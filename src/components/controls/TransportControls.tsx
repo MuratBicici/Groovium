@@ -1,7 +1,7 @@
 import {
   usePlaybackState,
   usePlayerStore,
-  useQueue,
+  useHasPlayback,
   useRepeatMode,
   useShuffle,
 } from '@/core/store';
@@ -9,7 +9,7 @@ import {
 /** Prev / play-pause / next, plus the shuffle and repeat toggles. */
 export function TransportControls() {
   const playbackState = usePlaybackState();
-  const queue = useQueue();
+  const hasQueue = useHasPlayback();
   const repeat = useRepeatMode();
   const shuffle = useShuffle();
 
@@ -21,7 +21,6 @@ export function TransportControls() {
 
   const isPlaying = playbackState === 'PLAYING';
   const isLoading = playbackState === 'LOADING';
-  const hasQueue = queue.length > 0;
 
   return (
     <div className="flex items-center justify-center gap-2 px-4">

@@ -14,24 +14,54 @@ import {
   registerProvider,
   getProvider,
 } from '@/core/providers';
-import { toPickedFiles } from '@/core/providers/localFilePicker';
+import {
+  addToPlaylist as addToPlaylistFile,
+  cancelImport as cancelImportFile,
+  createPlaylist as createPlaylistFile,
+  deletePlaylist as deletePlaylistFile,
+  importPaths,
+  libraryStoreDir,
+  libraryTrackToMetadata,
+  loadLibrary,
+  loadPlaylists,
+  pickFilesToImport,
+  pickFolderToImport,
+  playlistItemToMetadata,
+  removeFromLibrary,
+  removeFromPlaylist as removeFromPlaylistFile,
+  type ImportProgress,
+  type LibraryTrack,
+  type Playlist,
+  type PlaylistItem,
+  type ScanSummary,
+} from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
+/**
+ * What playback is running over.
+ *
+ * `library` and `playlist:<id>` are saved collections; `single` is one track
+ * played on its own, which is what a Spotify search result does — it plays and
+ * stops. Continuing afterwards means putting it in a playlist first.
+ */
+export type ContextId = 'library' | 'single' | `playlist:${string}`;
+
 /** Treat a `previous` press past this point as "restart the track" instead. */
 const RESTART_THRESHOLD_MS = 3000;
 
-/**
- * Quiet period before the session is written.
- *
- * Dragging the volume knob fires dozens of updates a second; without this, each
- * one would be a disk write. Long enough to coalesce a gesture, short enough
- * that closing the window right after a change still saves it.
- */
+/** Quiet period before playback settings are written. */
 const SESSION_SAVE_DEBOUNCE_MS = 800;
+
+export interface PlaybackContext {
+  id: ContextId;
+  /** Resolved view of the collection being played. */
+  tracks: TrackMetadata[];
+  index: number;
+}
 
 export interface PlayerState {
   activeProviderId: SourceType;
@@ -41,54 +71,67 @@ export interface PlayerState {
   durationMs: number;
   volume: number;
   muted: boolean;
-  queue: TrackMetadata[];
-  queueIndex: number;
-  /** Playback order when shuffle is on. Holds indices into `queue`. */
-  shuffleOrder: number[];
   repeat: RepeatMode;
   shuffle: boolean;
   error: string | null;
   initialized: boolean;
+
+  /** Imported local tracks, owned by the app. */
+  library: LibraryTrack[];
+  playlists: Playlist[];
+  /** Absolute path of the app's audio store, for building asset URLs. */
+  storeDir: string;
+
+  playback: PlaybackContext;
+  /** Playback order when shuffle is on. Indices into `playback.tracks`. */
+  shuffleOrder: number[];
+  /** Non-null while files are being copied in. */
+  importing: ImportProgress | null;
 }
 
 export interface PlayerActions {
-  /** Register providers and attach to the local one. Safe to call twice. */
   initialize: () => Promise<void>;
   setActiveProvider: (id: SourceType) => Promise<void>;
 
-  setQueue: (tracks: TrackMetadata[], startIndex?: number) => Promise<void>;
-  enqueue: (tracks: TrackMetadata[]) => void;
-  removeAt: (index: number) => Promise<void>;
-  clearQueue: () => void;
+  refreshLibrary: () => Promise<void>;
+  refreshPlaylists: () => Promise<void>;
 
-  playAt: (index: number) => Promise<void>;
+  /** Play a saved collection from the given position. */
+  playFrom: (contextId: ContextId, index: number) => Promise<void>;
+  /** Play one track on its own — no continuation. */
+  playSingle: (track: TrackMetadata) => Promise<void>;
+
   togglePlayPause: () => Promise<void>;
   next: () => Promise<void>;
   previous: () => Promise<void>;
   seek: (positionMs: number) => Promise<void>;
-
   setVolume: (volume: number) => Promise<void>;
   toggleMute: () => Promise<void>;
   cycleRepeat: () => void;
   toggleShuffle: () => void;
   clearError: () => void;
+
+  /** Open a picker and report what importing would copy. */
+  chooseFiles: () => Promise<ScanSummary | null>;
+  chooseFolder: () => Promise<ScanSummary | null>;
+  /** Copy the chosen files in. Progress lands on `importing`. */
+  runImport: (paths: string[]) => Promise<void>;
+  cancelImport: () => Promise<void>;
+  removeTrack: (libraryId: string) => Promise<void>;
+
+  newPlaylist: (name: string) => Promise<Playlist | null>;
+  removePlaylist: (id: string) => Promise<void>;
+  /** Resolves false when the track was already in that playlist. */
+  addTrackToPlaylist: (playlistId: string, track: TrackMetadata) => Promise<boolean>;
+  removePlaylistItem: (playlistId: string, index: number) => Promise<void>;
 }
 
 export type PlayerStore = PlayerState & PlayerActions;
 
-/**
- * Subscription to the active provider's event stream.
- *
- * Module-level rather than in state: it is a teardown function, not something
- * the UI ever renders.
- */
 let unsubscribeFromProvider: (() => void) | null = null;
-/**
- * The exact instance the subscription belongs to. Compared by identity rather
- * than by id, so re-registering a provider (hot reload, tests) correctly
- * re-subscribes instead of holding a handle on a disposed instance.
- */
 let subscribedProvider: AudioProvider | null = null;
+
+const EMPTY_CONTEXT: PlaybackContext = { id: 'single', tracks: [], index: -1 };
 
 const initialState: PlayerState = {
   activeProviderId: 'local',
@@ -98,44 +141,36 @@ const initialState: PlayerState = {
   durationMs: 0,
   volume: 0.8,
   muted: false,
-  queue: [],
-  queueIndex: -1,
-  shuffleOrder: [],
   repeat: 'off',
   shuffle: false,
   error: null,
   initialized: false,
+  library: [],
+  playlists: [],
+  storeDir: '',
+  playback: EMPTY_CONTEXT,
+  shuffleOrder: [],
+  importing: null,
 };
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
-  /**
-   * Amplitude to hand a provider for the current volume/mute state.
-   *
-   * `state.volume` is what the control shows — a perceptual position. Providers
-   * take linear amplitude, so the curve is applied once, here, at the boundary.
-   */
   function outputAmplitude(): number {
     const { muted, volume } = get();
     return muted ? 0 : volumeToAmplitude(volume);
   }
 
-  /** Playback order: shuffled indices, or plain 0..n-1. */
   function playbackOrder(): number[] {
-    const { shuffle, shuffleOrder, queue } = get();
-    if (shuffle && shuffleOrder.length === queue.length) return shuffleOrder;
-    return queue.map((_, index) => index);
+    const { shuffle, shuffleOrder, playback } = get();
+    if (shuffle && shuffleOrder.length === playback.tracks.length) return shuffleOrder;
+    return playback.tracks.map((_, index) => index);
   }
 
-  /**
-   * Resolve the queue index `step` positions away from the current one.
-   * Returns null when that would run off the end and repeat is not 'all'.
-   */
   function neighborIndex(step: number): number | null {
-    const { queue, queueIndex, repeat } = get();
-    if (queue.length === 0) return null;
+    const { playback, repeat } = get();
+    if (playback.tracks.length === 0) return null;
 
     const order = playbackOrder();
-    const current = order.indexOf(queueIndex);
+    const current = order.indexOf(playback.index);
     const position = current === -1 ? 0 : current + step;
 
     if (position < 0 || position >= order.length) {
@@ -146,22 +181,38 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     return order[position] ?? null;
   }
 
-  /** Called when the provider reports the current track finished. */
-  async function handleTrackEnded(): Promise<void> {
-    const { repeat, queueIndex } = get();
+  /** Turn a context id into the tracks it stands for. */
+  function resolveContext(contextId: ContextId): TrackMetadata[] {
+    const { library, playlists, storeDir } = get();
 
-    if (repeat === 'one' && queueIndex >= 0) {
-      await get().playAt(queueIndex);
+    if (contextId === 'library') {
+      return library.map((track) => libraryTrackToMetadata(track, storeDir));
+    }
+    if (contextId.startsWith('playlist:')) {
+      const id = contextId.slice('playlist:'.length);
+      const playlist = playlists.find((p) => p.id === id);
+      if (!playlist) return [];
+      return playlist.items
+        .map((item) => playlistItemToMetadata(item, library, storeDir))
+        .filter((track): track is TrackMetadata => track !== null);
+    }
+    return [];
+  }
+
+  async function handleTrackEnded(): Promise<void> {
+    const { repeat, playback } = get();
+
+    if (repeat === 'one' && playback.index >= 0) {
+      await startTrack(playback.index);
       return;
     }
 
     const nextIndex = neighborIndex(1);
     if (nextIndex === null) {
-      // End of queue: stop cleanly rather than leaving a stale PLAYING state.
       set({ playbackState: 'IDLE', positionMs: 0 });
       return;
     }
-    await get().playAt(nextIndex);
+    await startTrack(nextIndex);
   }
 
   function handleProviderEvent(event: ProviderEvent): void {
@@ -172,7 +223,6 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       case 'progress':
         set({
           positionMs: event.positionMs,
-          // Providers report 0 before metadata lands; keep the known duration.
           durationMs: event.durationMs > 0 ? event.durationMs : get().durationMs,
         });
         break;
@@ -188,7 +238,6 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
-  /** Run a provider command, routing failures into `error` instead of throwing. */
   async function withProvider(
     action: (provider: NonNullable<ReturnType<typeof getProvider>>) => Promise<void>,
   ): Promise<void> {
@@ -204,103 +253,49 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
+  /** Play the track at `index` of the current context. */
+  async function startTrack(index: number): Promise<void> {
+    const track = get().playback.tracks[index];
+    if (!track) return;
+
+    // A collection can mix sources; the track says which provider owns it.
+    if (track.source !== get().activeProviderId) {
+      await withProvider((provider) => provider.pause());
+      await get().setActiveProvider(track.source);
+      if (get().error) return;
+    }
+
+    set({
+      playback: { ...get().playback, index },
+      currentTrack: track,
+      positionMs: 0,
+      durationMs: track.duration,
+      error: null,
+    });
+    await withProvider((provider) => provider.play(track.id));
+  }
+
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceStarted = false;
 
-  /**
-   * Rebuild the previous session.
-   *
-   * Restores the queue and settings but deliberately does not start playback —
-   * an app that begins making noise the moment it launches is hostile. The
-   * previously playing track is left selected, so one press of play resumes it.
-   */
-  async function restoreSession(): Promise<void> {
-    const session = await loadSession();
-    if (!session) {
-      startPersisting();
-      return;
-    }
-
-    const repeat: RepeatMode =
-      session.repeat === 'all' || session.repeat === 'one' ? session.repeat : 'off';
-
-    set({
-      volume: clamp(session.volume, 0, 1),
-      muted: session.muted,
-      repeat,
-      shuffle: session.shuffle,
-    });
-
-    const provider = getProvider('local');
-    if (provider instanceof LocalAudioProvider && session.queue.length > 0) {
-      // Rust already dropped entries whose files are gone, so everything here
-      // is playable and its asset access has been re-granted.
-      const tracks = await provider.addFiles(await toPickedFiles(session.queue));
-
-      const index =
-        session.queueIndex >= 0 && session.queueIndex < tracks.length ? session.queueIndex : -1;
-      const current = index >= 0 ? (tracks[index] ?? null) : null;
-
-      set({
-        queue: tracks,
-        queueIndex: index,
-        shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
-        currentTrack: current,
-        durationMs: current?.duration ?? 0,
-        positionMs: 0,
-      });
-    }
-
-    await withProvider((p) => p.setVolume(outputAmplitude()));
-    startPersisting();
-  }
-
-  /**
-   * Begin persisting changes. Attached after restore, so replaying the restored
-   * state back into the store does not immediately rewrite the file.
-   */
   function startPersisting(): void {
     if (persistenceStarted) return;
     persistenceStarted = true;
 
     usePlayerStore.subscribe((state, prev) => {
       const unchanged =
-        state.queue === prev.queue &&
-        state.queueIndex === prev.queueIndex &&
         state.volume === prev.volume &&
         state.muted === prev.muted &&
         state.repeat === prev.repeat &&
         state.shuffle === prev.shuffle;
-
-      // Progress ticks arrive several times a second and are not persisted.
       if (unchanged) return;
 
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        void persistNow();
+        const { volume, muted, repeat, shuffle } = get();
+        void saveSession({ volume, muted, repeat, shuffle });
       }, SESSION_SAVE_DEBOUNCE_MS);
-    });
-  }
-
-  async function persistNow(): Promise<void> {
-    const { queue, queueIndex, volume, muted, repeat, shuffle } = get();
-    const provider = getProvider('local');
-
-    // Only the local provider can describe its tracks by path. Browser-picked
-    // files carry blob URLs, which mean nothing in the next run.
-    const persistedQueue =
-      provider instanceof LocalAudioProvider ? provider.toPersisted(queue.map((t) => t.id)) : [];
-
-    await saveSession({
-      queue: persistedQueue,
-      // Any dropped entry shifts every later index, so rather than guess, forget
-      // the selection.
-      queueIndex: persistedQueue.length === queue.length ? queueIndex : -1,
-      volume,
-      muted,
-      repeat,
-      shuffle,
     });
   }
 
@@ -317,7 +312,24 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       set({ initialized: true });
       await get().setActiveProvider('local');
-      await restoreSession();
+
+      const session = await loadSession();
+      if (session) {
+        const repeat: RepeatMode =
+          session.repeat === 'all' || session.repeat === 'one' ? session.repeat : 'off';
+        set({
+          volume: clamp(session.volume, 0, 1),
+          muted: session.muted,
+          repeat,
+          shuffle: session.shuffle,
+        });
+      }
+
+      set({ storeDir: await libraryStoreDir() });
+      await get().refreshLibrary();
+      await get().refreshPlaylists();
+      await withProvider((provider) => provider.setVolume(outputAmplitude()));
+      startPersisting();
     },
 
     async setActiveProvider(id) {
@@ -331,6 +343,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       unsubscribeFromProvider?.();
       unsubscribeFromProvider = provider.subscribe(handleProviderEvent);
       subscribedProvider = provider;
+
       set({
         activeProviderId: id,
         currentTrack: null,
@@ -342,118 +355,48 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       const ready = await provider.initialize();
       if (!ready) {
-        // A provider that explained itself while initialising keeps its message;
-        // the generic one is only for those that failed silently.
         if (!get().error) set({ error: `${provider.displayName} is unavailable.` });
         return;
       }
       await provider.setVolume(outputAmplitude());
     },
 
-    async setQueue(tracks, startIndex) {
-      set({
-        queue: tracks,
-        queueIndex: -1,
-        shuffleOrder: get().shuffle ? shuffledIndices(tracks.length) : [],
-      });
-      if (startIndex !== undefined && tracks.length > 0) {
-        await get().playAt(startIndex);
-      }
-    },
+    async refreshLibrary() {
+      const library = await loadLibrary();
+      set({ library });
 
-    enqueue(tracks) {
-      if (tracks.length === 0) return;
-      const queue = [...get().queue, ...tracks];
-      set({
-        queue,
-        shuffleOrder: get().shuffle ? shuffledIndices(queue.length) : [],
-      });
-    },
-
-    async removeAt(index) {
-      const { queue, queueIndex } = get();
-      const track = queue[index];
-      if (!track) return;
-
-      const removingCurrent = index === queueIndex;
-      if (removingCurrent) await withProvider((provider) => provider.pause());
-
-      // Release the provider's hold on the file — blob URLs in particular leak
-      // until revoked.
-      const provider = getProvider(get().activeProviderId);
-      if (provider instanceof LocalAudioProvider) provider.forget(track.id);
-
-      const nextQueue = queue.filter((_, i) => i !== index);
-
-      // Removing the playing track stops playback rather than jumping onward:
-      // a delete that silently starts a different song is startling.
-      let nextIndex = queueIndex;
-      if (removingCurrent) nextIndex = -1;
-      else if (index < queueIndex) nextIndex = queueIndex - 1;
-
-      set({
-        queue: nextQueue,
-        queueIndex: nextIndex,
-        shuffleOrder: get().shuffle ? shuffledIndices(nextQueue.length, nextIndex) : [],
-      });
-
-      if (removingCurrent) {
-        set({ currentTrack: null, playbackState: 'IDLE', positionMs: 0, durationMs: 0 });
-      }
-    },
-
-    clearQueue() {
-      void withProvider((provider) => provider.pause());
-
-      // Forget the files as well, not just the queue rows. Leaving them in the
-      // library would make re-adding the same file look like a duplicate and be
-      // silently refused.
-      const provider = getProvider(get().activeProviderId);
+      // Hand the provider everything it might be asked to play.
+      const provider = getProvider('local');
       if (provider instanceof LocalAudioProvider) {
-        for (const track of get().queue) provider.forget(track.id);
+        await provider.useLibrary(library, get().storeDir);
       }
-
-      set({
-        queue: [],
-        queueIndex: -1,
-        shuffleOrder: [],
-        currentTrack: null,
-        playbackState: 'IDLE',
-        positionMs: 0,
-        durationMs: 0,
-      });
     },
 
-    async playAt(index) {
-      const track = get().queue[index];
-      if (!track) return;
+    async refreshPlaylists() {
+      set({ playlists: await loadPlaylists() });
+    },
 
-      // A queue can hold tracks from different sources. The track carries which
-      // provider owns it, so switch before playing rather than assuming the
-      // active one can handle it. This is the whole point of `source` existing
-      // on `TrackMetadata`.
-      if (track.source !== get().activeProviderId) {
-        await withProvider((provider) => provider.pause());
-        await get().setActiveProvider(track.source);
-        if (get().error) return;
-      }
+    async playFrom(contextId, index) {
+      const tracks = resolveContext(contextId);
+      if (tracks.length === 0) return;
 
-      // The store already knows the metadata it is asking for, so it sets the
-      // current track itself. Making every provider re-derive it — trivial for
-      // local files, a second network round trip for Spotify — would be wasted
-      // work. Providers can still refine it through a `track` event.
       set({
-        queueIndex: index,
-        currentTrack: track,
-        positionMs: 0,
-        durationMs: track.duration,
-        error: null,
+        playback: { id: contextId, tracks, index },
+        shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
       });
-      await withProvider((provider) => provider.play(track.id));
+      await startTrack(index);
+    },
+
+    async playSingle(track) {
+      set({
+        playback: { id: 'single', tracks: [track], index: 0 },
+        shuffleOrder: [],
+      });
+      await startTrack(0);
     },
 
     async togglePlayPause() {
-      const { playbackState, queue, queueIndex } = get();
+      const { playbackState, playback } = get();
 
       if (playbackState === 'PLAYING') {
         await withProvider((provider) => provider.pause());
@@ -463,20 +406,18 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await withProvider((provider) => provider.resume());
         return;
       }
-      // IDLE or ERROR: start from where the queue left off, or the top.
-      if (queue.length > 0) {
-        await get().playAt(queueIndex >= 0 ? queueIndex : 0);
+      if (playback.tracks.length > 0) {
+        await startTrack(playback.index >= 0 ? playback.index : 0);
       }
     },
 
     async next() {
       const index = neighborIndex(1);
       if (index === null) return;
-      await get().playAt(index);
+      await startTrack(index);
     },
 
     async previous() {
-      // Matches every other player: a first press restarts the current track.
       if (get().positionMs > RESTART_THRESHOLD_MS) {
         await get().seek(0);
         return;
@@ -486,7 +427,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await get().seek(0);
         return;
       }
-      await get().playAt(index);
+      await startTrack(index);
     },
 
     async seek(positionMs) {
@@ -497,7 +438,6 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     async setVolume(volume) {
       const next = clamp(volume, 0, 1);
-      // Nudging the slider is an implicit unmute.
       set({ volume: next, muted: next === 0 ? get().muted : false });
       await withProvider((provider) => provider.setVolume(outputAmplitude()));
     },
@@ -515,24 +455,120 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     toggleShuffle() {
       const shuffle = !get().shuffle;
+      const { playback } = get();
       set({
         shuffle,
-        shuffleOrder: shuffle ? shuffledIndices(get().queue.length, get().queueIndex) : [],
+        shuffleOrder: shuffle ? shuffledIndices(playback.tracks.length, playback.index) : [],
       });
     },
 
     clearError() {
       set({ error: null });
     },
+
+    async chooseFiles() {
+      return pickFilesToImport();
+    },
+
+    async chooseFolder() {
+      return pickFolderToImport();
+    },
+
+    async runImport(paths) {
+      if (paths.length === 0) return;
+
+      set({ importing: { done: 0, total: paths.length, currentName: '' } });
+      try {
+        await importPaths(paths);
+        await get().refreshLibrary();
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+      } finally {
+        set({ importing: null });
+      }
+    },
+
+    async cancelImport() {
+      await cancelImportFile();
+    },
+
+    async removeTrack(libraryId) {
+      await removeFromLibrary(libraryId);
+      await get().refreshLibrary();
+      // Playlists may have referenced it; Rust already pruned them.
+      await get().refreshPlaylists();
+    },
+
+    async newPlaylist(name) {
+      try {
+        const playlist = await createPlaylistFile(name);
+        await get().refreshPlaylists();
+        return playlist;
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }
+    },
+
+    async removePlaylist(id) {
+      await deletePlaylistFile(id);
+      await get().refreshPlaylists();
+    },
+
+    async addTrackToPlaylist(playlistId, track) {
+      const item = toPlaylistItem(track);
+      if (!item) {
+        set({ error: 'That track cannot be saved to a playlist.' });
+        return false;
+      }
+      try {
+        const added = await addToPlaylistFile(playlistId, item);
+        if (added) await get().refreshPlaylists();
+        return added;
+      } catch (err) {
+        // A rejected payload used to surface as an unhandled promise rejection
+        // and nothing else, so the track just quietly failed to appear.
+        set({ error: err instanceof Error ? err.message : String(err) });
+        return false;
+      }
+    },
+
+    async removePlaylistItem(playlistId, index) {
+      await removeFromPlaylistFile(playlistId, index);
+      await get().refreshPlaylists();
+    },
   };
 });
 
 /**
- * Fisher-Yates over queue indices.
+ * Turn a playable track into something storable.
  *
- * When a track is already playing it is pinned to the front, so toggling shuffle
- * mid-track reorders what comes next without interrupting what is playing.
+ * Local tracks are stored as a reference into the library; Spotify tracks carry
+ * their metadata because nothing else holds it.
  */
+function toPlaylistItem(track: TrackMetadata): PlaylistItem | null {
+  if (track.source === 'spotify') {
+    const item: PlaylistItem = {
+      source: 'spotify',
+      uri: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      durationMs: track.duration,
+    };
+    if (track.coverArtUrl) item.coverArtUrl = track.coverArtUrl;
+    return item;
+  }
+
+  if (track.source === 'local' && track.id.startsWith('library:')) {
+    return { source: 'local', libraryId: track.id.slice('library:'.length) };
+  }
+
+  // A local file that never entered the library has nothing stable to point at.
+  return null;
+}
+
+/** Fisher-Yates over context indices, pinning whatever is playing to the front. */
 function shuffledIndices(length: number, pinnedIndex = -1): number[] {
   const indices = Array.from({ length }, (_, i) => i);
 

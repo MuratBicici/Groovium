@@ -1,8 +1,8 @@
-import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
+import type { AuthResult, SourceType } from '@/core/types';
 import { beginAuth, accessToken, isAuthenticated } from '@/core/security/spotifyAuth';
 import { clamp } from '@/core/utils/time';
 import { BaseProvider } from './BaseProvider';
-import { expandAlbum, expandPlaylist, playOnDevice, type SearchResult } from './spotifyApi';
+import { playOnDevice } from './spotifyApi';
 
 /**
  * Spotify playback through the Web Playback SDK.
@@ -146,6 +146,9 @@ export class SpotifyProvider extends BaseProvider {
       // window is entirely normal, so wait for it rather than failing.
       const deviceId = await this.waitForDevice();
       await playOnDevice(deviceId, trackId);
+      // Starting playback through the Web API can hand the device back its own
+      // default volume, so the setting is applied again once playback is on.
+      await this.player.setVolume(this.volume);
       // State arrives via player_state_changed; PLAYING is not set here.
     } catch (err) {
       this.fail(describe(err));
@@ -185,25 +188,6 @@ export class SpotifyProvider extends BaseProvider {
     super.dispose();
   }
 
-  /**
-   * Turn a search result into tracks ready for the queue.
-   *
-   * An album or playlist expands into all of its tracks, which is what makes
-   * playback continue on its own: everything lands in Groovium's queue, so the
-   * ordinary auto-advance takes over. Spotify's own "play something similar"
-   * radio is not available — `/recommendations` was closed to new apps in
-   * November 2024 — so continuation comes from queueing real tracks instead.
-   */
-  async resolve(result: SearchResult): Promise<TrackMetadata[]> {
-    switch (result.kind) {
-      case 'track':
-        return result.track ? [result.track] : [];
-      case 'album':
-        return expandAlbum(result.id);
-      case 'playlist':
-        return expandPlaylist(result.id);
-    }
-  }
 
   /**
    * Block until Spotify has registered this app as a device.
@@ -227,6 +211,11 @@ export class SpotifyProvider extends BaseProvider {
   private attachListeners(player: SpotifyPlayer): void {
     player.addListener('ready', ((payload: { device_id: string }) => {
       this.deviceId = payload.device_id;
+      // The volume the store pushed during `initialize` was set before Spotify
+      // had registered the device, so it went nowhere. Re-assert it now that
+      // there is something to apply it to — otherwise the first track plays at
+      // the SDK's default however low the control says.
+      void player.setVolume(this.volume);
     }) as never);
 
     player.addListener('not_ready', (() => {

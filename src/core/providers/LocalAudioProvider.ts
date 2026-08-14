@@ -1,13 +1,24 @@
 import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
-import type { PersistedTrack } from '@/core/session';
 import { clamp } from '@/core/utils/time';
 import { BaseProvider } from './BaseProvider';
-import {
-  pickAudioFiles,
-  pickMusicFolder,
-  readCoverArt,
-  type PickedFile,
-} from './localFilePicker';
+import { readCoverArt, type PickedFile } from './localFilePicker';
+
+/** The shape `useLibrary` needs, kept structural to avoid importing the store. */
+export interface LibraryEntrySource {
+  id: string;
+  storedFile: string;
+  title: string;
+  artist: string;
+  album: string;
+  durationMs: number;
+  hasCoverArt: boolean;
+}
+
+/** Join a directory and a file name without assuming a separator. */
+function joinPath(dir: string, name: string): string {
+  const separator = dir.includes('\\') ? '\\' : '/';
+  return dir.endsWith(separator) ? `${dir}${name}` : `${dir}${separator}${name}`;
+}
 
 interface LibraryEntry {
   track: TrackMetadata;
@@ -166,26 +177,46 @@ export class LocalAudioProvider extends BaseProvider {
   // Populating a library from disk has no meaning for streaming providers, so
   // it lives here rather than on the shared `AudioProvider` contract.
 
-  /** Open a file picker and add the chosen files. */
-  async pickAndAddFiles(): Promise<ImportResult> {
-    return this.importPicked(await pickAudioFiles());
-  }
-
-  /** Open a folder picker and add every audio file found inside it. */
-  async pickAndAddFolder(): Promise<ImportResult> {
-    return this.importPicked(await pickMusicFolder());
-  }
-
   /**
-   * Report duplicates separately from additions.
+   * Point the provider at the managed library.
    *
-   * A caller cannot infer this from an empty track list: no selection at all and
-   * a selection of nothing but duplicates look identical otherwise, and they
-   * warrant very different feedback.
+   * Every entry is a file the app owns a copy of, so the URL is built from the
+   * store directory rather than from wherever the user originally imported it.
+   * That is what lets a track keep playing after its source is deleted.
+   *
+   * Called whenever the library changes; it replaces the whole set rather than
+   * merging, so removals disappear too.
    */
-  private async importPicked(files: PickedFile[]): Promise<ImportResult> {
-    const added = await this.addFiles(files);
-    return { added, picked: files.length, duplicates: files.length - added.length };
+  async useLibrary(tracks: LibraryEntrySource[], storeDir: string): Promise<void> {
+    for (const entry of this.library.values()) {
+      if (entry.isObjectUrl) URL.revokeObjectURL(entry.url);
+    }
+    this.library.clear();
+    this.byDedupeKey.clear();
+
+    if (!storeDir) return;
+    const { convertFileSrc } = await import('@tauri-apps/api/core');
+
+    for (const track of tracks) {
+      const path = joinPath(storeDir, track.storedFile);
+      const id = `library:${track.id}`;
+      this.library.set(id, {
+        track: {
+          id,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          duration: track.durationMs,
+          source: 'local',
+        },
+        url: convertFileSrc(path),
+        isObjectUrl: false,
+        path,
+        hasCoverArt: track.hasCoverArt,
+        dedupeKey: `library:${track.id}`,
+      });
+      this.byDedupeKey.set(`library:${track.id}`, id);
+    }
   }
 
   /**
@@ -229,34 +260,6 @@ export class LocalAudioProvider extends BaseProvider {
       this.setCurrentTrack(null);
       this.setState('IDLE');
     }
-  }
-
-  /**
-   * Describe the given tracks in a form that survives a restart.
-   *
-   * The store cannot do this itself: `TrackMetadata` carries no file path, and
-   * adding one would push a local-only concern into the shared contract. Tracks
-   * with no path — anything from the browser file input — are skipped, since a
-   * blob URL is meaningless in the next run.
-   */
-  toPersisted(trackIds: string[]): PersistedTrack[] {
-    const persisted: PersistedTrack[] = [];
-
-    for (const id of trackIds) {
-      const entry = this.library.get(id);
-      if (!entry || entry.path === undefined) continue;
-
-      persisted.push({
-        path: entry.path,
-        title: entry.track.title,
-        artist: entry.track.artist,
-        album: entry.track.album,
-        durationMs: entry.track.duration,
-        hasCoverArt: entry.hasCoverArt || entry.track.coverArtUrl !== undefined,
-      });
-    }
-
-    return persisted;
   }
 
   private async addFile(file: PickedFile): Promise<TrackMetadata> {

@@ -43,6 +43,40 @@ body {
   cursor: default;
 }
 
+/*
+ * Scrollbars. The default Windows ones are wide, pale and sit outside the
+ * palette entirely, which reads as a browser control bolted onto a physical
+ * object. Both syntaxes are set: WebView2 honours the `-webkit-` pseudo
+ * elements, and the standard properties cover everything else.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-shell-600) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-shell-600);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-brass-600);
+}
+
+/* No dead square where the two bars would meet. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Anything marked as a drag region must not also look like selectable text. */
 [data-tauri-drag-region] {
   cursor: grab;

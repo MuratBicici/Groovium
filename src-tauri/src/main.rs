@@ -5,8 +5,10 @@
 mod audio;
 mod files;
 mod keyring;
+mod library;
 mod media;
 mod metadata;
+mod playlists;
 mod session;
 mod shortcuts;
 mod spotify;
@@ -35,6 +37,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(files::PickedPaths::default())
+        .manage(library::ImportControl::default())
         .manage(spotify::tokens::AccessTokenCache::default())
         .setup(|app| {
             tray::create(app.handle())?;
@@ -57,6 +60,19 @@ fn main() {
             files::pick_audio_files,
             files::pick_music_folder,
             files::read_cover_art,
+            library::library_load,
+            library::library_pick_files,
+            library::library_pick_folder,
+            library::library_import,
+            library::library_cancel_import,
+            library::library_remove,
+            library::library_store_dir,
+            playlists::playlists_load,
+            playlists::playlist_create,
+            playlists::playlist_rename,
+            playlists::playlist_delete,
+            playlists::playlist_add_item,
+            playlists::playlist_remove_item,
             session::load_session,
             session::save_session,
             spotify::spotify_begin_auth,

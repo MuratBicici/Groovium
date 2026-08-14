@@ -49,7 +49,17 @@ pub struct CoverArt {
 /// Never fails on a readable file: an untagged or unparseable file still yields
 /// a usable entry rather than dropping out of the library.
 pub fn read_track(path: &Path) -> ScannedTrack {
-    let fallback = fallback_metadata(path);
+    read_track_named(path, path)
+}
+
+/// Read tags from one file but derive the filename fallback from another.
+///
+/// The library stores its copies under a generated id, so reading tags from the
+/// copy is right — the bytes are guaranteed to be there — while naming an
+/// untagged track after it is not: the user would see a random string where the
+/// song title should be. `name_source` is the path the user recognises.
+pub fn read_track_named(path: &Path, name_source: &Path) -> ScannedTrack {
+    let fallback = fallback_metadata(name_source);
     let path_string = path.to_string_lossy().into_owned();
 
     let Ok(tagged) = read_from_path(path) else {
@@ -193,6 +203,23 @@ mod tests {
         assert_eq!(track.title, "does-not-exist");
         assert_eq!(track.duration_ms, 0);
         assert!(!track.has_cover_art);
+    }
+
+    #[test]
+    fn an_untagged_file_is_named_after_the_source_not_the_stored_copy() {
+        // Regression: the library stores copies as `<random-id>.mp3`, so reading
+        // the fallback from the stored path showed a random string as the title
+        // and wiped artist and album along with it.
+        let stored = PathBuf::from(r"C:\AppData\Groovium\library\aB3xK9zQ.mp3");
+        let source = PathBuf::from(r"C:\Music\Kraftwerk - Autobahn.mp3");
+
+        let track = read_track_named(&stored, &source);
+        assert_eq!(track.title, "Autobahn");
+        assert_eq!(track.artist, "Kraftwerk");
+
+        // What the bug produced, for contrast.
+        let wrong = read_track_named(&stored, &stored);
+        assert_eq!(wrong.title, "aB3xK9zQ");
     }
 
     #[test]
