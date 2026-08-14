@@ -9,11 +9,15 @@
 //! Note on paths: this module is named `keyring` and so is the crate it uses, so
 //! every reference to the crate is written as `::keyring` to disambiguate.
 //!
-//! SECURITY — see the matching note in `src/core/security/tokenVault.ts`. These
-//! commands are currently reachable from any JavaScript running in the webview.
-//! Before the first real OAuth provider ships, `vault_get_token` must be scoped
-//! so refresh tokens stay inside Rust and only short-lived access tokens cross
-//! into JS.
+//! SECURITY — this used to expose `vault_get_token` as a Tauri command, which
+//! meant any script running in the webview could read any stored secret by name.
+//! That is gone. Nothing here is callable from JavaScript any more; these are
+//! plain Rust functions, used by `spotify::tokens` and nothing else.
+//!
+//! The rule that replaced it: a refresh token has no path out of this process.
+//! The webview asks for a short-lived access token and Rust refreshes it
+//! transparently — see `src/core/security/spotifyAuth.ts` for the surface that
+//! is left.
 
 use ::keyring::v1::{Entry, Error as KeyringError};
 
@@ -22,8 +26,11 @@ use ::keyring::v1::{Entry, Error as KeyringError};
 /// orphans anything already stored, so settle it before the first release.
 const SERVICE: &str = "com.groovium.desktop";
 
-/// Reject anything that is not a well-formed `provider:key` account name, so a
-/// caller cannot reach outside its own namespace.
+/// Reject anything that is not a well-formed `provider:key` account name.
+///
+/// Less load-bearing than it was, now that callers are all in-process, but it
+/// still keeps one provider's namespace from colliding with another's and
+/// catches a malformed name at the call site rather than in the OS store.
 fn validate_account(account: &str) -> Result<(), String> {
     let mut parts = account.split(':');
     let provider = parts.next().unwrap_or_default();
@@ -47,17 +54,15 @@ fn entry_for(account: &str) -> Result<Entry, String> {
 }
 
 /// Store a secret. Overwrites any existing value for the same account.
-#[tauri::command]
-pub fn vault_set_token(account: String, value: String) -> Result<(), String> {
-    entry_for(&account)?
-        .set_password(&value)
+pub fn set_secret(account: &str, value: &str) -> Result<(), String> {
+    entry_for(account)?
+        .set_password(value)
         .map_err(|e| format!("Could not store credential: {e}"))
 }
 
 /// Read a secret. Returns `None` when nothing is stored, which is not an error.
-#[tauri::command]
-pub fn vault_get_token(account: String) -> Result<Option<String>, String> {
-    match entry_for(&account)?.get_password() {
+pub fn get_secret(account: &str) -> Result<Option<String>, String> {
+    match entry_for(account)?.get_password() {
         Ok(secret) => Ok(Some(secret)),
         Err(KeyringError::NoEntry) => Ok(None),
         Err(e) => Err(format!("Could not read credential: {e}")),
@@ -65,9 +70,8 @@ pub fn vault_get_token(account: String) -> Result<Option<String>, String> {
 }
 
 /// Remove a secret. Deleting something that was never stored is a no-op.
-#[tauri::command]
-pub fn vault_delete_token(account: String) -> Result<(), String> {
-    match entry_for(&account)?.delete_credential() {
+pub fn delete_secret(account: &str) -> Result<(), String> {
+    match entry_for(account)?.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
         Err(e) => Err(format!("Could not delete credential: {e}")),
     }

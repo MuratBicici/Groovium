@@ -3,7 +3,7 @@ import { isTauri } from '@/core/utils/env';
 /**
  * Bridge to the session file owned by `src-tauri/src/session.rs`.
  *
- * Follows the same shape as `src/core/security/tokenVault.ts`: a thin wrapper
+ * Follows the same shape as `src/platform/window.ts`: a thin wrapper
  * that becomes a no-op outside Tauri, so the browser build keeps working with
  * nothing persisted.
  *

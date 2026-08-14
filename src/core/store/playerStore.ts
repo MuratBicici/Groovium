@@ -342,7 +342,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       const ready = await provider.initialize();
       if (!ready) {
-        set({ error: `${provider.displayName} is unavailable.` });
+        // A provider that explained itself while initialising keeps its message;
+        // the generic one is only for those that failed silently.
+        if (!get().error) set({ error: `${provider.displayName} is unavailable.` });
         return;
       }
       await provider.setVolume(outputAmplitude());
@@ -426,7 +428,27 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       const track = get().queue[index];
       if (!track) return;
 
-      set({ queueIndex: index, positionMs: 0, durationMs: track.duration, error: null });
+      // A queue can hold tracks from different sources. The track carries which
+      // provider owns it, so switch before playing rather than assuming the
+      // active one can handle it. This is the whole point of `source` existing
+      // on `TrackMetadata`.
+      if (track.source !== get().activeProviderId) {
+        await withProvider((provider) => provider.pause());
+        await get().setActiveProvider(track.source);
+        if (get().error) return;
+      }
+
+      // The store already knows the metadata it is asking for, so it sets the
+      // current track itself. Making every provider re-derive it — trivial for
+      // local files, a second network round trip for Spotify — would be wasted
+      // work. Providers can still refine it through a `track` event.
+      set({
+        queueIndex: index,
+        currentTrack: track,
+        positionMs: 0,
+        durationMs: track.duration,
+        error: null,
+      });
       await withProvider((provider) => provider.play(track.id));
     },
 

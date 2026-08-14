@@ -1,0 +1,175 @@
+import { useCallback, useEffect, useState } from 'react';
+import {
+  beginAuth,
+  clearClientId,
+  hasClientId,
+  isAuthenticated,
+  signOut,
+  type SpotifyAccount,
+} from '@/core/security/spotifyAuth';
+import { describeAuthError, describeProduct } from '@/core/security/authErrors';
+import { SetupSteps } from './SetupSteps';
+import { SpotifySearch } from './SpotifySearch';
+
+type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
+
+interface SpotifyPanelProps {
+  open: boolean;
+  onClose: () => void;
+  id: string;
+}
+
+/**
+ * Spotify surface, sharing the queue panel's overlay pattern: it covers the
+ * platter while open and leaves the transport controls reachable below.
+ *
+ * Four states, because the setup has genuinely distinct stages and collapsing
+ * them would leave the user guessing which part failed. Once connected, the
+ * whole panel is given over to search — that is what it is for.
+ */
+export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
+  const [stage, setStage] = useState<Stage>('loading');
+  const [account, setAccount] = useState<SpotifyAccount | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!(await hasClientId())) {
+      setStage('setup');
+      return;
+    }
+    setStage((await isAuthenticated()) ? 'connected' : 'disconnected');
+  }, []);
+
+  useEffect(() => {
+    if (open) void refresh();
+  }, [open, refresh]);
+
+  async function connect() {
+    setStage('connecting');
+    setError(null);
+    try {
+      setAccount(await beginAuth());
+      setStage('connected');
+    } catch (err) {
+      setError(describeAuthError(err));
+      setStage('disconnected');
+    }
+  }
+
+  async function disconnect() {
+    await signOut();
+    setAccount(null);
+    setStage('disconnected');
+  }
+
+  async function changeClientId() {
+    await clearClientId();
+    setAccount(null);
+    setStage('setup');
+  }
+
+  const premiumWarning = account ? describeProduct(account.product) : null;
+
+  return (
+    <div
+      id={id}
+      aria-hidden={!open}
+      className={`absolute inset-0 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
+        open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
+      }`}
+    >
+      <div className="flex shrink-0 items-center justify-between px-3 py-2">
+        <span className="min-w-0 truncate text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+          {stage === 'connected' && account ? `Spotify · ${account.displayName}` : 'Spotify'}
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {stage === 'connected' && (
+            <button
+              type="button"
+              onClick={() => void disconnect()}
+              className="text-[9px] tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
+            >
+              Sign out
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Close Spotify panel"
+            title="Close"
+            onClick={onClose}
+            className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+          >
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        {stage === 'loading' && <Centered>Checking your Spotify setup…</Centered>}
+
+        {stage === 'setup' && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SetupSteps onConfigured={() => void refresh()} />
+          </div>
+        )}
+
+        {stage === 'connecting' && (
+          <Centered>
+            Waiting for authorisation in your browser…
+            <span className="mt-1 block text-[10px] text-cream-400/70">
+              Approve the request, then come back here.
+            </span>
+          </Centered>
+        )}
+
+        {stage === 'disconnected' && (
+          <div className="space-y-3 px-4 py-3 text-center">
+            <p className="text-[11px] text-cream-400">
+              Your Client ID is saved. Connect your Spotify account to start playing.
+            </p>
+            <button
+              type="button"
+              onClick={() => void connect()}
+              className="rounded-full bg-brass-600 px-4 py-1.5 text-[10px] font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+            >
+              Connect Spotify Account
+            </button>
+            {error && (
+              <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-[10px] leading-snug text-red-200">
+                {error}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => void changeClientId()}
+              className="block w-full text-[10px] text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
+            >
+              Use a different Client ID
+            </button>
+          </div>
+        )}
+
+        {stage === 'connected' && (
+          <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
+            {premiumWarning && (
+              <p className="shrink-0 rounded bg-shell-900/70 px-2 py-1.5 text-[10px] leading-snug text-brass-400">
+                {premiumWarning}
+              </p>
+            )}
+            <SpotifySearch />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-full items-center justify-center px-6">
+      <p className="text-center text-[11px] leading-relaxed text-cream-400">{children}</p>
+    </div>
+  );
+}

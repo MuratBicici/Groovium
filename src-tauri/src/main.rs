@@ -9,6 +9,7 @@ mod media;
 mod metadata;
 mod session;
 mod shortcuts;
+mod spotify;
 mod tray;
 
 use tauri::WindowEvent;
@@ -32,7 +33,9 @@ fn main() {
         )
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(files::PickedPaths::default())
+        .manage(spotify::tokens::AccessTokenCache::default())
         .setup(|app| {
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
@@ -47,15 +50,24 @@ fn main() {
                 let _ = window.hide();
             }
         })
+        // No credential-store commands here on purpose. Reading a stored secret
+        // by name used to be callable from the webview; it is now Rust-internal
+        // (`keyring.rs`), so a refresh token has no path out of this process.
         .invoke_handler(tauri::generate_handler![
-            keyring::vault_set_token,
-            keyring::vault_get_token,
-            keyring::vault_delete_token,
             files::pick_audio_files,
             files::pick_music_folder,
             files::read_cover_art,
             session::load_session,
             session::save_session,
+            spotify::spotify_begin_auth,
+            spotify::spotify_access_token,
+            spotify::spotify_is_authenticated,
+            spotify::spotify_sign_out,
+            spotify::spotify_has_client_id,
+            spotify::spotify_set_client_id,
+            spotify::spotify_clear_client_id,
+            spotify::spotify_redirect_uri,
+            spotify::spotify_open_dashboard,
             audio::audio_backend_available,
         ])
         .run(tauri::generate_context!())

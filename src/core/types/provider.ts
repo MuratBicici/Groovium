@@ -28,7 +28,7 @@ export interface AuthResult {
   success: boolean;
   /**
    * Never a refresh token. Long-lived secrets stay in the OS credential store,
-   * reachable only from Rust — see `src/core/security/tokenVault.ts`.
+   * reachable only from Rust — see `src/core/security/spotifyAuth.ts`.
    */
   accessToken?: string;
   expiresAt?: number;

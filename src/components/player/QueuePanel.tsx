@@ -79,7 +79,11 @@ export function QueuePanel({ open, onClose, id }: QueuePanelProps) {
           {queue.map((track, index) => {
             const active = index === queueIndex;
             return (
-              <li key={track.id} className="group/row relative">
+              // Position is part of the key because a queue may legitimately
+              // hold the same track twice. Local files get a unique generated
+              // id, but a Spotify track's id is its URI, so `track.id` alone
+              // collides the moment a song is queued again.
+              <li key={`${track.id}:${index}`} className="group/row relative">
                 <button
                   type="button"
                   onClick={() => void playAt(index)}

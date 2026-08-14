@@ -7,8 +7,8 @@ import { isTauri } from '@/core/utils/env';
  * at all. Keeping these here means the UI can be rewritten without the window
  * logic moving with it: a redesign replaces the buttons, not this file.
  *
- * Every function is a no-op outside Tauri, following `tokenVault.ts`, so the
- * browser build keeps working.
+ * Every function is a no-op outside Tauri, the same shape used by
+ * `src/core/session`, so the browser build keeps working.
  */
 
 async function currentWindow() {

@@ -57,11 +57,13 @@ The rule that keeps this modular: **components never import a provider**. They r
 - OAuth tokens belong in the OS credential store (`src-tauri/src/keyring.rs`), never in a file or `localStorage`. There is no backend server anywhere in this design.
 - **The file picker runs in Rust, and that is load-bearing.** `src-tauri/src/files.rs` opens the native dialog, then grants asset-protocol access to exactly the files the user chose. The static asset scope is therefore empty, and the webview holds no dialog permission at all. Doing it the other way round — a JS-callable `allow_path(path)` command — would let any script in the webview unlock `~/.ssh/id_rsa` and read it back through `convertFileSrc`. Keep the picker on the Rust side.
 - Two commands follow from that rule and must keep following it. `read_cover_art` returns raw file bytes, so it serves only paths recorded in `PickedPaths` — paths the user picked this session. And the session file is written by Rust rather than through a JS-facing store, because it holds paths that get asset access re-granted at startup; a webview able to write it could name a path there and have the next launch unlock it.
-- **Known gap:** `vault_get_token` is currently callable from any script in the webview. Before the first real OAuth integration ships, refresh tokens must stay inside Rust, with only short-lived access tokens crossing into JS. See the note at the top of `src/core/security/tokenVault.ts`.
+- **Credential-store commands are not exposed to the webview.** They were once, which meant any script running there could read any stored secret by name. `src-tauri/src/keyring.rs` is now Rust-internal: a refresh token has no path out of the process. The webview asks for a short-lived access token and Rust refreshes it transparently. If you ever find yourself adding a command that returns a stored secret, that is the thing this rule exists to prevent.
 
 ## Status
 
-Phase 1 (skeleton) is complete and verified in the real desktop app: the native file dialog, asset-protocol playback, seeking, volume, queue transitions, repeat and shuffle all work, across multiple audio formats. `cargo test` covers the credential-name validation. Not yet built: OAuth flows, real streaming playback, tag reading, persistence, tray icon, global media hotkeys.
+Working: local playback with real tags and cover art, folder scanning, a persisted queue, tray icon, global media keys, always-on-top, remembered window position, and Spotify via OAuth + the Web Playback SDK. Not yet built: YouTube Music, Apple Music, search and browse surfaces, and the real visual design.
+
+`AudioProvider` has not changed since it was written. Spotify — a different transport, auth model and event shape — implements the same interface as an `HTMLAudioElement`, and a queue can mix both sources because each track says which provider owns it.
 
 The current UI is a placeholder. It is meant to be replaced wholesale — see *Replacing the UI* below.
 
@@ -74,6 +76,29 @@ The current UI is a placeholder. It is meant to be replaced wholesale — see *R
 - Track metadata is derived from filenames (`Artist - Title.ext`); there is no ID3/Vorbis tag reader yet.
 - If Vite HMR misbehaves under `tauri dev`, the CSP in `src-tauri/tauri.conf.json` is the first thing to check — temporarily setting `app.security.csp` to `null` isolates it.
 
+## Spotify setup
+
+Spotify restricts Extended Quota Mode to organisations with 250k+ monthly users, so this project cannot ship one shared app registration: a Development Mode app only works for five accounts its owner allowlists by hand. **Every installation registers its own Spotify app.** The app walks you through it — open the Spotify panel and follow the four steps — but for reference:
+
+1. Create an app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard).
+2. Add `http://127.0.0.1:14536/callback` as a redirect URI, exactly, with no trailing slash. `localhost` is not accepted; Spotify requires the loopback literal.
+3. Under **User Management**, add your own Spotify account. Without this, sign-in is refused.
+4. Paste the Client ID into the app.
+
+**Spotify Premium is required for playback** — the Web Playback SDK will not stream to a free account. Signing in still works, and the app says so rather than failing silently.
+
+Under PKCE there is no client secret, so the Client ID is not a credential. It is still per-installation configuration: it lives in `config.json` under the app data directory (or `GROOVIUM_SPOTIFY_CLIENT_ID`), never in this repository.
+
+**macOS is not supported for Spotify playback.** The SDK needs Widevine, which WebView2 has and WKWebView does not.
+
+### CSP additions
+
+The Content-Security-Policy in `src-tauri/tauri.conf.json` was widened only as far as the SDK needs: `script-src` and `frame-src` for `https://sdk.scdn.co`, `img-src` for `https://i.scdn.co` cover art, and `connect-src` for the Spotify API, its websocket dealer, and the CDN. Nothing else was opened.
+
+### Known limitation
+
+Spotify tracks are dropped from the queue on restart. Session persistence stores file paths, which a Spotify URI is not; restoring one would mean re-fetching its metadata at startup.
+
 ## Debugging
 
 Devtools are available in `tauri dev` builds via right-click → Inspect (or F12).
@@ -82,7 +107,7 @@ Bare module specifiers do not resolve in the devtools console, so `import('@taur
 
 ```js
 const invoke = (cmd, args) => window.__TAURI_INTERNALS__.invoke(cmd, args);
-await invoke('vault_get_token', { account: 'spotify:refresh_token' });
+await invoke('audio_backend_available');
 ```
 
 `window.__TAURI_INTERNALS__.convertFileSrc(path)` is available the same way, which is the quickest check when a local file will not play.

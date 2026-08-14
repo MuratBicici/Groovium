@@ -30,10 +30,12 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "img-src": "'self' asset: http://asset.localhost data: blob:",
+        "script-src": "'self' https://sdk.scdn.co",
+        "img-src": "'self' asset: http://asset.localhost data: blob: https://i.scdn.co",
         "media-src": "'self' asset: http://asset.localhost blob:",
         "style-src": "'self' 'unsafe-inline'",
-        "connect-src": "'self' ipc: http://ipc.localhost"
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
+        "frame-src": "'self' https://sdk.scdn.co"
       },
       "assetProtocol": {
         "enable": true,
