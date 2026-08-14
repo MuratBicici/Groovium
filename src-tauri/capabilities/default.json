@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the Groovium widget window. Deliberately narrow: only what the custom titlebar needs. The file picker is not here on purpose — it runs in Rust (src/files.rs), so the webview has no dialog permission at all.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close"
+  ]
+}

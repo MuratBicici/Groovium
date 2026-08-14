@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+/*
+ * Vintage-modern palette: warm cream and brass over espresso, so the widget
+ * reads as a small physical object rather than a translucent panel.
+ */
+@theme {
+  --color-shell-900: #16110d;
+  --color-shell-800: #211913;
+  --color-shell-700: #2e231b;
+  --color-shell-600: #3d2f24;
+
+  --color-brass-400: #e0b071;
+  --color-brass-500: #c8945a;
+  --color-brass-600: #a2743f;
+
+  --color-cream-50: #f6efe4;
+  --color-cream-200: #ddd0bb;
+  --color-cream-400: #a9977e;
+
+  --radius-widget: 18px;
+}
+
+/*
+ * The Tauri window is transparent and undecorated, so nothing here may paint an
+ * opaque background — the rounded shell in App.tsx is the only visible surface.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  overflow: hidden;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: var(--color-cream-50);
+  /* A desktop widget should feel like a control surface, not a web page. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Anything marked as a drag region must not also look like selectable text. */
+[data-tauri-drag-region] {
+  cursor: grab;
+}
+[data-tauri-drag-region]:active {
+  cursor: grabbing;
+}
+
+@keyframes groove-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * The platter keeps spinning as a paused animation rather than resetting, so
+ * pausing and resuming picks up from the same angle instead of snapping back.
+ */
+.groove-platter {
+  animation: groove-spin 4.5s linear infinite;
+}
+.groove-platter[data-spinning='false'] {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-platter {
+    animation: none;
+  }
+}

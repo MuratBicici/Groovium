@@ -1,0 +1,37 @@
+[package]
+name = "groovium"
+version = "0.1.0"
+description = "A lightweight, modern desktop music player widget with a vintage disk player aesthetic."
+authors = ["Murat Emre Bicici"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `macos-private-api` is required for `transparent: true` to work on macOS.
+# `protocol-asset` backs `convertFileSrc()`, which is how local audio files reach
+# the webview; it must stay in sync with `assetProtocol.enable` in tauri.conf.json.
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
+tauri-plugin-dialog = "2"
+
+# OS credential store: DPAPI on Windows, Keychain on macOS, Secret Service on
+# Linux. Default features pull in the native backend for each platform, which is
+# the whole point — secrets must never land in a file we manage.
+keyring = "4"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Enabled by `tauri dev`; keeps devtools available in debug builds only.
+default = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

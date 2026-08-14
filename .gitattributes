@@ -1,0 +1,10 @@
+# Groovium targets Windows, macOS and Linux, so line endings are normalized to
+# LF in the repository regardless of the platform a contributor works on.
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.woff2 binary

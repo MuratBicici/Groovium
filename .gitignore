@@ -141,3 +141,14 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Claude Code — shared config is committed, machine-local settings are not
+.claude/settings.local.json
+
+# Rust / Tauri
+/src-tauri/target/
+/src-tauri/gen/
+**/*.rs.bk
+
+# Build output
+/dist/
