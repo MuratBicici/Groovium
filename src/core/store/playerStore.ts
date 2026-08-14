@@ -14,6 +14,8 @@ import {
   registerProvider,
   getProvider,
 } from '@/core/providers';
+import { toPickedFiles } from '@/core/providers/localFilePicker';
+import { loadSession, saveSession } from '@/core/session';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 
@@ -21,6 +23,15 @@ export type RepeatMode = 'off' | 'one' | 'all';
 
 /** Treat a `previous` press past this point as "restart the track" instead. */
 const RESTART_THRESHOLD_MS = 3000;
+
+/**
+ * Quiet period before the session is written.
+ *
+ * Dragging the volume knob fires dozens of updates a second; without this, each
+ * one would be a disk write. Long enough to coalesce a gesture, short enough
+ * that closing the window right after a change still saves it.
+ */
+const SESSION_SAVE_DEBOUNCE_MS = 800;
 
 export interface PlayerState {
   activeProviderId: SourceType;
@@ -47,6 +58,7 @@ export interface PlayerActions {
 
   setQueue: (tracks: TrackMetadata[], startIndex?: number) => Promise<void>;
   enqueue: (tracks: TrackMetadata[]) => void;
+  removeAt: (index: number) => Promise<void>;
   clearQueue: () => void;
 
   playAt: (index: number) => Promise<void>;
@@ -192,6 +204,106 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let persistenceStarted = false;
+
+  /**
+   * Rebuild the previous session.
+   *
+   * Restores the queue and settings but deliberately does not start playback —
+   * an app that begins making noise the moment it launches is hostile. The
+   * previously playing track is left selected, so one press of play resumes it.
+   */
+  async function restoreSession(): Promise<void> {
+    const session = await loadSession();
+    if (!session) {
+      startPersisting();
+      return;
+    }
+
+    const repeat: RepeatMode =
+      session.repeat === 'all' || session.repeat === 'one' ? session.repeat : 'off';
+
+    set({
+      volume: clamp(session.volume, 0, 1),
+      muted: session.muted,
+      repeat,
+      shuffle: session.shuffle,
+    });
+
+    const provider = getProvider('local');
+    if (provider instanceof LocalAudioProvider && session.queue.length > 0) {
+      // Rust already dropped entries whose files are gone, so everything here
+      // is playable and its asset access has been re-granted.
+      const tracks = await provider.addFiles(await toPickedFiles(session.queue));
+
+      const index =
+        session.queueIndex >= 0 && session.queueIndex < tracks.length ? session.queueIndex : -1;
+      const current = index >= 0 ? (tracks[index] ?? null) : null;
+
+      set({
+        queue: tracks,
+        queueIndex: index,
+        shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
+        currentTrack: current,
+        durationMs: current?.duration ?? 0,
+        positionMs: 0,
+      });
+    }
+
+    await withProvider((p) => p.setVolume(outputAmplitude()));
+    startPersisting();
+  }
+
+  /**
+   * Begin persisting changes. Attached after restore, so replaying the restored
+   * state back into the store does not immediately rewrite the file.
+   */
+  function startPersisting(): void {
+    if (persistenceStarted) return;
+    persistenceStarted = true;
+
+    usePlayerStore.subscribe((state, prev) => {
+      const unchanged =
+        state.queue === prev.queue &&
+        state.queueIndex === prev.queueIndex &&
+        state.volume === prev.volume &&
+        state.muted === prev.muted &&
+        state.repeat === prev.repeat &&
+        state.shuffle === prev.shuffle;
+
+      // Progress ticks arrive several times a second and are not persisted.
+      if (unchanged) return;
+
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        void persistNow();
+      }, SESSION_SAVE_DEBOUNCE_MS);
+    });
+  }
+
+  async function persistNow(): Promise<void> {
+    const { queue, queueIndex, volume, muted, repeat, shuffle } = get();
+    const provider = getProvider('local');
+
+    // Only the local provider can describe its tracks by path. Browser-picked
+    // files carry blob URLs, which mean nothing in the next run.
+    const persistedQueue =
+      provider instanceof LocalAudioProvider ? provider.toPersisted(queue.map((t) => t.id)) : [];
+
+    await saveSession({
+      queue: persistedQueue,
+      // Any dropped entry shifts every later index, so rather than guess, forget
+      // the selection.
+      queueIndex: persistedQueue.length === queue.length ? queueIndex : -1,
+      volume,
+      muted,
+      repeat,
+      shuffle,
+    });
+  }
+
   return {
     ...initialState,
 
@@ -205,6 +317,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       set({ initialized: true });
       await get().setActiveProvider('local');
+      await restoreSession();
     },
 
     async setActiveProvider(id) {
@@ -255,8 +368,49 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       });
     },
 
+    async removeAt(index) {
+      const { queue, queueIndex } = get();
+      const track = queue[index];
+      if (!track) return;
+
+      const removingCurrent = index === queueIndex;
+      if (removingCurrent) await withProvider((provider) => provider.pause());
+
+      // Release the provider's hold on the file — blob URLs in particular leak
+      // until revoked.
+      const provider = getProvider(get().activeProviderId);
+      if (provider instanceof LocalAudioProvider) provider.forget(track.id);
+
+      const nextQueue = queue.filter((_, i) => i !== index);
+
+      // Removing the playing track stops playback rather than jumping onward:
+      // a delete that silently starts a different song is startling.
+      let nextIndex = queueIndex;
+      if (removingCurrent) nextIndex = -1;
+      else if (index < queueIndex) nextIndex = queueIndex - 1;
+
+      set({
+        queue: nextQueue,
+        queueIndex: nextIndex,
+        shuffleOrder: get().shuffle ? shuffledIndices(nextQueue.length, nextIndex) : [],
+      });
+
+      if (removingCurrent) {
+        set({ currentTrack: null, playbackState: 'IDLE', positionMs: 0, durationMs: 0 });
+      }
+    },
+
     clearQueue() {
       void withProvider((provider) => provider.pause());
+
+      // Forget the files as well, not just the queue rows. Leaving them in the
+      // library would make re-adding the same file look like a duplicate and be
+      // silently refused.
+      const provider = getProvider(get().activeProviderId);
+      if (provider instanceof LocalAudioProvider) {
+        for (const track of get().queue) provider.forget(track.id);
+      }
+
       set({
         queue: [],
         queueIndex: -1,

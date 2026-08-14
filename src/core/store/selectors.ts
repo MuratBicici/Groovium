@@ -38,6 +38,7 @@ export const usePlayerActions = () => ({
   setActiveProvider: usePlayerStore((s) => s.setActiveProvider),
   setQueue: usePlayerStore((s) => s.setQueue),
   enqueue: usePlayerStore((s) => s.enqueue),
+  removeAt: usePlayerStore((s) => s.removeAt),
   clearQueue: usePlayerStore((s) => s.clearQueue),
   playAt: usePlayerStore((s) => s.playAt),
   togglePlayPause: usePlayerStore((s) => s.togglePlayPause),

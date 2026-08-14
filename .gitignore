@@ -152,3 +152,6 @@ vite.config.ts.timestamp-*
 
 # Build output
 /dist/
+
+# Generated audio fixtures for manual testing
+/.test-audio/

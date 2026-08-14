@@ -22,6 +22,13 @@ tauri-plugin-dialog = "2"
 # the whole point — secrets must never land in a file we manage.
 keyring = "4"
 
+# Audio tag reading: ID3v2, Vorbis comments, MP4 ilst, APE. Also yields track
+# duration from the file header, which is far cheaper and more reliable than
+# loading each file into a throwaway <audio> element to measure it.
+lofty = "0.25"
+walkdir = "2"
+base64 = "0.22"
+
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

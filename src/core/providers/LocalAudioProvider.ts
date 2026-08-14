@@ -1,16 +1,36 @@
 import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
+import type { PersistedTrack } from '@/core/session';
 import { clamp } from '@/core/utils/time';
 import { BaseProvider } from './BaseProvider';
-import { pickAudioFiles, type PickedFile } from './localFilePicker';
+import {
+  pickAudioFiles,
+  pickMusicFolder,
+  readCoverArt,
+  type PickedFile,
+} from './localFilePicker';
 
 interface LibraryEntry {
   track: TrackMetadata;
   url: string;
   isObjectUrl: boolean;
+  /** Absolute path, when known. Needed to fetch artwork lazily. */
+  path?: string;
+  /** Artwork is embedded in the file but has not been fetched yet. */
+  hasCoverArt: boolean;
+  /** File identity, kept so the entry can be un-indexed when removed. */
+  dedupeKey: string;
 }
 
 /** How long to wait for a file's duration before giving up and showing 0:00. */
 const DURATION_PROBE_TIMEOUT_MS = 8000;
+
+/** Outcome of an import, so callers can tell "cancelled" from "all duplicates". */
+export interface ImportResult {
+  added: TrackMetadata[];
+  /** How many files the user actually selected. Zero means they cancelled. */
+  picked: number;
+  duplicates: number;
+}
 
 /**
  * Baseline provider backed by an `HTMLAudioElement`.
@@ -26,6 +46,8 @@ export class LocalAudioProvider extends BaseProvider {
 
   private audio: HTMLAudioElement | null = null;
   private readonly library = new Map<string, LibraryEntry>();
+  /** Reverse index from file identity to track id, so a file cannot be added twice. */
+  private readonly byDedupeKey = new Map<string, string>();
   private nextTrackNumber = 0;
 
   async initialize(): Promise<boolean> {
@@ -70,6 +92,9 @@ export class LocalAudioProvider extends BaseProvider {
     try {
       await audio.play();
       this.setState('PLAYING');
+      // Artwork is fetched off the critical path: playback should never wait on
+      // a multi-megabyte JPEG crossing the IPC boundary.
+      void this.hydrateCoverArt(entry);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.fail(`Playback failed: ${message}`);
@@ -130,6 +155,7 @@ export class LocalAudioProvider extends BaseProvider {
       if (entry.isObjectUrl) URL.revokeObjectURL(entry.url);
     }
     this.library.clear();
+    this.byDedupeKey.clear();
 
     this.currentTrack = null;
     this.state = 'IDLE';
@@ -140,27 +166,161 @@ export class LocalAudioProvider extends BaseProvider {
   // Populating a library from disk has no meaning for streaming providers, so
   // it lives here rather than on the shared `AudioProvider` contract.
 
-  /** Open a file picker and add the chosen files. Returns the new tracks. */
-  async pickAndAddFiles(): Promise<TrackMetadata[]> {
-    return this.addFiles(await pickAudioFiles());
+  /** Open a file picker and add the chosen files. */
+  async pickAndAddFiles(): Promise<ImportResult> {
+    return this.importPicked(await pickAudioFiles());
   }
 
+  /** Open a folder picker and add every audio file found inside it. */
+  async pickAndAddFolder(): Promise<ImportResult> {
+    return this.importPicked(await pickMusicFolder());
+  }
+
+  /**
+   * Report duplicates separately from additions.
+   *
+   * A caller cannot infer this from an empty track list: no selection at all and
+   * a selection of nothing but duplicates look identical otherwise, and they
+   * warrant very different feedback.
+   */
+  private async importPicked(files: PickedFile[]): Promise<ImportResult> {
+    const added = await this.addFiles(files);
+    return { added, picked: files.length, duplicates: files.length - added.length };
+  }
+
+  /**
+   * Add files, skipping any already in the library.
+   *
+   * Returns only the tracks that were actually added, so a caller can tell how
+   * many were duplicates by comparing against what it passed in.
+   */
   async addFiles(files: PickedFile[]): Promise<TrackMetadata[]> {
-    const tracks = await Promise.all(files.map((file) => this.addFile(file)));
-    return tracks;
+    // Deduplicate within this batch too — a folder scan can reach the same file
+    // through two paths, and the user can shift-select a file twice.
+    const fresh = new Map<string, PickedFile>();
+    for (const file of files) {
+      if (this.byDedupeKey.has(file.dedupeKey) || fresh.has(file.dedupeKey)) {
+        // The blob URL for a rejected browser file would otherwise leak.
+        if (file.isObjectUrl) URL.revokeObjectURL(file.url);
+        continue;
+      }
+      fresh.set(file.dedupeKey, file);
+    }
+
+    return Promise.all([...fresh.values()].map((file) => this.addFile(file)));
+  }
+
+  /**
+   * Drop a track from the library and release anything it held.
+   *
+   * Local-only: forgetting a file has no meaning for a streaming source, so this
+   * stays off the shared `AudioProvider` contract.
+   */
+  forget(trackId: string): void {
+    const entry = this.library.get(trackId);
+    if (!entry) return;
+
+    if (entry.isObjectUrl) URL.revokeObjectURL(entry.url);
+    this.library.delete(trackId);
+    this.byDedupeKey.delete(entry.dedupeKey);
+
+    if (this.currentTrack?.id === trackId) {
+      this.audio?.pause();
+      this.setCurrentTrack(null);
+      this.setState('IDLE');
+    }
+  }
+
+  /**
+   * Describe the given tracks in a form that survives a restart.
+   *
+   * The store cannot do this itself: `TrackMetadata` carries no file path, and
+   * adding one would push a local-only concern into the shared contract. Tracks
+   * with no path — anything from the browser file input — are skipped, since a
+   * blob URL is meaningless in the next run.
+   */
+  toPersisted(trackIds: string[]): PersistedTrack[] {
+    const persisted: PersistedTrack[] = [];
+
+    for (const id of trackIds) {
+      const entry = this.library.get(id);
+      if (!entry || entry.path === undefined) continue;
+
+      persisted.push({
+        path: entry.path,
+        title: entry.track.title,
+        artist: entry.track.artist,
+        album: entry.track.album,
+        durationMs: entry.track.duration,
+        hasCoverArt: entry.hasCoverArt || entry.track.coverArtUrl !== undefined,
+      });
+    }
+
+    return persisted;
   }
 
   private async addFile(file: PickedFile): Promise<TrackMetadata> {
     const id = `local:${this.nextTrackNumber++}:${file.name}`;
-    const track: TrackMetadata = {
-      id,
-      ...parseNameMetadata(file.name),
-      duration: await probeDuration(file.url),
-      source: 'local',
-    };
+    const tags = file.metadata;
 
-    this.library.set(id, { track, url: file.url, isObjectUrl: file.isObjectUrl });
+    // Tags win when Rust could read them. The filename guess and the duration
+    // probe are the browser fallback, where no tag reader exists.
+    const track: TrackMetadata = tags
+      ? {
+          id,
+          title: tags.title,
+          artist: tags.artist,
+          album: tags.album,
+          duration: tags.durationMs,
+          source: 'local',
+        }
+      : {
+          id,
+          ...parseNameMetadata(file.name),
+          duration: await probeDuration(file.url),
+          source: 'local',
+        };
+
+    const entry: LibraryEntry = {
+      track,
+      url: file.url,
+      isObjectUrl: file.isObjectUrl,
+      hasCoverArt: tags?.hasCoverArt ?? false,
+      dedupeKey: file.dedupeKey,
+    };
+    if (file.path !== undefined) entry.path = file.path;
+
+    this.library.set(id, entry);
+    this.byDedupeKey.set(file.dedupeKey, id);
     return track;
+  }
+
+  /**
+   * Fetch embedded artwork once, then republish the track so the UI picks it up.
+   *
+   * Reuses the existing `track` event rather than adding a channel: the store
+   * already treats that event as "this track's metadata changed".
+   */
+  private async hydrateCoverArt(entry: LibraryEntry): Promise<void> {
+    if (!entry.hasCoverArt || entry.path === undefined || entry.track.coverArtUrl) return;
+
+    try {
+      const coverArtUrl = await readCoverArt(entry.path);
+      if (!coverArtUrl) {
+        // Nothing usable in the file after all; don't ask again.
+        entry.hasCoverArt = false;
+        return;
+      }
+
+      const updated: TrackMetadata = { ...entry.track, coverArtUrl };
+      entry.track = updated;
+
+      // The user may have skipped on while this was in flight.
+      if (this.currentTrack?.id === updated.id) this.setCurrentTrack(updated);
+    } catch (err) {
+      console.warn('[local] could not read cover art', err);
+      entry.hasCoverArt = false;
+    }
   }
 
   private requireAudio(): HTMLAudioElement {

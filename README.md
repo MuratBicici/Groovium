@@ -56,6 +56,7 @@ The rule that keeps this modular: **components never import a provider**. They r
 
 - OAuth tokens belong in the OS credential store (`src-tauri/src/keyring.rs`), never in a file or `localStorage`. There is no backend server anywhere in this design.
 - **The file picker runs in Rust, and that is load-bearing.** `src-tauri/src/files.rs` opens the native dialog, then grants asset-protocol access to exactly the files the user chose. The static asset scope is therefore empty, and the webview holds no dialog permission at all. Doing it the other way round — a JS-callable `allow_path(path)` command — would let any script in the webview unlock `~/.ssh/id_rsa` and read it back through `convertFileSrc`. Keep the picker on the Rust side.
+- Two commands follow from that rule and must keep following it. `read_cover_art` returns raw file bytes, so it serves only paths recorded in `PickedPaths` — paths the user picked this session. And the session file is written by Rust rather than through a JS-facing store, because it holds paths that get asset access re-granted at startup; a webview able to write it could name a path there and have the next launch unlock it.
 - **Known gap:** `vault_get_token` is currently callable from any script in the webview. Before the first real OAuth integration ships, refresh tokens must stay inside Rust, with only short-lived access tokens crossing into JS. See the note at the top of `src/core/security/tokenVault.ts`.
 
 ## Status
@@ -66,7 +67,9 @@ The current UI is a placeholder. It is meant to be replaced wholesale — see *R
 
 ### Known caveats
 
-- Asset-protocol grants are per-run and not persisted. A future "remember my library" feature must re-allow its paths on startup — see `src-tauri/src/files.rs`.
+- Tags are read once, at import. Editing a file's tags afterwards will not update an entry already in the queue.
+- Folder scanning walks 8 levels deep and reads tags for every file it finds. A very large library will take a while and is not indexed or cached between runs — that needs a real library database, which this phase does not have.
+- Embedded artwork over 8 MB is skipped rather than pushed through IPC.
 - The native audio backend (`src-tauri/src/audio.rs`) is an inert stub, and testing so far says it can stay one. Playback runs on an `HTMLAudioElement`. See that file for the conditions that would justify switching to `rodio`/`symphonia`.
 - Track metadata is derived from filenames (`Artist - Title.ext`); there is no ID3/Vorbis tag reader yet.
 - If Vite HMR misbehaves under `tauri dev`, the CSP in `src-tauri/tauri.conf.json` is the first thing to check — temporarily setting `app.security.csp` to `null` isolates it.
