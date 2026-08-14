@@ -145,6 +145,9 @@ vite.config.ts.timestamp-*
 # Claude Code — shared config is committed, machine-local settings are not
 .claude/settings.local.json
 
+# JetBrains IDE — per-machine project settings
+.idea/
+
 # Rust / Tauri
 /src-tauri/target/
 /src-tauri/gen/

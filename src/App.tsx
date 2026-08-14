@@ -9,6 +9,7 @@ import { LoadFilesButton } from '@/components/controls/LoadFilesButton';
 import { QueueToggleButton } from '@/components/controls/QueueToggleButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
+import { startCommandBridge } from '@/platform/commandBridge';
 
 const QUEUE_PANEL_ID = 'groovium-queue';
 
@@ -26,6 +27,13 @@ export default function App() {
     // `disposeAllProviders()` exists for tests and for a future multi-window setup.
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    // Tray menu and global media keys arrive as events from Rust. Unlike the
+    // providers, this one does tear down cleanly, so StrictMode's double-invoke
+    // is harmless.
+    return startCommandBridge();
+  }, []);
 
   useEffect(() => {
     if (!queueOpen) return;

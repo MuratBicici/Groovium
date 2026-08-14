@@ -14,8 +14,16 @@ tauri-build = { version = "2", features = [] }
 # `macos-private-api` is required for `transparent: true` to work on macOS.
 # `protocol-asset` backs `convertFileSrc()`, which is how local audio files reach
 # the webview; it must stay in sync with `assetProtocol.enable` in tauri.conf.json.
-tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
+# `tray-icon` is what makes this a widget rather than just a small window:
+# closing the window hides to the tray instead of ending playback.
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon"] }
 tauri-plugin-dialog = "2"
+
+# OS integration. Media keys and the tray are registered on this side so the
+# webview needs no additional permissions for either.
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
 
 # OS credential store: DPAPI on Windows, Keychain on macOS, Secret Service on
 # Linux. Default features pull in the native backend for each platform, which is
