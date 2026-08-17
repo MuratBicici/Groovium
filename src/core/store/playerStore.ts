@@ -16,6 +16,7 @@ import {
 } from '@/core/providers';
 import {
   addToPlaylist as addToPlaylistFile,
+  attachCoverArtUrls,
   cancelImport as cancelImportFile,
   createPlaylist as createPlaylistFile,
   deletePlaylist as deletePlaylistFile,
@@ -213,17 +214,17 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
   /** Turn a context id into the tracks it stands for. */
   function resolveContext(contextId: ContextId): TrackMetadata[] {
-    const { library, playlists, storeDir } = get();
+    const { library, playlists } = get();
 
     if (contextId === 'library') {
-      return library.map((track) => libraryTrackToMetadata(track, storeDir));
+      return library.map((track) => libraryTrackToMetadata(track));
     }
     if (contextId.startsWith('playlist:')) {
       const id = contextId.slice('playlist:'.length);
       const playlist = playlists.find((p) => p.id === id);
       if (!playlist) return [];
       return playlist.items
-        .map((item) => playlistItemToMetadata(item, library, storeDir))
+        .map((item) => playlistItemToMetadata(item, library))
         .filter((track): track is TrackMetadata => track !== null);
     }
     return [];
@@ -254,11 +255,10 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({ stationSearching: true, stationNext: null });
 
     try {
-      const { library, storeDir, stationHistory } = get();
+      const { library, stationHistory } = get();
       const found = await resolveNextTrack({
         seed: currentTrack,
         library,
-        storeDir,
         exclude: new Set([...stationHistory, seedKey]),
         spotifyAvailable: await spotifyIsAuthenticated(),
         searchSpotify: searchTracks,
@@ -493,7 +493,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async refreshLibrary() {
-      const library = await loadLibrary();
+      // Cover URLs are derived here, once, so every consumer below —
+      // rows, playlist mapping, the station — sees them for free.
+      const library = await attachCoverArtUrls(await loadLibrary(), get().storeDir);
       set({ library });
 
       // Hand the provider everything it might be asked to play.

@@ -1,5 +1,6 @@
 import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
 import { clamp } from '@/core/utils/time';
+import { joinPath } from '@/core/utils/paths';
 import { BaseProvider } from './BaseProvider';
 import { readCoverArt, type PickedFile } from './localFilePicker';
 
@@ -12,12 +13,8 @@ export interface LibraryEntrySource {
   album: string;
   durationMs: number;
   hasCoverArt: boolean;
-}
-
-/** Join a directory and a file name without assuming a separator. */
-function joinPath(dir: string, name: string): string {
-  const separator = dir.includes('\\') ? '\\' : '/';
-  return dir.endsWith(separator) ? `${dir}${name}` : `${dir}${separator}${name}`;
+  /** Sidecar cover, already a renderable asset URL. */
+  coverArtUrl?: string;
 }
 
 interface LibraryEntry {
@@ -200,15 +197,21 @@ export class LocalAudioProvider extends BaseProvider {
     for (const track of tracks) {
       const path = joinPath(storeDir, track.storedFile);
       const id = `library:${track.id}`;
+      const metadata: TrackMetadata = {
+        id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration: track.durationMs,
+        source: 'local',
+      };
+      // The sidecar URL arrives with the entry, so `hydrateCoverArt`'s guard
+      // short-circuits and the per-play IPC fetch never happens for library
+      // tracks. (It used to happen and always fail: the store's files were
+      // never in the picker allowlist that `read_cover_art` checks.)
+      if (track.coverArtUrl) metadata.coverArtUrl = track.coverArtUrl;
       this.library.set(id, {
-        track: {
-          id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          duration: track.durationMs,
-          source: 'local',
-        },
+        track: metadata,
         url: convertFileSrc(path),
         isObjectUrl: false,
         path,

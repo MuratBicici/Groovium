@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useLibrary, usePlayback, usePlayerStore } from '@/core/store';
 import { libraryTrackToMetadata, type ScanSummary } from '@/core/library';
+import { useDiscFlight } from '@/components/player/DiscFlight';
+import { VinylDisc } from '@/components/player/VinylDisc';
 import { formatDuration } from '@/core/utils/time';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
 
@@ -20,13 +22,13 @@ interface LibraryPanelProps {
 export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
   const library = useLibrary();
   const playback = usePlayback();
-  const storeDir = usePlayerStore((s) => s.storeDir);
 
   const chooseFiles = usePlayerStore((s) => s.chooseFiles);
   const chooseFolder = usePlayerStore((s) => s.chooseFolder);
   const runImport = usePlayerStore((s) => s.runImport);
   const removeTrack = usePlayerStore((s) => s.removeTrack);
   const playFrom = usePlayerStore((s) => s.playFrom);
+  const { flyToPlatter } = useDiscFlight();
 
   const [pending, setPending] = useState<ScanSummary | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -106,15 +108,26 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
           {library.map((track, index) => {
             const playing =
               playback.id === 'library' && playback.index === index;
+            const meta = libraryTrackToMetadata(track);
             return (
               <li key={track.id} className="group/row flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => void playFrom('library', index)}
+                  onClick={(e) => {
+                    // Measured before the panel starts dissolving; the flight
+                    // then outlives the panel, which is the "pops out" read.
+                    const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
+                    if (disc) flyToPlatter(disc, meta);
+                    onClose();
+                    void playFrom('library', index);
+                  }}
                   className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors ${
                     playing ? 'bg-shell-700 text-brass-400' : 'text-cream-200 hover:bg-shell-700/60'
                   }`}
                 >
+                  <span data-disc className="shrink-0">
+                    <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[11px]">{track.title}</span>
                     <span className="block truncate text-[9px] text-cream-400">{track.artist}</span>
@@ -125,7 +138,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
                 </button>
 
                 <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
-                  <AddToPlaylist track={libraryTrackToMetadata(track, storeDir)} />
+                  <AddToPlaylist track={meta} />
                   <button
                     type="button"
                     aria-label={`Remove ${track.title} from library`}

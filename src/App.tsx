@@ -6,6 +6,7 @@ import { LibraryPanel } from '@/components/library/LibraryPanel';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
+import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
 import { StationSetup } from '@/components/station/StationSetup';
 import { TransportControls } from '@/components/controls/TransportControls';
@@ -65,6 +66,7 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50">
       <PlaylistPickerProvider>
+      <DiscFlightProvider>
       <WindowChrome />
 
       <main className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
@@ -146,6 +148,7 @@ export default function App() {
           {error}
         </button>
       )}
+      </DiscFlightProvider>
       </PlaylistPickerProvider>
     </div>
   );

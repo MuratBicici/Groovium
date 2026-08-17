@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { usePlayback, usePlaylists, usePlayerStore } from '@/core/store';
 import { playlistItemToMetadata } from '@/core/library';
+import { useDiscFlight } from '@/components/player/DiscFlight';
+import { VinylDisc } from '@/components/player/VinylDisc';
 import { formatDuration } from '@/core/utils/time';
 
 interface PlaylistsPanelProps {
@@ -20,12 +22,12 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
   const playlists = usePlaylists();
   const playback = usePlayback();
   const library = usePlayerStore((s) => s.library);
-  const storeDir = usePlayerStore((s) => s.storeDir);
 
   const newPlaylist = usePlayerStore((s) => s.newPlaylist);
   const removePlaylist = usePlayerStore((s) => s.removePlaylist);
   const removePlaylistItem = usePlayerStore((s) => s.removePlaylistItem);
   const playFrom = usePlayerStore((s) => s.playFrom);
+  const { flyToPlatter } = useDiscFlight();
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -84,18 +86,26 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
             </li>
           )}
           {current.items.map((item, index) => {
-            const track = playlistItemToMetadata(item, library, storeDir);
+            const track = playlistItemToMetadata(item, library);
             const playing = playback.id === `playlist:${current.id}` && playback.index === index;
             return (
               <li key={`${index}`} className="group/row flex items-center gap-1">
                 <button
                   type="button"
                   disabled={!track}
-                  onClick={() => void playFrom(`playlist:${current.id}`, index)}
+                  onClick={(e) => {
+                    const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
+                    if (disc && track) flyToPlatter(disc, track);
+                    onClose();
+                    void playFrom(`playlist:${current.id}`, index);
+                  }}
                   className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors disabled:opacity-40 ${
                     playing ? 'bg-shell-700 text-brass-400' : 'text-cream-200 hover:bg-shell-700/60'
                   }`}
                 >
+                  <span data-disc className="shrink-0">
+                    <VinylDisc size={24} coverArtUrl={track?.coverArtUrl} />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[11px]">
                       {track?.title ?? 'Unavailable'}

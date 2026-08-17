@@ -1,5 +1,6 @@
 import type { TrackMetadata } from '@/core/types';
 import { isTauri } from '@/core/utils/env';
+import { joinPath } from '@/core/utils/paths';
 
 /**
  * Bridge to the managed library and the app's playlists.
@@ -21,6 +22,13 @@ export interface LibraryTrack {
   album: string;
   durationMs: number;
   hasCoverArt: boolean;
+  /** Sidecar image inside the store directory, written by Rust at import. */
+  coverFile?: string;
+  /**
+   * Renderable URL for the sidecar, derived once per load by
+   * `attachCoverArtUrls`. Client-only — never sent back to Rust.
+   */
+  coverArtUrl?: string;
   addedAt: number;
 }
 
@@ -66,6 +74,28 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 export async function loadLibrary(): Promise<LibraryTrack[]> {
   if (!isTauri()) return [];
   return invoke<LibraryTrack[]>('library_load');
+}
+
+/**
+ * Attach asset-protocol URLs for sidecar covers.
+ *
+ * Done once per load rather than per render: `convertFileSrc` lives in the
+ * lazily imported Tauri module, so the sync mapping functions below could
+ * never call it. The store directory carries a recursive asset grant, which
+ * is what makes a plain file path renderable at all.
+ */
+export async function attachCoverArtUrls(
+  tracks: LibraryTrack[],
+  storeDir: string,
+): Promise<LibraryTrack[]> {
+  if (!isTauri() || !storeDir) return tracks;
+
+  const { convertFileSrc } = await import('@tauri-apps/api/core');
+  return tracks.map((track) =>
+    track.coverFile
+      ? { ...track, coverArtUrl: convertFileSrc(joinPath(storeDir, track.coverFile)) }
+      : track,
+  );
 }
 
 /** Absolute path of the store directory, fetched once and cached. */
@@ -175,7 +205,7 @@ export async function removeFromPlaylist(id: string, index: number): Promise<voi
  * `id` is prefixed so the local provider can tell a library id from anything
  * else, and so it never collides with a Spotify URI.
  */
-export function libraryTrackToMetadata(track: LibraryTrack, storeDirPath: string): TrackMetadata {
+export function libraryTrackToMetadata(track: LibraryTrack): TrackMetadata {
   const metadata: TrackMetadata = {
     id: `library:${track.id}`,
     title: track.title,
@@ -184,8 +214,7 @@ export function libraryTrackToMetadata(track: LibraryTrack, storeDirPath: string
     duration: track.durationMs,
     source: 'local',
   };
-  // Cover art is fetched lazily on play; the path is what the provider needs.
-  void storeDirPath;
+  if (track.coverArtUrl) metadata.coverArtUrl = track.coverArtUrl;
   return metadata;
 }
 
@@ -193,7 +222,6 @@ export function libraryTrackToMetadata(track: LibraryTrack, storeDirPath: string
 export function playlistItemToMetadata(
   item: PlaylistItem,
   library: LibraryTrack[],
-  storeDirPath: string,
 ): TrackMetadata | null {
   if (item.source === 'spotify') {
     const metadata: TrackMetadata = {
@@ -211,5 +239,5 @@ export function playlistItemToMetadata(
   // A local item is a reference; if the library entry is gone the row cannot
   // play, so it is dropped rather than shown as a dead end.
   const track = library.find((t) => t.id === item.libraryId);
-  return track ? libraryTrackToMetadata(track, storeDirPath) : null;
+  return track ? libraryTrackToMetadata(track) : null;
 }

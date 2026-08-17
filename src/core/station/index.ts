@@ -92,7 +92,6 @@ export function trackKey(track: TrackMetadata): string {
 export function findInLibrary(
   candidates: SimilarTrack[],
   library: LibraryTrack[],
-  storeDir: string,
   exclude: ReadonlySet<string>,
 ): TrackMetadata | null {
   if (library.length === 0) return null;
@@ -109,7 +108,7 @@ export function findInLibrary(
     if (exclude.has(key)) continue;
 
     const found = byKey.get(key);
-    if (found) return libraryTrackToMetadata(found, storeDir);
+    if (found) return libraryTrackToMetadata(found);
   }
   return null;
 }
@@ -118,7 +117,6 @@ export interface ResolveOptions {
   /** The track the station is continuing from. */
   seed: TrackMetadata;
   library: LibraryTrack[];
-  storeDir: string;
   /** Keys of tracks already played in this station run. */
   exclude: ReadonlySet<string>;
   /** Only true when Spotify is actually connected and able to play. */
@@ -135,12 +133,12 @@ export interface ResolveOptions {
  * error. Only an actual fault — an unreachable API, a rejected key — throws.
  */
 export async function resolveNextTrack(options: ResolveOptions): Promise<TrackMetadata | null> {
-  const { seed, library, storeDir, exclude, spotifyAvailable, searchSpotify } = options;
+  const { seed, library, exclude, spotifyAvailable, searchSpotify } = options;
 
   const candidates = await similarTracks(seed.artist, seed.title);
   if (candidates.length === 0) return null;
 
-  const local = findInLibrary(candidates, library, storeDir, exclude);
+  const local = findInLibrary(candidates, library, exclude);
   if (local) return local;
 
   if (!spotifyAvailable) return null;

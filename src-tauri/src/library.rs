@@ -58,6 +58,12 @@ pub struct LibraryTrack {
     pub album: String,
     pub duration_ms: u64,
     pub has_cover_art: bool,
+    /// Sidecar image inside the store directory, extracted at import time.
+    /// `None` on records from before the field existed; backfilled on load.
+    /// The sidecar exists because the store directory has an asset-protocol
+    /// grant — a file here is an `<img src>` with no IPC payload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_file: Option<String>,
     pub added_at: u64,
 }
 
@@ -196,6 +202,32 @@ fn read_library(path: &Path) -> Vec<LibraryTrack> {
     }
 }
 
+/// Extract sidecar covers for records that predate the `cover_file` field.
+///
+/// Runs on every load and is almost always a no-op: a record either has its
+/// sidecar, or has provably no artwork. The interesting case is a library
+/// imported before sidecars existed — its records say `has_cover_art` without
+/// owning a cover file, and extraction from our own copy is cheap enough at
+/// widget scale to do inline rather than behind a migration command.
+///
+/// Returns whether anything changed and the file should be rewritten.
+fn backfill_covers(tracks: &mut [LibraryTrack], store: &Store) -> bool {
+    let mut dirty = false;
+    for track in tracks.iter_mut() {
+        if track.cover_file.is_some() || !track.has_cover_art {
+            continue;
+        }
+        match metadata::extract_picture_to(&store.path_of(&track.stored_file), &store.root, &track.id) {
+            Some(name) => track.cover_file = Some(name),
+            // Our copy is the source of truth; nothing extractable means the
+            // flag was optimistic. Clearing it stops the retry every launch.
+            None => track.has_cover_art = false,
+        }
+        dirty = true;
+    }
+    dirty
+}
+
 fn write_library(path: &Path, tracks: &[LibraryTrack]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Could not create {}: {e}", parent.display()))?;
@@ -243,7 +275,12 @@ pub fn library_load(app: AppHandle) -> Result<Vec<LibraryTrack>, String> {
         .allow_directory(&store.root, true)
         .map_err(|e| format!("Could not grant access to the library folder: {e}"))?;
 
-    Ok(read_library(&library_path(&app)?))
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    if backfill_covers(&mut tracks, &store) {
+        write_library(&library_path, &tracks)?;
+    }
+    Ok(tracks)
 }
 
 /// Ask for files and report what importing them would involve.
@@ -381,6 +418,9 @@ pub fn library_import(
         // come from the source. The copy is named after a generated id, and an
         // untagged file named after it would show a random string as its title.
         let scanned = metadata::read_track_named(&store.path_of(&stored_file), &source);
+        // Artwork comes out now, while the copy is fresh — the sidecar is what
+        // the webview renders, via the store directory's asset grant.
+        let cover_file = metadata::extract_picture_to(&store.path_of(&stored_file), &store.root, &id);
         let track = LibraryTrack {
             id,
             stored_file,
@@ -389,7 +429,11 @@ pub fn library_import(
             artist: scanned.artist,
             album: scanned.album,
             duration_ms: scanned.duration_ms,
-            has_cover_art: scanned.has_cover_art,
+            // The scan can say "has art" while extraction says "nothing usable"
+            // (oversized booklet scans, corrupt pictures). The sidecar is what
+            // actually renders, so it decides.
+            has_cover_art: cover_file.is_some(),
+            cover_file,
             added_at: now_secs(),
         };
 
@@ -427,7 +471,15 @@ pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
     };
     let removed = tracks.remove(position);
 
-    store(&app)?.discard(&removed.stored_file)?;
+    let store = store(&app)?;
+    store.discard(&removed.stored_file)?;
+    if let Some(cover) = &removed.cover_file {
+        // Best effort: an orphaned cover image wastes a few KB; it does not
+        // justify failing the removal the user asked for.
+        if let Err(e) = store.discard(cover) {
+            eprintln!("[library] {e}");
+        }
+    }
     write_library(&library_path, &tracks)?;
 
     // The copy is gone, so any playlist row pointing at it could never play.
@@ -546,11 +598,96 @@ mod tests {
             album: "Autobahn".into(),
             duration_ms: 1234,
             has_cover_art: true,
+            cover_file: Some("id4.cover.jpg".into()),
             added_at: 99,
         };
 
         write_library(&path, std::slice::from_ref(&track)).expect("write");
         assert_eq!(read_library(&path), vec![track]);
+    }
+
+    #[test]
+    fn a_library_from_before_sidecar_covers_still_loads() {
+        // `cover_file` was added without a version bump on purpose: bumping
+        // would have discarded every existing library over one optional field.
+        let dir = TempDir::new();
+        let path = dir.join("library.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"tracks":[{"id":"a","storedFile":"a.mp3","sourcePath":"C:/x.mp3",
+                "title":"T","artist":"A","album":"B","durationMs":1,"hasCoverArt":true,"addedAt":0}]}"#,
+        )
+        .unwrap();
+
+        let tracks = read_library(&path);
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].cover_file, None, "old records read as None");
+    }
+
+    #[test]
+    fn backfill_gives_up_on_a_track_with_no_extractable_art() {
+        // A pre-sidecar record claims art, but the stored copy yields nothing
+        // (here: not even audio). The flag must be cleared — otherwise every
+        // launch would retry the extraction and rewrite the library.
+        let dir = TempDir::new();
+        let store = Store::new(dir.join("store"));
+        fs::create_dir_all(&store.root).unwrap();
+        fs::write(store.path_of("a.mp3"), b"not audio").unwrap();
+
+        let mut tracks = vec![LibraryTrack {
+            id: "a".into(),
+            stored_file: "a.mp3".into(),
+            source_path: String::new(),
+            title: "T".into(),
+            artist: "A".into(),
+            album: "B".into(),
+            duration_ms: 1,
+            has_cover_art: true,
+            cover_file: None,
+            added_at: 0,
+        }];
+
+        assert!(backfill_covers(&mut tracks, &store), "the record changed");
+        assert!(!tracks[0].has_cover_art);
+        assert_eq!(tracks[0].cover_file, None);
+
+        // Second pass has nothing left to do — the launch-loop guard.
+        assert!(!backfill_covers(&mut tracks, &store));
+    }
+
+    #[test]
+    fn backfill_leaves_settled_records_alone() {
+        let dir = TempDir::new();
+        let store = Store::new(dir.join("store"));
+
+        let mut tracks = vec![
+            LibraryTrack {
+                id: "done".into(),
+                stored_file: "done.mp3".into(),
+                source_path: String::new(),
+                title: "T".into(),
+                artist: "A".into(),
+                album: "B".into(),
+                duration_ms: 1,
+                has_cover_art: true,
+                cover_file: Some("done.cover.jpg".into()),
+                added_at: 0,
+            },
+            LibraryTrack {
+                id: "artless".into(),
+                stored_file: "artless.mp3".into(),
+                source_path: String::new(),
+                title: "T".into(),
+                artist: "A".into(),
+                album: "B".into(),
+                duration_ms: 1,
+                has_cover_art: false,
+                cover_file: None,
+                added_at: 0,
+            },
+        ];
+
+        assert!(!backfill_covers(&mut tracks, &store), "nothing to do, no rewrite");
     }
 
     #[test]

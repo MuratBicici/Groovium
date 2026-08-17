@@ -3,6 +3,8 @@ import { searchTracks } from '@/core/providers/spotifyApi';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
+import { useDiscFlight } from '@/components/player/DiscFlight';
+import { VinylDisc } from '@/components/player/VinylDisc';
 
 /** Wait for typing to settle before spending a request. */
 const DEBOUNCE_MS = 350;
@@ -15,13 +17,20 @@ const DEBOUNCE_MS = 350;
  * result plays on its own and stops — saving it to a playlist is what makes it
  * part of something that keeps going.
  */
-export function SpotifySearch() {
+interface SpotifySearchProps {
+  /** Raised when a result starts playing, so the panel can fold away and let
+      the disc's flight to the platter be seen. */
+  onTrackPlayed?: (() => void) | undefined;
+}
+
+export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TrackMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
+  const { flyToPlatter } = useDiscFlight();
 
   // Ignore responses from a query the user has already typed past.
   const requestSeq = useRef(0);
@@ -81,19 +90,17 @@ export function SpotifySearch() {
           <li key={track.id} className="group/row flex items-center gap-1">
             <button
               type="button"
-              onClick={() => void playSingle(track)}
+              onClick={(e) => {
+                const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
+                if (disc) flyToPlatter(disc, track);
+                onTrackPlayed?.();
+                void playSingle(track);
+              }}
               className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-shell-700/60"
             >
-              {track.coverArtUrl ? (
-                <img
-                  src={track.coverArtUrl}
-                  alt=""
-                  loading="lazy"
-                  className="h-7 w-7 shrink-0 rounded-sm object-cover"
-                />
-              ) : (
-                <span className="h-7 w-7 shrink-0 rounded-sm bg-shell-700" />
-              )}
+              <span data-disc className="shrink-0">
+                <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[11px] text-cream-100">{track.title}</span>
                 <span className="block truncate text-[9px] text-cream-400">{track.artist}</span>

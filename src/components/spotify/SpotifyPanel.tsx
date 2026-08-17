@@ -158,7 +158,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
                 {premiumWarning}
               </p>
             )}
-            <SpotifySearch />
+            <SpotifySearch onTrackPlayed={onClose} />
           </div>
         )}
       </div>

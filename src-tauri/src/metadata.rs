@@ -98,6 +98,45 @@ pub fn read_track_named(path: &Path, name_source: &Path) -> ScannedTrack {
 
 /// Extract embedded artwork, if any is present and small enough to send.
 pub fn read_picture(path: &Path) -> Option<CoverArt> {
+    let (mime_type, data) = usable_picture(path)?;
+
+    Some(CoverArt {
+        mime_type,
+        base64: base64::engine::general_purpose::STANDARD.encode(data),
+    })
+}
+
+/// Extract embedded artwork into `dest_dir` as `<id>.cover.<ext>`.
+///
+/// This is how the library gets cover art the webview can actually load: the
+/// store directory carries a recursive asset-protocol grant, so a file written
+/// here becomes an `<img src>` with no IPC payload at all — unlike the base64
+/// path above, which ships the whole image through a command response.
+///
+/// Returns the sidecar's file name, or `None` when there is nothing usable.
+/// Writes via `.partial` + rename, same reasoning as `Store::take_in`: a
+/// failure part-way through must not leave a file that looks like a finished
+/// cover.
+pub fn extract_picture_to(audio_path: &Path, dest_dir: &Path, id: &str) -> Option<String> {
+    let (mime_type, data) = usable_picture(audio_path)?;
+
+    let file_name = format!("{id}.cover.{}", extension_for_mime(&mime_type));
+    let final_path = dest_dir.join(&file_name);
+    let temp_path = dest_dir.join(format!("{id}.cover.partial"));
+
+    if std::fs::write(&temp_path, &data).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return None;
+    }
+    if std::fs::rename(&temp_path, &final_path).is_err() {
+        let _ = std::fs::remove_file(&temp_path);
+        return None;
+    }
+    Some(file_name)
+}
+
+/// The embedded picture, when one exists and is worth using.
+fn usable_picture(path: &Path) -> Option<(String, Vec<u8>)> {
     let tagged = read_from_path(path).ok()?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag())?;
     let picture = tag.pictures().first()?;
@@ -107,13 +146,28 @@ pub fn read_picture(path: &Path) -> Option<CoverArt> {
         return None;
     }
 
-    Some(CoverArt {
-        mime_type: picture
-            .mime_type()
-            .map(|mime| mime.to_string())
-            .unwrap_or_else(|| "image/jpeg".to_owned()),
-        base64: base64::engine::general_purpose::STANDARD.encode(data),
-    })
+    let mime_type = picture
+        .mime_type()
+        .map(|mime| mime.to_string())
+        .unwrap_or_else(|| "image/jpeg".to_owned());
+    Some((mime_type, data.to_vec()))
+}
+
+/// File extension for an embedded picture's mime type.
+///
+/// The bytes are written out verbatim — there is no image decoding in this app —
+/// so the extension is the only place the type survives. Unknown types get
+/// "jpg" because that is what an untyped embedded picture almost always is, and
+/// the webview sniffs the real content anyway.
+fn extension_for_mime(mime: &str) -> &'static str {
+    match mime {
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/bmp" => "bmp",
+        "image/tiff" => "tif",
+        "image/webp" => "webp",
+        _ => "jpg",
+    }
 }
 
 struct FallbackMetadata {
@@ -226,5 +280,30 @@ mod tests {
     fn blank_tag_values_count_as_missing() {
         assert_eq!(non_empty(Some("   ")), None);
         assert_eq!(non_empty(Some(" Kraftwerk ")), Some("Kraftwerk".to_owned()));
+    }
+
+    #[test]
+    fn mime_types_map_onto_extensions() {
+        assert_eq!(extension_for_mime("image/png"), "png");
+        assert_eq!(extension_for_mime("image/jpeg"), "jpg");
+        // Unknown types default to jpg — the bytes are copied verbatim and the
+        // webview sniffs the real content, so a wrong guess still renders.
+        assert_eq!(extension_for_mime("application/octet-stream"), "jpg");
+    }
+
+    #[test]
+    fn extracting_from_an_artless_file_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join(format!("groovium-cover-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Not audio at all — extraction must fail without leaving a partial.
+        let fake = dir.join("noise.mp3");
+        std::fs::write(&fake, b"not really audio").unwrap();
+
+        assert_eq!(extract_picture_to(&fake, &dir, "t1"), None);
+        assert!(!dir.join("t1.cover.partial").exists());
+        assert!(!dir.join("t1.cover.jpg").exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
