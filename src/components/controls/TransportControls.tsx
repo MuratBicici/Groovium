@@ -1,4 +1,5 @@
 import {
+  useCurrentTrack,
   usePlaybackState,
   usePlayerStore,
   useHasPlayback,
@@ -7,6 +8,7 @@ import {
   useStation,
   useStationSearching,
 } from '@/core/store';
+import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
 
 interface TransportControlsProps {
   /** Raised when infinite play is switched on before a Last.fm key exists. */
@@ -16,6 +18,7 @@ interface TransportControlsProps {
 /** Prev / play-pause / next, plus the shuffle, repeat and station toggles. */
 export function TransportControls({ onStationNeedsSetup }: TransportControlsProps) {
   const playbackState = usePlaybackState();
+  const currentTrack = useCurrentTrack();
   const hasQueue = useHasPlayback();
   const repeat = useRepeatMode();
   const shuffle = useShuffle();
@@ -40,10 +43,11 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
 
   return (
     <div className="flex items-center justify-center gap-2 px-4">
-      {/* Balances the station toggle at the far right. Without it the row still
-          centres as a group, but the play button — the one control the eye
-          actually lines up on — sits 18px off centre. */}
-      <span aria-hidden="true" className="h-7 w-7 shrink-0" />
+      {/* Balances the station toggle at the far right, so the play button stays
+          dead centre — it used to float over the platter, where it had to be
+          hidden behind every overlay and vanished with nothing playing. A
+          spacer held this slot until it had a real occupant. */}
+      <AddToPlaylist track={currentTrack} variant="transport" />
 
       <ToggleButton
         label="Shuffle"

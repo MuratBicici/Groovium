@@ -12,8 +12,7 @@ import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
-import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
-import { useCurrentTrack, usePlayerError, usePlayerStore } from '@/core/store';
+import { usePlayerError, usePlayerStore } from '@/core/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 
@@ -29,7 +28,6 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
 export default function App() {
   const initialize = usePlayerStore((s) => s.initialize);
   const error = usePlayerError();
-  const currentTrack = useCurrentTrack();
   const clearError = usePlayerStore((s) => s.clearError);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
@@ -76,15 +74,6 @@ export default function App() {
           <DiskPlatter />
           <TrackDisplay />
 
-          {/* Floats over the platter rather than sitting in a row: nothing else
-              has to shift to make room, so neither the centred title nor the
-              transport controls lose their symmetry. Hidden while an overlay is
-              up, since it belongs to the platter it sits on. */}
-          {currentTrack && overlay === 'none' && (
-            <span className="absolute right-4 bottom-0">
-              <AddToPlaylist track={currentTrack} prominent />
-            </span>
-          )}
           <LibraryPanel
             id={PANEL_IDS.library}
             open={overlay === 'library'}

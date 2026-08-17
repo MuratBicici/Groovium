@@ -2,9 +2,16 @@ import type { TrackMetadata } from '@/core/types';
 import { usePlaylistPicker } from './PlaylistPicker';
 
 interface AddToPlaylistProps {
-  track: TrackMetadata;
-  /** Slightly larger and always visible, for the now-playing track. */
-  prominent?: boolean;
+  /**
+   * Null renders the button disabled rather than absent.
+   *
+   * Only the transport row passes null, and it matters there: the control has
+   * to hold its place with nothing playing, or the row loses its symmetry every
+   * time playback stops.
+   */
+  track: TrackMetadata | null;
+  /** `transport` matches the sibling toggles in the transport row. */
+  variant?: 'row' | 'transport';
 }
 
 /**
@@ -14,24 +21,26 @@ interface AddToPlaylistProps {
  * the menu out of here is what stopped it being clipped by scrolling lists and
  * reappearing over rows it did not belong to.
  */
-export function AddToPlaylist({ track, prominent }: AddToPlaylistProps) {
+export function AddToPlaylist({ track, variant = 'row' }: AddToPlaylistProps) {
   const { pick } = usePlaylistPicker();
+  const inTransport = variant === 'transport';
 
   return (
     <button
       type="button"
-      aria-label={`Add ${track.title} to a playlist`}
+      aria-label={track ? `Add ${track.title} to a playlist` : 'Add to playlist'}
       title="Add to playlist"
-      onClick={() => pick(track)}
+      disabled={!track}
+      onClick={() => track && pick(track)}
       className={
-        prominent
-          ? 'flex h-6 w-6 items-center justify-center rounded-full bg-shell-700 text-cream-300 transition-colors hover:bg-brass-600 hover:text-shell-900'
+        inTransport
+          ? 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:text-cream-200 disabled:opacity-35 disabled:hover:text-cream-400'
           : 'flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50'
       }
     >
       <svg
         viewBox="0 0 24 24"
-        className={prominent ? 'h-3.5 w-3.5' : 'h-3 w-3'}
+        className={inTransport ? 'h-4 w-4' : 'h-3 w-3'}
         fill="none"
         stroke="currentColor"
         strokeWidth="2.2"
