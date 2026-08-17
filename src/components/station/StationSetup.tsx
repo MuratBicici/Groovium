@@ -68,9 +68,9 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
       <div
         role="dialog"
         aria-label="Set up infinite play"
-        className="relative w-full overflow-hidden rounded-lg bg-shell-800 ring-1 ring-shell-600"
+        className="relative flex max-h-full w-full flex-col overflow-hidden rounded-lg bg-shell-800 ring-1 ring-shell-600"
       >
-        <div className="px-3 pt-2.5 pb-1">
+        <div className="shrink-0 px-3 pt-2.5 pb-1">
           <p className="text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
             Infinite play
           </p>
@@ -80,11 +80,24 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
           </p>
         </div>
 
-        <div className="space-y-2.5 px-3 pt-1.5 pb-3 text-[11px] text-cream-200">
-          <Step number={1} title="Get an API key">
+        {/* Scrolls rather than overflows. It fits at 340×480 as written, but a
+            larger system font would push the Save button off the bottom of a
+            window this small, and a sheet you cannot submit is worse than one
+            you have to scroll. */}
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 pt-1.5 pb-3 text-[11px] text-cream-200">
+          <Step number={1} title="Create an API account">
             <p className="text-cream-400">
-              Fill in any name and description. The key appears straight away — there is nothing
-              to approve and no account to link.
+              The form has four fields. Only the first two matter:
+            </p>
+            <dl className="mt-1 space-y-0.5 text-[10px]">
+              <Field name="Application name">anything — “Groovium” will do</Field>
+              <Field name="Application description">anything</Field>
+              <Field name="Application homepage">leave blank</Field>
+              <Field name="Callback URL">leave blank</Field>
+            </dl>
+            <p className="mt-1 text-cream-400">
+              The last two belong to Last.fm’s sign-in flow. Groovium never signs you in — it only
+              asks which tracks are similar, and that needs the key alone.
             </p>
             <button
               type="button"
@@ -128,11 +141,27 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
           )}
 
           <p className="text-[10px] leading-snug text-cream-400/70 italic">
-            Tracks already in your library are preferred, so the station usually costs nothing to
-            keep running.
+            The key appears straight away — nothing to approve, no account to link. Tracks already
+            in your library are preferred, so the station usually costs nothing to keep running.
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One field of Last.fm's form.
+ *
+ * Spelled out because the form asks for more than this app needs, and a blank
+ * that is meant to stay blank looks like a mistake — the callback URL in
+ * particular invites inventing an address, which then quietly does nothing.
+ */
+function Field({ name, children }: { name: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-1.5">
+      <dt className="shrink-0 text-cream-200">{name}</dt>
+      <dd className="min-w-0 flex-1 text-cream-400">{children}</dd>
     </div>
   );
 }

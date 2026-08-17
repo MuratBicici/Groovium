@@ -105,6 +105,17 @@ The ∞ button beside repeat keeps the music going: when a playlist or the libra
 
 Suggestions come from Last.fm's `track.getSimilar`, which needs a **free API key**. The app asks for one the first time the button is pressed; [last.fm/api/account/create](https://www.last.fm/api/account/create) issues it immediately, with no app review and no account to link. It is stored in `config.json` beside the Spotify Client ID, not in the keyring — it authorises quota, not an account.
 
+The form asks for four things, and two of them do not apply here:
+
+| Field | Value |
+| --- | --- |
+| Application name | anything |
+| Application description | anything |
+| Application homepage | leave blank |
+| Callback URL | leave blank |
+
+The callback URL belongs to Last.fm's user sign-in flow, where it receives an auth token as a GET parameter. Groovium never signs you in to Last.fm — `track.getSimilar` states it does not require authentication and takes `artist`, `track` and `api_key` alone — so there is nothing to redirect back to. Inventing an address here would be harmless but pointless.
+
 Why Last.fm and not Spotify: `/recommendations`, `/audio-features` and `related-artists` were all closed to new apps in November 2024, so there is no similarity data left inside Spotify to use. Last.fm's lookup is keyed on **artist and title** rather than a platform id, which turns out to fit better — one lookup serves a local mp3 and a Spotify track alike, so a station can cross between them.
 
 The call is made from Rust (`src-tauri/src/lastfm.rs`), not the webview. Last.fm requires an identifying `User-Agent` and browsers refuse to let JavaScript set that header; keeping the key out of the webview is the second reason. No CSP change was needed.
