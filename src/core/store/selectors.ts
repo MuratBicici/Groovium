@@ -25,6 +25,9 @@ export const usePlaylists = () => usePlayerStore((s) => s.playlists);
 export const usePlayback = () => usePlayerStore((s) => s.playback);
 export const useImporting = () => usePlayerStore((s) => s.importing);
 
+export const useStation = () => usePlayerStore((s) => s.station);
+export const useStationSearching = () => usePlayerStore((s) => s.stationSearching);
+
 /** True while a track is actually producing sound. */
 export const useIsPlaying = () => usePlayerStore((s) => s.playbackState === 'PLAYING');
 

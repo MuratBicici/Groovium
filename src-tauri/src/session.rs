@@ -36,6 +36,11 @@ pub struct SessionState {
     pub repeat: String,
     #[serde(default)]
     pub shuffle: bool,
+    /// Infinite play. Added after version 2 shipped; `default` rather than a
+    /// version bump, so existing files keep their volume instead of being
+    /// discarded over one new boolean.
+    #[serde(default)]
+    pub station: bool,
 }
 
 fn default_volume() -> f64 {
@@ -53,6 +58,7 @@ impl Default for SessionState {
             muted: false,
             repeat: default_repeat(),
             shuffle: false,
+            station: false,
         }
     }
 }
@@ -125,12 +131,25 @@ mod tests {
     }
 
     #[test]
+    fn a_file_written_before_the_station_existed_still_loads() {
+        // Why `station` is a defaulted field and not a version bump: a bump
+        // would have thrown away the user's volume and repeat mode too.
+        let raw = r#"{"version":2,"volume":0.42,"muted":false,"repeat":"all","shuffle":true}"#;
+        let parsed: SessionState = serde_json::from_str(raw).expect("parses");
+
+        assert_eq!(parsed.version, SESSION_VERSION, "still the current version");
+        assert_eq!(parsed.volume, 0.42, "settings survive");
+        assert!(!parsed.station, "the new field reads as off");
+    }
+
+    #[test]
     fn round_trips_through_json() {
         let original = SessionState {
             volume: 0.35,
             muted: true,
             repeat: "one".to_owned(),
             shuffle: true,
+            station: true,
             ..SessionState::default()
         };
         let parsed: SessionState =
@@ -139,6 +158,7 @@ mod tests {
         assert_eq!(parsed.volume, 0.35);
         assert!(parsed.muted);
         assert_eq!(parsed.repeat, "one");
+        assert!(parsed.station);
     }
 
     #[test]

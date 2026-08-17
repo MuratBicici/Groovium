@@ -36,6 +36,9 @@ import {
   type ScanSummary,
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
+import { isAuthenticated as spotifyIsAuthenticated } from '@/core/security/spotifyAuth';
+import { hasApiKey as hasLastfmKey, resolveNextTrack, trackKey } from '@/core/station';
+import { searchTracks } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 
@@ -55,6 +58,15 @@ const RESTART_THRESHOLD_MS = 3000;
 
 /** Quiet period before playback settings are written. */
 const SESSION_SAVE_DEBOUNCE_MS = 800;
+
+/**
+ * How many recently played tracks the station refuses to suggest again.
+ *
+ * Without this the station ping-pongs between two songs that each name the
+ * other as their closest match, which is common near the top of Last.fm's
+ * results. Capped so a long run does not grow without bound.
+ */
+const STATION_MEMORY = 60;
 
 export interface PlaybackContext {
   id: ContextId;
@@ -87,6 +99,18 @@ export interface PlayerState {
   shuffleOrder: number[];
   /** Non-null while files are being copied in. */
   importing: ImportProgress | null;
+
+  /**
+   * Infinite play. When the current collection runs out, a similar track is
+   * found and played instead of stopping.
+   */
+  station: boolean;
+  /** True while a suggestion is being looked up. */
+  stationSearching: boolean;
+  /** The track lined up to follow this one, found while it still plays. */
+  stationNext: TrackMetadata | null;
+  /** Name-based keys of what has played, so the station does not loop. */
+  stationHistory: string[];
 }
 
 export interface PlayerActions {
@@ -109,6 +133,8 @@ export interface PlayerActions {
   toggleMute: () => Promise<void>;
   cycleRepeat: () => void;
   toggleShuffle: () => void;
+  /** Resolves false when there is no Last.fm key yet, so the UI can ask for one. */
+  toggleStation: () => Promise<boolean>;
   clearError: () => void;
 
   /** Open a picker and report what importing would copy. */
@@ -151,6 +177,10 @@ const initialState: PlayerState = {
   playback: EMPTY_CONTEXT,
   shuffleOrder: [],
   importing: null,
+  station: false,
+  stationSearching: false,
+  stationNext: null,
+  stationHistory: [],
 };
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
@@ -199,6 +229,95 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     return [];
   }
 
+  // --- Station ---------------------------------------------------------------
+
+  /** Guards against two lookups running at once for the same seed. */
+  let prefetchSeedKey: string | null = null;
+
+  /**
+   * Look up what should follow the current track, while it is still playing.
+   *
+   * Done ahead of time on purpose: the user asked for the next song to play
+   * "hemen sonrasında", and a Last.fm round trip plus a Spotify search started
+   * at the moment of silence would be audible as a gap.
+   */
+  async function prefetchStationTrack(): Promise<void> {
+    const { station, currentTrack } = get();
+    if (!station || !currentTrack) return;
+
+    const seedKey = trackKey(currentTrack);
+    // Already looked up for this track, or looking right now. Not retried when
+    // it came back empty either: a second call would return the same nothing.
+    if (prefetchSeedKey === seedKey) return;
+
+    prefetchSeedKey = seedKey;
+    set({ stationSearching: true, stationNext: null });
+
+    try {
+      const { library, storeDir, stationHistory } = get();
+      const found = await resolveNextTrack({
+        seed: currentTrack,
+        library,
+        storeDir,
+        exclude: new Set([...stationHistory, seedKey]),
+        spotifyAvailable: await spotifyIsAuthenticated(),
+        searchSpotify: searchTracks,
+      });
+
+      // The user may have moved on or switched the station off mid-lookup.
+      if (!get().station || prefetchSeedKey !== seedKey) return;
+      set({ stationNext: found });
+    } catch (err) {
+      // A station that cannot find anything should fall quiet, not interrupt
+      // playback with an error banner over a background lookup.
+      console.warn('[station] could not find a next track', err);
+      if (prefetchSeedKey === seedKey) set({ stationNext: null });
+    } finally {
+      if (prefetchSeedKey === seedKey) set({ stationSearching: false });
+    }
+  }
+
+  /**
+   * Extend the current context with the station's pick and play it.
+   *
+   * Appending rather than replacing keeps `previous` working: a station run
+   * reads back as one growing collection, which is what it sounds like.
+   */
+  async function playStationTrack(): Promise<boolean> {
+    if (!get().station) return false;
+
+    if (!get().stationNext) {
+      // Nothing prefetched — a very short track, or the station was just turned
+      // on. Look it up now and accept the gap.
+      await prefetchStationTrack();
+    }
+    const track = get().stationNext;
+    if (!track) return false;
+
+    const { playback, shuffle, shuffleOrder } = get();
+    const tracks = [...playback.tracks, track];
+    const index = tracks.length - 1;
+
+    set({
+      playback: { ...playback, tracks, index },
+      // `playbackOrder` falls back to sequential unless these stay the same
+      // length, which would silently undo shuffle for the rest of the run.
+      shuffleOrder: shuffle && shuffleOrder.length > 0 ? [...shuffleOrder, index] : shuffleOrder,
+      stationNext: null,
+    });
+    prefetchSeedKey = null;
+
+    await startTrack(index);
+    return true;
+  }
+
+  function rememberPlayed(track: TrackMetadata): void {
+    const key = trackKey(track);
+    const history = get().stationHistory.filter((entry) => entry !== key);
+    history.push(key);
+    set({ stationHistory: history.slice(-STATION_MEMORY) });
+  }
+
   async function handleTrackEnded(): Promise<void> {
     const { repeat, playback } = get();
 
@@ -208,11 +327,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
 
     const nextIndex = neighborIndex(1);
-    if (nextIndex === null) {
-      set({ playbackState: 'IDLE', positionMs: 0 });
+    if (nextIndex !== null) {
+      await startTrack(nextIndex);
       return;
     }
-    await startTrack(nextIndex);
+
+    // The collection is finished. With the station on, keep going; without it,
+    // stop — which is exactly the switch the button controls.
+    if (await playStationTrack()) return;
+    set({ playbackState: 'IDLE', positionMs: 0 });
   }
 
   function handleProviderEvent(event: ProviderEvent): void {
@@ -272,7 +395,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       durationMs: track.duration,
       error: null,
     });
+    rememberPlayed(track);
     await withProvider((provider) => provider.play(track.id));
+
+    // Deliberately not awaited: finding the successor must not delay playback.
+    void prefetchStationTrack();
   }
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -287,14 +414,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         state.volume === prev.volume &&
         state.muted === prev.muted &&
         state.repeat === prev.repeat &&
-        state.shuffle === prev.shuffle;
+        state.shuffle === prev.shuffle &&
+        state.station === prev.station;
       if (unchanged) return;
 
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        const { volume, muted, repeat, shuffle } = get();
-        void saveSession({ volume, muted, repeat, shuffle });
+        const { volume, muted, repeat, shuffle, station } = get();
+        void saveSession({ volume, muted, repeat, shuffle, station });
       }, SESSION_SAVE_DEBOUNCE_MS);
     });
   }
@@ -322,6 +450,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
           muted: session.muted,
           repeat,
           shuffle: session.shuffle,
+          // Only restore it if the key is still there; a key cleared between
+          // runs would otherwise leave the button lit and doing nothing.
+          station: session.station === true && (await hasLastfmKey()),
         });
       }
 
@@ -413,8 +544,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     async next() {
       const index = neighborIndex(1);
-      if (index === null) return;
-      await startTrack(index);
+      if (index !== null) {
+        await startTrack(index);
+        return;
+      }
+      // Same rule as reaching the end naturally: with the station on, pressing
+      // next at the end of a collection continues rather than doing nothing.
+      await playStationTrack();
     },
 
     async previous() {
@@ -460,6 +596,22 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         shuffle,
         shuffleOrder: shuffle ? shuffledIndices(playback.tracks.length, playback.index) : [],
       });
+    },
+
+    async toggleStation() {
+      if (get().station) {
+        set({ station: false, stationNext: null, stationSearching: false });
+        prefetchSeedKey = null;
+        return true;
+      }
+
+      // Turning it on needs a key. Report rather than throw, so the caller can
+      // open the setup sheet instead of showing an error.
+      if (!(await hasLastfmKey())) return false;
+
+      set({ station: true });
+      void prefetchStationTrack();
+      return true;
     },
 
     clearError() {

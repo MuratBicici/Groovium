@@ -99,6 +99,26 @@ The Content-Security-Policy in `src-tauri/tauri.conf.json` was widened only as f
 
 Spotify tracks are dropped from the queue on restart. Session persistence stores file paths, which a Spotify URI is not; restoring one would mean re-fetching its metadata at startup.
 
+## Infinite play
+
+The ∞ button beside repeat keeps the music going: when a playlist or the library runs out, a track similar to the one just played is found and played instead of stopping. Switched off, playback stops at the end of the collection — that is the whole of what the button controls.
+
+Suggestions come from Last.fm's `track.getSimilar`, which needs a **free API key**. The app asks for one the first time the button is pressed; [last.fm/api/account/create](https://www.last.fm/api/account/create) issues it immediately, with no app review and no account to link. It is stored in `config.json` beside the Spotify Client ID, not in the keyring — it authorises quota, not an account.
+
+Why Last.fm and not Spotify: `/recommendations`, `/audio-features` and `related-artists` were all closed to new apps in November 2024, so there is no similarity data left inside Spotify to use. Last.fm's lookup is keyed on **artist and title** rather than a platform id, which turns out to fit better — one lookup serves a local mp3 and a Spotify track alike, so a station can cross between them.
+
+The call is made from Rust (`src-tauri/src/lastfm.rs`), not the webview. Last.fm requires an identifying `User-Agent` and browsers refuse to let JavaScript set that header; keeping the key out of the webview is the second reason. No CSP change was needed.
+
+Resolution is two-tier, to protect Spotify's quota: one lookup returns up to fifty candidates, all of which are matched against your library first — free and instant — and only if none is there is a Spotify search spent, at most three per track. A Development Mode app gets 100 searches a day, which a station left running would otherwise finish in an evening.
+
+The last 60 tracks are remembered and not suggested again, so the station cannot ping-pong between two songs that each name the other as their closest match. Matching is by normalised name, so `Money - 2011 Remastered Version` in your tags still matches `Money`.
+
+### Known limitations
+
+Last.fm knows nothing about a great deal of music. When it returns nothing, the station falls quiet rather than showing an error — the same outcome as having it switched off. `track.getSimilar` has also broken temporarily in the past, which is the other reason failures are handled by going quiet.
+
+Repeat-all and infinite play do not combine: repeat-all never lets the collection run out, so the station never gets its turn. That is the intended reading of both switches rather than a conflict to resolve.
+
 ## Debugging
 
 Devtools are available in `tauri dev` builds via right-click → Inspect (or F12).

@@ -18,6 +18,8 @@ export interface PersistedSession {
   muted: boolean;
   repeat: string;
   shuffle: boolean;
+  /** Infinite play. Absent in files written before it existed. */
+  station?: boolean;
 }
 
 export async function loadSession(): Promise<PersistedSession | null> {

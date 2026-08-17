@@ -3,8 +3,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
+mod config;
 mod files;
 mod keyring;
+mod lastfm;
 mod library;
 mod media;
 mod metadata;
@@ -84,6 +86,11 @@ fn main() {
             spotify::spotify_clear_client_id,
             spotify::spotify_redirect_uri,
             spotify::spotify_open_dashboard,
+            lastfm::lastfm_has_api_key,
+            lastfm::lastfm_set_api_key,
+            lastfm::lastfm_clear_api_key,
+            lastfm::lastfm_open_account,
+            lastfm::lastfm_similar_tracks,
             audio::audio_backend_available,
         ])
         .run(tauri::generate_context!())

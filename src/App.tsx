@@ -7,6 +7,7 @@ import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
+import { StationSetup } from '@/components/station/StationSetup';
 import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
@@ -30,8 +31,12 @@ export default function App() {
   const error = usePlayerError();
   const currentTrack = useCurrentTrack();
   const clearError = usePlayerStore((s) => s.clearError);
+  const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const [overlay, setOverlay] = useState<Overlay>('none');
+  // Not an `Overlay`: it is raised by the transport row rather than a panel
+  // button, and it may sit over whichever panel happens to be open.
+  const [stationSetup, setStationSetup] = useState(false);
   const toggle = (which: Exclude<Overlay, 'none'>) =>
     setOverlay((current) => (current === which ? 'none' : which));
 
@@ -99,7 +104,7 @@ export default function App() {
 
         {/* Always reachable, including while an overlay is open. */}
         <ProgressBar />
-        <TransportControls />
+        <TransportControls onStationNeedsSetup={() => setStationSetup(true)} />
 
         <div className="flex items-center justify-between px-4">
           <VolumeKnob />
@@ -129,6 +134,16 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      <StationSetup
+        open={stationSetup}
+        onClose={() => setStationSetup(false)}
+        onConfigured={() => {
+          setStationSetup(false);
+          // The key exists now, so the press that opened this can take effect.
+          void toggleStation();
+        }}
+      />
 
       <ImportProgress />
 

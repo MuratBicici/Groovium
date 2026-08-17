@@ -10,13 +10,9 @@
 //! contains none. Under PKCE there is no client secret, so the value is not a
 //! credential — but one person's Client ID would burn another person's quota.
 
-use std::fs;
-use std::path::PathBuf;
+use tauri::AppHandle;
 
-use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
-
-const CONFIG_FILE: &str = "config.json";
+use crate::config;
 
 /// Overrides the stored value. Convenient for development; the app never writes it.
 const CLIENT_ID_ENV: &str = "GROOVIUM_SPOTIFY_CLIENT_ID";
@@ -31,13 +27,6 @@ pub const CALLBACK_PORT: u16 = 14536;
 /// never needs permission to open arbitrary URLs.
 pub const DASHBOARD_URL: &str = "https://developer.spotify.com/dashboard";
 
-#[derive(Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Config {
-    #[serde(default)]
-    spotify_client_id: Option<String>,
-}
-
 /// Resolve the Client ID: environment first, then the config file.
 pub fn client_id(app: &AppHandle) -> Option<String> {
     if let Ok(from_env) = std::env::var(CLIENT_ID_ENV) {
@@ -46,22 +35,18 @@ pub fn client_id(app: &AppHandle) -> Option<String> {
             return Some(trimmed);
         }
     }
-    read_config(app).spotify_client_id.filter(|id| !id.is_empty())
+    config::read(app).spotify_client_id.filter(|id| !id.is_empty())
 }
 
 pub fn set_client_id(app: &AppHandle, id: &str) -> Result<(), String> {
     let id = id.trim();
     validate(id)?;
 
-    let mut config = read_config(app);
-    config.spotify_client_id = Some(id.to_owned());
-    write_config(app, &config)
+    config::update(app, |c| c.spotify_client_id = Some(id.to_owned()))
 }
 
 pub fn clear_client_id(app: &AppHandle) -> Result<(), String> {
-    let mut config = read_config(app);
-    config.spotify_client_id = None;
-    write_config(app, &config)
+    config::update(app, |c| c.spotify_client_id = None)
 }
 
 /// Catch an obviously wrong value before it turns into an opaque Spotify error.
@@ -76,33 +61,6 @@ pub fn validate(id: &str) -> Result<(), String> {
     if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("malformed".into());
     }
-    Ok(())
-}
-
-fn config_path(app: &AppHandle) -> Option<PathBuf> {
-    app.path()
-        .app_data_dir()
-        .ok()
-        .map(|dir| dir.join(CONFIG_FILE))
-}
-
-fn read_config(app: &AppHandle) -> Config {
-    config_path(app)
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
-}
-
-fn write_config(app: &AppHandle, config: &Config) -> Result<(), String> {
-    let path = config_path(app).ok_or_else(|| "No app data directory available.".to_string())?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Could not create {}: {e}", parent.display()))?;
-    }
-
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    let temp = path.with_extension("json.tmp");
-    fs::write(&temp, json).map_err(|e| format!("Could not write config: {e}"))?;
-    fs::rename(&temp, &path).map_err(|e| format!("Could not replace config: {e}"))?;
     Ok(())
 }
 

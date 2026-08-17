@@ -4,26 +4,47 @@ import {
   useHasPlayback,
   useRepeatMode,
   useShuffle,
+  useStation,
+  useStationSearching,
 } from '@/core/store';
 
-/** Prev / play-pause / next, plus the shuffle and repeat toggles. */
-export function TransportControls() {
+interface TransportControlsProps {
+  /** Raised when infinite play is switched on before a Last.fm key exists. */
+  onStationNeedsSetup: () => void;
+}
+
+/** Prev / play-pause / next, plus the shuffle, repeat and station toggles. */
+export function TransportControls({ onStationNeedsSetup }: TransportControlsProps) {
   const playbackState = usePlaybackState();
   const hasQueue = useHasPlayback();
   const repeat = useRepeatMode();
   const shuffle = useShuffle();
+  const station = useStation();
+  const stationSearching = useStationSearching();
 
   const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
   const next = usePlayerStore((s) => s.next);
   const previous = usePlayerStore((s) => s.previous);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const isPlaying = playbackState === 'PLAYING';
   const isLoading = playbackState === 'LOADING';
 
+  async function onStationClick() {
+    // False means there is no API key yet, which is a setup prompt rather than
+    // a failure — the sheet asks for one and switches the station on after.
+    if (!(await toggleStation())) onStationNeedsSetup();
+  }
+
   return (
     <div className="flex items-center justify-center gap-2 px-4">
+      {/* Balances the station toggle at the far right. Without it the row still
+          centres as a group, but the play button — the one control the eye
+          actually lines up on — sits 18px off centre. */}
+      <span aria-hidden="true" className="h-7 w-7 shrink-0" />
+
       <ToggleButton
         label="Shuffle"
         active={shuffle}
@@ -58,6 +79,17 @@ export function TransportControls() {
         onClick={cycleRepeat}
       >
         <RepeatIcon mode={repeat} />
+      </ToggleButton>
+
+      {/* Sits beside repeat because the two answer the same question — what
+          happens when the track ends — and unlike the rest of the row it stays
+          enabled with nothing playing, so it can be armed in advance. */}
+      <ToggleButton
+        label={`Infinite play: ${station ? 'on' : 'off'}`}
+        active={station}
+        onClick={() => void onStationClick()}
+      >
+        <InfinityIcon searching={station && stationSearching} />
       </ToggleButton>
     </div>
   );
@@ -162,6 +194,26 @@ function ShuffleIcon() {
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
       <path d="M4 7h3.5l9 10H20M4 17h3.5l9-10H20" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M17.5 4.5L20 7l-2.5 2.5M17.5 14.5L20 17l-2.5 2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Pulses while a suggestion is being looked up, so the wait is visible. */
+function InfinityIcon({ searching }: { searching: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-4 w-4 ${searching ? 'animate-pulse' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      aria-hidden="true"
+    >
+      <path
+        d="M7.5 9a3 3 0 100 6c2.5 0 4-6 6.5-6a3 3 0 110 6c-2.5 0-4-6-6.5-6z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
