@@ -13,6 +13,8 @@
 //! `User-Agent`, and browsers refuse to let JavaScript set that header. And
 //! keeping it here means the API key never enters the webview.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -35,6 +37,13 @@ pub const API_ACCOUNT_URL: &str = "https://www.last.fm/api/account/create";
 /// match already in the user's library, which costs nothing, and so another
 /// chance to avoid spending one of Spotify's 100 daily searches.
 const SIMILAR_LIMIT: u32 = 50;
+
+/// Give up rather than hang.
+///
+/// This used to be background work nobody was waiting on. Pressing Next now
+/// runs the same lookup on demand, so a stalled connection would leave the
+/// button looking ignored with the indicator pulsing indefinitely.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// One suggestion. Names only — resolving it to something playable is the
 /// frontend's job, and it deliberately tries the local library first.
@@ -172,7 +181,12 @@ pub async fn lastfm_similar_tracks(
     )
     .map_err(|e| format!("Could not build the Last.fm request: {e}"))?;
 
-    let response = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|e| format!("Could not create the HTTP client: {e}"))?;
+
+    let response = client
         .get(url)
         .header("User-Agent", USER_AGENT)
         .send()

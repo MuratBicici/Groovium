@@ -234,6 +234,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
   /** Guards against two lookups running at once for the same seed. */
   let prefetchSeedKey: string | null = null;
+  /**
+   * The running lookup, so a caller that needs its answer can wait for it.
+   *
+   * Without this, `playStationTrack`'s "look it up now" fallback was a no-op in
+   * exactly the two cases it existed for — a lookup already in flight, and one
+   * that had already come back — because the seed guard below returned early
+   * and the press was swallowed.
+   */
+  let prefetchInFlight: Promise<void> | null = null;
 
   /**
    * Look up what should follow the current track, while it is still playing.
@@ -242,17 +251,29 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * "hemen sonrasında", and a Last.fm round trip plus a Spotify search started
    * at the moment of silence would be audible as a gap.
    */
-  async function prefetchStationTrack(): Promise<void> {
+  async function prefetchStationTrack(manual = false): Promise<void> {
     const { station, currentTrack } = get();
-    if (!station || !currentTrack) return;
+    // `manual` is a press of Next. The toggle governs what happens when a track
+    // ends by itself; an explicit press is a request, and the two do not have
+    // to agree.
+    if ((!station && !manual) || !currentTrack) return;
 
     const seedKey = trackKey(currentTrack);
-    // Already looked up for this track, or looking right now. Not retried when
-    // it came back empty either: a second call would return the same nothing.
-    if (prefetchSeedKey === seedKey) return;
+    if (prefetchSeedKey === seedKey) {
+      // Looking right now: wait for that answer rather than reporting nothing.
+      // Already finished: the result stands, and asking again would only get
+      // the same nothing back.
+      if (prefetchInFlight) await prefetchInFlight;
+      return;
+    }
 
     prefetchSeedKey = seedKey;
     set({ stationSearching: true, stationNext: null });
+
+    let settle = () => {};
+    prefetchInFlight = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
 
     try {
       const { library, stationHistory } = get();
@@ -265,7 +286,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       });
 
       // The user may have moved on or switched the station off mid-lookup.
-      if (!get().station || prefetchSeedKey !== seedKey) return;
+      if ((!get().station && !manual) || prefetchSeedKey !== seedKey) return;
       set({ stationNext: found });
     } catch (err) {
       // A station that cannot find anything should fall quiet, not interrupt
@@ -273,7 +294,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       console.warn('[station] could not find a next track', err);
       if (prefetchSeedKey === seedKey) set({ stationNext: null });
     } finally {
-      if (prefetchSeedKey === seedKey) set({ stationSearching: false });
+      // Unconditional: the old guard let the flag stick when the seed changed
+      // mid-lookup, which was invisible only because the indicator also
+      // required the station to be on. It no longer does.
+      set({ stationSearching: false });
+      prefetchInFlight = null;
+      settle();
     }
   }
 
@@ -283,13 +309,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * Appending rather than replacing keeps `previous` working: a station run
    * reads back as one growing collection, which is what it sounds like.
    */
-  async function playStationTrack(): Promise<boolean> {
-    if (!get().station) return false;
+  async function playStationTrack(manual = false): Promise<boolean> {
+    if (!get().station && !manual) return false;
 
     if (!get().stationNext) {
-      // Nothing prefetched — a very short track, or the station was just turned
-      // on. Look it up now and accept the gap.
-      await prefetchStationTrack();
+      // Nothing prefetched — a very short track, the station was just turned
+      // on, or this is a manual press with the station off, where nothing is
+      // ever prefetched. Look it up now and accept the gap.
+      await prefetchStationTrack(manual);
     }
     const track = get().stationNext;
     if (!track) return false;
@@ -555,9 +582,22 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await startTrack(index);
         return;
       }
-      // Same rule as reaching the end naturally: with the station on, pressing
-      // next at the end of a collection continues rather than doing nothing.
-      await playStationTrack();
+
+      // The collection is out of tracks, but the button was pressed. The
+      // infinite-play toggle decides what happens when a track ends by itself;
+      // asking for the next one is a request, and it gets answered by the same
+      // search the station uses.
+      if (await playStationTrack(true)) return;
+
+      // Nothing to suggest — no Last.fm key, or it knows nothing about this
+      // track. Rather than leave the press unanswered, start the collection
+      // again. Pointless for a lone track, which would just replay itself.
+      const { playback } = get();
+      if (playback.tracks.length > 1) {
+        const order = playbackOrder();
+        const first = order[0];
+        if (first !== undefined) await startTrack(first);
+      }
     },
 
     async previous() {

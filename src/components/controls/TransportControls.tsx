@@ -93,7 +93,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
         active={station}
         onClick={() => void onStationClick()}
       >
-        <InfinityIcon searching={station && stationSearching} />
+        <InfinityIcon searching={stationSearching} />
       </ToggleButton>
     </div>
   );
@@ -202,7 +202,13 @@ function ShuffleIcon() {
   );
 }
 
-/** Pulses while a suggestion is being looked up, so the wait is visible. */
+/**
+ * Pulses while a suggestion is being looked up, so the wait is visible.
+ *
+ * Not gated on the toggle: pressing Next at the end of a collection runs the
+ * same search with infinite play switched off, and that press must not look
+ * ignored while a network round trip is in flight.
+ */
 function InfinityIcon({ searching }: { searching: boolean }) {
   return (
     <svg
