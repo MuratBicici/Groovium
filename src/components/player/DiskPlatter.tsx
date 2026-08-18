@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { useCurrentTrack, useIsPlaying } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { useDiscFlight } from './DiscFlight';
+import { useDiscFlight, usePendingLanding } from './DiscFlight';
 import { VinylDisc } from './VinylDisc';
 
 /** Disc diameter. The flight layer lands on exactly this size. */
@@ -17,19 +17,23 @@ const SWAP_MS = 450;
  *
  * Track changes are staged like a record changer: the old disc lifts up and
  * away, the new one drops onto the spindle. When the change came from a row
- * click, the drop is suppressed — the flight's landing clone IS the entrance,
- * and running both would show two discs arriving.
+ * click the platter stays *empty* instead — the disc is still in the air, and
+ * the flying clone is the record until it lands.
  */
 export function DiskPlatter() {
   const isPlaying = useIsPlaying();
   const track = useCurrentTrack();
-  const { registerPlatter, isFlightFor } = useDiscFlight();
+  const { registerPlatter, didJustLand } = useDiscFlight();
+  const pendingTrackId = usePendingLanding();
 
   /** Entrance transforms live here — the spin owns the disc's own transform. */
   const dropRef = useRef<HTMLDivElement | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const prevTrackRef = useRef<TrackMetadata | null>(null);
   const [ghost, setGhost] = useState<TrackMetadata | null>(null);
+
+  /** This track's disc is still flying; the deck must look empty. */
+  const awaitingLanding = pendingTrackId !== null && track?.id === pendingTrackId;
 
   useEffect(() => {
     const prev = prevTrackRef.current;
@@ -41,14 +45,22 @@ export function DiskPlatter() {
     if ((prev?.id ?? null) === (track?.id ?? null)) return;
     if (prefersReducedMotion()) return;
 
-    // The old record lifts away. Also mid-flight: watching it leave while the
-    // new one arcs in is the record-changer read.
+    // Cancel first, unconditionally: a provider switch nulls the track on its
+    // way to another source, and an entrance left running would keep animating
+    // an empty deck through that window.
+    dropRef.current?.getAnimations().forEach((a) => a.cancel());
+
+    // The old record lifts away. Also during a flight: watching it leave while
+    // the new one arcs in is the record-changer read.
     if (prev) setGhost(prev);
 
     const drop = dropRef.current;
     if (!drop || !track) return;
-    drop.getAnimations().forEach((a) => a.cancel());
-    if (isFlightFor(track.id)) return;
+    // A landing clone is the entrance; running both shows two discs arriving.
+    // `didJustLand` covers the slow paths, where the track becomes current in
+    // the same commit that hands the disc over — by then `pendingTrackId` has
+    // already cleared, and without this the record would drop in a second time.
+    if (pendingTrackId === track.id || didJustLand(track.id)) return;
 
     drop.animate(
       [
@@ -59,7 +71,10 @@ export function DiskPlatter() {
       // pose through it.
       { duration: SWAP_MS, delay: 120, easing: 'ease-out', fill: 'backwards' },
     );
-  }, [track, isFlightFor]);
+    // `pendingTrackId` is read, not depended on: a flight landing must not
+    // retrigger the entrance the landing was meant to replace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track]);
 
   useEffect(() => {
     if (!ghost) return;
@@ -94,23 +109,37 @@ export function DiskPlatter() {
   }, [ghost]);
 
   return (
-    <div className="relative mx-auto flex h-[168px] w-[168px] items-center justify-center">
+    <div
+      ref={registerPlatter}
+      className="relative mx-auto flex h-[168px] w-[168px] items-center justify-center"
+    >
       {/* Well the platter sits in, so the disk reads as recessed into the shell. */}
       <div className="absolute inset-0 rounded-full bg-shell-900 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)]" />
 
-      <div ref={dropRef} className="relative">
+      {/* Opacity, never transform: the spin below owns `transform`, and the
+          flight measures this wrapper's centre, which must not move. */}
+      <div ref={dropRef} className="relative" style={{ opacity: awaitingLanding ? 0 : 1 }}>
         {/* The spin stays on its own element; entrance and exit transforms
             wrap it rather than fighting the keyframe for `transform`. */}
-        <div ref={registerPlatter} className="groove-platter" data-spinning={isPlaying}>
+        <div className="groove-platter" data-spinning={isPlaying}>
           <VinylDisc size={DISC_SIZE} sheen coverArtUrl={track?.coverArtUrl} />
         </div>
       </div>
 
-      {/* The departing record, drawn over the live one while it lifts away. */}
+      {/* The departing record, drawn over the live one while it lifts away.
+          `z-40` puts it alongside the flight layer: without it the ghost hides
+          behind the dissolving panel while the clone flies over it. Keyed by
+          track so a rapid second change restarts cleanly instead of sliding
+          the outgoing disc back down. */}
       {ghost && (
-        <div ref={ghostRef} className="pointer-events-none absolute top-2 left-2" aria-hidden="true">
-          <div className="groove-platter" data-spinning={true}>
-            <VinylDisc size={DISC_SIZE} coverArtUrl={ghost.coverArtUrl} />
+        <div
+          key={ghost.id}
+          ref={ghostRef}
+          className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center"
+          aria-hidden="true"
+        >
+          <div className="groove-platter" data-spinning={isPlaying}>
+            <VinylDisc size={DISC_SIZE} sheen coverArtUrl={ghost.coverArtUrl} />
           </div>
         </div>
       )}

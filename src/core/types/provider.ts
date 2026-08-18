@@ -47,7 +47,12 @@ export type ProviderEvent =
   | { type: 'state'; state: PlaybackState }
   | { type: 'progress'; positionMs: number; durationMs: number }
   | { type: 'track'; track: TrackMetadata | null }
-  | { type: 'ended' }
+  /**
+   * `trackId` names what finished. Without it the store cannot tell a genuine
+   * end from the previous track's event arriving just after the user started a
+   * new one — a race that skipped the freshly clicked song.
+   */
+  | { type: 'ended'; trackId: string | null }
   | { type: 'error'; error: string };
 
 export type ProviderEventListener = (event: ProviderEvent) => void;

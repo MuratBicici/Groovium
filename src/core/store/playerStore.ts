@@ -318,8 +318,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({ stationHistory: history.slice(-STATION_MEMORY) });
   }
 
-  async function handleTrackEnded(): Promise<void> {
-    const { repeat, playback } = get();
+  async function handleTrackEnded(trackId: string | null): Promise<void> {
+    const { repeat, playback, currentTrack } = get();
+
+    // A track ending a moment after the user clicked a different one arrives
+    // here with the *outgoing* track's id, while the store has already moved
+    // on. Acting on it advanced past the song that was just chosen.
+    if (trackId !== null && currentTrack !== null && trackId !== currentTrack.id) return;
 
     if (repeat === 'one' && playback.index >= 0) {
       await startTrack(playback.index);
@@ -356,7 +361,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         set({ error: event.error });
         break;
       case 'ended':
-        void handleTrackEnded();
+        void handleTrackEnded(event.trackId);
         break;
     }
   }

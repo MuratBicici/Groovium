@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { usePlayback, usePlaylists, usePlayerStore } from '@/core/store';
-import { playlistItemToMetadata } from '@/core/library';
+import { playlistItemToMetadata, type LibraryTrack, type PlaylistItem } from '@/core/library';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { formatDuration } from '@/core/utils/time';
@@ -87,7 +87,13 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
           )}
           {current.items.map((item, index) => {
             const track = playlistItemToMetadata(item, library);
-            const playing = playback.id === `playlist:${current.id}` && playback.index === index;
+            // The store drops unplayable items when it resolves the context, so
+            // a row's position here is not its position there. Counting the
+            // playable items before this one converts between them — without
+            // it, a playlist holding a deleted track plays the wrong song.
+            const playableIndex = playableBefore(current.items, library, index);
+            const playing =
+              playback.id === `playlist:${current.id}` && playback.index === playableIndex;
             return (
               <li key={`${index}`} className="group/row flex items-center gap-1">
                 <button
@@ -97,7 +103,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                     const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
                     if (disc && track) flyToPlatter(disc, track);
                     onClose();
-                    void playFrom(`playlist:${current.id}`, index);
+                    void playFrom(`playlist:${current.id}`, playableIndex);
                   }}
                   className={`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left transition-colors disabled:opacity-40 ${
                     playing ? 'bg-shell-700 text-brass-400' : 'text-cream-200 hover:bg-shell-700/60'
@@ -194,4 +200,22 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
       )}
     </div>
   );
+}
+
+/**
+ * How many playable items sit before `index`.
+ *
+ * Mirrors the filter in the store's `resolveContext`: a playlist entry whose
+ * library track was deleted cannot play, so the store leaves it out of the
+ * context entirely. This panel still renders it — greyed out, so the user can
+ * see what went missing and remove it — which means the two lists disagree on
+ * every position after the first dead entry.
+ */
+function playableBefore(items: PlaylistItem[], library: LibraryTrack[], index: number): number {
+  let count = 0;
+  for (let i = 0; i < index; i++) {
+    const item = items[i];
+    if (item && playlistItemToMetadata(item, library)) count++;
+  }
+  return count;
 }

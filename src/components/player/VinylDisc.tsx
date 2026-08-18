@@ -4,6 +4,11 @@ interface VinylDiscProps {
   coverArtUrl?: string | undefined;
   /** The rotating light-catch. On for the platter; at row size it reads as noise. */
   sheen?: boolean;
+  /**
+   * Load the cover immediately. The flying clone needs it: a lazy image that
+   * misses the cache pops in mid-arc, on the one disc the eye is following.
+   */
+  eager?: boolean;
   className?: string;
 }
 
@@ -21,7 +26,7 @@ const LABEL_RATIO = 56 / 152;
  * Deliberately animation-free. The platter spins it, the flight layer throws
  * it — both by wrapping it, so no transform in here can fight theirs.
  */
-export function VinylDisc({ size, coverArtUrl, sheen, className }: VinylDiscProps) {
+export function VinylDisc({ size, coverArtUrl, sheen, eager, className }: VinylDiscProps) {
   const label = Math.round(size * LABEL_RATIO);
   const spindle = Math.max(2, Math.round(size * 0.05));
 
@@ -61,7 +66,7 @@ export function VinylDisc({ size, coverArtUrl, sheen, className }: VinylDiscProp
           <img
             src={coverArtUrl}
             alt=""
-            loading="lazy"
+            loading={eager ? 'eager' : 'lazy'}
             className="h-full w-full object-cover"
             draggable={false}
           />

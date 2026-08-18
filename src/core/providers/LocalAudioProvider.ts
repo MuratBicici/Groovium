@@ -366,7 +366,7 @@ export class LocalAudioProvider extends BaseProvider {
     audio.addEventListener('ended', () => {
       // Deliberately does not change state or pick the next track — queue policy
       // (repeat, shuffle, end-of-queue) belongs to the store, not the provider.
-      this.emit({ type: 'ended' });
+      this.emit({ type: 'ended', trackId: this.currentTrack?.id ?? null });
     });
 
     audio.addEventListener('error', () => {

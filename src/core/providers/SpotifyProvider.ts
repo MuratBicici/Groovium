@@ -267,7 +267,7 @@ export class SpotifyProvider extends BaseProvider {
       // never does — that difference is the only signal available.
       if (wasPlaying && state.position === 0) {
         this.setState('IDLE');
-        this.emit({ type: 'ended' });
+        this.emit({ type: 'ended', trackId: this.currentTrack?.id ?? null });
         return;
       }
       this.setState('PAUSED');
