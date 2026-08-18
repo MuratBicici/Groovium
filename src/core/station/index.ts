@@ -26,6 +26,17 @@ export type { SimilarTrack } from './lastfm';
 const SPOTIFY_ATTEMPTS = 3;
 
 /**
+ * How many suggestions one lookup tries to bring back.
+ *
+ * A single Last.fm call returns fifty candidates and this used to keep one,
+ * discarding the rest — so every press of Next paid for another round trip.
+ * Filling a short queue from the same answer makes the following presses
+ * instant and costs nothing extra, because the extra depth comes only from
+ * library matches.
+ */
+const SUGGESTION_DEPTH = 5;
+
+/**
  * Written as an escape on purpose.
  *
  * Keys are compared as opaque strings, so any separator works and a wrong one
@@ -88,13 +99,19 @@ export function trackKey(track: TrackMetadata): string {
   return matchKey(track.artist, track.title);
 }
 
-/** The first candidate that is already in the library, if any. */
+/**
+ * Candidates that are already in the library, most similar first.
+ *
+ * Scanning for several costs no more than scanning for one — the candidate
+ * list is already in hand — which is why the queue can be deep for free.
+ */
 export function findInLibrary(
   candidates: SimilarTrack[],
   library: LibraryTrack[],
   exclude: ReadonlySet<string>,
-): TrackMetadata | null {
-  if (library.length === 0) return null;
+  limit = 1,
+): TrackMetadata[] {
+  if (library.length === 0) return [];
 
   const byKey = new Map<string, LibraryTrack>();
   for (const track of library) {
@@ -103,14 +120,23 @@ export function findInLibrary(
     if (!byKey.has(key)) byKey.set(key, track);
   }
 
+  const found: TrackMetadata[] = [];
+  const taken = new Set<string>();
   for (const candidate of candidates) {
-    const key = matchKey(candidate.artist, candidate.title);
-    if (exclude.has(key)) continue;
+    if (found.length >= limit) break;
 
-    const found = byKey.get(key);
-    if (found) return libraryTrackToMetadata(found);
+    const key = matchKey(candidate.artist, candidate.title);
+    // `taken` stops one library entry filling two slots when Last.fm lists the
+    // same song twice under different spellings.
+    if (exclude.has(key) || taken.has(key)) continue;
+
+    const match = byKey.get(key);
+    if (match) {
+      taken.add(key);
+      found.push(libraryTrackToMetadata(match));
+    }
   }
-  return null;
+  return found;
 }
 
 export interface ResolveOptions {
@@ -126,22 +152,31 @@ export interface ResolveOptions {
 }
 
 /**
- * The next track for the station, or null if none could be found.
+ * The next few tracks for the station, most similar first.
  *
- * Null is an ordinary outcome, not a failure: Last.fm knows nothing about a
- * great deal of music, and the station should fall quiet rather than raise an
- * error. Only an actual fault — an unreachable API, a rejected key — throws.
+ * An empty list is an ordinary outcome, not a failure: Last.fm knows nothing
+ * about a great deal of music, and the station should fall quiet rather than
+ * raise an error. Only an actual fault — an unreachable API, a rejected key —
+ * throws.
+ *
+ * The queue only runs deep when it is free. Library matches all come from the
+ * one candidate list, so finding five costs exactly what finding one did. A
+ * Spotify resolution costs a search out of 100 a day, so that path still
+ * yields a single track — depth there would burn the quota in an evening.
  */
-export async function resolveNextTrack(options: ResolveOptions): Promise<TrackMetadata | null> {
+export async function resolveNextTracks(
+  options: ResolveOptions,
+  limit = SUGGESTION_DEPTH,
+): Promise<TrackMetadata[]> {
   const { seed, library, exclude, spotifyAvailable, searchSpotify } = options;
 
   const candidates = await similarTracks(seed.artist, seed.title);
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return [];
 
-  const local = findInLibrary(candidates, library, exclude);
-  if (local) return local;
+  const local = findInLibrary(candidates, library, exclude, limit);
+  if (local.length > 0) return local;
 
-  if (!spotifyAvailable) return null;
+  if (!spotifyAvailable) return [];
 
   // Only now spend the quota, and on a few candidates at most.
   const fresh = candidates.filter((c) => !exclude.has(matchKey(c.artist, c.title)));
@@ -153,7 +188,7 @@ export async function resolveNextTrack(options: ResolveOptions): Promise<TrackMe
     // Spotify's field search is fuzzy; take a result only if it really is the
     // song asked for, otherwise the station drifts somewhere unrelated.
     const exact = results.find((track) => trackKey(track) === wanted);
-    if (exact && !exclude.has(trackKey(exact))) return exact;
+    if (exact && !exclude.has(trackKey(exact))) return [exact];
   }
-  return null;
+  return [];
 }

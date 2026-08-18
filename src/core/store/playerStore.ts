@@ -38,7 +38,7 @@ import {
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
 import { isAuthenticated as spotifyIsAuthenticated } from '@/core/security/spotifyAuth';
-import { hasApiKey as hasLastfmKey, resolveNextTrack, trackKey } from '@/core/station';
+import { hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
 import { searchTracks } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
@@ -108,8 +108,14 @@ export interface PlayerState {
   station: boolean;
   /** True while a suggestion is being looked up. */
   stationSearching: boolean;
-  /** The track lined up to follow this one, found while it still plays. */
-  stationNext: TrackMetadata | null;
+  /**
+   * Suggestions lined up to follow, found while the current track still plays.
+   *
+   * A queue rather than a single track because one Last.fm call answers with
+   * fifty candidates: keeping several costs nothing and spares the next few
+   * presses a round trip.
+   */
+  stationQueue: TrackMetadata[];
   /** Name-based keys of what has played, so the station does not loop. */
   stationHistory: string[];
 }
@@ -180,7 +186,7 @@ const initialState: PlayerState = {
   importing: null,
   station: false,
   stationSearching: false,
-  stationNext: null,
+  stationQueue: [],
   stationHistory: [],
 };
 
@@ -252,11 +258,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * at the moment of silence would be audible as a gap.
    */
   async function prefetchStationTrack(manual = false): Promise<void> {
-    const { station, currentTrack } = get();
+    const { station, currentTrack, stationQueue } = get();
     // `manual` is a press of Next. The toggle governs what happens when a track
     // ends by itself; an explicit press is a request, and the two do not have
     // to agree.
     if ((!station && !manual) || !currentTrack) return;
+    // Already stocked. Refilling early would spend a lookup to replace answers
+    // that have not been used yet.
+    if (stationQueue.length > 0) return;
 
     const seedKey = trackKey(currentTrack);
     if (prefetchSeedKey === seedKey) {
@@ -268,7 +277,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
 
     prefetchSeedKey = seedKey;
-    set({ stationSearching: true, stationNext: null });
+    set({ stationSearching: true });
 
     let settle = () => {};
     prefetchInFlight = new Promise<void>((resolve) => {
@@ -276,23 +285,24 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     });
 
     try {
-      const { library, stationHistory } = get();
-      const found = await resolveNextTrack({
+      const { library, stationHistory, stationQueue } = get();
+      const found = await resolveNextTracks({
         seed: currentTrack,
         library,
-        exclude: new Set([...stationHistory, seedKey]),
+        // Anything already queued is excluded too, or a refill would hand back
+        // what is still waiting to play.
+        exclude: new Set([...stationHistory, seedKey, ...stationQueue.map(trackKey)]),
         spotifyAvailable: await spotifyIsAuthenticated(),
         searchSpotify: searchTracks,
       });
 
       // The user may have moved on or switched the station off mid-lookup.
       if ((!get().station && !manual) || prefetchSeedKey !== seedKey) return;
-      set({ stationNext: found });
+      set({ stationQueue: [...get().stationQueue, ...found] });
     } catch (err) {
       // A station that cannot find anything should fall quiet, not interrupt
       // playback with an error banner over a background lookup.
       console.warn('[station] could not find a next track', err);
-      if (prefetchSeedKey === seedKey) set({ stationNext: null });
     } finally {
       // Unconditional: the old guard let the flag stick when the seed changed
       // mid-lookup, which was invisible only because the indicator also
@@ -312,13 +322,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   async function playStationTrack(manual = false): Promise<boolean> {
     if (!get().station && !manual) return false;
 
-    if (!get().stationNext) {
-      // Nothing prefetched — a very short track, the station was just turned
-      // on, or this is a manual press with the station off, where nothing is
-      // ever prefetched. Look it up now and accept the gap.
+    if (get().stationQueue.length === 0) {
+      // Nothing queued — a very short track, the station was just turned on, or
+      // this is a manual press with the station off, where nothing is ever
+      // prefetched. Look it up now and accept the gap.
       await prefetchStationTrack(manual);
     }
-    const track = get().stationNext;
+    const [track, ...rest] = get().stationQueue;
     if (!track) return false;
 
     const { playback, shuffle, shuffleOrder } = get();
@@ -330,9 +340,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // `playbackOrder` falls back to sequential unless these stay the same
       // length, which would silently undo shuffle for the rest of the run.
       shuffleOrder: shuffle && shuffleOrder.length > 0 ? [...shuffleOrder, index] : shuffleOrder,
-      stationNext: null,
+      stationQueue: rest,
     });
-    prefetchSeedKey = null;
+    // Only re-open the lookup once the queue is spent; the entries still in it
+    // are good answers for the seed they came from.
+    if (rest.length === 0) prefetchSeedKey = null;
 
     await startTrack(index);
     return true;
@@ -647,7 +659,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     async toggleStation() {
       if (get().station) {
-        set({ station: false, stationNext: null, stationSearching: false });
+        set({ station: false, stationQueue: [], stationSearching: false });
         prefetchSeedKey = null;
         return true;
       }
