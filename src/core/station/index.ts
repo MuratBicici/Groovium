@@ -99,11 +99,47 @@ export function trackKey(track: TrackMetadata): string {
   return matchKey(track.artist, track.title);
 }
 
+/** One library track that a candidate matched, with the score it matched at. */
+interface Match {
+  track: TrackMetadata;
+  artistKey: string;
+  score: number;
+}
+
 /**
- * Candidates that are already in the library, most similar first.
+ * Draw one entry, favouring a higher weight but never guaranteeing it.
  *
- * Scanning for several costs no more than scanning for one — the candidate
- * list is already in hand — which is why the queue can be deep for free.
+ * Roulette-wheel selection: the chance of being picked is the entry's share of
+ * the total weight. That keeps close matches likely without making the order
+ * fixed, which is what stops the same suggestion arriving every time.
+ */
+function drawWeighted<T>(entries: T[], weightOf: (entry: T) => number): T | undefined {
+  if (entries.length === 0) return undefined;
+
+  // A floor, so a candidate Last.fm scored at zero can still come up.
+  const weights = entries.map((entry) => Math.max(weightOf(entry), 0.01));
+  const total = weights.reduce((sum, w) => sum + w, 0);
+
+  let ticket = Math.random() * total;
+  for (let i = 0; i < entries.length; i++) {
+    ticket -= weights[i] as number;
+    if (ticket <= 0) return entries[i];
+  }
+  return entries[entries.length - 1];
+}
+
+/**
+ * Candidates that are already in the library, spread across artists.
+ *
+ * Taking the most similar few sounds right and plays wrong: the top of a
+ * `track.getSimilar` answer is mostly *other songs by the same artist*, so a
+ * library holding that album filled every slot from it and the station became
+ * one record on repeat.
+ *
+ * So artists are drawn one at a time — weighted by their best match, so a close
+ * artist is likelier to come up first — and each contributes a single track
+ * before any artist is asked for a second. A library too thin to fill the
+ * request that way doubles up rather than returning short.
  */
 export function findInLibrary(
   candidates: SimilarTrack[],
@@ -111,7 +147,7 @@ export function findInLibrary(
   exclude: ReadonlySet<string>,
   limit = 1,
 ): TrackMetadata[] {
-  if (library.length === 0) return [];
+  if (library.length === 0 || limit <= 0) return [];
 
   const byKey = new Map<string, LibraryTrack>();
   for (const track of library) {
@@ -120,23 +156,52 @@ export function findInLibrary(
     if (!byKey.has(key)) byKey.set(key, track);
   }
 
-  const found: TrackMetadata[] = [];
-  const taken = new Set<string>();
+  // Collect every match first. Cheap — the candidate list is already in hand —
+  // and a spread cannot be chosen from a list truncated at the top.
+  const byArtist = new Map<string, Match[]>();
+  const seen = new Set<string>();
   for (const candidate of candidates) {
-    if (found.length >= limit) break;
-
     const key = matchKey(candidate.artist, candidate.title);
-    // `taken` stops one library entry filling two slots when Last.fm lists the
-    // same song twice under different spellings.
-    if (exclude.has(key) || taken.has(key)) continue;
+    // `seen` stops one library entry appearing twice when Last.fm lists the
+    // same song under different spellings.
+    if (exclude.has(key) || seen.has(key)) continue;
 
     const match = byKey.get(key);
-    if (match) {
-      taken.add(key);
-      found.push(libraryTrackToMetadata(match));
+    if (!match) continue;
+    seen.add(key);
+
+    const artistKey = normalize(match.artist);
+    const group = byArtist.get(artistKey) ?? [];
+    group.push({ track: libraryTrackToMetadata(match), artistKey, score: candidate.matchScore });
+    byArtist.set(artistKey, group);
+  }
+
+  const picked: TrackMetadata[] = [];
+  const pools = [...byArtist.values()];
+
+  // One pass per round: every artist offers a track before any offers a second.
+  while (picked.length < limit) {
+    // Artists still holding something, each allowed one turn this round.
+    const round = pools.filter((p) => p.length > 0);
+    if (round.length === 0) break;
+
+    while (picked.length < limit && round.length > 0) {
+      // Rank an artist by its best remaining match, then let chance decide.
+      const pool = drawWeighted(round, (p) =>
+        p.reduce((best, m) => Math.max(best, m.score), 0),
+      );
+      if (!pool) break;
+      // Out of the round whether or not it yields — that is what makes this a
+      // round rather than a free-for-all the loudest artist would dominate.
+      round.splice(round.indexOf(pool), 1);
+
+      const chosen = drawWeighted(pool, (m) => m.score);
+      if (!chosen) continue;
+      pool.splice(pool.indexOf(chosen), 1);
+      picked.push(chosen.track);
     }
   }
-  return found;
+  return picked;
 }
 
 export interface ResolveOptions {
