@@ -264,58 +264,37 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * and the press was swallowed.
    */
   let prefetchInFlight: Promise<void> | null = null;
-  /**
-   * Whether the finished lookup for `prefetchSeedKey` left Spotify untried.
-   *
-   * A speculative look is deliberately library-only, so "found nothing" from
-   * one does not mean there is nothing to find. A press has to be able to go
-   * back and spend the search the speculative pass declined to.
-   */
-  let prefetchSkippedSpotify = false;
 
   /**
    * Look up what should follow the current track, while it is still playing.
    *
-   * Done ahead of time on purpose: the user asked for the next song to play
-   * "hemen sonrasında", and a Last.fm round trip plus a Spotify search started
-   * at the moment of silence would be audible as a gap.
+   * Runs the same way whether or not infinite play is switched on. The toggle
+   * decides one thing and one thing only — whether a track ending by itself
+   * continues — and it is read in `handleTrackEnded`, nowhere else. Everything
+   * here is what makes the answer ready before it is wanted, and Next wants it
+   * just as much as an ending track does.
+   *
+   * Done ahead of time on purpose: a Last.fm round trip plus a Spotify search
+   * started at the moment of silence would be audible as a gap, and under a
+   * press it is felt as one.
    */
-  async function prefetchStationTrack(manual = false): Promise<void> {
-    const { station, currentTrack, stationQueue } = get();
+  async function prefetchStationTrack(): Promise<void> {
+    const { currentTrack, stationQueue } = get();
     if (!currentTrack) return;
     // Already stocked. Refilling early would spend a lookup to replace answers
     // that have not been used yet.
     if (stationQueue.length > 0) return;
 
-    // Three reasons to look. The station will need an answer when the track
-    // ends; a press needs one now; and with the station off, sitting on the
-    // last track of a collection means Next has nowhere to go, so the answer
-    // should be ready before the press rather than after it.
-    const atEndOfContext = neighborIndex(1) === null;
-    if (!station && !manual && !atEndOfContext) return;
-
-    // `manual` is a press of Next. The toggle governs what happens when a track
-    // ends by itself; an explicit press is a request, and the two do not have
-    // to agree.
-    //
-    // Spotify is off the table for the speculative look: it costs a search out
-    // of 100 a day, and a press that never comes would have spent it for
-    // nothing. Library matches are free, so those are worth fetching on spec.
-    const spotifyAllowed = station || manual;
-
     const seedKey = trackKey(currentTrack);
     if (prefetchSeedKey === seedKey) {
       // Looking right now: wait for that answer rather than reporting nothing.
+      // Already finished: the result stands, and asking again would only get
+      // the same nothing back.
       if (prefetchInFlight) await prefetchInFlight;
-      // Otherwise the result stands and asking again would get the same
-      // nothing — unless this call may reach further than the one that set it.
-      const canReachFurther =
-        spotifyAllowed && prefetchSkippedSpotify && get().stationQueue.length === 0;
-      if (!canReachFurther) return;
+      return;
     }
 
     prefetchSeedKey = seedKey;
-    prefetchSkippedSpotify = !spotifyAllowed;
     set({ stationSearching: true });
 
     let settle = () => {};
@@ -334,12 +313,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         // The seed's own artist is included: it is the one most likely to come
         // back, since its other tracks head the similarity list.
         excludeArtists: new Set([...stationArtists, artistKey(currentTrack.artist)]),
-        spotifyAvailable: spotifyAllowed ? await spotifyIsAuthenticated() : false,
+        spotifyAvailable: await spotifyIsAuthenticated(),
         searchSpotify: searchTracks,
       });
 
       // The user may have moved on or switched the station off mid-lookup.
-      if ((!get().station && !manual) || prefetchSeedKey !== seedKey) return;
+      if (prefetchSeedKey !== seedKey) return;
       set({ stationQueue: [...get().stationQueue, ...found] });
     } catch (err) {
       // A station that cannot find anything should fall quiet, not interrupt
@@ -361,14 +340,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * Appending rather than replacing keeps `previous` working: a station run
    * reads back as one growing collection, which is what it sounds like.
    */
-  async function playStationTrack(manual = false): Promise<boolean> {
-    if (!get().station && !manual) return false;
-
+  async function playStationTrack(): Promise<boolean> {
     if (get().stationQueue.length === 0) {
-      // Nothing queued — a very short track, the station was just turned on, or
-      // this is a manual press with the station off, where nothing is ever
-      // prefetched. Look it up now and accept the gap.
-      await prefetchStationTrack(manual);
+      // Nothing queued — a very short track, or a press that arrived before the
+      // lookup finished. Look it up now and accept the gap.
+      await prefetchStationTrack();
     }
     const [track, ...rest] = get().stationQueue;
     if (!track) return false;
@@ -423,9 +399,10 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       return;
     }
 
-    // The collection is finished. With the station on, keep going; without it,
-    // stop — which is exactly the switch the button controls.
-    if (await playStationTrack()) return;
+    // The collection is finished, and this is the one place the toggle is
+    // read: with infinite play on, keep going; without it, stop. Everything
+    // else about finding a successor runs the same either way.
+    if (get().station && (await playStationTrack())) return;
     set({ playbackState: 'IDLE', positionMs: 0 });
   }
 
@@ -642,11 +619,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         return;
       }
 
-      // The collection is out of tracks, but the button was pressed. The
-      // infinite-play toggle decides what happens when a track ends by itself;
-      // asking for the next one is a request, and it gets answered by the same
-      // search the station uses.
-      if (await playStationTrack(true)) return;
+      // Out of tracks, but the button was pressed. Same machinery as infinite
+      // play, toggle or no toggle — the toggle only governs an ending track.
+      if (await playStationTrack()) return;
 
       // Nothing to suggest — no Last.fm key, or it knows nothing about this
       // track. Rather than leave the press unanswered, start the collection
@@ -706,8 +681,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     async toggleStation() {
       if (get().station) {
-        set({ station: false, stationQueue: [], stationSearching: false });
-        prefetchSeedKey = null;
+        // The queue stays: with the toggle off the machinery is unchanged, so
+        // discarding it would only make the next press pay for a lookup again.
+        set({ station: false });
         return true;
       }
 
