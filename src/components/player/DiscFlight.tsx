@@ -178,13 +178,14 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
       <PendingContext.Provider value={pendingTrackId}>
         {children}
 
-        {/* z-40: above the panels (unlayered), the picker sheet (z-20) and its
-            toast (z-30). Nothing may occlude a disc in flight. Rounded to match
-            the shell, so a clipped edge follows the widget's corner. */}
+        {/* z-10 — the disc-motion layer, above the stage and below the panels
+            (see the layer table in App.tsx). A record is part of the deck, and
+            the deck is what a panel covers. Rounded to match the shell, so a
+            clipped edge follows the widget's corner. */}
         <div
           ref={layerRef}
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[var(--radius-widget)]"
+          className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-[var(--radius-widget)]"
         >
           {flights.map((flight) => (
             <FlyingDisc

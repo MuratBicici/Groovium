@@ -26,6 +26,25 @@ const PANEL_IDS = {
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
 type Overlay = 'none' | keyof typeof PANEL_IDS;
 
+/**
+ * How this window stacks, written down because the numbers live in five files
+ * and drifted once already — a rising disc was thrown over an open menu.
+ *
+ * | Layer  | What                                            |
+ * | ------ | ----------------------------------------------- |
+ * | (auto) | The stage: platter, tonearm, track display      |
+ * | z-10   | Disc motion: the flight layer and the ghost     |
+ * | z-20   | Panels: Library, Playlists, Spotify             |
+ * | z-30   | Modal sheets: playlist picker, station setup    |
+ * | z-40   | The picker's confirmation, over its own sheet   |
+ *
+ * A record is part of the deck, so it belongs under whatever covers the deck.
+ * The shell below is `relative` with no z-index, no transform and no opacity,
+ * so it creates no stacking context and every number here resolves against the
+ * same root — which is what lets a panel inside `main` sit above a layer that
+ * comes after `main` in the DOM.
+ */
+
 export default function App() {
   const initialize = usePlayerStore((s) => s.initialize);
   const error = usePlayerError();

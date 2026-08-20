@@ -49,7 +49,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
     <div
       id={id}
       aria-hidden={!open}
-      className={`absolute inset-0 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
+      className={`absolute inset-0 z-20 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
         open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
     >

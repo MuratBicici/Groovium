@@ -57,7 +57,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
   }
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center p-5">
+    <div className="absolute inset-0 z-30 flex items-center justify-center p-5">
       <button
         type="button"
         aria-label="Cancel"

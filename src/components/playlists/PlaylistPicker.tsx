@@ -108,7 +108,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
 
       {/* Confirmation lives outside the sheet so it survives the close. */}
       {saved && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-14 z-30 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 bottom-14 z-40 flex justify-center">
           <span className="rounded-full bg-shell-900/95 px-3 py-1 text-[10px] text-brass-400 shadow">
             {saved}
           </span>
@@ -116,7 +116,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
       )}
 
       {track && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center p-5">
+        <div className="absolute inset-0 z-30 flex items-center justify-center p-5">
           <button
             type="button"
             aria-label="Cancel"

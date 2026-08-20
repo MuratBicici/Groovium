@@ -127,15 +127,16 @@ export function DiskPlatter() {
       </div>
 
       {/* The departing record, drawn over the live one while it lifts away.
-          `z-40` puts it alongside the flight layer: without it the ghost hides
-          behind the dissolving panel while the clone flies over it. Keyed by
-          track so a rapid second change restarts cleanly instead of sliding
-          the outgoing disc back down. */}
+          `z-10` puts it alongside the flight layer, so the two halves of one
+          record change share a depth. Both stay under the panels: pressing
+          Next with a menu open should not throw a disc over it. Keyed by track
+          so a rapid second change restarts cleanly instead of sliding the
+          outgoing disc back down. */}
       {ghost && (
         <div
           key={ghost.id}
           ref={ghostRef}
-          className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center"
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
           aria-hidden="true"
         >
           <div className="groove-platter" data-spinning={isPlaying}>
