@@ -14,16 +14,27 @@ export type { SimilarTrack } from './lastfm';
  * local mp3 continue into a Spotify track and back again — no other similarity
  * API this app can reach works by name.
  *
- * Resolution is deliberately two-tier. One lookup returns up to fifty
- * candidates; matching them against the library costs nothing and plays
- * instantly, so that is tried first, and the whole list is checked before a
- * single Spotify search is spent. Spotify's search quota is 100 calls a day for
- * a Development Mode app, which a station left running would otherwise eat in
- * an evening.
+ * Resolution is two-tier. One lookup returns up to fifty candidates; matching
+ * them against the library costs no network at all and plays instantly, so the
+ * whole list is checked there first. Only what the library cannot supply is
+ * resolved through Spotify search, one request per candidate.
+ *
+ * Spotify limits on a rolling 30-second window rather than a daily budget, and
+ * answers a breach with 429 plus `Retry-After`. Development Mode adds its own
+ * quota buckets, whose size Spotify does not publish. So the searches here are
+ * bounded and sequential — a small, spread-out number rather than a burst —
+ * and the transport layer honours `Retry-After` (`spotifyApi.ts`).
  */
 
-/** How many candidates to try on Spotify before giving up on this seed. */
-const SPOTIFY_ATTEMPTS = 3;
+/**
+ * Searches one fill may spend resolving candidates through Spotify.
+ *
+ * A bound rather than a budget: Spotify's published limit is a rolling
+ * 30-second window, so a handful of sequential requests is unremarkable. This
+ * exists so a candidate list full of songs Spotify cannot match cannot turn
+ * one fill into fifty requests.
+ */
+const SPOTIFY_SEARCH_BUDGET = 8;
 
 /**
  * How many suggestions one lookup tries to bring back.
@@ -241,11 +252,65 @@ export interface ResolveOptions {
  * raise an error. Only an actual fault — an unreachable API, a rejected key —
  * throws.
  *
- * The queue only runs deep when it is free. Library matches all come from the
- * one candidate list, so finding five costs exactly what finding one did. A
- * Spotify resolution costs a search out of 100 a day, so that path still
- * yields a single track — depth there would burn the quota in an evening.
+ * Library matches all come from the one candidate list already in hand, so
+ * finding five costs exactly what finding one did. Anything the library cannot
+ * supply is resolved through Spotify, one bounded search per candidate, spread
+ * across artists the same way.
  */
+/**
+ * Resolve candidates the library could not supply through Spotify search.
+ *
+ * Exported for the same reason `matchKey` is: it decides how wide the pool
+ * gets, it costs real requests, and calling it directly is the only way to
+ * check either without a live Last.fm key.
+ */
+export async function resolveViaSpotify(
+  candidates: SimilarTrack[],
+  options: {
+    exclude: ReadonlySet<string>;
+    excludeArtists: ReadonlySet<string>;
+    searchSpotify: (query: string) => Promise<TrackMetadata[]>;
+  },
+  limit: number,
+): Promise<TrackMetadata[]> {
+  const { exclude, excludeArtists, searchSpotify } = options;
+
+  const takenKeys = new Set(exclude);
+  const takenArtists = new Set(excludeArtists);
+  const picked: TrackMetadata[] = [];
+
+  const fresh = candidates
+    .filter((c) => !takenKeys.has(matchKey(c.artist, c.title)))
+    .sort((a, b) => {
+      const aRested = excludeArtists.has(artistKey(a.artist)) ? 1 : 0;
+      const bRested = excludeArtists.has(artistKey(b.artist)) ? 1 : 0;
+      // Similarity still orders within each half; only the split is imposed.
+      return aRested - bRested || b.matchScore - a.matchScore;
+    });
+
+  let spent = 0;
+  for (const candidate of fresh) {
+    if (picked.length >= limit || spent >= SPOTIFY_SEARCH_BUDGET) break;
+    // One track per artist here too, or the spread the library path takes care
+    // to produce would be undone by whatever is appended after it.
+    if (takenArtists.has(artistKey(candidate.artist))) continue;
+
+    spent++;
+    const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
+    const wanted = matchKey(candidate.artist, candidate.title);
+
+    // Spotify's field search is fuzzy; take a result only if it really is the
+    // song asked for, otherwise the station drifts somewhere unrelated.
+    const exact = results.find((track) => trackKey(track) === wanted);
+    if (!exact || takenKeys.has(trackKey(exact))) continue;
+
+    picked.push(exact);
+    takenKeys.add(trackKey(exact));
+    takenArtists.add(artistKey(exact.artist));
+  }
+  return picked;
+}
+
 export async function resolveNextTracks(
   options: ResolveOptions,
   limit = SUGGESTION_DEPTH,
@@ -255,32 +320,21 @@ export async function resolveNextTracks(
   const candidates = await similarTracks(seed.artist, seed.title);
   if (candidates.length === 0) return [];
 
-  const local = findInLibrary(candidates, library, exclude, limit, excludeArtists);
-  if (local.length > 0) return local;
+  const picked = findInLibrary(candidates, library, exclude, limit, excludeArtists);
+  if (picked.length >= limit || !spotifyAvailable) return picked;
 
-  if (!spotifyAvailable) return [];
-
-  // Only now spend the quota, and on a few candidates at most. Candidates by an
-  // artist that just played go to the back: this path resolves a single track,
-  // so without the reordering every Spotify-fed suggestion would be seeded from
-  // the previous one and stay on the same band indefinitely.
-  const fresh = candidates
-    .filter((c) => !exclude.has(matchKey(c.artist, c.title)))
-    .sort((a, b) => {
-      const aRested = excludeArtists.has(artistKey(a.artist)) ? 1 : 0;
-      const bRested = excludeArtists.has(artistKey(b.artist)) ? 1 : 0;
-      // Similarity still orders within each half; only the split is imposed.
-      return aRested - bRested || b.matchScore - a.matchScore;
-    });
-
-  for (const candidate of fresh.slice(0, SPOTIFY_ATTEMPTS)) {
-    const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
-    const wanted = matchKey(candidate.artist, candidate.title);
-
-    // Spotify's field search is fuzzy; take a result only if it really is the
-    // song asked for, otherwise the station drifts somewhere unrelated.
-    const exact = results.find((track) => trackKey(track) === wanted);
-    if (exact && !exclude.has(trackKey(exact))) return [exact];
-  }
-  return [];
+  // Top up whatever the library could not supply. This used to stop at a single
+  // track, on the belief that each search came out of a hundred a day — a limit
+  // Spotify does not actually impose. Stopping at one made the pool feel like a
+  // choice between two songs, which is the real cost of the mistake.
+  const fromSpotify = await resolveViaSpotify(
+    candidates,
+    {
+      exclude: new Set([...exclude, ...picked.map(trackKey)]),
+      excludeArtists: new Set([...excludeArtists, ...picked.map((t) => artistKey(t.artist))]),
+      searchSpotify,
+    },
+    limit - picked.length,
+  );
+  return [...picked, ...fromSpotify];
 }

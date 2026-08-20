@@ -19,10 +19,18 @@ const API_BASE = 'https://api.spotify.com/v1';
 /** Spotify caps this at 10 for Development Mode apps; it was 50 until Feb 2026. */
 export const SEARCH_LIMIT = 10;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
-  const token = await accessToken();
+/**
+ * Longest `Retry-After` worth honouring before giving up.
+ *
+ * Spotify limits on a rolling 30-second window, so a wait it asks for is
+ * normally seconds. Anything much longer means the app is being told to stop
+ * rather than to slow down, and blocking a caller on it would be worse than
+ * failing.
+ */
+const MAX_RETRY_AFTER_MS = 10_000;
 
-  const response = await fetch(`${API_BASE}${path}`, {
+async function send(path: string, token: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -30,6 +38,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
       ...init?.headers,
     },
   });
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
+  const token = await accessToken();
+
+  let response = await send(path, token, init);
+
+  // Spotify's documented contract for 429 is to wait the number of seconds in
+  // `Retry-After` and try again, so one honest retry beats surfacing an error
+  // the user can do nothing with. Only once: a second 429 means the window is
+  // genuinely full, and stacking retries is how an app gets itself throttled
+  // harder.
+  if (response.status === 429) {
+    const after = Number(response.headers.get('Retry-After'));
+    const waitMs = Number.isFinite(after) ? after * 1000 : 1000;
+    if (waitMs <= MAX_RETRY_AFTER_MS) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      response = await send(path, token, init);
+    }
+  }
 
   // Transport commands answer 204 with no body.
   if (response.status === 204) return null;
@@ -49,7 +77,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
       throw new Error('Spotify has no active device for this app yet.');
     }
     if (response.status === 429) {
-      throw new Error('Too many requests to Spotify. Wait a moment and try again.');
+      // Already waited once for whatever `Retry-After` asked.
+      throw new Error('Spotify is rate limiting this app. Wait a moment and try again.');
     }
     throw new Error(`Spotify API ${response.status}: ${body.slice(0, 160)}`);
   }

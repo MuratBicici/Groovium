@@ -34,8 +34,8 @@ pub const API_ACCOUNT_URL: &str = "https://www.last.fm/api/account/create";
 /// How many candidates to ask for.
 ///
 /// Deliberately generous: every extra candidate is another chance to find a
-/// match already in the user's library, which costs nothing, and so another
-/// chance to avoid spending one of Spotify's 100 daily searches.
+/// match already in the user's library, which needs no second network call at
+/// all, and so another chance to skip a Spotify search entirely.
 const SIMILAR_LIMIT: u32 = 50;
 
 /// Give up rather than hang.

@@ -120,7 +120,9 @@ Why Last.fm and not Spotify: `/recommendations`, `/audio-features` and `related-
 
 The call is made from Rust (`src-tauri/src/lastfm.rs`), not the webview. Last.fm requires an identifying `User-Agent` and browsers refuse to let JavaScript set that header; keeping the key out of the webview is the second reason. No CSP change was needed.
 
-Resolution is two-tier, to protect Spotify's quota: one lookup returns up to fifty candidates, all of which are matched against your library first — free and instant — and only if none is there is a Spotify search spent, at most three per track. A Development Mode app gets 100 searches a day, which a station left running would otherwise finish in an evening.
+Resolution is two-tier. One lookup returns up to fifty candidates, all matched against your library first — no second network call, and it plays instantly. Only what the library cannot supply is resolved through Spotify search, one request per candidate and at most eight per fill.
+
+Spotify rate-limits on a [rolling 30-second window](https://developer.spotify.com/documentation/web-api/concepts/rate-limits) rather than a daily budget, answering a breach with `429` and a `Retry-After` header, which this app waits out once before giving up. Development Mode adds its own quota buckets, whose size Spotify does not publish — so the searches are bounded and sequential rather than a burst.
 
 The last 60 tracks are remembered and not suggested again, so the station cannot ping-pong between two songs that each name the other as their closest match. Matching is by normalised name, so `Money - 2011 Remastered Version` in your tags still matches `Money`.
 
