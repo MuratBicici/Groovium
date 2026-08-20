@@ -38,7 +38,7 @@ import {
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
 import { isAuthenticated as spotifyIsAuthenticated } from '@/core/security/spotifyAuth';
-import { hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
+import { artistKey, hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
 import { searchTracks } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
@@ -68,6 +68,18 @@ const SESSION_SAVE_DEBOUNCE_MS = 800;
  * results. Capped so a long run does not grow without bound.
  */
 const STATION_MEMORY = 60;
+
+/**
+ * How many recent artists are held back from the next suggestion.
+ *
+ * Spreading artists inside one queue fill was not enough: the lookup that
+ * refills it is seeded from the track that just played, whose own artist tops
+ * what Last.fm returns, so the same band came straight back around. Three is
+ * enough to break a run without starving a library where one band holds most
+ * of the music — that case falls back to allowing repeats rather than going
+ * silent.
+ */
+const STATION_ARTIST_MEMORY = 3;
 
 export interface PlaybackContext {
   id: ContextId;
@@ -118,6 +130,8 @@ export interface PlayerState {
   stationQueue: TrackMetadata[];
   /** Name-based keys of what has played, so the station does not loop. */
   stationHistory: string[];
+  /** Artists of the last few tracks, so runs do not settle on one band. */
+  stationArtists: string[];
 }
 
 export interface PlayerActions {
@@ -188,6 +202,7 @@ const initialState: PlayerState = {
   stationSearching: false,
   stationQueue: [],
   stationHistory: [],
+  stationArtists: [],
 };
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
@@ -285,13 +300,16 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     });
 
     try {
-      const { library, stationHistory, stationQueue } = get();
+      const { library, stationHistory, stationArtists, stationQueue } = get();
       const found = await resolveNextTracks({
         seed: currentTrack,
         library,
         // Anything already queued is excluded too, or a refill would hand back
         // what is still waiting to play.
         exclude: new Set([...stationHistory, seedKey, ...stationQueue.map(trackKey)]),
+        // The seed's own artist is included: it is the one most likely to come
+        // back, since its other tracks head the similarity list.
+        excludeArtists: new Set([...stationArtists, artistKey(currentTrack.artist)]),
         spotifyAvailable: await spotifyIsAuthenticated(),
         searchSpotify: searchTracks,
       });
@@ -351,6 +369,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   }
 
   function rememberPlayed(track: TrackMetadata): void {
+    const artist = artistKey(track.artist);
+    const artists = get().stationArtists.filter((entry) => entry !== artist);
+    artists.push(artist);
+    set({ stationArtists: artists.slice(-STATION_ARTIST_MEMORY) });
+
     const key = trackKey(track);
     const history = get().stationHistory.filter((entry) => entry !== key);
     history.push(key);

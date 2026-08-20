@@ -99,6 +99,11 @@ export function trackKey(track: TrackMetadata): string {
   return matchKey(track.artist, track.title);
 }
 
+/** An artist's comparable form, for keeping the same band off the next slot. */
+export function artistKey(artist: string): string {
+  return normalize(artist);
+}
+
 /** One library track that a candidate matched, with the score it matched at. */
 interface Match {
   track: TrackMetadata;
@@ -146,6 +151,7 @@ export function findInLibrary(
   library: LibraryTrack[],
   exclude: ReadonlySet<string>,
   limit = 1,
+  recentArtists: ReadonlySet<string> = new Set(),
 ): TrackMetadata[] {
   if (library.length === 0 || limit <= 0) return [];
 
@@ -177,7 +183,16 @@ export function findInLibrary(
   }
 
   const picked: TrackMetadata[] = [];
-  const pools = [...byArtist.values()];
+  // Artists heard in the last few tracks step aside. Spreading within one fill
+  // was not enough on its own: the next lookup is seeded from the track that
+  // just played, and its own artist sits at the top of what Last.fm returns, so
+  // the same band kept coming back around the moment a queue ran out.
+  const rested = [...byArtist.entries()]
+    .filter(([artist]) => !recentArtists.has(artist))
+    .map(([, group]) => group);
+  // Falling back to everyone matters for a library where one band holds most of
+  // the tracks — with nothing else to offer, repeating beats going silent.
+  const pools = rested.length > 0 ? rested : [...byArtist.values()];
 
   // One pass per round: every artist offers a track before any offers a second.
   while (picked.length < limit) {
@@ -210,6 +225,8 @@ export interface ResolveOptions {
   library: LibraryTrack[];
   /** Keys of tracks already played in this station run. */
   exclude: ReadonlySet<string>;
+  /** Artists heard in the last few tracks, held back so runs do not cluster. */
+  excludeArtists: ReadonlySet<string>;
   /** Only true when Spotify is actually connected and able to play. */
   spotifyAvailable: boolean;
   /** Injected so this module does not depend on the Spotify client. */
@@ -233,18 +250,28 @@ export async function resolveNextTracks(
   options: ResolveOptions,
   limit = SUGGESTION_DEPTH,
 ): Promise<TrackMetadata[]> {
-  const { seed, library, exclude, spotifyAvailable, searchSpotify } = options;
+  const { seed, library, exclude, excludeArtists, spotifyAvailable, searchSpotify } = options;
 
   const candidates = await similarTracks(seed.artist, seed.title);
   if (candidates.length === 0) return [];
 
-  const local = findInLibrary(candidates, library, exclude, limit);
+  const local = findInLibrary(candidates, library, exclude, limit, excludeArtists);
   if (local.length > 0) return local;
 
   if (!spotifyAvailable) return [];
 
-  // Only now spend the quota, and on a few candidates at most.
-  const fresh = candidates.filter((c) => !exclude.has(matchKey(c.artist, c.title)));
+  // Only now spend the quota, and on a few candidates at most. Candidates by an
+  // artist that just played go to the back: this path resolves a single track,
+  // so without the reordering every Spotify-fed suggestion would be seeded from
+  // the previous one and stay on the same band indefinitely.
+  const fresh = candidates
+    .filter((c) => !exclude.has(matchKey(c.artist, c.title)))
+    .sort((a, b) => {
+      const aRested = excludeArtists.has(artistKey(a.artist)) ? 1 : 0;
+      const bRested = excludeArtists.has(artistKey(b.artist)) ? 1 : 0;
+      // Similarity still orders within each half; only the split is imposed.
+      return aRested - bRested || b.matchScore - a.matchScore;
+    });
 
   for (const candidate of fresh.slice(0, SPOTIFY_ATTEMPTS)) {
     const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
