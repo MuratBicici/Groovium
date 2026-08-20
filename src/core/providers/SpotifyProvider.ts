@@ -220,6 +220,10 @@ export class SpotifyProvider extends BaseProvider {
 
     player.addListener('not_ready', (() => {
       this.deviceId = null;
+      // The null-state branch below stops the ticker and this one did not, so
+      // handing playback to another device left a 250ms interval reporting
+      // progress for a device we no longer drive.
+      this.stopTicker();
       this.setState('IDLE');
     }) as never);
 
@@ -252,13 +256,11 @@ export class SpotifyProvider extends BaseProvider {
     this.positionMs = state.position;
     this.lastTickAt = Date.now();
 
+    // What the player says it is on. The store owns the metadata — it came from
+    // the Web API when the track was queued, with artwork this state does not
+    // carry as well — so nothing is republished here. Only the identity is
+    // taken, and only because `ended` has to name what finished.
     const track = state.track_window.current_track;
-    if (track && this.currentTrack?.id !== track.uri) {
-      // Metadata came from the Web API when the track was queued; this only
-      // needs to notice that the player moved to it.
-      const known = this.currentTrack;
-      if (known && known.id !== track.uri) this.setCurrentTrack(known);
-    }
 
     if (state.paused) {
       this.stopTicker();
@@ -267,7 +269,11 @@ export class SpotifyProvider extends BaseProvider {
       // never does — that difference is the only signal available.
       if (wasPlaying && state.position === 0) {
         this.setState('IDLE');
-        this.emit({ type: 'ended', trackId: this.currentTrack?.id ?? null });
+        // From the player's own state, not from `this.currentTrack` — which
+        // this provider never assigns, so the payload was always null and the
+        // store's stale-`ended` guard (`trackId !== null && …`) could not fire
+        // for Spotify at all.
+        this.emit({ type: 'ended', trackId: track?.uri ?? null });
         return;
       }
       this.setState('PAUSED');

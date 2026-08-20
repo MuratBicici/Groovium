@@ -81,6 +81,16 @@ const STATION_MEMORY = 60;
  */
 const STATION_ARTIST_MEMORY = 3;
 
+/**
+ * How far back a station run stays walkable with Previous.
+ *
+ * Each suggestion is appended to the playing collection, so an overnight run
+ * grew the array — and the shuffle order beside it — without limit, copying
+ * both on every advance. The other two station collections were capped from
+ * the start; this one was not.
+ */
+const STATION_TRAIL = 100;
+
 export interface PlaybackContext {
   id: ContextId;
   /** Resolved view of the collection being played. */
@@ -278,6 +288,41 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * started at the moment of silence would be audible as a gap, and under a
    * press it is felt as one.
    */
+  /**
+   * Rebuild the playing collection after the library or a playlist changed.
+   *
+   * `playback.tracks` is a snapshot taken when playback started, and nothing
+   * used to refresh it. Deleting a song mid-listen left the snapshot holding a
+   * track that no longer existed: the wrong row showed as playing, and Next
+   * walked into it and raised "Unknown track" over the music.
+   *
+   * The playing track is followed to its new position rather than the index
+   * being kept, because everything after a removal has shifted by one.
+   */
+  function reconcilePlayback(): void {
+    const { playback, currentTrack, shuffle } = get();
+    // A single track is not derived from a collection, so nothing can stale it.
+    if (playback.id === 'single' || playback.tracks.length === 0) return;
+
+    const tracks = resolveContext(playback.id);
+    if (tracks.length === 0) {
+      set({ playback: { ...playback, tracks, index: -1 }, shuffleOrder: [] });
+      return;
+    }
+
+    const found = currentTrack ? tracks.findIndex((t) => t.id === currentTrack.id) : -1;
+    // When the playing track is the one that went, hold the position so Next
+    // carries on from about where the listener was.
+    const index = found >= 0 ? found : Math.min(playback.index, tracks.length - 1);
+
+    set({
+      playback: { ...playback, tracks, index },
+      // Rebuilt rather than kept: `playbackOrder` needs the two lengths to
+      // match, and a stale order silently turns shuffle back into sequential.
+      shuffleOrder: shuffle ? shuffledIndices(tracks.length, index) : [],
+    });
+  }
+
   async function prefetchStationTrack(): Promise<void> {
     const { currentTrack, stationQueue } = get();
     if (!currentTrack) return;
@@ -298,9 +343,10 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({ stationSearching: true });
 
     let settle = () => {};
-    prefetchInFlight = new Promise<void>((resolve) => {
+    const inFlight = new Promise<void>((resolve) => {
       settle = resolve;
     });
+    prefetchInFlight = inFlight;
 
     try {
       const { library, stationHistory, stationArtists, stationQueue } = get();
@@ -317,19 +363,25 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         searchSpotify: searchTracks,
       });
 
-      // The user may have moved on or switched the station off mid-lookup.
+      // The user may have moved on mid-lookup.
       if (prefetchSeedKey !== seedKey) return;
       set({ stationQueue: [...get().stationQueue, ...found] });
     } catch (err) {
       // A station that cannot find anything should fall quiet, not interrupt
-      // playback with an error banner over a background lookup.
+      // playback with an error banner over a background lookup. But a failure
+      // must not pin the seed either: leaving it set meant one network blip
+      // silenced the station for that song for the rest of the session.
       console.warn('[station] could not find a next track', err);
+      if (prefetchSeedKey === seedKey) prefetchSeedKey = null;
     } finally {
-      // Unconditional: the old guard let the flag stick when the seed changed
-      // mid-lookup, which was invisible only because the indicator also
-      // required the station to be on. It no longer does.
-      set({ stationSearching: false });
-      prefetchInFlight = null;
+      // Only tidy up after ourselves. A newer lookup may already own these —
+      // clearing them unconditionally destroyed its handle and switched off its
+      // indicator while it was still running, which put the swallowed press
+      // this handle exists to prevent straight back.
+      if (prefetchInFlight === inFlight) {
+        prefetchInFlight = null;
+        set({ stationSearching: false });
+      }
       settle();
     }
   }
@@ -350,14 +402,24 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     if (!track) return false;
 
     const { playback, shuffle, shuffleOrder } = get();
-    const tracks = [...playback.tracks, track];
+    // Trim from the front once the trail is long enough. Previous still walks
+    // back a hundred tracks, which is further than anyone reaches.
+    const kept = [...playback.tracks, track].slice(-STATION_TRAIL);
+    const dropped = playback.tracks.length + 1 - kept.length;
+    const tracks = kept;
     const index = tracks.length - 1;
 
     set({
       playback: { ...playback, tracks, index },
       // `playbackOrder` falls back to sequential unless these stay the same
       // length, which would silently undo shuffle for the rest of the run.
-      shuffleOrder: shuffle && shuffleOrder.length > 0 ? [...shuffleOrder, index] : shuffleOrder,
+      // Indices shift when the front is trimmed, so the order shifts with them.
+      shuffleOrder:
+        shuffle && shuffleOrder.length > 0
+          ? [...shuffleOrder, playback.tracks.length]
+              .map((i) => i - dropped)
+              .filter((i) => i >= 0)
+          : shuffleOrder,
       stationQueue: rest,
     });
     // Only re-open the lookup once the queue is spent; the entries still in it
@@ -429,6 +491,23 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
+  /**
+   * Run an action that can fail, and show the user when it does.
+   *
+   * A policy rather than a habit. Error wrapping had been added one bug at a
+   * time, so seven actions were still bare — including `removeTrack`, where the
+   * user confirms an irreversible delete, the call fails, the row stays put and
+   * nothing is said.
+   */
+  async function reporting<T>(action: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await action();
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      return fallback;
+    }
+  }
+
   async function withProvider(
     action: (provider: NonNullable<ReturnType<typeof getProvider>>) => Promise<void>,
   ): Promise<void> {
@@ -472,6 +551,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceStarted = false;
+  /** Startup in progress. Separate from `initialized`, which means it worked. */
+  let starting = false;
 
   function startPersisting(): void {
     if (persistenceStarted) return;
@@ -499,36 +580,49 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     ...initialState,
 
     async initialize() {
-      if (get().initialized) return;
+      if (get().initialized || starting) return;
+      // A separate latch from `initialized`, which is now only set on success.
+      // The flag used to be raised first, so anything below throwing left the
+      // app looking normal with an empty library, no message, no way to retry,
+      // and settings silently no longer being saved.
+      starting = true;
 
-      registerProvider(new LocalAudioProvider());
-      registerProvider(new SpotifyProvider());
-      registerProvider(new YTMusicProvider());
-      registerProvider(new AppleMusicProvider());
+      try {
+        registerProvider(new LocalAudioProvider());
+        registerProvider(new SpotifyProvider());
+        registerProvider(new YTMusicProvider());
+        registerProvider(new AppleMusicProvider());
 
-      set({ initialized: true });
-      await get().setActiveProvider('local');
+        await get().setActiveProvider('local');
 
-      const session = await loadSession();
-      if (session) {
-        const repeat: RepeatMode =
-          session.repeat === 'all' || session.repeat === 'one' ? session.repeat : 'off';
+        const session = await loadSession();
+        if (session) {
+          const repeat: RepeatMode =
+            session.repeat === 'all' || session.repeat === 'one' ? session.repeat : 'off';
+          set({
+            volume: clamp(session.volume, 0, 1),
+            muted: session.muted,
+            repeat,
+            shuffle: session.shuffle,
+            // Only restore it if the key is still there; a key cleared between
+            // runs would otherwise leave the button lit and doing nothing.
+            station: session.station === true && (await hasLastfmKey()),
+          });
+        }
+
+        set({ storeDir: await libraryStoreDir() });
+        await get().refreshLibrary();
+        await get().refreshPlaylists();
+        await withProvider((provider) => provider.setVolume(outputAmplitude()));
+        startPersisting();
+        set({ initialized: true });
+      } catch (err) {
         set({
-          volume: clamp(session.volume, 0, 1),
-          muted: session.muted,
-          repeat,
-          shuffle: session.shuffle,
-          // Only restore it if the key is still there; a key cleared between
-          // runs would otherwise leave the button lit and doing nothing.
-          station: session.station === true && (await hasLastfmKey()),
+          error: `Could not start up: ${err instanceof Error ? err.message : String(err)}`,
         });
+      } finally {
+        starting = false;
       }
-
-      set({ storeDir: await libraryStoreDir() });
-      await get().refreshLibrary();
-      await get().refreshPlaylists();
-      await withProvider((provider) => provider.setVolume(outputAmplitude()));
-      startPersisting();
     },
 
     async setActiveProvider(id) {
@@ -571,10 +665,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       if (provider instanceof LocalAudioProvider) {
         await provider.useLibrary(library, get().storeDir);
       }
+      reconcilePlayback();
     },
 
     async refreshPlaylists() {
       set({ playlists: await loadPlaylists() });
+      reconcilePlayback();
     },
 
     async playFrom(contextId, index) {
@@ -701,11 +797,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async chooseFiles() {
-      return pickFilesToImport();
+      return reporting(() => pickFilesToImport(), null);
     },
 
     async chooseFolder() {
-      return pickFolderToImport();
+      return reporting(() => pickFolderToImport(), null);
     },
 
     async runImport(paths) {
@@ -713,40 +809,41 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       set({ importing: { done: 0, total: paths.length, currentName: '' } });
       try {
-        await importPaths(paths);
-        await get().refreshLibrary();
-      } catch (err) {
-        set({ error: err instanceof Error ? err.message : String(err) });
+        await reporting(async () => {
+          await importPaths(paths);
+          await get().refreshLibrary();
+        }, undefined);
       } finally {
         set({ importing: null });
       }
     },
 
     async cancelImport() {
-      await cancelImportFile();
+      await reporting(() => cancelImportFile(), undefined);
     },
 
     async removeTrack(libraryId) {
-      await removeFromLibrary(libraryId);
-      await get().refreshLibrary();
-      // Playlists may have referenced it; Rust already pruned them.
-      await get().refreshPlaylists();
+      await reporting(async () => {
+        await removeFromLibrary(libraryId);
+        await get().refreshLibrary();
+        // Playlists may have referenced it; Rust already pruned them.
+        await get().refreshPlaylists();
+      }, undefined);
     },
 
     async newPlaylist(name) {
-      try {
+      return reporting(async () => {
         const playlist = await createPlaylistFile(name);
         await get().refreshPlaylists();
         return playlist;
-      } catch (err) {
-        set({ error: err instanceof Error ? err.message : String(err) });
-        return null;
-      }
+      }, null);
     },
 
     async removePlaylist(id) {
-      await deletePlaylistFile(id);
-      await get().refreshPlaylists();
+      await reporting(async () => {
+        await deletePlaylistFile(id);
+        await get().refreshPlaylists();
+      }, undefined);
     },
 
     async addTrackToPlaylist(playlistId, track) {
@@ -755,21 +852,20 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         set({ error: 'That track cannot be saved to a playlist.' });
         return false;
       }
-      try {
+      // A rejected payload used to surface as an unhandled promise rejection
+      // and nothing else, so the track just quietly failed to appear.
+      return reporting(async () => {
         const added = await addToPlaylistFile(playlistId, item);
         if (added) await get().refreshPlaylists();
         return added;
-      } catch (err) {
-        // A rejected payload used to surface as an unhandled promise rejection
-        // and nothing else, so the track just quietly failed to appear.
-        set({ error: err instanceof Error ? err.message : String(err) });
-        return false;
-      }
+      }, false);
     },
 
     async removePlaylistItem(playlistId, index) {
-      await removeFromPlaylistFile(playlistId, index);
-      await get().refreshPlaylists();
+      await reporting(async () => {
+        await removeFromPlaylistFile(playlistId, index);
+        await get().refreshPlaylists();
+      }, undefined);
     },
   };
 });

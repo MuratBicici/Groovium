@@ -16,6 +16,7 @@
 //! recursive grant on our own directory instead of a grant per picked file,
 //! which is a narrower surface than Phase 1 had.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,6 +43,14 @@ const AUDIO_EXTENSIONS: &[&str] = &[
 /// Deep enough for `Artist/Album/Disc 1`, shallow enough that pointing at a
 /// drive root cannot run away.
 const MAX_SCAN_DEPTH: usize = 8;
+
+/// Record progress this often during a long import.
+///
+/// The library used to be written once, after the last file. Everything copied
+/// before a crash — or before a failing write — was left in the store with no
+/// record pointing at it, which is disk nothing ever reclaims. Flushing as we
+/// go bounds that loss to the last few files instead of the whole import.
+const IMPORT_FLUSH_EVERY: usize = 25;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -336,7 +345,11 @@ pub fn library_pick_folder(app: AppHandle) -> Result<Option<ScanSummary>, String
 
 fn summarize(app: &AppHandle, paths: Vec<PathBuf>) -> Result<ScanSummary, String> {
     let existing = read_library(&library_path(app)?);
-    let known: Vec<&str> = existing.iter().map(|t| t.source_path.as_str()).collect();
+    // A set, not a list. Scanning a folder against a large library was a
+    // membership test per file across every existing entry — quadratic, and it
+    // ran on the thread the user is waiting on between picking a folder and
+    // seeing the confirmation.
+    let known: HashSet<&str> = existing.iter().map(|t| t.source_path.as_str()).collect();
 
     let mut fresh = Vec::new();
     let mut duplicates = 0usize;
@@ -344,7 +357,7 @@ fn summarize(app: &AppHandle, paths: Vec<PathBuf>) -> Result<ScanSummary, String
 
     for path in paths {
         let as_string = path.to_string_lossy().into_owned();
-        if known.contains(&as_string.as_str()) {
+        if known.contains(as_string.as_str()) {
             duplicates += 1;
             continue;
         }
@@ -439,6 +452,14 @@ pub fn library_import(
 
         tracks.push(track.clone());
         added.push(track);
+
+        // Best effort: a failure here is not worth abandoning an import that is
+        // otherwise working, and the final write below reports it properly.
+        if added.len() % IMPORT_FLUSH_EVERY == 0 {
+            if let Err(e) = write_library(&library_path, &tracks) {
+                eprintln!("[library] could not checkpoint the library: {e}");
+            }
+        }
     }
 
     write_library(&library_path, &tracks)?;

@@ -170,20 +170,23 @@ fn interpret_callback(
             .map(|(_, v)| v.as_str())
     };
 
-    if let Some(error) = get("error") {
-        // Spotify sends `access_denied` both when the user declines and when the
-        // account is not on a development-mode app's user list.
-        return Err(AuthError::new("access_denied", error.to_owned()));
-    }
-
-    // Check state before touching the code: a callback we did not initiate must
-    // not have its code exchanged.
+    // State comes first, before anything from the query is read for meaning.
+    // The loopback server answers whatever reaches it for the three minutes it
+    // is bound, so an uninvited request used to be able to abort the sign-in
+    // and get its own `error` text onto the response page. A genuine refusal
+    // still carries the state we sent, so nothing legitimate is lost.
     let received_state = get("state").unwrap_or_default();
     if !pkce::state_matches(expected_state, received_state) {
         return Err(AuthError::new(
             "state_mismatch",
             "The redirect did not match the request that started it.",
         ));
+    }
+
+    if let Some(error) = get("error") {
+        // Spotify sends `access_denied` both when the user declines and when the
+        // account is not on a development-mode app's user list.
+        return Err(AuthError::new("access_denied", error.to_owned()));
     }
 
     get("code")
@@ -284,9 +287,24 @@ fn html_header() -> Header {
         .expect("static header is valid")
 }
 
+/// Escape text that is about to be spliced into the page below.
+///
+/// `message` carries an `AuthError`'s detail, and for a rejected callback that
+/// text came from the query string rather than from us.
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+}
+
 /// The page Spotify's redirect lands on. Shown in the user's browser, so the
 /// copy is English like the rest of the interface.
 fn page(title: &str, message: &str) -> String {
+    let title = escape_html(title);
+    let message = escape_html(message);
     format!(
         "<!doctype html><meta charset=\"utf-8\"><title>{title}</title>\
          <body style=\"background:#211913;color:#f6efe4;font:15px/1.6 system-ui,sans-serif;\
@@ -326,6 +344,27 @@ mod tests {
         let params = parse_query("/callback?error=access_denied&state=right");
         let err = interpret_callback(&params, "right").expect_err("must reject");
         assert_eq!(err.code, "access_denied");
+    }
+
+    #[test]
+    fn an_unsolicited_error_is_rejected_before_it_is_reported() {
+        // The loopback server answers anything for the 180s it is bound, so any
+        // page the user visits can hit it. Reading `error` before verifying
+        // `state` let an uninvited request both abort the sign-in and put its
+        // own text on the response page.
+        let params = parse_query("/callback?error=%3Cscript%3Ealert(1)%3C/script%3E");
+        let err = interpret_callback(&params, "right").expect_err("must reject");
+        assert_eq!(err.code, "state_mismatch", "state is checked first");
+        assert!(!err.detail.contains("script"), "the payload is not carried forward");
+    }
+
+    #[test]
+    fn page_escapes_what_it_is_given() {
+        // `detail` reaches this function, and a rejected callback is the one
+        // place its content is not ours.
+        let html = page("Title", "<script>alert(1)</script>");
+        assert!(!html.contains("<script>"), "no raw markup survives");
+        assert!(html.contains("&lt;script&gt;"), "it is shown as text instead");
     }
 
     #[test]
