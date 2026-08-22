@@ -20,19 +20,3 @@ export function getProvider(id: SourceType): AudioProvider | undefined {
   return providers.get(id);
 }
 
-/** Look up a provider, throwing when it is missing. For code paths that require one. */
-export function requireProvider(id: SourceType): AudioProvider {
-  const provider = providers.get(id);
-  if (!provider) throw new Error(`No provider registered for "${id}"`);
-  return provider;
-}
-
-export function listProviders(): AudioProvider[] {
-  return [...providers.values()];
-}
-
-/** Tear every provider down. Call on app unmount. */
-export function disposeAllProviders(): void {
-  for (const provider of providers.values()) provider.dispose();
-  providers.clear();
-}

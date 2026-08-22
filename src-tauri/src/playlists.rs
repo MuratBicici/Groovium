@@ -148,19 +148,6 @@ pub fn playlist_create(app: AppHandle, name: String) -> Result<Playlist, String>
 }
 
 #[tauri::command(async)]
-pub fn playlist_rename(app: AppHandle, id: String, name: String) -> Result<(), String> {
-    let path = playlists_path(&app)?;
-    let mut playlists = read_all(&path);
-    let clean = clean_name(&name)?;
-
-    let Some(playlist) = playlists.iter_mut().find(|p| p.id == id) else {
-        return Err("That playlist no longer exists.".into());
-    };
-    playlist.name = clean;
-    write_all(&path, &playlists)
-}
-
-#[tauri::command(async)]
 pub fn playlist_delete(app: AppHandle, id: String) -> Result<(), String> {
     let path = playlists_path(&app)?;
     let mut playlists = read_all(&path);

@@ -4,7 +4,6 @@
 
 mod audio;
 mod config;
-mod files;
 mod keyring;
 mod lastfm;
 mod library;
@@ -38,7 +37,6 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(files::PickedPaths::default())
         .manage(library::ImportControl::default())
         .manage(spotify::tokens::AccessTokenCache::default())
         .setup(|app| {
@@ -59,9 +57,6 @@ fn main() {
         // by name used to be callable from the webview; it is now Rust-internal
         // (`keyring.rs`), so a refresh token has no path out of this process.
         .invoke_handler(tauri::generate_handler![
-            files::pick_audio_files,
-            files::pick_music_folder,
-            files::read_cover_art,
             library::library_load,
             library::library_pick_files,
             library::library_pick_folder,
@@ -71,7 +66,6 @@ fn main() {
             library::library_store_dir,
             playlists::playlists_load,
             playlists::playlist_create,
-            playlists::playlist_rename,
             playlists::playlist_delete,
             playlists::playlist_add_item,
             playlists::playlist_remove_item,

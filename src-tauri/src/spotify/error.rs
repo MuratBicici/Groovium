@@ -38,7 +38,12 @@ impl std::fmt::Display for AuthError {
 /// Every code this module can produce.
 ///
 /// Exists so the frontend's mapping can be checked for completeness rather than
-/// discovering a missing case in front of a user.
+/// discovering a missing case in front of a user. Nothing in the app reads it:
+/// the Rust tests assert it is well formed, and a TypeScript test parses this
+/// very array and compares it against `HANDLED_CODES` in `authErrors.ts`. That
+/// is the whole point of it, so the unused warning in a non-test build is
+/// expected rather than a sign it can go.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const ALL_CODES: &[&str] = &[
     "no_client_id",
     "invalid_client_id",

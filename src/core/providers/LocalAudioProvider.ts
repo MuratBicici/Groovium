@@ -2,7 +2,6 @@ import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
 import { clamp } from '@/core/utils/time';
 import { joinPath } from '@/core/utils/paths';
 import { BaseProvider } from './BaseProvider';
-import { readCoverArt, type PickedFile } from './localFilePicker';
 
 /** The shape `useLibrary` needs, kept structural to avoid importing the store. */
 export interface LibraryEntrySource {
@@ -21,24 +20,11 @@ interface LibraryEntry {
   track: TrackMetadata;
   url: string;
   isObjectUrl: boolean;
-  /** Absolute path, when known. Needed to fetch artwork lazily. */
-  path?: string;
-  /** Artwork is embedded in the file but has not been fetched yet. */
-  hasCoverArt: boolean;
   /** File identity, kept so the entry can be un-indexed when removed. */
   dedupeKey: string;
 }
 
 /** How long to wait for a file's duration before giving up and showing 0:00. */
-const DURATION_PROBE_TIMEOUT_MS = 8000;
-
-/** Outcome of an import, so callers can tell "cancelled" from "all duplicates". */
-export interface ImportResult {
-  added: TrackMetadata[];
-  /** How many files the user actually selected. Zero means they cancelled. */
-  picked: number;
-  duplicates: number;
-}
 
 /**
  * Baseline provider backed by an `HTMLAudioElement`.
@@ -56,7 +42,6 @@ export class LocalAudioProvider extends BaseProvider {
   private readonly library = new Map<string, LibraryEntry>();
   /** Reverse index from file identity to track id, so a file cannot be added twice. */
   private readonly byDedupeKey = new Map<string, string>();
-  private nextTrackNumber = 0;
 
   async initialize(): Promise<boolean> {
     if (typeof Audio === 'undefined') {
@@ -100,9 +85,6 @@ export class LocalAudioProvider extends BaseProvider {
     try {
       await audio.play();
       this.setState('PLAYING');
-      // Artwork is fetched off the critical path: playback should never wait on
-      // a multi-megabyte JPEG crossing the IPC boundary.
-      void this.hydrateCoverArt(entry);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.fail(`Playback failed: ${message}`);
@@ -205,129 +187,20 @@ export class LocalAudioProvider extends BaseProvider {
         duration: track.durationMs,
         source: 'local',
       };
-      // The sidecar URL arrives with the entry, so `hydrateCoverArt`'s guard
-      // short-circuits and the per-play IPC fetch never happens for library
-      // tracks. (It used to happen and always fail: the store's files were
-      // never in the picker allowlist that `read_cover_art` checks.)
+      // The sidecar URL arrives with the entry. Artwork used to be fetched
+      // per play, over IPC, through a command that checked a picker allowlist
+      // the library's own copies were never on — so it always failed.
       if (track.coverArtUrl) metadata.coverArtUrl = track.coverArtUrl;
       this.library.set(id, {
         track: metadata,
         url: convertFileSrc(path),
         isObjectUrl: false,
-        path,
-        hasCoverArt: track.hasCoverArt,
         dedupeKey: `library:${track.id}`,
       });
       this.byDedupeKey.set(`library:${track.id}`, id);
     }
   }
 
-  /**
-   * Add files, skipping any already in the library.
-   *
-   * Returns only the tracks that were actually added, so a caller can tell how
-   * many were duplicates by comparing against what it passed in.
-   */
-  async addFiles(files: PickedFile[]): Promise<TrackMetadata[]> {
-    // Deduplicate within this batch too — a folder scan can reach the same file
-    // through two paths, and the user can shift-select a file twice.
-    const fresh = new Map<string, PickedFile>();
-    for (const file of files) {
-      if (this.byDedupeKey.has(file.dedupeKey) || fresh.has(file.dedupeKey)) {
-        // The blob URL for a rejected browser file would otherwise leak.
-        if (file.isObjectUrl) URL.revokeObjectURL(file.url);
-        continue;
-      }
-      fresh.set(file.dedupeKey, file);
-    }
-
-    return Promise.all([...fresh.values()].map((file) => this.addFile(file)));
-  }
-
-  /**
-   * Drop a track from the library and release anything it held.
-   *
-   * Local-only: forgetting a file has no meaning for a streaming source, so this
-   * stays off the shared `AudioProvider` contract.
-   */
-  forget(trackId: string): void {
-    const entry = this.library.get(trackId);
-    if (!entry) return;
-
-    if (entry.isObjectUrl) URL.revokeObjectURL(entry.url);
-    this.library.delete(trackId);
-    this.byDedupeKey.delete(entry.dedupeKey);
-
-    if (this.currentTrack?.id === trackId) {
-      this.audio?.pause();
-      this.setCurrentTrack(null);
-      this.setState('IDLE');
-    }
-  }
-
-  private async addFile(file: PickedFile): Promise<TrackMetadata> {
-    const id = `local:${this.nextTrackNumber++}:${file.name}`;
-    const tags = file.metadata;
-
-    // Tags win when Rust could read them. The filename guess and the duration
-    // probe are the browser fallback, where no tag reader exists.
-    const track: TrackMetadata = tags
-      ? {
-          id,
-          title: tags.title,
-          artist: tags.artist,
-          album: tags.album,
-          duration: tags.durationMs,
-          source: 'local',
-        }
-      : {
-          id,
-          ...parseNameMetadata(file.name),
-          duration: await probeDuration(file.url),
-          source: 'local',
-        };
-
-    const entry: LibraryEntry = {
-      track,
-      url: file.url,
-      isObjectUrl: file.isObjectUrl,
-      hasCoverArt: tags?.hasCoverArt ?? false,
-      dedupeKey: file.dedupeKey,
-    };
-    if (file.path !== undefined) entry.path = file.path;
-
-    this.library.set(id, entry);
-    this.byDedupeKey.set(file.dedupeKey, id);
-    return track;
-  }
-
-  /**
-   * Fetch embedded artwork once, then republish the track so the UI picks it up.
-   *
-   * Reuses the existing `track` event rather than adding a channel: the store
-   * already treats that event as "this track's metadata changed".
-   */
-  private async hydrateCoverArt(entry: LibraryEntry): Promise<void> {
-    if (!entry.hasCoverArt || entry.path === undefined || entry.track.coverArtUrl) return;
-
-    try {
-      const coverArtUrl = await readCoverArt(entry.path);
-      if (!coverArtUrl) {
-        // Nothing usable in the file after all; don't ask again.
-        entry.hasCoverArt = false;
-        return;
-      }
-
-      const updated: TrackMetadata = { ...entry.track, coverArtUrl };
-      entry.track = updated;
-
-      // The user may have skipped on while this was in flight.
-      if (this.currentTrack?.id === updated.id) this.setCurrentTrack(updated);
-    } catch (err) {
-      console.warn('[local] could not read cover art', err);
-      entry.hasCoverArt = false;
-    }
-  }
 
   private requireAudio(): HTMLAudioElement {
     if (!this.audio) throw new Error('LocalAudioProvider used before initialize()');
@@ -373,51 +246,6 @@ export class LocalAudioProvider extends BaseProvider {
       this.fail(describeMediaError(audio.error));
     });
   }
-}
-
-/**
- * Derive display metadata from a filename.
- *
- * Phase 1 has no tag reader, so `Artist - Title.mp3` is honored and everything
- * else falls back to the bare filename. Real ID3/Vorbis parsing is a later step
- * and will replace this without touching the interface.
- */
-function parseNameMetadata(fileName: string): Pick<TrackMetadata, 'title' | 'artist' | 'album'> {
-  const withoutExtension = fileName.replace(/\.[^.]+$/, '');
-  const separator = withoutExtension.match(/^(.+?)\s+[-–—]\s+(.+)$/);
-
-  if (separator) {
-    const [, artist, title] = separator;
-    return { title: title ?? withoutExtension, artist: artist ?? 'Unknown Artist', album: 'Local Files' };
-  }
-
-  return { title: withoutExtension, artist: 'Unknown Artist', album: 'Local Files' };
-}
-
-/** Read a file's duration with a throwaway element, so the queue can show times. */
-function probeDuration(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const probe = new Audio();
-    probe.preload = 'metadata';
-
-    let settled = false;
-    const finish = (durationMs: number) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      probe.removeAttribute('src');
-      resolve(durationMs);
-    };
-
-    const timer = setTimeout(() => finish(0), DURATION_PROBE_TIMEOUT_MS);
-
-    probe.addEventListener('loadedmetadata', () => {
-      finish(Number.isFinite(probe.duration) ? probe.duration * 1000 : 0);
-    });
-    probe.addEventListener('error', () => finish(0));
-
-    probe.src = url;
-  });
 }
 
 function describeMediaError(error: MediaError | null): string {

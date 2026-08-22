@@ -12,7 +12,6 @@
 
 use std::path::Path;
 
-use base64::Engine;
 use lofty::prelude::*;
 use lofty::probe::read_from_path;
 use serde::{Deserialize, Serialize};
@@ -22,11 +21,10 @@ use serde::{Deserialize, Serialize};
 /// booklet and not worth the transfer for a 168px platter label.
 const MAX_COVER_ART_BYTES: usize = 8 * 1024 * 1024;
 
-/// Round-trips through the session file, so it deserializes as well.
+/// What reading a file's tags produced. Consumed by the library at import.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ScannedTrack {
-    pub path: String,
     pub title: String,
     pub artist: String,
     pub album: String,
@@ -34,22 +32,6 @@ pub struct ScannedTrack {
     /// Whether artwork is embedded. The bytes are fetched separately, only for
     /// the track actually being played — see `read_picture`.
     pub has_cover_art: bool,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CoverArt {
-    pub mime_type: String,
-    /// Base64 payload, ready to drop into a `data:` URL.
-    pub base64: String,
-}
-
-/// Read a track's tags, falling back to the filename when they are missing.
-///
-/// Never fails on a readable file: an untagged or unparseable file still yields
-/// a usable entry rather than dropping out of the library.
-pub fn read_track(path: &Path) -> ScannedTrack {
-    read_track_named(path, path)
 }
 
 /// Read tags from one file but derive the filename fallback from another.
@@ -60,11 +42,9 @@ pub fn read_track(path: &Path) -> ScannedTrack {
 /// song title should be. `name_source` is the path the user recognises.
 pub fn read_track_named(path: &Path, name_source: &Path) -> ScannedTrack {
     let fallback = fallback_metadata(name_source);
-    let path_string = path.to_string_lossy().into_owned();
 
     let Ok(tagged) = read_from_path(path) else {
         return ScannedTrack {
-            path: path_string,
             title: fallback.title,
             artist: fallback.artist,
             album: fallback.album,
@@ -87,23 +67,12 @@ pub fn read_track_named(path: &Path, name_source: &Path) -> ScannedTrack {
     };
 
     ScannedTrack {
-        path: path_string,
         title,
         artist,
         album,
         duration_ms,
         has_cover_art,
     }
-}
-
-/// Extract embedded artwork, if any is present and small enough to send.
-pub fn read_picture(path: &Path) -> Option<CoverArt> {
-    let (mime_type, data) = usable_picture(path)?;
-
-    Some(CoverArt {
-        mime_type,
-        base64: base64::engine::general_purpose::STANDARD.encode(data),
-    })
 }
 
 /// Extract embedded artwork into `dest_dir` as `<id>.cover.<ext>`.
@@ -253,7 +222,8 @@ mod tests {
 
     #[test]
     fn unreadable_file_still_yields_a_track() {
-        let track = read_track(&PathBuf::from("does-not-exist.mp3"));
+        let missing = PathBuf::from("does-not-exist.mp3");
+        let track = read_track_named(&missing, &missing);
         assert_eq!(track.title, "does-not-exist");
         assert_eq!(track.duration_ms, 0);
         assert!(!track.has_cover_art);

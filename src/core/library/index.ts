@@ -180,11 +180,6 @@ export async function deletePlaylist(id: string): Promise<void> {
   await invoke('playlist_delete', { id });
 }
 
-export async function renamePlaylist(id: string, name: string): Promise<void> {
-  if (!isTauri()) return;
-  await invoke('playlist_rename', { id, name });
-}
-
 /** Returns false when the track was already in that playlist. */
 export async function addToPlaylist(id: string, item: PlaylistItem): Promise<boolean> {
   if (!isTauri()) return false;
