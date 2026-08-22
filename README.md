@@ -2,7 +2,7 @@
 
 A lightweight, modern desktop music player widget with a vintage disk player aesthetic. Built with Tauri, TypeScript, and Rust.
 
-A frameless, transparent 340×480 widget. Local files work today; Spotify, YouTube Music and Apple Music are stubbed behind a shared provider interface so each can be added without touching the store or the UI.
+A frameless, transparent 340×480 widget. Local files and Spotify both play today, behind one shared provider interface; YouTube Music and Apple Music are inert stubs of that interface rather than working sources.
 
 ## Requirements
 
@@ -10,7 +10,7 @@ A frameless, transparent 340×480 widget. Local files work today; Spotify, YouTu
 - **Rust** — install via [rustup](https://rustup.rs/). Required for anything under `src-tauri/`.
 - **Windows:** Visual Studio Build Tools with the *Desktop development with C++* workload, plus the WebView2 runtime (already present on Windows 11).
 
-The frontend alone runs without Rust — useful for working on the core and the UI.
+The frontend alone runs without Rust, which is useful for working on the core and the UI — but nothing plays there. Importing, playback and every API call go through Tauri commands that no-op in a browser.
 
 ## Getting started
 
@@ -18,7 +18,7 @@ The frontend alone runs without Rust — useful for working on the core and the 
 npm install
 ```
 
-Frontend only, in a normal browser. Local playback works here through a file-input fallback:
+Frontend only, in a normal browser. The interface renders and the store runs; playback and the library do not (see above):
 
 ```bash
 npm run dev
@@ -37,11 +37,19 @@ Other scripts: `npm run typecheck`, `npm run build`, `npm run tauri build`.
 ```
 src/core/          UI-agnostic. Knows nothing about React.
   types/           AudioProvider contract every source implements
-  providers/       LocalAudioProvider (working) + Spotify/YTMusic/AppleMusic stubs
-  store/           Zustand store: queue, playback state, repeat/shuffle
-  security/        Bridge to the OS credential store
+  providers/       LocalAudioProvider + SpotifyProvider (both real);
+                   YTMusic/AppleMusic are inert stubs
+  store/           Zustand store: library, playlists, playback context,
+                   repeat/shuffle, infinite play
+  library/         Bridge to the managed library and playlists
+  station/         Last.fm similarity: name matching and suggestion picking
+  session/         Playback settings that survive a restart
+  security/        Spotify OAuth bridge and error mapping
+  utils/           Pure helpers: time, volume curve, paths, motion
+src/platform/      Window and tray/media-key plumbing, kept out of core
 src/components/    Presentational only; talks to the store, never to a provider
-src-tauri/         Rust: window shell, keyring commands, native-audio stub
+src-tauri/         Rust: window shell, managed library, playlists, tags,
+                   Spotify OAuth, Last.fm, tray, shortcuts, native-audio stub
 ```
 
 The rule that keeps this modular: **components never import a provider**. They read state and call actions. The store resolves the active provider from a registry and issues commands against the `AudioProvider` interface. Adding a source means writing one class and registering it.
@@ -50,30 +58,31 @@ The rule that keeps this modular: **components never import a provider**. They r
 
 1. Implement `AudioProvider` (`src/core/types/provider.ts`), extending `BaseProvider` for the event plumbing.
 2. Register it in `playerStore.initialize()`.
-3. Emit `state`, `progress`, `track`, `ended` and `error` events — the store handles queue transitions from there.
+3. Emit `state`, `progress`, `track`, `ended` and `error` events — the store handles collection transitions from there. `ended` carries `{ trackId }`: the store drops one that names a track it is no longer playing, which is what stops a late event from the outgoing track skipping past a freshly chosen one.
 
 ## Security notes
 
 - OAuth tokens belong in the OS credential store (`src-tauri/src/keyring.rs`), never in a file or `localStorage`. There is no backend server anywhere in this design.
-- **The file picker runs in Rust, and that is load-bearing.** `src-tauri/src/files.rs` opens the native dialog, then grants asset-protocol access to exactly the files the user chose. The static asset scope is therefore empty, and the webview holds no dialog permission at all. Doing it the other way round — a JS-callable `allow_path(path)` command — would let any script in the webview unlock `~/.ssh/id_rsa` and read it back through `convertFileSrc`. Keep the picker on the Rust side.
-- Two commands follow from that rule and must keep following it. `read_cover_art` returns raw file bytes, so it serves only paths recorded in `PickedPaths` — paths the user picked this session. And the session file is written by Rust rather than through a JS-facing store, because it holds paths that get asset access re-granted at startup; a webview able to write it could name a path there and have the next launch unlock it.
+- **The file picker runs in Rust, and that is load-bearing.** `src-tauri/src/library.rs` opens the native dialog; the webview holds no dialog permission at all. Doing it the other way round — a JS-callable `allow_path(path)` command — would let any script in the webview unlock `~/.ssh/id_rsa` and read it back through `convertFileSrc`. Keep the picker on the Rust side.
+- **Asset access is one grant on a directory the app owns.** Because importing copies the file into the store, the scope collapses to a single recursive grant on that directory (`library_load`) instead of a grant per picked file. The static scope in `tauri.conf.json` stays empty. Cover art is written there as a sidecar image at import, so it renders through that same grant with no IPC payload and no second permission.
+- **The library and playlist files are written by Rust, not through a JS-facing store.** They name files inside the store directory, and the store directory is what the asset grant covers; a webview able to write them could point an entry somewhere else.
 - **Credential-store commands are not exposed to the webview.** They were once, which meant any script running there could read any stored secret by name. `src-tauri/src/keyring.rs` is now Rust-internal: a refresh token has no path out of the process. The webview asks for a short-lived access token and Rust refreshes it transparently. If you ever find yourself adding a command that returns a stored secret, that is the thing this rule exists to prevent.
 
 ## Status
 
-Working: local playback with real tags and cover art, folder scanning, a persisted queue, tray icon, global media keys, always-on-top, remembered window position, and Spotify via OAuth + the Web Playback SDK. Not yet built: YouTube Music, Apple Music, search and browse surfaces, and the real visual design.
+Working: a managed local library the app owns copies of, real tags and cover art, folder scanning, playlists that mix local and Spotify tracks, Spotify sign-in and single-track search via OAuth + the Web Playback SDK, infinite play backed by Last.fm, tray icon, global media keys, always-on-top and remembered window position. Not built: YouTube Music, Apple Music, and the real visual design.
 
-`AudioProvider` has not changed since it was written. Spotify — a different transport, auth model and event shape — implements the same interface as an `HTMLAudioElement`, and a queue can mix both sources because each track says which provider owns it.
+`AudioProvider`'s method list has not changed since it was written. Spotify — a different transport, auth model and event shape — implements the same interface as an `HTMLAudioElement`, and one playback context can mix both sources because each track says which provider owns it. The only widening since has been a `trackId` on the `ended` event, to tell a genuine end from a late one.
 
-The current UI is a placeholder. It is meant to be replaced wholesale — see *Replacing the UI* below.
+The current UI is a placeholder, kept deliberately plain and meant to be replaced wholesale — see *Replacing the UI* below. The disc rendering and its animations (`VinylDisc`, `DiscFlight`) and the layer table in `App.tsx` are the parts worth carrying over.
 
 ### Known caveats
 
-- Tags are read once, at import. Editing a file's tags afterwards will not update an entry already in the queue.
-- Folder scanning walks 8 levels deep and reads tags for every file it finds. A very large library will take a while and is not indexed or cached between runs — that needs a real library database, which this phase does not have.
-- Embedded artwork over 8 MB is skipped rather than pushed through IPC.
+- Tags are read once, from the app's own copy, at import. Editing the original afterwards can never change the entry — the entry does not point at the original any more.
+- Importing copies every file, so a large folder takes as long as copying it and occupies disk twice. Scanning a folder is quick by comparison: it walks 8 levels deep collecting paths and sizes, and reads no tags. The library itself *is* indexed between runs, in `library.json`.
+- Embedded artwork over 8 MB is skipped. Anything smaller is extracted once at import into a sidecar image beside the audio copy.
 - The native audio backend (`src-tauri/src/audio.rs`) is an inert stub, and testing so far says it can stay one. Playback runs on an `HTMLAudioElement`. See that file for the conditions that would justify switching to `rodio`/`symphonia`.
-- Track metadata is derived from filenames (`Artist - Title.ext`); there is no ID3/Vorbis tag reader yet.
+- Nothing about *where you were* survives a restart — not the collection, not the position. Volume, mute, repeat, shuffle and infinite play do.
 - If Vite HMR misbehaves under `tauri dev`, the CSP in `src-tauri/tauri.conf.json` is the first thing to check — temporarily setting `app.security.csp` to `null` isolates it.
 
 ## Spotify setup
@@ -97,11 +106,13 @@ The Content-Security-Policy in `src-tauri/tauri.conf.json` was widened only as f
 
 ### Known limitation
 
-Spotify tracks are dropped from the queue on restart. Session persistence stores file paths, which a Spotify URI is not; restoring one would mean re-fetching its metadata at startup.
+A Spotify search result plays on its own and stops; saving it to a playlist is what makes it part of something that continues. Playlists do keep Spotify tracks across restarts — the URI and its metadata are stored — but the search results themselves are not remembered.
 
 ## Infinite play
 
-The ∞ button beside repeat keeps the music going: when a playlist or the library runs out, a track similar to the one just played is found and played instead of stopping. Switched off, playback stops at the end of the collection — that is the whole of what the button controls.
+The ∞ button beside repeat decides one thing: whether a track that *ends by itself* is followed by another. On, a similar track is found and played; off, playback stops at the end of the collection.
+
+Pressing **Next** runs the same search either way. The toggle governs automatic continuation; a press is a request, and it is answered whether or not the toggle is on. Everything below — the lookup, the queue, the Spotify top-up — behaves identically in both states. When nothing can be found and the collection has more than one track, Next starts it again rather than leaving the press unanswered.
 
 Suggestions come from Last.fm's `track.getSimilar`, which needs a **free API key**. The app asks for one the first time the button is pressed; [last.fm/api/account/create](https://www.last.fm/api/account/create) issues it immediately, with no app review and no account to link. It is stored in `config.json` beside the Spotify Client ID, not in the keyring — it authorises quota, not an account.
 
@@ -124,7 +135,11 @@ Resolution is two-tier. One lookup returns up to fifty candidates, all matched a
 
 Spotify rate-limits on a [rolling 30-second window](https://developer.spotify.com/documentation/web-api/concepts/rate-limits) rather than a daily budget, answering a breach with `429` and a `Retry-After` header, which this app waits out once before giving up. Development Mode adds its own quota buckets, whose size Spotify does not publish — so the searches are bounded and sequential rather than a burst.
 
-The last 60 tracks are remembered and not suggested again, so the station cannot ping-pong between two songs that each name the other as their closest match. Matching is by normalised name, so `Money - 2011 Remastered Version` in your tags still matches `Money`.
+Suggestions are kept as a short queue rather than fetched one at a time: a single lookup answers with fifty candidates, so keeping five costs nothing and spares the next few advances a round trip.
+
+Two memories stop a station settling into a rut. The last 60 **tracks** are not suggested again, so it cannot ping-pong between two songs that each name the other as their closest match. And the last 3 **artists** are held back, along with the seed's own — without that, the top of a `track.getSimilar` answer is mostly other songs by the artist that just played, and the station walks down one album. Within a fill, artists take turns rather than the closest few winning every slot.
+
+Matching is by normalised name, so `Money - 2011 Remastered Version` in your tags still matches `Money`.
 
 ### Known limitations
 
@@ -150,7 +165,7 @@ await invoke('audio_backend_available');
 Everything in `src/components/` is disposable. The contract a new UI codes against is:
 
 - **`src/core/store/selectors.ts`** — narrow hooks (`useIsPlaying`, `useProgressFraction`, `useCurrentTrack`, …). Use these rather than reading the whole store, so a progress tick re-renders one component instead of the tree.
-- **`usePlayerStore` actions** — `togglePlayPause`, `next`, `previous`, `seek`, `setVolume`, `playAt`, …
+- **`usePlayerStore` actions** — `togglePlayPause`, `next`, `previous`, `seek`, `setVolume`, `playFrom(contextId, index)`, `playSingle(track)`, `toggleStation`, …
 
 Three details in the placeholder components are worth carrying over, because each encodes a bug that was already hit once:
 
