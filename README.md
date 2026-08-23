@@ -173,6 +173,40 @@ Three details in the placeholder components are worth carrying over, because eac
 2. `ProgressBar.tsx` — the `scrubMs` guard ignores incoming progress events while the user drags, otherwise every provider tick yanks the handle back.
 3. `VolumeKnob.tsx` — `liveVolume()` reads from the store rather than a render closure. Rapid repeated events (held key, wheel) outpace React's re-render, and a captured value makes every event in a burst compute from the same stale baseline.
 
+## Releasing
+
+Two workflows. `check.yml` runs types, lint, tests, the frontend build and
+`cargo test` on every push and pull request, on Windows — the only platform
+1.0 targets, because Spotify playback needs Widevine and only WebView2 has it.
+
+`release.yml` fires on a `v*` tag and drafts a GitHub release with the NSIS
+installer. It refuses to build if the tag and the three manifests disagree
+about the version, since `package.json`, `Cargo.toml` and `tauri.conf.json`
+each carry it and the Cargo one also reaches Last.fm in the `User-Agent`.
+
+```bash
+# after bumping all three to the same number
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+### Code signing is not set up, and that is visible to users
+
+An unsigned Windows installer triggers SmartScreen: *"Windows protected your
+PC"*, with the Run button behind **More info**. Nothing about the app is wrong;
+Windows simply has no idea who published it.
+
+Fixing it needs an Authenticode certificate — an OV certificate involves
+identity verification and an annual fee, and reputation still builds over
+downloads; an EV certificate on a hardware token clears SmartScreen
+immediately and costs more. Either way it is a purchase and an identity check,
+so it cannot be done from inside this repository. The release workflow already
+reads `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+from repository secrets, so adding a certificate is configuration rather than
+code.
+
+Until then, say so on the release page rather than letting people meet the
+warning cold.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# The tag is the trigger, so the version in the tag and the version in the
+# three manifests must already agree — the job checks rather than assumes.
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version matches the tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for file in package.json src-tauri/tauri.conf.json; do
+            found=$(grep -m1 '"version"' "$file" | sed 's/.*"version"[^"]*"\([^"]*\)".*/\1/')
+            [ "$found" = "$tag" ] || { echo "$file says $found, tag says $tag"; exit 1; }
+          done
+          found=$(grep -m1 '^version' src-tauri/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          [ "$found" = "$tag" ] || { echo "Cargo.toml says $found, tag says $tag"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Both are optional. Without them the installer is unsigned, which
+          # Windows answers with a SmartScreen warning — see the release notes
+          # in README.md for what that costs and how to fix it.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Groovium ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false

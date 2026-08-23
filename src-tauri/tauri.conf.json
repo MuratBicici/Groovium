@@ -31,11 +31,14 @@
       "csp": {
         "default-src": "'self'",
         "script-src": "'self' https://sdk.scdn.co",
-        "img-src": "'self' asset: http://asset.localhost data: blob: https://i.scdn.co",
-        "media-src": "'self' asset: http://asset.localhost blob:",
+        "img-src": "'self' asset: http://asset.localhost https://i.scdn.co",
+        "media-src": "'self' asset: http://asset.localhost",
         "style-src": "'self' 'unsafe-inline'",
         "connect-src": "'self' ipc: http://ipc.localhost https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
-        "frame-src": "'self' https://sdk.scdn.co"
+        "frame-src": "'self' https://sdk.scdn.co",
+        "object-src": "'none'",
+        "frame-ancestors": "'none'",
+        "base-uri": "'self'"
       },
       "assetProtocol": {
         "enable": true,
@@ -48,7 +51,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -56,7 +61,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "shortDescription": "Vintage-modern desktop music player widget",
-    "longDescription": "A lightweight, modular desktop music player widget with a vintage disk player aesthetic."
+    "shortDescription": "A desktop music player widget.",
+    "longDescription": "A lightweight, modern desktop music player widget with a vintage disk player aesthetic.",
+    "publisher": "Murat Emre Bicici",
+    "copyright": "Copyright © Murat Emre Bicici. MIT licensed.",
+    "category": "Music"
   }
 }

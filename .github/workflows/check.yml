@@ -1,0 +1,56 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push makes an older run pointless; let it go rather than queue.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Windows because that is what 1.0 targets: Spotify playback needs
+    # Widevine, which WebView2 has and WKWebView and WebKitGTK do not. Checking
+    # on a platform the app does not ship to would prove less than it looks.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Not `cargo clippy`: the project has never been clipped, so turning it on
+      # here would fail the first run on style rather than on a real problem.
+      # Worth doing, worth doing deliberately.
+      - name: Rust warnings
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+        env:
+          RUSTFLAGS: -D warnings
