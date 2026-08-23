@@ -147,6 +147,13 @@ cleared is recorded so it does not get re-reviewed from scratch.
 - `macOSPrivateApi: true` is set for window transparency and is irrelevant to a
   Windows-only build, but it would matter if this ever shipped on macOS.
 
+## Not verification, just recorded
+
+- `docs/character-themes.md` — a design conversation about game-character theme
+  packs and a tool for making them. Nothing was built; the note exists so the
+  reasoning does not have to be reconstructed, particularly the part about why
+  the app must carry no art of its own.
+
 ## Notes
 
 - The browser preview at `npm run dev` covers layout, animation, themes and
