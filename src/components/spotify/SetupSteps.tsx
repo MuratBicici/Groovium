@@ -57,6 +57,11 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
   return (
     <div className="space-y-3 px-3 pb-3 text-[11px] leading-relaxed text-cream-200">
       <p className="text-cream-400">
+        <span className="text-cream-200">Spotify is optional.</span> Your own music
+        plays without any of this — set it up only if you want to search Spotify
+        from here.
+      </p>
+      <p className="text-cream-400">
         Spotify requires every installation to register its own app. This is a one-time setup.
       </p>
 

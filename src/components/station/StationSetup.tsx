@@ -78,6 +78,9 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
             Keeps the music going once a playlist ends, by finding a track similar to the one
             playing. Suggestions come from Last.fm and need a free API key.
           </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-cream-400">
+            Entirely optional — everything else works without it.
+          </p>
         </div>
 
         {/* Scrolls rather than overflows. It fits at 340×480 as written, but a

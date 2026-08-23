@@ -18,9 +18,12 @@ export function ImportProgress() {
 
   useEffect(() => {
     // Rust reports per file; the store holds the latest.
-    return onImportProgress((progress) => {
-      usePlayerStore.setState({ importing: progress.done >= progress.total ? null : progress });
-    });
+    return onImportProgress(
+      (progress) => {
+        usePlayerStore.setState({ importing: progress.done >= progress.total ? null : progress });
+      },
+      (message) => usePlayerStore.setState({ error: message }),
+    );
   }, []);
 
   if (!importing) return null;

@@ -96,12 +96,20 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
       )}
 
       {library.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center px-6">
+        /* The one screen a first run always reaches, so it offers the action
+           rather than describing it. Nothing else — no account, no key — is
+           needed to get from here to music playing. */
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
           <p className="text-center text-[11px] leading-relaxed text-cream-400/70">
-            Your library is empty.
-            <br />
-            Added songs are copied here and stay even if the original is deleted.
+            Nothing here yet. Add some music to get started — songs are copied
+            in, so they keep playing even if you move or delete the original.
           </p>
+          <div className="flex gap-1.5">
+            <SmallButton onClick={() => void choose('files')} primary>
+              Add Files
+            </SmallButton>
+            <SmallButton onClick={() => void choose('folder')}>Add Folder</SmallButton>
+          </div>
         </div>
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">

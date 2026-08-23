@@ -134,8 +134,17 @@ export async function removeFromLibrary(id: string): Promise<void> {
   await invoke('library_remove', { id });
 }
 
-/** Subscribe to import progress. Returns the unsubscribe function. */
-export function onImportProgress(handler: (progress: ImportProgress) => void): () => void {
+/**
+ * Subscribe to import progress. Returns the unsubscribe function.
+ *
+ * `onFailure` matters more than it looks: without progress events the strip
+ * never updates and never offers Cancel, while a copy that can run for minutes
+ * carries on behind a window that appears idle.
+ */
+export function onImportProgress(
+  handler: (progress: ImportProgress) => void,
+  onFailure?: (message: string) => void,
+): () => void {
   if (!isTauri()) return () => {};
 
   let unlisten: (() => void) | null = null;
@@ -151,9 +160,10 @@ export function onImportProgress(handler: (progress: ImportProgress) => void): (
       if (cancelled) stop();
       else unlisten = stop;
     } catch (err) {
-      // Losing progress updates should degrade to a silent import, not an
-      // unhandled rejection.
+      // Losing progress updates degrades the import rather than breaking it,
+      // so this reports and carries on rather than throwing.
       console.warn('[library] could not subscribe to import progress', err);
+      onFailure?.('Import progress cannot be shown. The copy is still running.');
     }
   })();
 

@@ -571,6 +571,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   let persistenceStarted = false;
   /** Startup in progress. Separate from `initialized`, which means it worked. */
   let starting = false;
+  /** So a failing save reports once rather than on every settings change. */
+  let warnedAboutSaving = false;
 
   function startPersisting(): void {
     if (persistenceStarted) return;
@@ -589,7 +591,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       saveTimer = setTimeout(() => {
         saveTimer = null;
         const { volume, muted, repeat, shuffle, station } = get();
-        void saveSession({ volume, muted, repeat, shuffle, station });
+        void saveSession({ volume, muted, repeat, shuffle, station }).then((saved) => {
+          // Once per session. Every settings change would otherwise report the
+          // same failure again, which is noise rather than information.
+          if (saved || warnedAboutSaving) return;
+          warnedAboutSaving = true;
+          set({ error: 'Settings are not being saved — volume and repeat will reset on restart.' });
+        });
       }, SESSION_SAVE_DEBOUNCE_MS);
     });
   }

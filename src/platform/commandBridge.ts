@@ -42,7 +42,13 @@ export function startCommandBridge(): () => void {
       if (cancelled) stop();
       else unlisten = stop;
     } catch (err) {
+      // Losing this takes the tray menu and all three media keys with it, and
+      // nothing about the window would look any different — so it is said out
+      // loud rather than left in the console.
       console.warn('[commandBridge] could not subscribe to media commands', err);
+      usePlayerStore.setState({
+        error: 'Media keys and the tray menu are not responding. Restarting the app usually fixes it.',
+      });
     }
   })();
 
