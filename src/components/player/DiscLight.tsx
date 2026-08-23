@@ -20,12 +20,13 @@
  * it does not turn when the record turns. Spin a record under a lamp and the
  * sheen sits still while the label goes round.
  *
- * Then a tighter reflection inside it for the source itself, and a rim bright
- * only on the arc facing the light.
+ * There was a tighter straight-edged reflection over the top of it for the
+ * source itself, and it is gone. A linear gradient's bands are straight lines —
+ * that one ran up to the right, across a disc whose every other feature follows
+ * a circle, and a straight edge is the one thing a record's surface never
+ * shows. The lobes and the rim are both circular, and the light reads better
+ * for having nothing square in it.
  */
-
-/** Where the light is coming from, as a fraction of the disc's box. */
-const SOURCE = { x: '31%', y: '23%' };
 
 export function DiscLight({ size }: { size: number }) {
   // Below platter size the record does not spin and the band reads as grime.
@@ -60,25 +61,6 @@ export function DiscLight({ size }: { size: number }) {
             'radial-gradient(circle closest-side at center,' +
             ' rgba(0,0,0,0) 36%, #000 40%, #000 85%,' +
             ' rgba(0,0,0,0.25) 88%, rgba(0,0,0,0) 91%)',
-        }}
-      />
-
-      {/* The source itself — a window's worth of light, tight enough to have
-          edges the seam can cross. Masked back toward where it comes from so
-          it dissolves before the rim instead of ending in a straight chord. */}
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background:
-            'linear-gradient(118deg,' +
-            ' rgba(255,247,235,0) 34%,' +
-            ' rgba(255,247,235,0.06) 41%,' +
-            ' rgba(255,247,235,0.22) 45.5%,' +
-            ' rgba(255,247,235,0.04) 50%,' +
-            ' rgba(255,247,235,0) 56%)',
-          maskImage:
-            `radial-gradient(74% 74% at ${SOURCE.x} ${SOURCE.y},` +
-            ' #000 0%, rgba(0,0,0,0.5) 44%, rgba(0,0,0,0) 82%)',
         }}
       />
 
