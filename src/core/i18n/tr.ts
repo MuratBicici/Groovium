@@ -159,6 +159,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.close': 'Ayarları kapat',
   'settings.appearance': 'Görünüm',
   'settings.theme': 'Tema',
+  'settings.custom': 'Kendi temam',
+  'settings.customPrimary': 'Yüzey',
+  'settings.customSecondary': 'Vurgu',
+  'settings.customWarning':
+    'Kendi seçtiğiniz iki renk okunabilirlik açısından denetlenemez — metin bu renklerin üzerinde zor okunur hale gelebilir. Yukarıdaki paletlerin her biri ölçüldü.',
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',

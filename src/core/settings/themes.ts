@@ -36,6 +36,17 @@ export interface Theme {
  */
 export const DEFAULT_THEME = 'espresso';
 
+/**
+ * The palette somebody builds themselves, from two colours.
+ *
+ * Not in `THEMES`: it has no fixed swatch to show, because its swatch is
+ * whatever was picked. The picker draws it from the stored colours instead.
+ */
+export const CUSTOM_THEME = 'custom';
+
+/** What a custom palette starts from — Espresso, so the first move is an edit. */
+export const CUSTOM_DEFAULTS = { primary: '#2e231b', secondary: '#c8945a' };
+
 export const THEMES: readonly Theme[] = [
   { id: 'espresso', name: 'Espresso', swatch: ['#2e231b', '#c8945a'] },
   { id: 'prussian-blue', name: 'Prussian Blue', swatch: ['#1b2740', '#c9b171'] },
@@ -45,5 +56,6 @@ export const THEMES: readonly Theme[] = [
 ];
 
 export function isThemeId(value: unknown): value is string {
-  return typeof value === 'string' && THEMES.some((theme) => theme.id === value);
+  if (typeof value !== 'string') return false;
+  return value === CUSTOM_THEME || THEMES.some((theme) => theme.id === value);
 }

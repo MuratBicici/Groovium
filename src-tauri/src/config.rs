@@ -60,6 +60,13 @@ pub struct Settings {
     /// without this the window would come back full height on every launch.
     #[serde(default)]
     pub compact: bool,
+    /// The two colours a hand-rolled palette is built from, as `#rrggbb`.
+    /// Only meaningful while `theme` is `custom`, but kept either way so
+    /// switching to a preset and back does not lose the choice.
+    #[serde(default)]
+    pub custom_primary: Option<String>,
+    #[serde(default)]
+    pub custom_secondary: Option<String>,
 }
 
 #[tauri::command]
@@ -150,6 +157,8 @@ mod tests {
             reduce_motion: true,
             always_on_top: false,
             compact: true,
+            custom_primary: Some("#2e231b".into()),
+            custom_secondary: None,
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -158,6 +167,9 @@ mod tests {
         assert!(written.contains(r#""theme":"prussian-blue""#));
         assert!(written.contains(r#""reduceMotion":true"#));
         assert!(written.contains(r#""compact":true"#));
+        // Two hashes: the value itself contains `"#`, which closes an
+        // `r#"..."#` literal early.
+        assert!(written.contains(r##""customPrimary":"#2e231b""##));
     }
 
     #[test]
@@ -169,6 +181,7 @@ mod tests {
         assert!(!config.settings.reduce_motion);
         assert!(!config.settings.always_on_top);
         assert!(!config.settings.compact);
+        assert!(config.settings.custom_primary.is_none());
     }
 
     #[test]

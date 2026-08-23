@@ -163,6 +163,11 @@ export const en = {
   'settings.close': 'Close settings',
   'settings.appearance': 'Appearance',
   'settings.theme': 'Theme',
+  'settings.custom': 'Custom',
+  'settings.customPrimary': 'Surface',
+  'settings.customSecondary': 'Accent',
+  'settings.customWarning':
+    'Two colours of your choosing cannot be checked for legibility — text may end up hard to read against them. The palettes above were each measured.',
   'settings.language': 'Language',
   'settings.behaviour': 'Behaviour',
   'settings.reduceMotion': 'Reduce motion',

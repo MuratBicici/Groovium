@@ -6,7 +6,12 @@ import {
   type Language,
   type Settings,
 } from '@/core/settings';
-import { DEFAULT_THEME, isThemeId } from '@/core/settings/themes';
+import {
+  CUSTOM_DEFAULTS,
+  CUSTOM_THEME,
+  DEFAULT_THEME,
+  isThemeId,
+} from '@/core/settings/themes';
 
 /**
  * Preferences, in their own store.
@@ -31,6 +36,7 @@ interface SettingsStore extends Settings {
   setReduceMotion: (reduce: boolean) => void;
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
+  setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
 }
 
 /**
@@ -71,6 +77,21 @@ function applyToDocument(settings: Settings): void {
     delete root.dataset.theme;
   }
 
+  if (settings.theme === CUSTOM_THEME) {
+    const primary = settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
+    const secondary = settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
+    root.style.setProperty('--custom-primary', primary);
+    root.style.setProperty('--custom-secondary', secondary);
+    // The light in the room, which every palette tints to match its own. This
+    // one is the only value `color-mix` cannot supply, because `DiscLight`
+    // needs raw channels to mix its own alphas against.
+    root.style.setProperty('--sheen', sheenFrom(primary));
+  } else {
+    for (const name of ['--custom-primary', '--custom-secondary', '--sheen']) {
+      root.style.removeProperty(name);
+    }
+  }
+
   if (settings.reduceMotion) {
     root.dataset.motion = 'off';
   } else {
@@ -78,12 +99,37 @@ function applyToDocument(settings: Settings): void {
   }
 }
 
+/**
+ * A near-white carrying a trace of the surface it will fall on.
+ *
+ * Plain sRGB rather than anything perceptual on purpose: this is a highlight
+ * drawn at a quarter opacity or less, where the difference between colour
+ * spaces is far below what anyone can see, and the alternative is pulling in a
+ * colour library to compute something invisible.
+ */
+function sheenFrom(hex: string): string {
+  const value = hex.replace('#', '');
+  if (value.length !== 6) return '255 247 235';
+  const channels = [0, 2, 4].map((at) => parseInt(value.slice(at, at + 2), 16));
+  if (channels.some(Number.isNaN)) return '255 247 235';
+  return channels.map((c) => Math.round(c * 0.08 + 255 * 0.92)).join(' ');
+}
+
 export const useSettingsStore = create<SettingsStore>((set, get) => {
   /** Apply, then persist. Never called before `ready`. */
   const commit = (patch: Partial<Settings>) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
-    const settings = { theme, language, reduceMotion, alwaysOnTop, compact };
+    const { customPrimary, customSecondary } = get();
+    const settings = {
+      theme,
+      language,
+      reduceMotion,
+      alwaysOnTop,
+      compact,
+      customPrimary,
+      customSecondary,
+    };
     applyToDocument(settings);
     void saveSettings(settings);
   };
@@ -109,6 +155,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
     setCompact: (compact) => commit({ compact }),
+    setCustomColour: (which, colour) =>
+      commit(
+        which === 'primary'
+          ? { customPrimary: colour, theme: CUSTOM_THEME }
+          : { customSecondary: colour, theme: CUSTOM_THEME },
+      ),
   };
 });
 

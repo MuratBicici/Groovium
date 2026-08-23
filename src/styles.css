@@ -95,6 +95,46 @@
   --sheen: 255 243 236;
 }
 
+/*
+ * A palette built from two colours somebody chose.
+ *
+ * The ramp is `color-mix(in oklab, …)` rather than arithmetic in JavaScript.
+ * Mixing toward black and white in a perceptual space keeps a step of the same
+ * size looking like a step of the same size whatever hue it starts from, which
+ * naive sRGB maths does not — and it keeps the whole palette here, next to the
+ * ones that were written by hand, instead of half here and half in a colour
+ * library.
+ *
+ * The proportions are lifted from Espresso: its 900 sits at roughly half its
+ * 700 toward black, its 600 a little way toward white. A custom palette built
+ * from Espresso's own two colours therefore lands back on something close to
+ * Espresso, which makes it a sane place to start adjusting from.
+ *
+ * What this cannot do is promise the result is readable. Two free colours can
+ * be any two colours; the panel says so.
+ */
+:root[data-theme='custom'] {
+  --color-shell-900: color-mix(in oklab, var(--custom-primary) 52%, black);
+  --color-shell-800: color-mix(in oklab, var(--custom-primary) 74%, black);
+  --color-shell-700: var(--custom-primary);
+  --color-shell-600: color-mix(in oklab, var(--custom-primary) 90%, white);
+
+  --color-brass-400: color-mix(in oklab, var(--custom-secondary) 74%, white);
+  --color-brass-500: var(--custom-secondary);
+  /* 85%, not the 78% the other ramps suggested: swept against the accent
+     button's dark-text-on-accent pairing, 80% lands at 4.3 and 85% at 4.94,
+     against a 4.5 floor. Darkening it further moves it *towards* shell-900 and
+     makes things worse, which is the opposite of what it looks like it should
+     do. */
+  --color-brass-600: color-mix(in oklab, var(--custom-secondary) 85%, black);
+
+  /* Text is tinted with the surface it sits on rather than left neutral, the
+     same way every hand-written palette here does. */
+  --color-cream-50: color-mix(in oklab, var(--custom-primary) 7%, white);
+  --color-cream-200: color-mix(in oklab, var(--custom-primary) 24%, white);
+  --color-cream-400: color-mix(in oklab, var(--custom-primary) 48%, white);
+}
+
 :root[data-theme='sakura'] {
   --color-shell-900: #16101a;
   --color-shell-800: #201826;

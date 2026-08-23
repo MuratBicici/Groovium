@@ -36,6 +36,14 @@ export interface Settings {
    * startup the window comes back full height every time.
    */
   compact: boolean;
+  /**
+   * The two colours a hand-rolled palette is built from.
+   *
+   * Kept even while a preset is selected, so switching away and back does not
+   * throw the choice away.
+   */
+  customPrimary: string | null;
+  customSecondary: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -44,6 +52,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   alwaysOnTop: false,
   compact: false,
+  customPrimary: null,
+  customSecondary: null,
 };
 
 export async function loadSettings(): Promise<Settings> {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
-import { DEFAULT_THEME, THEMES } from '@/core/settings/themes';
+import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
 import { isTauri } from '@/core/utils/env';
@@ -37,6 +37,9 @@ export function SettingsPanel({
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
+  const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
+  const setCustomColour = useSettingsStore((s) => s.setCustomColour);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
@@ -101,7 +104,9 @@ export function SettingsPanel({
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-body text-cream-200">{t('settings.theme')}</span>
               <span className="truncate text-meta text-cream-400">
-                {THEMES.find((entry) => entry.id === theme)?.name}
+                {theme === CUSTOM_THEME
+                  ? t('settings.custom')
+                  : THEMES.find((entry) => entry.id === theme)?.name}
               </span>
             </div>
             <div className="flex gap-1.5">
@@ -127,7 +132,48 @@ export function SettingsPanel({
                   </span>
                 </button>
               ))}
+
+              {/* Last, and drawn from what was picked rather than from a
+                  fixed pair — it is the only swatch whose colours are an
+                  answer rather than a definition. */}
+              <button
+                type="button"
+                aria-label={t('settings.custom')}
+                title={t('settings.custom')}
+                aria-pressed={theme === CUSTOM_THEME}
+                onClick={() => setTheme(CUSTOM_THEME)}
+                className={`h-7 flex-1 overflow-hidden rounded-md ring-1 transition-all ${
+                  theme === CUSTOM_THEME
+                    ? 'ring-2 ring-brass-400'
+                    : 'ring-shell-600 hover:ring-cream-400/50'
+                }`}
+              >
+                <span className="flex h-full w-full">
+                  <span className="h-full w-2/3" style={{ background: customPrimary }} />
+                  <span className="h-full w-1/3" style={{ background: customSecondary }} />
+                </span>
+              </button>
             </div>
+
+            {theme === CUSTOM_THEME && (
+              <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
+                <div className="flex gap-2">
+                  <Colour
+                    label={t('settings.customPrimary')}
+                    value={customPrimary}
+                    onChange={(colour) => setCustomColour('primary', colour)}
+                  />
+                  <Colour
+                    label={t('settings.customSecondary')}
+                    value={customSecondary}
+                    onChange={(colour) => setCustomColour('secondary', colour)}
+                  />
+                </div>
+                <p className="text-meta leading-snug text-cream-400">
+                  {t('settings.customWarning')}
+                </p>
+              </div>
+            )}
           </div>
 
           <Toggle
@@ -188,6 +234,38 @@ export function SettingsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * One colour of a hand-rolled palette.
+ *
+ * A native `<input type="color">` rather than a picker of our own: the platform
+ * already has one, it is the one people know, and reimplementing a colour
+ * wheel inside a 340px widget would be a worse version of something already
+ * installed. It is styled down to a swatch — the browser draws a bordered box
+ * by default, which reads as a form control in a room full of physical ones.
+ */
+function Colour({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (colour: string) => void;
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 items-center gap-1.5">
+      <input
+        type="color"
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-6 w-8 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border [&::-webkit-color-swatch]:border-shell-600"
+      />
+      <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
+    </label>
   );
 }
 

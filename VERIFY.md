@@ -46,6 +46,12 @@ when the backlog is empty and the session is back under direct control.
       animating. Nobody has watched that happen.
 - [ ] **Always-on-top is restored at startup.** Same shape: the stored value is
       applied to the window once settings load.
+- [ ] **The colour picker opens.** The custom theme uses a native
+      `<input type="color">`, on the reasoning that the platform already has a
+      picker and reimplementing a colour wheel inside a 340px widget would be a
+      worse version of something already installed. Whether WebView2 opens the
+      Windows picker, and whether that dialog behaves on a frameless
+      always-on-top window, has only been tested in Chrome.
 - [ ] **The tray menu changes language.** Rust holds no dictionary; it rebuilds
       the menu from strings handed over by the webview. Switch to Turkish, right
       click the tray icon, and check all five entries — Show / Previous /
@@ -61,9 +67,24 @@ when the backlog is empty and the session is back under direct control.
 - [ ] **The arm leaving and returning.** Out in 170ms, back in 360ms after a
       60ms delay. Chosen to read as a flick of the wrist out and a careful hand
       back; only a person can say whether it does.
-- [ ] **Five palettes.** Every text pairing clears WCAG AA in all five, which is
+- [ ] **Six palettes.** Every text pairing clears WCAG AA in all six, which is
       a floor rather than a verdict on how they look — particularly Sakura,
       which was added without anyone seeing it on a real screen.
+
+      The numbers were re-measured on 2026-08-23 after the first method turned
+      out to be wrong: it probed with a `bg-shell-800` class, and Tailwind v4
+      only generates the utilities it finds in the source, where that one is
+      used exactly zero times. Three of the six pairings were therefore
+      measured against transparent — that is, against black — and came back
+      higher than the truth. Espresso's body text reads 6.11 against its panel,
+      not the 7.41 first reported. Nothing actually fell below the line, but
+      the earlier figures should not be quoted.
+- [ ] **A palette built by hand.** Two free colours cannot be checked for
+      legibility and the panel says so, but somebody should still try a few and
+      see whether the derived ramp holds up. From Espresso's own two colours it
+      lands within a hair of Espresso (lowest pairing 4.94 against Espresso's
+      4.56). From a pale surface it collapses to 1.49, which is the warning
+      doing its job rather than a bug.
 - [ ] **Turkish throughout.** No panel overflows 340px and long titles truncate,
       but the wording itself has had no native reading. The setup panels in
       particular are long prose translated in one pass.
