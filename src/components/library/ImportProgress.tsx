@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { onImportProgress } from '@/core/library';
 import { useImporting, usePlayerStore } from '@/core/store';
+import { useT } from '@/core/i18n';
 
 /**
  * Live strip shown while audio is being copied into the library.
@@ -13,6 +14,7 @@ import { useImporting, usePlayerStore } from '@/core/store';
  * accident should not leave killing the app as the only way out.
  */
 export function ImportProgress() {
+  const t = useT();
   const importing = useImporting();
   const cancelImport = usePlayerStore((s) => s.cancelImport);
 
@@ -34,15 +36,15 @@ export function ImportProgress() {
     <div className="shrink-0 bg-shell-900 px-3 py-1.5">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-meta text-cream-200">
-          Adding {importing.done + 1} of {importing.total}
+          {t('library.importing', { done: importing.done + 1, total: importing.total })}
           {importing.currentName && (
             <span className="text-cream-400"> · {importing.currentName}</span>
           )}
         </span>
         <button
           type="button"
-          aria-label="Cancel import"
-          title="Cancel"
+          aria-label={t('library.cancelImport')}
+          title={t('common.cancel')}
           onClick={() => void cancelImport()}
           className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-700 hover:text-cream-50"
         >

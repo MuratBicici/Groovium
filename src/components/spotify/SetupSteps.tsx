@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { openDashboard, redirectUri, setClientId } from '@/core/security/spotifyAuth';
 import { describeAuthError } from '@/core/security/authErrors';
+import { useT } from '@/core/i18n';
 
 interface SetupStepsProps {
   /** Called once a Client ID has been accepted and stored. */
@@ -21,6 +22,7 @@ interface SetupStepsProps {
  * most common way this whole flow fails.
  */
 export function SetupSteps({ onConfigured }: SetupStepsProps) {
+  const t = useT();
   const [uri, setUri] = useState('');
   const [copied, setCopied] = useState(false);
   const [clientId, setClientIdInput] = useState('');
@@ -37,7 +39,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      setError('Could not reach the clipboard. Select the address and copy it manually.');
+      setError(t('setup.clipboardFailed'));
     }
   }
 
@@ -57,27 +59,23 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
   return (
     <div className="space-y-3 px-3 pb-3 text-body leading-relaxed text-cream-200">
       <p className="text-cream-400">
-        <span className="text-cream-200">Spotify is optional.</span> Your own music
-        plays without any of this — set it up only if you want to search Spotify
-        from here.
+        <span className="text-cream-200">{t('setup.optionalLead')}</span> {t('setup.optionalRest')}
       </p>
-      <p className="text-cream-400">
-        Spotify requires every installation to register its own app. This is a one-time setup.
-      </p>
+      <p className="text-cream-400">{t('setup.oneTime')}</p>
 
-      <Step number={1} title="Create an app">
-        <p className="text-cream-400">Any name and description will do.</p>
+      <Step number={1} title={t('setup.step1')}>
+        <p className="text-cream-400">{t('setup.step1Body')}</p>
         <button
           type="button"
           onClick={() => void openDashboard()}
           className="mt-1 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
         >
-          Open Spotify Dashboard ↗
+          {t('setup.openDashboard')}
         </button>
       </Step>
 
-      <Step number={2} title="Add this redirect URI">
-        <p className="text-cream-400">It must match exactly, with no trailing slash.</p>
+      <Step number={2} title={t('setup.step2')}>
+        <p className="text-cream-400">{t('setup.step2Body')}</p>
         <div className="mt-1 flex items-center gap-1.5">
           <code className="min-w-0 flex-1 truncate groove-inset rounded px-2 py-1 text-meta text-brass-400 select-all">
             {uri || '…'}
@@ -87,26 +85,23 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
             onClick={() => void copyUri()}
             className="shrink-0 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('common.copied') : t('common.copy')}
           </button>
         </div>
       </Step>
 
-      <Step number={3} title="Add yourself as a user">
-        <p className="text-cream-400">
-          Open the app’s User Management tab and add your own Spotify account. Without this,
-          Spotify will refuse the sign-in.
-        </p>
+      <Step number={3} title={t('setup.step3')}>
+        <p className="text-cream-400">{t('setup.step3Body')}</p>
       </Step>
 
-      <Step number={4} title="Paste your Client ID">
+      <Step number={4} title={t('setup.step4')}>
         <div className="mt-1 flex items-center gap-1.5">
           <input
             type="text"
             value={clientId}
             spellCheck={false}
             autoComplete="off"
-            placeholder="32-character Client ID"
+            placeholder={t('setup.idPlaceholder')}
             onChange={(e) => setClientIdInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && clientId.trim()) void save();
@@ -119,7 +114,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
             onClick={() => void save()}
             className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
           >
-            {saving ? 'Saving' : 'Save'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </Step>
@@ -131,7 +126,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
       )}
 
       <p className="text-meta text-cream-400/70 italic">
-        Spotify Premium is required for playback.
+        {t('setup.premium')}
       </p>
     </div>
   );

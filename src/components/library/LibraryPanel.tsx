@@ -5,6 +5,7 @@ import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { formatDuration } from '@/core/utils/time';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
+import { useT } from '@/core/i18n';
 
 interface LibraryPanelProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface LibraryPanelProps {
  * Removing a track deletes that copy, which is why it asks first.
  */
 export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
+  const t = useT();
   const library = useLibrary();
   const playback = usePlayback();
 
@@ -60,15 +62,15 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-          Library · {library.length}
+          {t('library.heading', { count: library.length })}
         </span>
         <div className="flex items-center gap-1.5">
-          <SmallButton onClick={() => void choose('files')}>Add Files</SmallButton>
-          <SmallButton onClick={() => void choose('folder')}>Add Folder</SmallButton>
+          <SmallButton onClick={() => void choose('files')}>{t('library.addFiles')}</SmallButton>
+          <SmallButton onClick={() => void choose('folder')}>{t('library.addFolder')}</SmallButton>
           <button
             type="button"
-            aria-label="Close library"
-            title="Close"
+            aria-label={t('library.close')}
+            title={t('common.close')}
             onClick={onClose}
             className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
@@ -83,19 +85,27 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
           starts rather than discovered afterwards. */}
       {pending && (
         <div className="mx-3 mb-2 shrink-0 rounded bg-shell-900/80 p-2 text-meta leading-snug text-cream-200">
+          {/* One sentence, one string. The count used to be wrapped in a
+              `<strong>`, which meant the sentence was assembled from four JSX
+              fragments — a shape no translator can reorder, and Turkish puts
+              the number somewhere else. */}
           <p>
-            Copy <strong>{pending.paths.length}</strong> file
-            {pending.paths.length === 1 ? '' : 's'} ({formatBytes(pending.totalBytes)}) into your
-            library?
+            {t('library.confirmImport', {
+              count: pending.paths.length,
+              size: formatBytes(pending.totalBytes),
+            })}
             {pending.duplicates > 0 && (
-              <span className="text-cream-400"> {pending.duplicates} already added.</span>
+              <span className="text-cream-400">
+                {' '}
+                {t('library.duplicates', { count: pending.duplicates })}
+              </span>
             )}
           </p>
           <div className="mt-1.5 flex gap-1.5">
             <SmallButton onClick={() => void confirmImport()} primary>
-              Copy
+              {t('common.copy')}
             </SmallButton>
-            <SmallButton onClick={() => setPending(null)}>Cancel</SmallButton>
+            <SmallButton onClick={() => setPending(null)}>{t('common.cancel')}</SmallButton>
           </div>
         </div>
       )}
@@ -106,14 +116,15 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
            needed to get from here to music playing. */
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
           <p className="text-center text-body leading-relaxed text-cream-400/70">
-            Nothing here yet. Add some music to get started — songs are copied
-            in, so they keep playing even if you move or delete the original.
+            {t('library.empty')}
           </p>
           <div className="flex gap-1.5">
             <SmallButton onClick={() => void choose('files')} primary>
-              Add Files
+              {t('library.addFiles')}
             </SmallButton>
-            <SmallButton onClick={() => void choose('folder')}>Add Folder</SmallButton>
+            <SmallButton onClick={() => void choose('folder')}>
+              {t('library.addFolder')}
+            </SmallButton>
           </div>
         </div>
       ) : (
@@ -154,8 +165,8 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
                   <AddToPlaylist track={meta} />
                   <button
                     type="button"
-                    aria-label={`Remove ${track.title} from library`}
-                    title="Remove from library"
+                    aria-label={t('library.removeNamed', { title: track.title })}
+                    title={t('library.removeTitle')}
                     onClick={() => setConfirmRemove(track.id)}
                     className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-red-300"
                   >
@@ -173,7 +184,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
       {/* Deleting the app's copy is not reversible, so it is confirmed. */}
       {confirmRemove && (
         <div className="shrink-0 bg-red-950/80 px-3 py-2 text-meta leading-snug text-red-100">
-          <p>Delete this song from your library? The copy this app keeps is removed for good.</p>
+          <p>{t('library.confirmRemove')}</p>
           <div className="mt-1.5 flex gap-1.5">
             <SmallButton
               onClick={() => {
@@ -183,9 +194,9 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
               }}
               primary
             >
-              Delete
+              {t('common.delete')}
             </SmallButton>
-            <SmallButton onClick={() => setConfirmRemove(null)}>Keep</SmallButton>
+            <SmallButton onClick={() => setConfirmRemove(null)}>{t('common.keep')}</SmallButton>
           </div>
         </div>
       )}

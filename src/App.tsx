@@ -8,19 +8,25 @@ import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { StationSetup } from '@/components/station/StationSetup';
 import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
+import { useSettingsStore } from '@/core/settings/store';
+import { useT } from '@/core/i18n';
+import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
+import { syncTrayLabels } from '@/platform/tray';
 
 const PANEL_IDS = {
   library: 'groovium-library',
   playlists: 'groovium-playlists',
   spotify: 'groovium-spotify',
+  settings: 'groovium-settings',
 } as const;
 
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
@@ -46,7 +52,10 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  */
 
 export default function App() {
+  const t = useT();
   const initialize = usePlayerStore((s) => s.initialize);
+  const initializeSettings = useSettingsStore((s) => s.initialize);
+  const language = useLanguage();
   const error = usePlayerError();
   const clearError = usePlayerStore((s) => s.clearError);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
@@ -66,9 +75,24 @@ export default function App() {
   }, [initialize]);
 
   useEffect(() => {
+    // Separate from playback startup, and not awaited alongside it: a theme
+    // should land as soon as it is read rather than behind provider setup, and
+    // a failure to read preferences must not stop music from working.
+    void initializeSettings();
+  }, [initializeSettings]);
+
+  useEffect(() => {
     // Tray menu and global media keys arrive as events from Rust.
     return startCommandBridge();
   }, []);
+
+  useEffect(() => {
+    // The tray is the one part of the interface Rust draws, so it has to be
+    // told when the language changes rather than re-rendering with everything
+    // else. Depends on `language` and not on `ready`: the first run writes the
+    // default, and loading the stored language changes it, which runs it again.
+    void syncTrayLabels();
+  }, [language]);
 
   useEffect(() => {
     if (overlay === 'none') return;
@@ -110,6 +134,13 @@ export default function App() {
             open={overlay === 'spotify'}
             onClose={() => setOverlay('none')}
           />
+          <SettingsPanel
+            id={PANEL_IDS.settings}
+            open={overlay === 'settings'}
+            onClose={() => setOverlay('none')}
+            onSetUpSpotify={() => setOverlay('spotify')}
+            onSetUpStation={() => setStationSetup(true)}
+          />
         </div>
 
         {/* Always reachable, including while an overlay is open. */}
@@ -120,13 +151,13 @@ export default function App() {
           <VolumeKnob />
           <div className="flex items-center gap-1.5">
             <PanelButton
-              label="Library"
+              panel="library"
               open={overlay === 'library'}
               onToggle={() => toggle('library')}
               controls={PANEL_IDS.library}
             />
             <PanelButton
-              label="Playlists"
+              panel="playlists"
               open={overlay === 'playlists'}
               onToggle={() => toggle('playlists')}
               controls={PANEL_IDS.playlists}
@@ -135,12 +166,18 @@ export default function App() {
                 neither of which exists in a plain browser. */}
             {isTauri() && (
               <PanelButton
-                label="Spotify"
+                panel="spotify"
                 open={overlay === 'spotify'}
                 onToggle={() => toggle('spotify')}
                 controls={PANEL_IDS.spotify}
               />
             )}
+            <PanelButton
+              panel="settings"
+              open={overlay === 'settings'}
+              onToggle={() => toggle('settings')}
+              controls={PANEL_IDS.settings}
+            />
           </div>
         </div>
       </main>
@@ -161,7 +198,7 @@ export default function App() {
         <button
           type="button"
           onClick={clearError}
-          title="Dismiss"
+          title={t('common.dismiss')}
           className="shrink-0 bg-red-950/80 px-3 py-1.5 text-left text-meta leading-snug text-red-200"
         >
           {error}

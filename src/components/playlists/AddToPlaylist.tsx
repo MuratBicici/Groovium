@@ -1,5 +1,6 @@
 import type { TrackMetadata } from '@/core/types';
 import { usePlaylistPicker } from './PlaylistPicker';
+import { useT } from '@/core/i18n';
 
 interface AddToPlaylistProps {
   /**
@@ -22,14 +23,15 @@ interface AddToPlaylistProps {
  * reappearing over rows it did not belong to.
  */
 export function AddToPlaylist({ track, variant = 'row' }: AddToPlaylistProps) {
+  const t = useT();
   const { pick } = usePlaylistPicker();
   const inTransport = variant === 'transport';
 
   return (
     <button
       type="button"
-      aria-label={track ? `Add ${track.title} to a playlist` : 'Add to playlist'}
-      title="Add to playlist"
+      aria-label={track ? t('playlists.addNamed', { title: track.title }) : t('playlists.add')}
+      title={t('playlists.add')}
       disabled={!track}
       onClick={() => track && pick(track)}
       className={

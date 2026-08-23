@@ -10,6 +10,7 @@ import {
 import { describeAuthError, describeProduct } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
+import { useT } from '@/core/i18n';
 
 type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
 
@@ -28,6 +29,7 @@ interface SpotifyPanelProps {
  * whole panel is given over to search — that is what it is for.
  */
 export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
+  const t = useT();
   const [stage, setStage] = useState<Stage>('loading');
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,9 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-          {stage === 'connected' && account ? `Spotify · ${account.displayName}` : 'Spotify'}
+          {stage === 'connected' && account
+            ? t('spotify.heading', { name: account.displayName })
+            : t('panel.spotify')}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {stage === 'connected' && (
@@ -107,13 +111,13 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
               onClick={() => void disconnect()}
               className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
             >
-              Sign out
+              {t('spotify.signOut')}
             </button>
           )}
           <button
             type="button"
-            aria-label="Close Spotify panel"
-            title="Close"
+            aria-label={t('spotify.close')}
+            title={t('common.close')}
             onClick={onClose}
             className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
@@ -125,7 +129,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {stage === 'loading' && <Centered>Checking your Spotify setup…</Centered>}
+        {stage === 'loading' && <Centered>{t('spotify.checking')}</Centered>}
 
         {stage === 'setup' && (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -135,9 +139,9 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
 
         {stage === 'connecting' && (
           <Centered>
-            Waiting for authorisation in your browser…
+            {t('spotify.waiting')}
             <span className="mt-1 block text-meta text-cream-400/70">
-              Approve the request, then come back here.
+              {t('spotify.waitingHint')}
             </span>
           </Centered>
         )}
@@ -145,14 +149,14 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
         {stage === 'disconnected' && (
           <div className="space-y-3 px-4 py-3 text-center">
             <p className="text-body text-cream-400">
-              Your Client ID is saved. Connect your Spotify account to start playing.
+              {t('spotify.savedId')}
             </p>
             <button
               type="button"
               onClick={() => void connect()}
               className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
             >
-              Connect Spotify Account
+              {t('spotify.connect')}
             </button>
             {error && (
               <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-meta leading-snug text-red-200">
@@ -164,7 +168,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
               onClick={() => void changeClientId()}
               className="block w-full text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
             >
-              Use a different Client ID
+              {t('spotify.changeId')}
             </button>
           </div>
         )}

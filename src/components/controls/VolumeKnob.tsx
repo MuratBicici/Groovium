@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useMuted, usePlayerStore, useVolume } from '@/core/store';
+import { useT } from '@/core/i18n';
 
 /**
  * Current volume read straight from the store rather than from a render
@@ -25,6 +26,7 @@ const SWEEP_DEGREES = 270;
  * standard slider role so this is not pointer-only.
  */
 export function VolumeKnob() {
+  const t = useT();
   const volume = useVolume();
   const muted = useMuted();
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -70,7 +72,7 @@ export function VolumeKnob() {
     <div className="flex items-center gap-2">
       <button
         type="button"
-        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? t('transport.unmute') : t('transport.mute')}
         aria-pressed={muted}
         onClick={() => void toggleMute()}
         className={`transition-colors ${muted ? 'text-brass-400' : 'text-cream-400 hover:text-cream-200'}`}
@@ -81,7 +83,7 @@ export function VolumeKnob() {
       <div
         role="slider"
         tabIndex={0}
-        aria-label="Volume"
+        aria-label={t('transport.volume')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(effectiveVolume * 100)}

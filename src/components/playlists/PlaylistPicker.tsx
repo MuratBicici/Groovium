@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { TrackMetadata } from '@/core/types';
 import type { PlaylistItem } from '@/core/library';
 import { usePlaylists, usePlayerStore } from '@/core/store';
+import { useT } from '@/core/i18n';
 
 /**
  * One playlist picker for the whole window.
@@ -57,6 +58,7 @@ function containsTrack(items: PlaylistItem[], track: TrackMetadata): boolean {
 }
 
 export function PlaylistPickerProvider({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [track, setTrack] = useState<TrackMetadata | null>(null);
   const [newName, setNewName] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
@@ -119,19 +121,19 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
         <div className="absolute inset-0 z-30 flex items-center justify-center p-5">
           <button
             type="button"
-            aria-label="Cancel"
+            aria-label={t('common.cancel')}
             onClick={close}
             className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
           />
 
           <div
             role="dialog"
-            aria-label="Add to playlist"
+            aria-label={t('playlists.add')}
             className="relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600"
           >
             <div className="shrink-0 px-3 pt-2.5 pb-1.5">
               <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-                Add to playlist
+                {t('playlists.add')}
               </p>
               <p className="mt-0.5 truncate text-body text-cream-100">{track.title}</p>
             </div>
@@ -139,7 +141,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
             <ul className="min-h-0 flex-1 overflow-y-auto px-1.5">
               {playlists.length === 0 && (
                 <li className="px-1.5 py-2 text-center text-meta text-cream-400/70">
-                  No playlists yet — name one below.
+                  {t('playlists.pickerNone')}
                 </li>
               )}
               {playlists.map((playlist) => {
@@ -161,7 +163,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                       </span>
                       {/* Saying so up front beats clicking and being told. */}
                       <span className="shrink-0 text-label text-cream-400">
-                        {already ? 'Added' : playlist.items.length}
+                        {already ? t('playlists.added') : playlist.items.length}
                       </span>
                     </button>
                   </li>
@@ -174,7 +176,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                 type="text"
                 value={newName}
                 autoFocus
-                placeholder="New playlist"
+                placeholder={t('playlists.newPlaceholder')}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newName.trim()) void createAndAdd();
@@ -187,7 +189,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                 onClick={() => void createAndAdd()}
                 className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
               >
-                Create
+                {t('common.create')}
               </button>
             </div>
           </div>

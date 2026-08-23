@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/core/store';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
+import { useT } from '@/core/i18n';
 
 /** Wait for typing to settle before spending a request. */
 const DEBOUNCE_MS = 350;
@@ -24,6 +25,7 @@ interface SpotifySearchProps {
 }
 
 export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TrackMetadata[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,7 +71,7 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
         type="text"
         value={query}
         spellCheck={false}
-        placeholder="Search Spotify for a song"
+        placeholder={t('spotify.searchPlaceholder')}
         onChange={(e) => setQuery(e.target.value)}
         className="shrink-0 groove-inset rounded px-2 py-1.5 text-body text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
       />
@@ -81,9 +83,9 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
       )}
 
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {loading && results.length === 0 && <Hint>Searching…</Hint>}
+        {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
         {!loading && results.length === 0 && (
-          <Hint>{query.trim() ? 'Nothing found.' : 'Type to find a song.'}</Hint>
+          <Hint>{query.trim() ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>
         )}
 
         {results.map((track) => (

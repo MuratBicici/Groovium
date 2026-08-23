@@ -42,6 +42,7 @@ import { artistKey, hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } fro
 import { searchTracks } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
+import { say } from '@/core/i18n';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
@@ -633,7 +634,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
           // same failure again, which is noise rather than information.
           if (saved || warnedAboutSaving) return;
           warnedAboutSaving = true;
-          set({ error: 'Settings are not being saved — volume and repeat will reset on restart.' });
+          set({ error: say('error.settingsNotSaved') });
         });
       }, SESSION_SAVE_DEBOUNCE_MS);
     });
@@ -685,7 +686,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         set({ initialized: true });
       } catch (err) {
         set({
-          error: `Could not start up: ${err instanceof Error ? err.message : String(err)}`,
+          error: say('error.startup', {
+            message: err instanceof Error ? err.message : String(err),
+          }),
         });
       } finally {
         starting = false;
@@ -715,7 +718,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
       const ready = await provider.initialize();
       if (!ready) {
-        if (!get().error) set({ error: `${provider.displayName} is unavailable.` });
+        if (!get().error) {
+          set({ error: say('error.providerUnavailable', { provider: provider.displayName }) });
+        }
         return;
       }
       await provider.setVolume(outputAmplitude());
@@ -920,7 +925,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     async addTrackToPlaylist(playlistId, track) {
       const item = toPlaylistItem(track);
       if (!item) {
-        set({ error: 'That track cannot be saved to a playlist.' });
+        set({ error: say('error.notPlayable') });
         return false;
       }
       // A rejected payload used to surface as an unhandled promise rejection

@@ -26,6 +26,46 @@ pub struct AppConfig {
     pub spotify_client_id: Option<String>,
     #[serde(default)]
     pub lastfm_api_key: Option<String>,
+    #[serde(default)]
+    pub settings: Settings,
+}
+
+/// What the person using this app chose, as opposed to what a provider needs.
+///
+/// Nested rather than flat so the file stays readable by eye, and so the
+/// distinction between "configuration this installation was given" and
+/// "preferences someone set" survives in the document itself.
+///
+/// Every field is optional in the sense that a missing one takes the default:
+/// a config written before any of this existed still reads, and a settings file
+/// from a newer build still loads on an older one.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Palette id, matching the `data-theme` values in `styles.css`. `None` is
+    /// the default palette, which sets no attribute at all.
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// BCP 47-ish language tag. `None` means "follow the operating system",
+    /// which is only consulted on a first run.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Set independently of the OS `prefers-reduced-motion` setting; either one
+    /// being on is enough to stop the animation.
+    #[serde(default)]
+    pub reduce_motion: bool,
+    #[serde(default)]
+    pub always_on_top: bool,
+}
+
+#[tauri::command]
+pub fn load_settings(app: AppHandle) -> Settings {
+    read(&app).settings
+}
+
+#[tauri::command]
+pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    update(&app, |config| config.settings = settings)
 }
 
 pub fn read(app: &AppHandle) -> AppConfig {
@@ -93,15 +133,54 @@ mod tests {
     }
 
     #[test]
+    fn saving_a_preference_does_not_erase_a_providers_key() {
+        // The same hazard as above, one level down: settings arrive from the
+        // webview as a whole object, and writing them through `update` must
+        // leave everything a provider put in this file alone.
+        let stored = r#"{"spotifyClientId":"abc","lastfmApiKey":"xyz"}"#;
+        let mut config: AppConfig = serde_json::from_str(stored).expect("parses");
+
+        config.settings = Settings {
+            theme: Some("prussian-blue".into()),
+            language: Some("tr".into()),
+            reduce_motion: true,
+            always_on_top: false,
+        };
+
+        let written = serde_json::to_string(&config).expect("serializes");
+        assert!(written.contains(r#""spotifyClientId":"abc""#));
+        assert!(written.contains(r#""lastfmApiKey":"xyz""#));
+        assert!(written.contains(r#""theme":"prussian-blue""#));
+        assert!(written.contains(r#""reduceMotion":true"#));
+    }
+
+    #[test]
+    fn a_config_written_before_settings_existed_still_reads() {
+        let config: AppConfig =
+            serde_json::from_str(r#"{"spotifyClientId":"abc"}"#).expect("parses");
+        assert!(config.settings.theme.is_none());
+        assert!(config.settings.language.is_none());
+        assert!(!config.settings.reduce_motion);
+        assert!(!config.settings.always_on_top);
+    }
+
+    #[test]
     fn field_names_are_camel_case_on_disk() {
         // The file is human-editable; the names should match what the setup
         // panels and the README call them.
         let json = serde_json::to_string(&AppConfig {
             spotify_client_id: Some("a".into()),
             lastfm_api_key: Some("b".into()),
+            settings: Settings {
+                reduce_motion: true,
+                always_on_top: true,
+                ..Settings::default()
+            },
         })
         .unwrap();
         assert!(json.contains("spotifyClientId"));
         assert!(json.contains("lastfmApiKey"));
+        assert!(json.contains("reduceMotion"));
+        assert!(json.contains("alwaysOnTop"));
     }
 }

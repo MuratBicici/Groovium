@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useDurationMs, usePlayerStore, usePositionMs } from '@/core/store';
 import { clamp, formatDuration } from '@/core/utils/time';
+import { useT } from '@/core/i18n';
 
 /**
  * Seek scrubber.
@@ -18,6 +19,7 @@ import { clamp, formatDuration } from '@/core/utils/time';
  * no longer decides where a click lands.
  */
 export function ProgressBar() {
+  const t = useT();
   const positionMs = usePositionMs();
   const durationMs = useDurationMs();
   const seek = usePlayerStore((s) => s.seek);
@@ -105,7 +107,7 @@ export function ProgressBar() {
           step={100}
           value={displayMs}
           disabled={disabled}
-          aria-label="Seek"
+          aria-label={t('transport.seek')}
           onChange={(e) => setScrubMs(Number(e.target.value))}
           onKeyUp={(e) => commit(Number(e.currentTarget.value))}
           onBlur={(e) => {

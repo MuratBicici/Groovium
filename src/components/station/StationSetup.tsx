@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { openAccountPage, setApiKey } from '@/core/station';
+import { useT } from '@/core/i18n';
 
 interface StationSetupProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface StationSetupProps {
  * `config.json` next to the Spotify Client ID rather than in the keyring.
  */
 export function StationSetup({ open, onClose, onConfigured }: StationSetupProps) {
+  const t = useT();
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -60,27 +62,22 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
     <div className="absolute inset-0 z-30 flex items-center justify-center p-5">
       <button
         type="button"
-        aria-label="Cancel"
+        aria-label={t('common.cancel')}
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
       />
 
       <div
         role="dialog"
-        aria-label="Set up infinite play"
+        aria-label={t('station.dialog')}
         className="relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600"
       >
         <div className="shrink-0 px-3 pt-2.5 pb-1">
           <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-            Infinite play
+            {t('station.heading')}
           </p>
-          <p className="mt-1 text-body leading-relaxed text-cream-200">
-            Keeps the music going once a playlist ends, by finding a track similar to the one
-            playing. Suggestions come from Last.fm and need a free API key.
-          </p>
-          <p className="mt-1 text-meta leading-relaxed text-cream-400">
-            Entirely optional — everything else works without it.
-          </p>
+          <p className="mt-1 text-body leading-relaxed text-cream-200">{t('station.intro')}</p>
+          <p className="mt-1 text-meta leading-relaxed text-cream-400">{t('station.optional')}</p>
         </div>
 
         {/* Scrolls rather than overflows. It fits at 340×480 as written, but a
@@ -88,30 +85,30 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
             window this small, and a sheet you cannot submit is worse than one
             you have to scroll. */}
         <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 pt-1.5 pb-3 text-body text-cream-200">
-          <Step number={1} title="Create an API account">
-            <p className="text-cream-400">
-              The form has four fields. Only the first two matter:
-            </p>
+          <Step number={1} title={t('station.step1')}>
+            <p className="text-cream-400">{t('station.formIntro')}</p>
+            {/* The field names stay in English in every language: they are
+                what Last.fm's own form says, and a translated label would
+                send someone looking for a field that is not there. */}
             <dl className="mt-1 space-y-0.5 text-meta">
-              <Field name="Application name">anything — “Groovium” will do</Field>
-              <Field name="Application description">anything</Field>
-              <Field name="Application homepage">leave blank</Field>
-              <Field name="Callback URL">leave blank</Field>
+              <Field name={t('station.fieldName')}>{t('station.fieldNameValue')}</Field>
+              <Field name={t('station.fieldDescription')}>
+                {t('station.fieldDescriptionValue')}
+              </Field>
+              <Field name={t('station.fieldHomepage')}>{t('station.fieldBlank')}</Field>
+              <Field name={t('station.fieldCallback')}>{t('station.fieldBlank')}</Field>
             </dl>
-            <p className="mt-1 text-cream-400">
-              The last two belong to Last.fm’s sign-in flow. Groovium never signs you in — it only
-              asks which tracks are similar, and that needs the key alone.
-            </p>
+            <p className="mt-1 text-cream-400">{t('station.callbackNote')}</p>
             <button
               type="button"
               onClick={() => void openAccountPage()}
               className="mt-1 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
             >
-              Open Last.fm ↗
+              {t('station.openLastfm')}
             </button>
           </Step>
 
-          <Step number={2} title="Paste it here">
+          <Step number={2} title={t('station.step2')}>
             <div className="mt-1 flex items-center gap-1.5">
               <input
                 type="text"
@@ -119,7 +116,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
                 autoFocus
                 spellCheck={false}
                 autoComplete="off"
-                placeholder="32-character API key"
+                placeholder={t('station.keyPlaceholder')}
                 onChange={(e) => setKey(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && key.trim()) void save();
@@ -132,7 +129,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
                 onClick={() => void save()}
                 className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
               >
-                {saving ? 'Saving' : 'Save'}
+                {saving ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </Step>
@@ -144,8 +141,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
           )}
 
           <p className="text-meta leading-snug text-cream-400/70 italic">
-            The key appears straight away — nothing to approve, no account to link. Tracks already
-            in your library are preferred, so the station usually costs nothing to keep running.
+            {t('station.footnote')}
           </p>
         </div>
       </div>

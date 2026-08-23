@@ -4,6 +4,7 @@ import { playlistItemToMetadata, type LibraryTrack, type PlaylistItem } from '@/
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { formatDuration } from '@/core/utils/time';
+import { useT } from '@/core/i18n';
 
 interface PlaylistsPanelProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface PlaylistsPanelProps {
  * Spotify search result worth keeping rather than a one-off.
  */
 export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
+  const t = useT();
   const playlists = usePlaylists();
   const playback = usePlayback();
   const library = usePlayerStore((s) => s.library);
@@ -66,13 +68,13 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
               onClick={() => setOpenId(null)}
               className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
             >
-              Back
+              {t('common.back')}
             </button>
           )}
           <button
             type="button"
-            aria-label="Close playlists"
-            title="Close"
+            aria-label={t('playlists.close')}
+            title={t('common.close')}
             onClick={onClose}
             className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
@@ -87,7 +89,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {current.items.length === 0 && (
             <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
-              Nothing here yet. Add songs from your library or from Spotify.
+              {t('playlists.emptyPlaylist')}
             </li>
           )}
           {current.items.map((item, index) => {
@@ -119,10 +121,10 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body">
-                      {track?.title ?? 'Unavailable'}
+                      {track?.title ?? t('playlists.unavailable')}
                     </span>
                     <span className="block truncate text-label text-cream-400">
-                      {track ? `${track.artist} · ${track.source}` : 'Removed from library'}
+                      {track ? `${track.artist} · ${track.source}` : t('playlists.removedFromLibrary')}
                     </span>
                   </span>
                   {track && (
@@ -133,8 +135,8 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                 </button>
                 <button
                   type="button"
-                  aria-label="Remove from playlist"
-                  title="Remove"
+                  aria-label={t('playlists.removeItem')}
+                  title={t('common.remove')}
                   onClick={() => void removePlaylistItem(current.id, index)}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 opacity-0 transition-all group-hover/row:opacity-100 hover:bg-shell-600 hover:text-red-300 focus-visible:opacity-100"
                 >
@@ -152,7 +154,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
             <input
               type="text"
               value={name}
-              placeholder="New playlist"
+              placeholder={t('playlists.newPlaceholder')}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && name.trim()) void create();
@@ -165,14 +167,14 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
               onClick={() => void create()}
               className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
             >
-              Create
+              {t('common.create')}
             </button>
           </div>
 
           <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
             {playlists.length === 0 && (
               <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
-                No playlists yet. Make one to keep songs together.
+                {t('playlists.none')}
               </li>
             )}
             {playlists.map((playlist) => (
@@ -189,8 +191,8 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Delete ${playlist.name}`}
-                  title="Delete playlist"
+                  aria-label={t('playlists.deleteNamed', { name: playlist.name })}
+                  title={t('playlists.deleteTitle')}
                   onClick={() => void removePlaylist(playlist.id)}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 opacity-0 transition-all group-hover/row:opacity-100 hover:bg-shell-600 hover:text-red-300 focus-visible:opacity-100"
                 >

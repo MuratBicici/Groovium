@@ -9,6 +9,7 @@ import {
   useStationSearching,
 } from '@/core/store';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
+import { useT } from '@/core/i18n';
 
 interface TransportControlsProps {
   /** Raised when infinite play is switched on before a Last.fm key exists. */
@@ -17,6 +18,7 @@ interface TransportControlsProps {
 
 /** Prev / play-pause / next, plus the shuffle, repeat and station toggles. */
 export function TransportControls({ onStationNeedsSetup }: TransportControlsProps) {
+  const t = useT();
   const playbackState = usePlaybackState();
   const currentTrack = useCurrentTrack();
   const hasQueue = useHasPlayback();
@@ -50,7 +52,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       <AddToPlaylist track={currentTrack} variant="transport" />
 
       <ToggleButton
-        label="Shuffle"
+        label={t('transport.shuffle')}
         active={shuffle}
         disabled={!hasQueue}
         onClick={toggleShuffle}
@@ -58,13 +60,13 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
         <ShuffleIcon />
       </ToggleButton>
 
-      <TactileButton label="Previous" disabled={!hasQueue} onClick={() => void previous()}>
+      <TactileButton label={t('transport.previous')} disabled={!hasQueue} onClick={() => void previous()}>
         <SkipIcon direction="back" />
       </TactileButton>
 
       <button
         type="button"
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? t('transport.pause') : t('transport.play')}
         disabled={!hasQueue}
         onClick={() => void togglePlayPause()}
         className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-brass-400 to-brass-600 text-shell-900 shadow-[0_3px_0_var(--color-brass-600),0_5px_10px_rgba(0,0,0,0.5)] transition-all active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-600),0_2px_5px_rgba(0,0,0,0.5)] disabled:opacity-40 disabled:shadow-none"
@@ -72,12 +74,12 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
         {isLoading ? <SpinnerIcon /> : isPlaying ? <PauseIcon /> : <PlayIcon />}
       </button>
 
-      <TactileButton label="Next" disabled={!hasQueue} onClick={() => void next()}>
+      <TactileButton label={t('transport.next')} disabled={!hasQueue} onClick={() => void next()}>
         <SkipIcon direction="forward" />
       </TactileButton>
 
       <ToggleButton
-        label={`Repeat: ${repeat}`}
+        label={t('transport.repeat', { mode: t(`repeat.${repeat}`) })}
         active={repeat !== 'off'}
         disabled={!hasQueue}
         onClick={cycleRepeat}
@@ -89,7 +91,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
           happens when the track ends — and unlike the rest of the row it stays
           enabled with nothing playing, so it can be armed in advance. */}
       <ToggleButton
-        label={`Infinite play: ${station ? 'on' : 'off'}`}
+        label={t('transport.station', { state: station ? t('common.on') : t('common.off') })}
         active={station}
         onClick={() => void onStationClick()}
       >

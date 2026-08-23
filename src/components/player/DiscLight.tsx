@@ -20,6 +20,11 @@
  * it does not turn when the record turns. Spin a record under a lamp and the
  * sheen sits still while the label goes round.
  *
+ * The colour is `--sheen` rather than a literal, so it follows the palette: a
+ * warm cream reflection on a cold blue shell reads as a sticker stuck to the
+ * record instead of light falling on it. The record's own black does not follow
+ * the palette, because vinyl is black in every room.
+ *
  * There was a tighter straight-edged reflection over the top of it for the
  * source itself, and it is gone. A linear gradient's bands are straight lines —
  * that one ran up to the right, across a disc whose every other feature follows
@@ -43,16 +48,16 @@ export function DiscLight({ size }: { size: number }) {
         style={{
           background:
             'conic-gradient(from 0deg,' +
-            ' rgba(255,247,235,0.02) 0deg,' +
-            ' rgba(255,247,235,0.004) 62deg,' +
-            ' rgba(255,247,235,0.02) 108deg,' +
-            ' rgba(255,247,235,0.14) 135deg,' +
-            ' rgba(255,247,235,0.02) 162deg,' +
-            ' rgba(255,247,235,0.004) 248deg,' +
-            ' rgba(255,247,235,0.03) 288deg,' +
-            ' rgba(255,247,235,0.26) 315deg,' +
-            ' rgba(255,247,235,0.03) 342deg,' +
-            ' rgba(255,247,235,0.02) 360deg)',
+            ' rgb(var(--sheen) / 0.02) 0deg,' +
+            ' rgb(var(--sheen) / 0.004) 62deg,' +
+            ' rgb(var(--sheen) / 0.02) 108deg,' +
+            ' rgb(var(--sheen) / 0.14) 135deg,' +
+            ' rgb(var(--sheen) / 0.02) 162deg,' +
+            ' rgb(var(--sheen) / 0.004) 248deg,' +
+            ' rgb(var(--sheen) / 0.03) 288deg,' +
+            ' rgb(var(--sheen) / 0.26) 315deg,' +
+            ' rgb(var(--sheen) / 0.03) 342deg,' +
+            ' rgb(var(--sheen) / 0.02) 360deg)',
           maskImage:
             // Edges kept crisp on purpose. Faded gently, the sheen reads as
             // the highlight on a sphere; the grooved band on a record has a
@@ -72,14 +77,14 @@ export function DiscLight({ size }: { size: number }) {
         style={{
           background:
             'conic-gradient(from 0deg,' +
-            ' rgba(255,247,235,0.11) 0deg,' +
-            ' rgba(255,247,235,0.02) 48deg,' +
+            ' rgb(var(--sheen) / 0.11) 0deg,' +
+            ' rgb(var(--sheen) / 0.02) 48deg,' +
             ' rgba(0,0,0,0.2) 120deg,' +
             ' rgba(0,0,0,0.26) 168deg,' +
             ' rgba(0,0,0,0.16) 228deg,' +
-            ' rgba(255,247,235,0.05) 282deg,' +
-            ' rgba(255,247,235,0.28) 318deg,' +
-            ' rgba(255,247,235,0.11) 360deg)',
+            ' rgb(var(--sheen) / 0.05) 282deg,' +
+            ' rgb(var(--sheen) / 0.28) 318deg,' +
+            ' rgb(var(--sheen) / 0.11) 360deg)',
           maskImage:
             'radial-gradient(circle closest-side at center,' +
             ' rgba(0,0,0,0) 92%, rgba(0,0,0,0.7) 96.5%, #000 100%)',

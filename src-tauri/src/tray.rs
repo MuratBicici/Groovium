@@ -9,6 +9,7 @@
 //! back into Rust and kept in sync — real complexity for a menu label, when one
 //! toggle entry already does the right thing.
 
+use serde::Deserialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
@@ -18,14 +19,45 @@ use crate::media::{self, MediaCommand};
 /// Label of the widget window, matching `tauri.conf.json`.
 pub const MAIN_WINDOW: &str = "main";
 
-pub fn create(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show Groovium", true, None::<&str>)?;
-    let previous = MenuItem::with_id(app, "previous", "Previous", true, None::<&str>)?;
-    let play_pause = MenuItem::with_id(app, "playpause", "Play / Pause", true, None::<&str>)?;
-    let next = MenuItem::with_id(app, "next", "Next", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Groovium", true, None::<&str>)?;
+const TRAY_ID: &str = "groovium-tray";
 
-    let menu = Menu::with_items(
+/// The menu's text, handed over by the webview.
+///
+/// Rust holds no dictionary. Every string the app shows lives in one place —
+/// `src/core/i18n` — and this menu is the only part of the interface Rust
+/// draws, so it is told what to say rather than told which language to say it
+/// in. A second dictionary here is a second thing to keep in step.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayLabels {
+    pub show: String,
+    pub previous: String,
+    pub play_pause: String,
+    pub next: String,
+    pub quit: String,
+}
+
+impl Default for TrayLabels {
+    /// English, for the moment before the webview has loaded and reported in.
+    fn default() -> Self {
+        Self {
+            show: "Show Groovium".into(),
+            previous: "Previous".into(),
+            play_pause: "Play / Pause".into(),
+            next: "Next".into(),
+            quit: "Quit Groovium".into(),
+        }
+    }
+}
+
+fn build_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::Wry>> {
+    let show = MenuItem::with_id(app, "show", &labels.show, true, None::<&str>)?;
+    let previous = MenuItem::with_id(app, "previous", &labels.previous, true, None::<&str>)?;
+    let play_pause = MenuItem::with_id(app, "playpause", &labels.play_pause, true, None::<&str>)?;
+    let next = MenuItem::with_id(app, "next", &labels.next, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
+
+    Menu::with_items(
         app,
         &[
             &show,
@@ -36,14 +68,33 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
-    )?;
+    )
+}
+
+/// Replace the menu's text.
+///
+/// The whole menu is rebuilt rather than each item's text being set in place.
+/// The ids are what the click handler matches on and they are rebuilt
+/// identically, so nothing about behaviour depends on the labels — which is the
+/// property that makes translating them safe.
+#[tauri::command]
+pub fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<(), String> {
+    let tray = app
+        .tray_by_id(TRAY_ID)
+        .ok_or_else(|| "No tray icon to relabel.".to_string())?;
+    let menu = build_menu(&app, &labels).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
+pub fn create(app: &AppHandle) -> tauri::Result<()> {
+    let menu = build_menu(app, &TrayLabels::default())?;
 
     let icon = app
         .default_window_icon()
         .cloned()
         .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
 
-    TrayIconBuilder::with_id("groovium-tray")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip("Groovium")
         // Left click toggles the window; the menu belongs on right click, which

@@ -18,6 +18,14 @@
   --color-cream-200: #ddd0bb;
   --color-cream-400: #a9977e;
 
+  /*
+   * The light falling on the record, as raw channels so the disc can mix its
+   * own alphas. A theme changes the room the deck is sitting in, and a warm
+   * cream reflection on a cold blue shell reads as a sticker rather than a
+   * highlight.
+   */
+  --sheen: 255 247 235;
+
   --radius-widget: 18px;
 
   /*
@@ -35,6 +43,73 @@
 
   --text-body--line-height: 1.45;
   --text-meta--line-height: 1.45;
+}
+
+/*
+ * The palettes.
+ *
+ * Only colour variables are redefined — every utility in the app already reads
+ * them through `var()`, so this is the whole of what a theme is. Nothing about
+ * shadow, spacing or type changes with one.
+ *
+ * The selector must be `:root[data-theme=…]` and not `[data-theme=…]` alone.
+ * `:root` and a bare attribute selector have identical specificity (0,1,0), so
+ * which one wins would come down to source order against Tailwind's own output.
+ * Qualifying it takes these to (0,2,0), which settles it in every build.
+ *
+ * Espresso, the default, is deliberately absent: it is the `@theme` block above
+ * and sets no attribute at all. One palette that is the real one beats four that
+ * are all overrides of something that no longer exists on its own.
+ */
+:root[data-theme='prussian-blue'] {
+  --color-shell-900: #0d1420;
+  --color-shell-800: #131e2e;
+  --color-shell-700: #1b2740;
+  --color-shell-600: #2b3a57;
+
+  --color-brass-400: #e6d2a0;
+  --color-brass-500: #cfb478;
+  --color-brass-600: #a68a52;
+
+  --color-cream-50: #eff2f7;
+  --color-cream-200: #ccd5e2;
+  --color-cream-400: #9aa7ba;
+
+  --sheen: 236 243 255;
+}
+
+:root[data-theme='oxblood'] {
+  --color-shell-900: #190d0e;
+  --color-shell-800: #251517;
+  --color-shell-700: #341c1e;
+  --color-shell-600: #4a292c;
+
+  --color-brass-400: #ddaa76;
+  --color-brass-500: #c08a55;
+  --color-brass-600: #a97a4a;
+
+  --color-cream-50: #f6ebe7;
+  --color-cream-200: #e0cac4;
+  --color-cream-400: #b5968f;
+
+  --sheen: 255 243 236;
+}
+
+:root[data-theme='verdigris'] {
+  --color-shell-900: #0c1614;
+  --color-shell-800: #14201d;
+  --color-shell-700: #1d2e2a;
+  --color-shell-600: #2c433c;
+
+  --color-brass-400: #bcdcc4;
+  --color-brass-500: #9dc2a9;
+  --color-brass-600: #74987f;
+
+  --color-cream-50: #eef4ef;
+  --color-cream-200: #cbdccf;
+  --color-cream-400: #9bb0a1;
+
+  --sheen: 238 250 242;
 }
 
 /*
@@ -146,4 +221,16 @@ body {
   .groove-platter {
     animation: none;
   }
+}
+
+/*
+ * The same thing, asked for in the app rather than in Windows.
+ *
+ * A separate rule instead of a combined selector because the two are separate
+ * facts: either one being true stops the motion, and neither can switch the
+ * other back on. `src/core/utils/motion.ts` answers the same way for the
+ * scripted animations.
+ */
+:root[data-motion='off'] .groove-platter {
+  animation: none;
 }

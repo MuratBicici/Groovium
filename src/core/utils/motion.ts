@@ -7,6 +7,8 @@
  * stylesheet has no sane shape.
  */
 
+import { useSettingsStore } from '@/core/settings/store';
+
 /** The query both halves of this app's motion answer to. */
 const REDUCED = '(prefers-reduced-motion: reduce)';
 
@@ -14,10 +16,17 @@ const REDUCED = '(prefers-reduced-motion: reduce)';
  * JS mirror of the `prefers-reduced-motion` block in styles.css, so scripted
  * motion honors the same setting the CSS spin already does.
  *
- * Read fresh each call rather than cached, so flipping the OS setting takes
- * effect on the next animation without a restart.
+ * Two sources, either of which is enough. The OS setting is a statement about
+ * every application; the one in Settings is a statement about this one. Taking
+ * the OR means turning it on here cannot be undone by the system, and turning
+ * it on in the system cannot be undone here — which is the only reading of
+ * "reduce motion" that never surprises anyone.
+ *
+ * Read fresh each call rather than cached, so either one takes effect on the
+ * next animation without a restart.
  */
 export function prefersReducedMotion(): boolean {
+  if (useSettingsStore.getState().reduceMotion) return true;
   return typeof matchMedia !== 'undefined' && matchMedia(REDUCED).matches;
 }
 

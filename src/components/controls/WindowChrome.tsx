@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { isTauri } from '@/core/utils/env';
-import { hideWindow, isAlwaysOnTop, minimizeWindow, setAlwaysOnTop } from '@/platform/window';
+import {
+  hideWindow,
+  minimizeWindow,
+  setAlwaysOnTop as setWindowAlwaysOnTop,
+} from '@/platform/window';
+import { useSettingsStore } from '@/core/settings/store';
+import { useT } from '@/core/i18n';
 
 /**
  * Custom titlebar for the frameless window.
@@ -10,19 +16,19 @@ import { hideWindow, isAlwaysOnTop, minimizeWindow, setAlwaysOnTop } from '@/pla
  * child buttons must opt out of it or they become drag handles instead.
  */
 export function WindowChrome() {
+  const t = useT();
   const runningInTauri = isTauri();
-  const [pinned, setPinned] = useState(false);
+  // The setting is the truth, not the window. Reading the window's state at
+  // startup was fine while nothing remembered the choice; now that it survives
+  // a restart, the stored value is what the window has to be told.
+  const ready = useSettingsStore((s) => s.ready);
+  const pinned = useSettingsStore((s) => s.alwaysOnTop);
+  const setPinned = useSettingsStore((s) => s.setAlwaysOnTop);
 
   useEffect(() => {
-    // Start from the window's actual state rather than assuming it is unpinned.
-    void isAlwaysOnTop().then(setPinned);
-  }, []);
-
-  async function togglePinned() {
-    const next = !pinned;
-    setPinned(next);
-    await setAlwaysOnTop(next);
-  }
+    if (!ready) return;
+    void setWindowAlwaysOnTop(pinned);
+  }, [ready, pinned]);
 
   return (
     <header
@@ -39,9 +45,9 @@ export function WindowChrome() {
       {runningInTauri && (
         <div className="flex items-center gap-1.5">
           <ChromeButton
-            label={pinned ? 'Unpin from top' : 'Keep on top'}
+            label={pinned ? t('chrome.unpin') : t('chrome.pin')}
             active={pinned}
-            onClick={togglePinned}
+            onClick={() => setPinned(!pinned)}
           >
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M12 17v5" strokeLinecap="round" />
@@ -49,13 +55,13 @@ export function WindowChrome() {
             </svg>
           </ChromeButton>
 
-          <ChromeButton label="Minimize" onClick={minimizeWindow}>
+          <ChromeButton label={t('chrome.minimize')} onClick={minimizeWindow}>
             <span className="block h-px w-2.5 bg-current" />
           </ChromeButton>
 
           {/* Hides rather than quits — the tray menu owns quitting, so dismissing
               the window does not stop playback. */}
-          <ChromeButton label="Hide to tray" onClick={hideWindow}>
+          <ChromeButton label={t('chrome.hide')} onClick={hideWindow}>
             <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
               <path
                 d="M1 1l8 8M9 1l-8 8"
