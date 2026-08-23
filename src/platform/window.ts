@@ -38,6 +38,44 @@ export async function setAlwaysOnTop(enabled: boolean): Promise<void> {
   await (await currentWindow()).setAlwaysOnTop(enabled);
 }
 
+/** The widget's designed size, mirroring `tauri.conf.json`. */
+const WIDTH = 340;
+export const EXPANDED_HEIGHT = 480;
+
+/**
+ * Set the window's height, keeping the top edge where it is.
+ *
+ * Windows anchors a resize at the top left, which is exactly the behaviour
+ * compact mode wants: the titlebar stays put and the bottom edge moves.
+ *
+ * The window is declared `resizable: false`, which governs whether someone can
+ * drag its edges rather than whether it can be resized in code — but rather
+ * than take that on faith, this reads the size back and, if nothing moved,
+ * retries with the flag lifted for the duration of the call. The check costs
+ * one IPC round trip on a gesture that happens by hand, and it means the
+ * uncertainty is answered at runtime instead of assumed.
+ */
+export async function setWindowHeight(height: number): Promise<void> {
+  if (!isTauri()) return;
+
+  const rounded = Math.round(height);
+  const { LogicalSize } = await import('@tauri-apps/api/dpi');
+  const window = await currentWindow();
+
+  await window.setSize(new LogicalSize(WIDTH, rounded));
+
+  const scale = await window.scaleFactor();
+  const applied = (await window.innerSize()).toLogical(scale);
+  if (Math.abs(applied.height - rounded) <= 1) return;
+
+  await window.setResizable(true);
+  try {
+    await window.setSize(new LogicalSize(WIDTH, rounded));
+  } finally {
+    await window.setResizable(false);
+  }
+}
+
 /** Read the current pinned state, so the UI can start from the truth. */
 export async function isAlwaysOnTop(): Promise<boolean> {
   if (!isTauri()) return false;

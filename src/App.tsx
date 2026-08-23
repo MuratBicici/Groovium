@@ -16,6 +16,7 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
+import { useCompactShell } from '@/components/controls/useCompactShell';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
@@ -60,7 +61,16 @@ export default function App() {
   const clearError = usePlayerStore((s) => s.clearError);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
+  const compact = useSettingsStore((s) => s.compact);
+  const settingsReady = useSettingsStore((s) => s.ready);
+  const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(compact, settingsReady);
+
   const [overlay, setOverlay] = useState<Overlay>('none');
+  // Collapsing takes the panel buttons away with it, so nothing may be showing
+  // over a bar that has no way to close it. Derived rather than reset: what was
+  // open is still open when the player is opened back up, which is the same
+  // answer any window gives after being minimised.
+  const shown: Overlay = compact ? 'none' : overlay;
   // Not an `Overlay`: it is raised by the transport row rather than a panel
   // button, and it may sit over whichever panel happens to be open.
   const [stationSetup, setStationSetup] = useState(false);
@@ -95,19 +105,22 @@ export default function App() {
   }, [language]);
 
   useEffect(() => {
-    if (overlay === 'none') return;
+    if (shown === 'none') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOverlay('none');
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [overlay]);
+  }, [shown]);
 
   return (
     // The shell is the only opaque surface — the window behind it is transparent.
     // `relative` so the playlist picker can cover the whole widget: rendering it
     // inside a scrolling list is what made it clip and misbehave.
-    <div className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50">
+    <div
+      ref={shellRef}
+      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50"
+    >
       <PlaylistPickerProvider>
       <DiscFlightProvider>
       <WindowChrome />
@@ -115,28 +128,48 @@ export default function App() {
       <main className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
         {/* The stage. Overlays take it over rather than competing for a slice of
             the column — at this window size that slice was under one row tall. */}
-        <div className="relative flex min-h-0 flex-1 flex-col justify-center gap-3">
-          <DiskPlatter />
-          <TrackDisplay />
+        <div
+          ref={stageRef}
+          className={`relative flex min-h-0 flex-col justify-center gap-3 ${
+            compact ? 'flex-none' : 'flex-1'
+          }`}
+        >
+          {/* Kept mounted through the collapse so it can fade rather than
+              vanish, and taken out of flow at the same moment so the stage's
+              height answers to the track display alone. It stays centred in
+              the shrinking stage, which reads as the record being drawn down
+              into the bar. */}
+          <div
+            className={`transition-opacity duration-200 ${
+              compact
+                ? 'pointer-events-none absolute inset-0 flex items-center justify-center opacity-0'
+                : 'opacity-100'
+            }`}
+          >
+            <DiskPlatter />
+          </div>
+          <div ref={trackRef}>
+            <TrackDisplay compact={compact} />
+          </div>
 
           <LibraryPanel
             id={PANEL_IDS.library}
-            open={overlay === 'library'}
+            open={shown === 'library'}
             onClose={() => setOverlay('none')}
           />
           <PlaylistsPanel
             id={PANEL_IDS.playlists}
-            open={overlay === 'playlists'}
+            open={shown === 'playlists'}
             onClose={() => setOverlay('none')}
           />
           <SpotifyPanel
             id={PANEL_IDS.spotify}
-            open={overlay === 'spotify'}
+            open={shown === 'spotify'}
             onClose={() => setOverlay('none')}
           />
           <SettingsPanel
             id={PANEL_IDS.settings}
-            open={overlay === 'settings'}
+            open={shown === 'settings'}
             onClose={() => setOverlay('none')}
             onSetUpSpotify={() => setOverlay('spotify')}
             onSetUpStation={() => setStationSetup(true)}
@@ -147,18 +180,24 @@ export default function App() {
         <ProgressBar />
         <TransportControls onStationNeedsSetup={() => setStationSetup(true)} />
 
-        <div className="flex items-center justify-between px-4">
+        <div
+          ref={bottomRef}
+          inert={compact}
+          className={`flex items-center justify-between px-4 transition-opacity duration-200 ${
+            compact ? 'h-0 overflow-hidden opacity-0' : 'opacity-100'
+          }`}
+        >
           <VolumeKnob />
           <div className="flex items-center gap-1.5">
             <PanelButton
               panel="library"
-              open={overlay === 'library'}
+              open={shown === 'library'}
               onToggle={() => toggle('library')}
               controls={PANEL_IDS.library}
             />
             <PanelButton
               panel="playlists"
-              open={overlay === 'playlists'}
+              open={shown === 'playlists'}
               onToggle={() => toggle('playlists')}
               controls={PANEL_IDS.playlists}
             />
@@ -167,14 +206,14 @@ export default function App() {
             {isTauri() && (
               <PanelButton
                 panel="spotify"
-                open={overlay === 'spotify'}
+                open={shown === 'spotify'}
                 onToggle={() => toggle('spotify')}
                 controls={PANEL_IDS.spotify}
               />
             )}
             <PanelButton
               panel="settings"
-              open={overlay === 'settings'}
+              open={shown === 'settings'}
               onToggle={() => toggle('settings')}
               controls={PANEL_IDS.settings}
             />

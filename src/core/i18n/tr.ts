@@ -20,6 +20,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'chrome.unpin': 'Üstte tutmayı bırak',
   'chrome.minimize': 'Küçült',
   'chrome.hide': 'Tepsiye gizle',
+  'chrome.collapse': 'Yalnızca kontrolleri göster',
+  'chrome.expand': 'Oynatıcının tamamını göster',
 
   'common.close': 'Kapat',
   'common.cancel': 'Vazgeç',

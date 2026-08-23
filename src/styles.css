@@ -226,16 +226,25 @@ body {
 /*
  * The platter keeps spinning as a paused animation rather than resetting, so
  * pausing and resuming picks up from the same angle instead of snapping back.
+ *
+ * Two class names share one rule rather than one name covering both places.
+ * `DiscFlight.syncSpin` finds the live record with `querySelector('.groove-platter')`
+ * — the first one in document order — and the verification scripts lean on the
+ * same thing. A second element wearing that class, even a 28px one in the
+ * collapsed bar, would quietly become "the platter" for both.
  */
-.groove-platter {
+.groove-platter,
+.groove-spin {
   animation: groove-spin 4.5s linear infinite;
 }
-.groove-platter[data-spinning='false'] {
+.groove-platter[data-spinning='false'],
+.groove-spin[data-spinning='false'] {
   animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .groove-platter {
+  .groove-platter,
+  .groove-spin {
     animation: none;
   }
 }
@@ -248,6 +257,7 @@ body {
  * other back on. `src/core/utils/motion.ts` answers the same way for the
  * scripted animations.
  */
-:root[data-motion='off'] .groove-platter {
+:root[data-motion='off'] .groove-platter,
+:root[data-motion='off'] .groove-spin {
   animation: none;
 }

@@ -28,6 +28,14 @@ export interface Settings {
    */
   reduceMotion: boolean;
   alwaysOnTop: boolean;
+  /**
+   * Collapsed to the controls.
+   *
+   * Remembered because the window plugin saves position only — every launch
+   * starts at the size in `tauri.conf.json`, so if this is not applied at
+   * startup the window comes back full height every time.
+   */
+  compact: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: null,
   reduceMotion: false,
   alwaysOnTop: false,
+  compact: false,
 };
 
 export async function loadSettings(): Promise<Settings> {

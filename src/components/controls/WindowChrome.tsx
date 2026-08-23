@@ -24,6 +24,8 @@ export function WindowChrome() {
   const ready = useSettingsStore((s) => s.ready);
   const pinned = useSettingsStore((s) => s.alwaysOnTop);
   const setPinned = useSettingsStore((s) => s.setAlwaysOnTop);
+  const compact = useSettingsStore((s) => s.compact);
+  const setCompact = useSettingsStore((s) => s.setCompact);
 
   useEffect(() => {
     if (!ready) return;
@@ -57,6 +59,23 @@ export function WindowChrome() {
             <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M12 17v5" strokeLinecap="round" />
               <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z" strokeLinejoin="round" />
+            </svg>
+          </ChromeButton>
+
+          {/* Beside the pin, because the two are the same kind of thing: how
+              the window sits rather than what it is playing. */}
+          <ChromeButton
+            label={compact ? t('chrome.expand') : t('chrome.collapse')}
+            active={compact}
+            onClick={() => setCompact(!compact)}
+          >
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M5 6h14" strokeLinecap="round" />
+              <path
+                d={compact ? 'M9 12l3 3 3-3' : 'M9 15l3-3 3 3'}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </ChromeButton>
 

@@ -30,6 +30,7 @@ interface SettingsStore extends Settings {
   setLanguage: (language: Language) => void;
   setReduceMotion: (reduce: boolean) => void;
   setAlwaysOnTop: (onTop: boolean) => void;
+  setCompact: (compact: boolean) => void;
 }
 
 /**
@@ -81,8 +82,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   /** Apply, then persist. Never called before `ready`. */
   const commit = (patch: Partial<Settings>) => {
     set(patch);
-    const { theme, language, reduceMotion, alwaysOnTop } = get();
-    const settings = { theme, language, reduceMotion, alwaysOnTop };
+    const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
+    const settings = { theme, language, reduceMotion, alwaysOnTop, compact };
     applyToDocument(settings);
     void saveSettings(settings);
   };
@@ -107,6 +108,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setLanguage: (language) => commit({ language }),
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
+    setCompact: (compact) => commit({ compact }),
   };
 });
 

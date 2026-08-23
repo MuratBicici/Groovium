@@ -56,6 +56,10 @@ pub struct Settings {
     pub reduce_motion: bool,
     #[serde(default)]
     pub always_on_top: bool,
+    /// Collapsed to the controls. The window plugin saves position only, so
+    /// without this the window would come back full height on every launch.
+    #[serde(default)]
+    pub compact: bool,
 }
 
 #[tauri::command]
@@ -145,6 +149,7 @@ mod tests {
             language: Some("tr".into()),
             reduce_motion: true,
             always_on_top: false,
+            compact: true,
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -152,6 +157,7 @@ mod tests {
         assert!(written.contains(r#""lastfmApiKey":"xyz""#));
         assert!(written.contains(r#""theme":"prussian-blue""#));
         assert!(written.contains(r#""reduceMotion":true"#));
+        assert!(written.contains(r#""compact":true"#));
     }
 
     #[test]
@@ -162,6 +168,7 @@ mod tests {
         assert!(config.settings.language.is_none());
         assert!(!config.settings.reduce_motion);
         assert!(!config.settings.always_on_top);
+        assert!(!config.settings.compact);
     }
 
     #[test]

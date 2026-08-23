@@ -15,6 +15,8 @@ export const en = {
   'chrome.unpin': 'Unpin from top',
   'chrome.minimize': 'Minimize',
   'chrome.hide': 'Hide to tray',
+  'chrome.collapse': 'Show controls only',
+  'chrome.expand': 'Show the whole player',
 
   // Shared verbs. Worth sharing precisely because they are single words: the
   // same button reading "Save" in one panel and "Store" in another is how an
