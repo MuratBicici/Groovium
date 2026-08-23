@@ -45,9 +45,14 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
   return (
     <div
       id={id}
-      aria-hidden={!open}
+      // `inert` rather than `aria-hidden`: the pair used to be `aria-hidden`
+      // plus `pointer-events-none`, which stopped the mouse and not the
+      // keyboard. Tab walked into a closed panel and focus landed on buttons
+      // nobody could see — a WCAG 4.1.2 failure, and Chromium says so in the
+      // console. One attribute covers visibility, focus and pointers together.
+      inert={!open}
       className={`absolute inset-0 z-20 groove-surface flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
-        open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
+        open ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">

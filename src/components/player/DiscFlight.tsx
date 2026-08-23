@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
-import { arcKeyframes, prefersReducedMotion } from '@/core/utils/motion';
+import { arcKeyframes, onReducedMotionChange, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import { VinylDisc } from './VinylDisc';
 
@@ -167,6 +167,16 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     setPendingTrackId((current) => (current === flight.track.id ? null : current));
     setFlights((current) => current.filter((f) => f !== flight));
   }, []);
+
+  // Turning the setting on mid-flight should stop what is moving, not let it
+  // finish. The CSS spin already reacts on its own.
+  useEffect(
+    () =>
+      onReducedMotionChange((reduced) => {
+        if (reduced) setFlights([]);
+      }),
+    [],
+  );
 
   const actions = useMemo(
     () => ({ registerPlatter, flyToPlatter, didJustLand }),

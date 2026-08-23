@@ -448,6 +448,30 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     return true;
   }
 
+  /**
+   * Re-open the collection that was playing when the app last closed.
+   *
+   * Resolved rather than reloaded: the id is a pointer, so a library that
+   * changed in between simply produces a different — and correct — list. The
+   * track is loaded into the context and left paused.
+   */
+  function restoreContext(contextId: string | undefined, index: number): void {
+    if (!contextId || contextId === 'single') return;
+    if (contextId !== 'library' && !contextId.startsWith('playlist:')) return;
+
+    const id = contextId as ContextId;
+    const tracks = resolveContext(id);
+    if (tracks.length === 0) return;
+
+    const at = Math.min(Math.max(index, 0), tracks.length - 1);
+    set({
+      playback: { id, tracks, index: at },
+      currentTrack: tracks[at] ?? null,
+      durationMs: tracks[at]?.duration ?? 0,
+      shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, at) : [],
+    });
+  }
+
   function rememberPlayed(track: TrackMetadata): void {
     const artist = artistKey(track.artist);
     const artists = get().stationArtists.filter((entry) => entry !== artist);
@@ -584,14 +608,27 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         state.muted === prev.muted &&
         state.repeat === prev.repeat &&
         state.shuffle === prev.shuffle &&
-        state.station === prev.station;
+        state.station === prev.station &&
+        state.playback.id === prev.playback.id &&
+        state.playback.index === prev.playback.index;
       if (unchanged) return;
 
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        const { volume, muted, repeat, shuffle, station } = get();
-        void saveSession({ volume, muted, repeat, shuffle, station }).then((saved) => {
+        const { volume, muted, repeat, shuffle, station, playback } = get();
+        void saveSession({
+          volume,
+          muted,
+          repeat,
+          shuffle,
+          station,
+          // `single` is deliberately not written: a Spotify search result has
+          // nothing to be resolved back from on the next launch.
+          ...(playback.id === 'single'
+            ? {}
+            : { context: playback.id, contextIndex: Math.max(playback.index, 0) }),
+        }).then((saved) => {
           // Once per session. Every settings change would otherwise report the
           // same failure again, which is noise rather than information.
           if (saved || warnedAboutSaving) return;
@@ -639,6 +676,10 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         set({ storeDir: await libraryStoreDir() });
         await get().refreshLibrary();
         await get().refreshPlaylists();
+        // Put the last collection back, ready but not playing. Restoring is one
+        // thing; deciding on the user's behalf that the room should suddenly
+        // have music in it is another.
+        restoreContext(session?.context, session?.contextIndex ?? 0);
         await withProvider((provider) => provider.setVolume(outputAmplitude()));
         startPersisting();
         set({ initialized: true });

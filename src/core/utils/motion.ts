@@ -7,12 +7,34 @@
  * stylesheet has no sane shape.
  */
 
+/** The query both halves of this app's motion answer to. */
+const REDUCED = '(prefers-reduced-motion: reduce)';
+
 /**
  * JS mirror of the `prefers-reduced-motion` block in styles.css, so scripted
  * motion honors the same setting the CSS spin already does.
+ *
+ * Read fresh each call rather than cached, so flipping the OS setting takes
+ * effect on the next animation without a restart.
  */
 export function prefersReducedMotion(): boolean {
-  return typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return typeof matchMedia !== 'undefined' && matchMedia(REDUCED).matches;
+}
+
+/**
+ * Watch for the setting changing, and report the new value.
+ *
+ * The CSS side updates live; without this the JS side only noticed at the next
+ * track change, so for a while the platter would sit still while a disc flew
+ * across it. Returns an unsubscribe function.
+ */
+export function onReducedMotionChange(handler: (reduced: boolean) => void): () => void {
+  if (typeof matchMedia === 'undefined') return () => {};
+
+  const query = matchMedia(REDUCED);
+  const listener = (e: MediaQueryListEvent) => handler(e.matches);
+  query.addEventListener('change', listener);
+  return () => query.removeEventListener('change', listener);
 }
 
 export function easeInOutCubic(t: number): number {
