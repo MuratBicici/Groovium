@@ -342,6 +342,19 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     });
   }
 
+  /**
+   * Throw away suggestions that belong to a track no longer playing.
+   *
+   * The seed guard goes with them. Without that, the lookup still in flight for
+   * the old track would come back and refill the queue it was just emptied
+   * from, and the next lookup would be skipped because the queue looked stocked
+   * — which is the same stale suggestion arriving by a slower route.
+   */
+  function discardStationQueue(): void {
+    prefetchSeedKey = null;
+    if (get().stationQueue.length > 0) set({ stationQueue: [] });
+  }
+
   async function prefetchStationTrack(): Promise<void> {
     const { currentTrack, stationQueue } = get();
     if (!currentTrack) return;
@@ -445,7 +458,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // are good answers for the seed they came from.
     if (rest.length === 0) prefetchSeedKey = null;
 
-    await startTrack(index);
+    await startTrack(index, true);
     return true;
   }
 
@@ -566,10 +579,22 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
-  /** Play the track at `index` of the current context. */
-  async function startTrack(index: number): Promise<void> {
+  /**
+   * Play the track at `index` of the current context.
+   *
+   * `continuingStation` is what tells a station run apart from someone
+   * choosing a song. The queue holds suggestions for one particular track, and
+   * the moment a different track starts they are answers to a question nobody
+   * asked any more — play a K-pop song, let it stock the queue, then pick a
+   * Turkish song from search, and the queue would still be K-pop when the
+   * Turkish song ended. The station's own hand-off is the one case where the
+   * queue outlives a track change, because there it is the same run.
+   */
+  async function startTrack(index: number, continuingStation = false): Promise<void> {
     const track = get().playback.tracks[index];
     if (!track) return;
+
+    if (!continuingStation) discardStationQueue();
 
     // A collection can mix sources; the track says which provider owns it.
     if (track.source !== get().activeProviderId) {
