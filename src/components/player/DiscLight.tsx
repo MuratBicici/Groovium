@@ -59,8 +59,8 @@ export function DiscLight({ size }: { size: number }) {
             // beginning and an end, and finding them is what tells the eye it
             // is looking at an annulus of texture rather than at a ball.
             'radial-gradient(circle closest-side at center,' +
-            ' rgba(0,0,0,0) 36%, #000 40%, #000 85%,' +
-            ' rgba(0,0,0,0.25) 88%, rgba(0,0,0,0) 91%)',
+            ' rgba(0,0,0,0) 36%, #000 40%, #000 93%,' +
+            ' rgba(0,0,0,0.3) 96%, rgba(0,0,0,0) 98%)',
         }}
       />
 
@@ -82,7 +82,7 @@ export function DiscLight({ size }: { size: number }) {
             ' rgba(255,247,235,0.11) 360deg)',
           maskImage:
             'radial-gradient(circle closest-side at center,' +
-            ' rgba(0,0,0,0) 86%, rgba(0,0,0,0.7) 94%, #000 99%, #000 100%)',
+            ' rgba(0,0,0,0) 92%, rgba(0,0,0,0.7) 96.5%, #000 100%)',
         }}
       />
 

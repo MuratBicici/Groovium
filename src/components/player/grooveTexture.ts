@@ -22,7 +22,19 @@ const SIZE = 304;
 
 /** Fractions of the disc's radius: label edge out to the smooth margin. */
 const INNER = 0.39;
-const OUTER = 0.86;
+const OUTER = 0.95;
+
+/**
+ * How far the field takes to arrive and leave, also as fractions of the radius.
+ *
+ * Absolute rather than a share of the band, which is what they were. A share
+ * grows when the band grows, and widening the band was the whole point — the
+ * grooves used to stop at 0.86 and hand a seventh of the record over to one
+ * smooth sweep. On a 302mm side the land outside the last groove is 3-6mm,
+ * which here is two or three pixels, so that is what it gets.
+ */
+const FADE_IN = 0.05;
+const FADE_OUT = 0.02;
 
 /**
  * Deterministic jitter. The texture has to be the same every run — a record
@@ -54,12 +66,11 @@ export function grooveTexture(): string | null {
   const random = seeded(0x9e3779b9);
 
   ctx.lineWidth = 1;
-  const span = radius * (OUTER - INNER);
   for (let r = radius * INNER; r < radius * OUTER; r += 1.7 + random() * 1.1) {
     // Faded at both ends of the band, so the field arrives and leaves rather
     // than stopping at a ring of its own.
-    const t = (r - radius * INNER) / span;
-    const edge = Math.min(1, t / 0.09, (1 - t) / 0.07);
+    const t = r / radius;
+    const edge = Math.min(1, (t - INNER) / FADE_IN, (OUTER - t) / FADE_OUT);
 
     // Light and dark alternate around the same mean, so the field does not
     // brighten overall — it is texture, not a wash.

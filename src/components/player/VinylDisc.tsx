@@ -71,8 +71,10 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
     ' #191311 0%, #181310 35%,' +
     // the grooved band begins: a real one starts at a visible edge
     ' #131010 39%, #120f0e 60%, #0e0c0b 82%,' +
-    // and ends at one, into the smooth margin and the raised rim
-    ' #100d0c 88%, #171211 92%, #0d0a09 97%, #060505 100%)';
+    // and runs almost to the edge. The land outside the last groove is a
+    // couple of pixels on a disc this size; it had been a seventh of the
+    // radius, which read as one big sweep where the texture should have been.
+    ' #0e0c0b 94.5%, #151110 96.5%, #0b0908 98.5%, #060505 100%)';
 
   /*
     The groove field.
@@ -107,7 +109,7 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
         // arriving from everywhere, which is what made the edge read as drawn
         // rather than lit. `DiscLight` puts it on the arc facing the light.
         boxShadow: detailed
-          ? '0 2px 6px rgba(0,0,0,0.45), inset 0 0 26px rgba(0,0,0,0.45)'
+          ? '0 2px 6px rgba(0,0,0,0.45), inset 0 0 18px rgba(0,0,0,0.35)'
           : '0 1px 2px rgba(0,0,0,0.5), inset 0 0 4px rgba(0,0,0,0.7)',
       }}
     >
