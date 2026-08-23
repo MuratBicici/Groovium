@@ -143,6 +143,16 @@ export interface PlayerState {
   stationHistory: string[];
   /** Artists of the last few tracks, so runs do not settle on one band. */
   stationArtists: string[];
+  /**
+   * Ids of the tracks the station appended to the current collection.
+   *
+   * The station extends `playback.tracks` rather than replacing them, so its
+   * picks end up sitting in the collection next to whatever someone actually
+   * chose. Once they are in there, nothing distinguished them — walk back to
+   * the first song, switch infinite play off, and the ending track advanced
+   * into a station pick, because by then it was simply "the next track".
+   */
+  stationAdded: string[];
 }
 
 export interface PlayerActions {
@@ -214,6 +224,7 @@ const initialState: PlayerState = {
   stationQueue: [],
   stationHistory: [],
   stationArtists: [],
+  stationAdded: [],
 };
 
 /**
@@ -453,6 +464,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
               .filter((i) => i >= 0)
           : shuffleOrder,
       stationQueue: rest,
+      // Trimmed alongside the trail: an id for a track no longer in the
+      // collection would keep this list growing for the length of a session.
+      stationAdded: [...get().stationAdded, track.id].filter((id) =>
+        tracks.some((entry) => entry.id === id),
+      ),
     });
     // Only re-open the lookup once the queue is spent; the entries still in it
     // are good answers for the seed they came from.
@@ -498,6 +514,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({ stationHistory: history.slice(-STATION_MEMORY) });
   }
 
+  /** Whether the track at `index` was put there by the station, not by anyone. */
+  function isStationTrack(index: number): boolean {
+    const id = get().playback.tracks[index]?.id;
+    return id !== undefined && get().stationAdded.includes(id);
+  }
+
   async function handleTrackEnded(trackId: string | null): Promise<void> {
     const { repeat, playback, currentTrack } = get();
 
@@ -513,14 +535,29 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     const nextIndex = neighborIndex(1);
     if (nextIndex !== null) {
-      await startTrack(nextIndex);
+      // The toggle governs the station's own picks even after they have been
+      // appended to the collection — otherwise going back to the first song
+      // and switching infinite play off still ran on into the trail, because
+      // by then those tracks were indistinguishable from a chosen collection.
+      // Tracks someone chose play through regardless; the toggle was never
+      // about those.
+      const stationsOwn = isStationTrack(nextIndex);
+      if (!stationsOwn) {
+        await startTrack(nextIndex);
+        return;
+      }
+      if (get().station) {
+        // Continuing the run, so the queued suggestions stay good.
+        await startTrack(nextIndex, true);
+        return;
+      }
+    } else if (get().station && (await playStationTrack())) {
+      // The collection is finished. With infinite play on, find something to
+      // follow it; without it, stop. Everything else about finding a successor
+      // runs the same either way.
       return;
     }
 
-    // The collection is finished, and this is the one place the toggle is
-    // read: with infinite play on, keep going; without it, stop. Everything
-    // else about finding a successor runs the same either way.
-    if (get().station && (await playStationTrack())) return;
     set({ playbackState: 'IDLE', positionMs: 0 });
   }
 
@@ -777,6 +814,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       set({
         playback: { id: contextId, tracks, index },
         shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
+        // A new collection; the old trail went with it.
+        stationAdded: [],
       });
       await startTrack(index);
     },
@@ -789,6 +828,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         // match again, so a station run started from a single track spent the
         // rest of its life sequential with the shuffle button still lit.
         shuffleOrder: get().shuffle ? [0] : [],
+        stationAdded: [],
       });
       await startTrack(0);
     },
