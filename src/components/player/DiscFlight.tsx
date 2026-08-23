@@ -11,6 +11,7 @@ import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { arcKeyframes, onReducedMotionChange, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
+import { DiscLight } from './DiscLight';
 import { VinylDisc } from './VinylDisc';
 
 /**
@@ -390,8 +391,11 @@ function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingD
       {/* The spin lives on its own element so it cannot fight the WAAPI
           transform on the wrapper — same separation the platter uses. */}
       <div ref={spinRef} className="groove-platter" data-spinning={isPlaying}>
-        <VinylDisc size={PLATTER_SIZE} sheen eager coverArtUrl={flight.track.coverArtUrl} />
+        <VinylDisc size={PLATTER_SIZE} eager coverArtUrl={flight.track.coverArtUrl} />
       </div>
+      {/* The clone crossfades into the platter, so it has to be lit the same
+          way — same sibling, same fixed reflection. */}
+      <DiscLight size={PLATTER_SIZE} />
     </div>
   );
 }

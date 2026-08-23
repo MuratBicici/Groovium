@@ -3,6 +3,8 @@ import type { TrackMetadata } from '@/core/types';
 import { useCurrentTrack, useIsPlaying } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useDiscFlight, usePendingLanding } from './DiscFlight';
+import { DiscLight } from './DiscLight';
+import { Tonearm } from './Tonearm';
 import { VinylDisc } from './VinylDisc';
 
 /** Disc diameter. The flight layer lands on exactly this size. */
@@ -114,7 +116,7 @@ export function DiskPlatter() {
       className="relative mx-auto flex h-[168px] w-[168px] items-center justify-center"
     >
       {/* Well the platter sits in, so the disk reads as recessed into the shell. */}
-      <div className="absolute inset-0 rounded-full bg-shell-900 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)]" />
+      <div className="groove-inset absolute inset-0 rounded-full" />
 
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
@@ -122,8 +124,11 @@ export function DiskPlatter() {
         {/* The spin stays on its own element; entrance and exit transforms
             wrap it rather than fighting the keyframe for `transform`. */}
         <div className="groove-platter" data-spinning={isPlaying}>
-          <VinylDisc size={DISC_SIZE} sheen coverArtUrl={track?.coverArtUrl} />
+          <VinylDisc size={DISC_SIZE} coverArtUrl={track?.coverArtUrl} />
         </div>
+        {/* Sibling, not child: the light stays where it is while the record
+            turns under it. Inside the spinning element it orbited the room. */}
+        <DiscLight size={DISC_SIZE} />
       </div>
 
       {/* The departing record, drawn over the live one while it lifts away.
@@ -139,30 +144,16 @@ export function DiskPlatter() {
           className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
           aria-hidden="true"
         >
-          <div className="groove-platter" data-spinning={isPlaying}>
-            <VinylDisc size={DISC_SIZE} sheen coverArtUrl={ghost.coverArtUrl} />
+          <div className="relative">
+            <div className="groove-platter" data-spinning={isPlaying}>
+              <VinylDisc size={DISC_SIZE} coverArtUrl={ghost.coverArtUrl} />
+            </div>
+            <DiscLight size={DISC_SIZE} />
           </div>
         </div>
       )}
 
-      <Tonearm engaged={isPlaying} />
-    </div>
-  );
-}
-
-/** Placeholder tonearm. Swings in when playback starts. */
-function Tonearm({ engaged }: { engaged: boolean }) {
-  return (
-    <div
-      className="absolute top-2 right-0 origin-top-right transition-transform duration-700 ease-out"
-      style={{ transform: `rotate(${engaged ? 22 : 0}deg)` }}
-      aria-hidden="true"
-    >
-      <div className="flex flex-col items-center">
-        <div className="h-3 w-3 rounded-full bg-brass-500 shadow-[0_1px_3px_rgba(0,0,0,0.6)]" />
-        <div className="h-16 w-[3px] rounded-full bg-gradient-to-b from-brass-400 to-brass-600" />
-        <div className="h-2.5 w-1.5 rounded-sm bg-cream-400" />
-      </div>
+      <Tonearm />
     </div>
   );
 }
