@@ -8,12 +8,20 @@
  * underneath it and the grooves pass through it, which is how you read the
  * rotation of a real one.
  *
- * One source, upper left, modelled in the three parts a glossy black surface
- * actually shows: a broad lobe where the light lands, a tight reflection inside
- * it, and a rim that is bright only on the arc facing the light. The first pass
- * had the reflection alone — a straight-edged stripe laid across the whole disc
- * and chopped off square where the circle ended, which is why the edge read as
- * painted on rather than lit.
+ * One source, upper left. The part that makes it read as vinyl rather than as
+ * a dark plastic disc is the **anisotropic** sheen: the grooves are circles, so
+ * the surface does not scatter light evenly the way a smooth one would — it
+ * throws it into two opposed arcs, which is the wide bright band you see across
+ * a record in any photograph of one.
+ *
+ * That pattern belongs here, on the fixed layer, and not on the record, and the
+ * reason is the same physics that made the old rotating sheen wrong. A field of
+ * concentric grooves is rotationally symmetric, so the reflection off it is too:
+ * it does not turn when the record turns. Spin a record under a lamp and the
+ * sheen sits still while the label goes round.
+ *
+ * Then a tighter reflection inside it for the source itself, and a rim bright
+ * only on the arc facing the light.
  */
 
 /** Where the light is coming from, as a fraction of the disc's box. */
@@ -25,36 +33,52 @@ export function DiscLight({ size }: { size: number }) {
 
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full">
-      {/* The lobe: the soft pool of light around where it lands. Sized
-          explicitly, because a radial gradient's default extent is the box's
-          diagonal, not its edge. */}
+      {/* The groove field's sheen: two opposed arcs, the near one stronger.
+          Angular shape from the cone, radial extent from the mask — between
+          them they multiply out to a band that lies across the grooved area
+          and fades into the label and the rim. */}
       <div
         className="absolute inset-0 rounded-full"
         style={{
           background:
-            `radial-gradient(66% 56% at ${SOURCE.x} ${SOURCE.y},` +
-            ' rgba(255,247,235,0.125) 0%,' +
-            ' rgba(255,247,235,0.05) 46%,' +
-            ' rgba(255,247,235,0) 78%)',
+            'conic-gradient(from 0deg,' +
+            ' rgba(255,247,235,0.02) 0deg,' +
+            ' rgba(255,247,235,0.004) 62deg,' +
+            ' rgba(255,247,235,0.02) 108deg,' +
+            ' rgba(255,247,235,0.14) 135deg,' +
+            ' rgba(255,247,235,0.02) 162deg,' +
+            ' rgba(255,247,235,0.004) 248deg,' +
+            ' rgba(255,247,235,0.03) 288deg,' +
+            ' rgba(255,247,235,0.26) 315deg,' +
+            ' rgba(255,247,235,0.03) 342deg,' +
+            ' rgba(255,247,235,0.02) 360deg)',
+          maskImage:
+            // Edges kept crisp on purpose. Faded gently, the sheen reads as
+            // the highlight on a sphere; the grooved band on a record has a
+            // beginning and an end, and finding them is what tells the eye it
+            // is looking at an annulus of texture rather than at a ball.
+            'radial-gradient(circle closest-side at center,' +
+            ' rgba(0,0,0,0) 36%, #000 40%, #000 85%,' +
+            ' rgba(0,0,0,0.25) 88%, rgba(0,0,0,0) 91%)',
         }}
       />
 
-      {/* The reflection itself — a window's worth of light, narrow enough to
-          have edges the grooves can cross. Masked back toward the source so it
-          dissolves before the rim instead of ending in a straight chord. */}
+      {/* The source itself — a window's worth of light, tight enough to have
+          edges the seam can cross. Masked back toward where it comes from so
+          it dissolves before the rim instead of ending in a straight chord. */}
       <div
         className="absolute inset-0 rounded-full"
         style={{
           background:
             'linear-gradient(118deg,' +
-            ' rgba(255,247,235,0) 31%,' +
-            ' rgba(255,247,235,0.09) 40%,' +
-            ' rgba(255,247,235,0.17) 45.5%,' +
-            ' rgba(255,247,235,0.045) 50.5%,' +
-            ' rgba(255,247,235,0) 58%)',
+            ' rgba(255,247,235,0) 34%,' +
+            ' rgba(255,247,235,0.06) 41%,' +
+            ' rgba(255,247,235,0.22) 45.5%,' +
+            ' rgba(255,247,235,0.04) 50%,' +
+            ' rgba(255,247,235,0) 56%)',
           maskImage:
             `radial-gradient(74% 74% at ${SOURCE.x} ${SOURCE.y},` +
-            ' #000 0%, rgba(0,0,0,0.55) 46%, rgba(0,0,0,0) 84%)',
+            ' #000 0%, rgba(0,0,0,0.5) 44%, rgba(0,0,0,0) 82%)',
         }}
       />
 

@@ -78,87 +78,76 @@ export function Tonearm() {
             : 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))',
         }}
       >
-        {/* Counterweight, behind the pivot — what an arm balances with, and
-            the detail whose absence made the old one read as a stick. */}
-        <rect
-          x={px - 31}
-          y={py - 5.5}
-          width={17}
-          height={11}
-          rx={5.5}
-          fill="var(--color-shell-700)"
-        />
-        <rect
-          x={px - 31}
-          y={py - 5.5}
-          width={17}
-          height={4}
-          rx={2}
-          fill="rgba(255,247,235,0.10)"
-        />
-        <rect
-          x={px - 14}
-          y={py - 2}
-          width={5}
-          height={4}
-          rx={1}
+        {/* Counterweight, and the stub it rides on. An arm balances behind
+            its pivot; drawn as a lone pill it read as a bead on a wire. */}
+        <rect x={px - 21} y={py - 2.4} width={16} height={4.8} rx={2.2} fill="var(--color-brass-600)" />
+        <rect x={px - 33} y={py - 7.2} width={19} height={14} rx={5} fill="var(--color-shell-700)" />
+        <rect x={px - 33} y={py - 7.2} width={19} height={5} rx={2.4} fill="rgba(255,247,235,0.2)" />
+        <rect x={px - 33} y={py + 2.6} width={19} height={4.2} rx={2} fill="rgba(0,0,0,0.45)" />
+        {/* The knurled band a weight is adjusted by. */}
+        <rect x={px - 26} y={py - 7.2} width={2.2} height={14} fill="rgba(0,0,0,0.3)" />
+        <rect x={px - 22} y={py - 7.2} width={2.2} height={14} fill="rgba(0,0,0,0.3)" />
+
+        {/* The tube. Three bands, not one fill: a cylinder lit from above has a
+            bright line along the top, a mid tone and a dark underside, and it
+            is their absence that made the old arm read as a strip of card.
+            Tapered toward the headshell the way a real one is. */}
+        <path
+          d={`M ${px + 5} ${py - 6.1} L ${px + 82} ${py - 5.2}
+              L ${px + 82} ${py - 1.6} L ${px + 5} ${py - 0.7} Z`}
           fill="var(--color-brass-600)"
         />
-
-        {/* Arm tube: tapers toward the headshell the way a real one does. */}
         <path
-          d={`M ${px + 4} ${py - 2.4}
-              L ${px + ARM_LENGTH - 16} ${py - 1.5}
-              L ${px + ARM_LENGTH - 16} ${py + 1.5}
-              L ${px + 4} ${py + 2.4} Z`}
+          d={`M ${px + 5} ${py - 6.1} L ${px + 82} ${py - 5.2}
+              L ${px + 82} ${py - 4.2} L ${px + 5} ${py - 4.8} Z`}
+          fill="rgba(255,247,235,0.38)"
+        />
+        <path
+          d={`M ${px + 5} ${py - 1.9} L ${px + 82} ${py - 2.3}
+              L ${px + 82} ${py - 1.6} L ${px + 5} ${py - 0.7} Z`}
+          fill="rgba(0,0,0,0.42)"
+        />
+
+        {/* Headshell and cartridge, as one block offset across the tube's
+            line. Real arms angle the cartridge to cut tracking error, and that
+            kink is most of what reads as "tonearm" rather than "stick".
+
+            Drawn as one piece deliberately. The whole business end is about
+            fourteen pixels on screen; a separate headshell, cartridge and
+            finger lift at that size stopped being three parts and became a
+            smudge with a brass line through it. */}
+        <path
+          d={`M ${px + 80.9} ${py - 7.1} L ${px + 96.9} ${py - 2.7}
+              L ${px + 95.2} ${py + 3.5} L ${px + 79.2} ${py - 0.9} Z`}
+          fill="var(--color-shell-800)"
+        />
+        <path
+          d={`M ${px + 80.9} ${py - 7.1} L ${px + 96.9} ${py - 2.7}
+              L ${px + 96.5} ${py - 1.3} L ${px + 80.5} ${py - 5.7} Z`}
           fill="var(--color-brass-500)"
         />
         <path
-          d={`M ${px + 4} ${py - 2.4}
-              L ${px + ARM_LENGTH - 16} ${py - 1.5}
-              L ${px + ARM_LENGTH - 16} ${py - 0.3}
-              L ${px + 4} ${py - 0.9} Z`}
-          fill="rgba(255,247,235,0.28)"
+          d={`M ${px + 79.2} ${py - 0.9} L ${px + 95.2} ${py + 3.5}
+              L ${px + 95} ${py + 4.2} L ${px + 79} ${py - 0.2} Z`}
+          fill="rgba(0,0,0,0.45)"
         />
 
-        {/* Headshell, angled down to the record like the real fitting. */}
+        {/* The stylus. Its contact point is at exactly `ARM_LENGTH` along the
+            arm's own axis — that is the point the geometry solves for, so
+            drawing it anywhere else would put the stylus on a different groove
+            than the one being computed. */}
         <path
-          d={`M ${px + ARM_LENGTH - 17} ${py - 3.2}
-              L ${px + ARM_LENGTH - 4} ${py - 1}
-              L ${px + ARM_LENGTH - 2} ${py + 3.4}
-              L ${px + ARM_LENGTH - 15} ${py + 3.4} Z`}
-          fill="var(--color-shell-700)"
-        />
-        <path
-          d={`M ${px + ARM_LENGTH - 17} ${py - 3.2}
-              L ${px + ARM_LENGTH - 4} ${py - 1}
-              L ${px + ARM_LENGTH - 4} ${py + 0.2}
-              L ${px + ARM_LENGTH - 17} ${py - 1.8} Z`}
-          fill="rgba(255,247,235,0.14)"
-        />
-
-        {/* The stylus, at exactly `ARM_LENGTH` from the pivot — this point is
-            what the geometry above is solving for. */}
-        <path
-          d={`M ${px + ARM_LENGTH - 6} ${py + 3.4}
-              L ${px + ARM_LENGTH} ${py + 6.4}
-              L ${px + ARM_LENGTH - 3} ${py + 3.4} Z`}
-          fill="var(--color-cream-200)"
+          d={`M ${px + 96.2} ${py - 0.8} L ${px + ARM_LENGTH} ${py}
+              L ${px + 95.6} ${py + 1.8} Z`}
+          fill="var(--color-cream-50)"
         />
 
         {/* Pivot housing, drawn last so it sits over both the arm and the
             counterweight, which is how a gimbal actually looks. */}
-        <circle cx={px} cy={py} r={6.5} fill="var(--color-shell-800)" />
-        <circle
-          cx={px}
-          cy={py}
-          r={6.5}
-          fill="none"
-          stroke="var(--color-brass-600)"
-          strokeWidth={1.2}
-        />
-        <circle cx={px} cy={py} r={2.6} fill="var(--color-brass-400)" />
-        <circle cx={px - 1.4} cy={py - 1.6} r={0.9} fill="rgba(255,247,235,0.45)" />
+        <circle cx={px} cy={py} r={7} fill="var(--color-shell-800)" />
+        <circle cx={px} cy={py} r={7} fill="none" stroke="var(--color-brass-600)" strokeWidth={1.3} />
+        <circle cx={px} cy={py} r={3} fill="var(--color-brass-400)" />
+        <circle cx={px - 1.5} cy={py - 1.7} r={1} fill="rgba(255,247,235,0.5)" />
       </g>
     </svg>
   );

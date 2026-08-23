@@ -1,3 +1,5 @@
+import { grooveTexture } from './grooveTexture';
+
 interface VinylDiscProps {
   /** Outer diameter in px. Everything inside is proportional to it. */
   size: number;
@@ -24,11 +26,6 @@ const DETAILED_FROM = 96;
  * against the pixel grid; irregular radii cannot beat with anything. They are
  * also what a real side looks like — tracks are not the same length.
  */
-const SEPARATIONS = [42.5, 49, 58, 64.5, 74, 83.5, 89.5];
-
-/** Half-width of a separation ring, in the same units. ~1px at platter size. */
-const SEPARATION_HALF = 1.3;
-
 /**
  * A vinyl record at any size.
  *
@@ -56,6 +53,7 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
   const label = Math.round(size * LABEL_RATIO);
   const spindle = Math.max(2, Math.round(size * 0.05));
   const detailed = size >= DETAILED_FROM;
+  const texture = detailed ? grooveTexture() : null;
 
   // Every radial gradient here says `closest-side`, which is the difference
   // between a percentage meaning what it reads as and meaning something 41%
@@ -63,58 +61,39 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
   // diagonal, so 100% was 107.5px on a 152px disc rather than the 76px radius.
   const extent = 'circle closest-side at center';
 
-  // The body of the record: darkest where it turns away at the rim, holding a
-  // little more light across the middle.
+  // The body of the record. Near black on purpose: measured off the render,
+  // the previous surface sat at luminance 35-50 everywhere, which is the
+  // reading of matte plastic. Vinyl is dark and *glossy* — the black has to go
+  // low so the reflection has somewhere to be bright against.
   const body =
     `radial-gradient(${extent},` +
-    ' #262019 0%, #221b16 34%, #1e1714 52%,' +
-    ' #191312 74%, #1d1613 90%, #15100e 97%, #100c0b 100%)';
+    // the run-out, smooth, between label and first groove
+    ' #191311 0%, #181310 35%,' +
+    // the grooved band begins: a real one starts at a visible edge
+    ' #131010 39%, #120f0e 60%, #0e0c0b 82%,' +
+    // and ends at one, into the smooth margin and the raised rim
+    ' #100d0c 88%, #171211 92%, #0d0a09 97%, #060505 100%)';
 
   /*
-    The groove field, as a broad sheen rather than as grooves.
+    The groove field.
 
-    This is the second rewrite of this texture and the first one that can
-    actually work, because the previous two were drawing something that does
-    not exist at this size. A 12" side has a groove pitch around 0.125mm; at
-    152px across a 302mm record that is **0.063px** — a sixteenth of a pixel.
-    Individual grooves are not visible on a record this small, and the 25 rings
+    This is the third rewrite of this texture and the first two were both
+    drawing something that is not there. A 12" side has a groove pitch around
+    0.125mm; at 152px across a 302mm record that is **0.063px** — a sixteenth
+    of a pixel. Individual grooves are not visible at this size, and the rings
     that were being drawn were not a fine texture, they were a coarse one.
 
-    Worse, they could not be made to look right by adjusting them. A ring
-    pattern is periodic, the rasteriser point-samples it, and the two beat: at
-    a 3.1px period on this display the rings landed 6.2 device px apart against
-    a whole-pixel grid, detuned by 0.2px per ring, which folds into moiré bands
-    ~31px wide. Those bands were the harsh rings in the screenshot. Changing
-    the period only moves the beat — and moves it differently on every display
-    scaling, so it cannot be tuned once and left.
+    They also could not be tuned. A ring pattern is periodic, the rasteriser
+    point-samples it, and the two beat: at a 3.1px period the rings landed 6.2
+    device px apart against a whole-pixel grid, detuned 0.2px per ring, folding
+    into moiré bands ~31px wide. Changing the period only moves the beat, and
+    moves it differently on every display scaling.
 
-    So there is no periodic content on this disc any more, at any frequency.
-    What is left is what you actually see on a record at thumbnail size: a
-    smooth sheen across the grooved band, brighter at the lead-in, with the
-    separations between tracks placed individually.
+    So nothing here repeats. All that is left on the record itself is the
+    faintest hint that the grooved band is not as smooth as the lead-in and the
+    run-out around it — the *reflection* off that band is what you actually
+    see, and it lives in `DiscLight`, because it does not turn with the record.
   */
-  const field =
-    `radial-gradient(${extent},` +
-    ' rgba(255,246,232,0) 34%,' +
-    ' rgba(255,246,232,0.012) 38%,' +
-    ' rgba(255,246,232,0.042) 53%,' +
-    ' rgba(255,246,232,0.022) 69%,' +
-    ' rgba(255,246,232,0.05) 87%,' +
-    ' rgba(255,246,232,0.01) 93%,' +
-    ' rgba(255,246,232,0) 96%)';
-
-  // Zero alpha is written with the highlight's own colour, never `transparent`
-  // — `transparent` is *black* at zero alpha, and ramping to it drags a grey
-  // edge through the middle of every band.
-  const separations =
-    `radial-gradient(${extent},` +
-    SEPARATIONS.flatMap((r) => [
-      ` rgba(255,246,232,0) ${(r - SEPARATION_HALF).toFixed(1)}%`,
-      ` rgba(255,246,232,0.05) ${r.toFixed(1)}%`,
-      ` rgba(255,246,232,0) ${(r + SEPARATION_HALF).toFixed(1)}%`,
-    ]).join(',') +
-    ')';
-
   return (
     <div
       aria-hidden="true"
@@ -122,7 +101,8 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
       style={{
         width: size,
         height: size,
-        background: detailed ? `${separations}, ${field}, ${body}` : `${field}, ${body}`,
+        background: detailed && texture ? `url(${texture}), ${body}` : body,
+        backgroundSize: '100% 100%',
         // No rim highlight here any more: a glow on all sides at once is light
         // arriving from everywhere, which is what made the edge read as drawn
         // rather than lit. `DiscLight` puts it on the arc facing the light.
@@ -149,14 +129,14 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
             style={{
               background:
                 'conic-gradient(from 8deg,' +
-                ' rgba(255,246,232,0.075) 0deg,' +
-                ' rgba(255,246,232,0.02) 2.5deg,' +
-                ' rgba(255,246,232,0) 6deg,' +
-                ' rgba(255,246,232,0) 351deg,' +
-                ' rgba(0,0,0,0.06) 355deg,' +
-                ' rgba(0,0,0,0.2) 360deg)',
-              maskImage: `radial-gradient(${extent}, rgba(0,0,0,0) 34%, #000 44%,` +
-                ' #000 88%, rgba(0,0,0,0.35) 97%, rgba(0,0,0,0) 100%)',
+                ' rgba(255,246,232,0.035) 0deg,' +
+                ' rgba(255,246,232,0.02) 6deg,' +
+                ' rgba(255,246,232,0) 18deg,' +
+                ' rgba(255,246,232,0) 336deg,' +
+                ' rgba(0,0,0,0.02) 348deg,' +
+                ' rgba(0,0,0,0.06) 360deg)',
+              maskImage: `radial-gradient(${extent}, rgba(0,0,0,0) 36%, #000 50%,` +
+                ' #000 80%, rgba(0,0,0,0.3) 90%, rgba(0,0,0,0) 95%)',
             }}
           />
 
@@ -172,9 +152,9 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
             style={{
               background:
                 'conic-gradient(from 130deg,' +
-                ' rgba(255,246,232,0.03) 0deg, rgba(255,246,232,0) 60deg,' +
-                ' rgba(0,0,0,0.05) 140deg, rgba(0,0,0,0) 220deg,' +
-                ' rgba(255,246,232,0.02) 290deg, rgba(255,246,232,0) 360deg)',
+                ' rgba(255,246,232,0.016) 0deg, rgba(255,246,232,0) 78deg,' +
+                ' rgba(0,0,0,0.022) 150deg, rgba(0,0,0,0) 232deg,' +
+                ' rgba(255,246,232,0.012) 296deg, rgba(255,246,232,0.016) 360deg)',
             }}
           />
         </>
