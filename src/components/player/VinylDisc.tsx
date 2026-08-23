@@ -41,8 +41,8 @@ const DETAILED_FROM = 96;
  * That move exposed the real problem it had been covering. Concentric rings are
  * rotationally symmetric, so a disc drawn from them cannot show that it is
  * turning — the sheen was the only thing betraying rotation, and it was
- * betraying it wrongly. Hence the spiral seam and the pressing variation below:
- * they are what actually turns.
+ * betraying it wrongly. What turns now is the label, which carries the cover
+ * art, and the pressing variation below.
  *
  * Deliberately animation-free, and deliberately exactly `size` px square with
  * nothing bleeding outside it — the flight scales a row disc to platter size by
@@ -114,47 +114,33 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
       {detailed && (
         <>
           {/*
-            The spiral seam. A record's groove is one continuous spiral, so
-            there is a point where it steps inward and the surface visibly
-            breaks — the single most legible sign that a record is turning,
-            and the reason the disc no longer needs the light to move.
+            Pressing variation, and the only asymmetric thing on the record.
 
-            Softened and faded at both ends since the first pass, where it was
-            a 0.45-alpha black edge running rim to label: at that contrast it
-            stopped reading as a step in the groove and started reading as a
-            crack across the record.
-          */}
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background:
-                'conic-gradient(from 8deg,' +
-                ' rgba(255,246,232,0.035) 0deg,' +
-                ' rgba(255,246,232,0.02) 6deg,' +
-                ' rgba(255,246,232,0) 18deg,' +
-                ' rgba(255,246,232,0) 336deg,' +
-                ' rgba(0,0,0,0.02) 348deg,' +
-                ' rgba(0,0,0,0.06) 360deg)',
-              maskImage: `radial-gradient(${extent}, rgba(0,0,0,0) 36%, #000 50%,` +
-                ' #000 80%, rgba(0,0,0,0.3) 90%, rgba(0,0,0,0) 95%)',
-            }}
-          />
+            A spiral seam used to sit here too — the step where a groove turns
+            inward, which is real, and which was the strongest cue that the
+            disc was turning. It had to go: a conic gradient whose 360° value
+            differs from its 0° value is a step of zero width, and measured off
+            the render that one was a 6.35 luminance jump along a single ray.
+            That is the hard vertical edge, and no amount of softening the
+            stops removes it, because the discontinuity is at the wrap and not
+            in the ramp.
 
-          {/*
-            Pressing variation. Vinyl is not perfectly uniform; some sectors
-            hold the light a little differently, and that unevenness turning
-            under a fixed reflection is what a spinning record actually looks
-            like. Very low contrast on purpose — it should register as movement
-            rather than as a pattern.
+            Rotation does not need it. The label carries the cover art, and a
+            turning record with a turning cover is not ambiguous. What is left
+            here is a slow swell that begins and ends on the same value, so
+            there is no ray anywhere on this disc where the surface steps.
           */}
           <div
             className="absolute inset-0 rounded-full opacity-70"
             style={{
               background:
                 'conic-gradient(from 130deg,' +
-                ' rgba(255,246,232,0.016) 0deg, rgba(255,246,232,0) 78deg,' +
-                ' rgba(0,0,0,0.022) 150deg, rgba(0,0,0,0) 232deg,' +
-                ' rgba(255,246,232,0.012) 296deg, rgba(255,246,232,0.016) 360deg)',
+                ' rgba(255,246,232,0.022) 0deg,' +
+                ' rgba(255,246,232,0) 74deg,' +
+                ' rgba(0,0,0,0.03) 148deg,' +
+                ' rgba(0,0,0,0.012) 214deg,' +
+                ' rgba(255,246,232,0.014) 286deg,' +
+                ' rgba(255,246,232,0.022) 360deg)',
             }}
           />
         </>
