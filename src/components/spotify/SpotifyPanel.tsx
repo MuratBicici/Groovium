@@ -32,17 +32,30 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!(await hasClientId())) {
-      setStage('setup');
-      return;
-    }
-    setStage((await isAuthenticated()) ? 'connected' : 'disconnected');
+  /** Which stage the panel should show, asked without touching state. */
+  const stageFor = useCallback(async (): Promise<Stage> => {
+    if (!(await hasClientId())) return 'setup';
+    return (await isAuthenticated()) ? 'connected' : 'disconnected';
   }, []);
 
+  const refresh = useCallback(async () => {
+    setStage(await stageFor());
+  }, [stageFor]);
+
   useEffect(() => {
-    if (open) void refresh();
-  }, [open, refresh]);
+    if (!open) return;
+    // Deferred rather than called straight from the effect body: `refresh`
+    // reaches Tauri and then sets state, and doing that synchronously inside an
+    // effect cascades a second render before the first has painted.
+    let cancelled = false;
+    void (async () => {
+      const next = await stageFor();
+      if (!cancelled) setStage(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, stageFor]);
 
   async function connect() {
     setStage('connecting');

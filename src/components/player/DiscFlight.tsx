@@ -191,8 +191,8 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
             <FlyingDisc
               key={flight.key}
               flight={flight}
-              platterEl={platterRef.current}
-              layerEl={layerRef.current}
+              platterRef={platterRef}
+              layerRef={layerRef}
               onHandOff={handOff}
               onDone={endFlight}
             />
@@ -205,8 +205,13 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
 
 interface FlyingDiscProps {
   flight: Flight;
-  platterEl: HTMLElement | null;
-  layerEl: HTMLElement | null;
+  /**
+   * Passed as refs rather than elements. Reading `.current` during render is
+   * not guaranteed to see what the latest commit wrote; the effect below runs
+   * after commit, which is exactly when the answer is reliable.
+   */
+  platterRef: React.RefObject<HTMLElement | null>;
+  layerRef: React.RefObject<HTMLDivElement | null>;
   onHandOff: (flight: Flight) => void;
   onDone: (flight: Flight) => void;
 }
@@ -216,7 +221,7 @@ interface FlyingDiscProps {
  * animation carries it backwards from the row, so landing is the identity
  * transform and cannot miss.
  */
-function FlyingDisc({ flight, platterEl, layerEl, onHandOff, onDone }: FlyingDiscProps) {
+function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingDiscProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const spinRef = useRef<HTMLDivElement | null>(null);
   const [style, setStyle] = useState<React.CSSProperties | null>(null);
@@ -224,6 +229,8 @@ function FlyingDisc({ flight, platterEl, layerEl, onHandOff, onDone }: FlyingDis
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
+    const platterEl = platterRef.current;
+    const layerEl = layerRef.current;
     if (!wrapper || !platterEl || !layerEl) {
       onDone(flight);
       return;

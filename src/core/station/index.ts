@@ -71,11 +71,15 @@ export function matchKey(artist: string, title: string): string {
  * Strip the things that differ between a file's tags and a database entry
  * without meaning a different song.
  *
+ * Exported so it can be pinned directly: it is the half that actually decides
+ * whether two names are the same song, and every judgement call in it is a
+ * trade rather than an obvious rule.
+ *
  * Tags carry "(Remastered 2011)", " - Live at Wembley", "feat. Someone" and
  * stray punctuation; Last.fm mostly does not. Leaving them in means a track
  * sitting in the library never matches and a Spotify search gets spent instead.
  */
-function normalize(value: string): string {
+export function normalize(value: string): string {
   return (
     value
       .toLowerCase()

@@ -41,13 +41,25 @@ export function arcKeyframes(
   arcHeight: number,
   samples = 24,
 ): Keyframe[] {
+  // Two is the floor: `i / (samples - 1)` divides by zero at one, which yields
+  // a keyframe of NaNs that the browser rejects — silently, since the animation
+  // simply never runs.
+  const steps = Math.max(2, Math.floor(samples));
+
   const frames: Keyframe[] = [];
-  for (let i = 0; i < samples; i++) {
-    const t = i / (samples - 1);
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    const last = i === steps - 1;
     const e = easeInOutCubic(t);
-    const x = from.x + (to.x - from.x) * e;
-    const y = from.y + (to.y - from.y) * e - arcHeight * Math.sin(Math.PI * t);
-    const scale = from.scale + (to.scale - from.scale) * e;
+
+    // The final frame is written as the destination rather than computed.
+    // `sin(π)` is not exactly zero in floating point, so the arc landed a few
+    // femtometres off the identity transform the flight is documented to end
+    // on — true enough to look at, false enough to be worth not claiming.
+    const x = last ? to.x : from.x + (to.x - from.x) * e;
+    const y = last ? to.y : from.y + (to.y - from.y) * e - arcHeight * Math.sin(Math.PI * t);
+    const scale = last ? to.scale : from.scale + (to.scale - from.scale) * e;
+
     frames.push({
       transform: `translate(${x}px, ${y}px) scale(${scale})`,
       offset: t,

@@ -215,6 +215,35 @@ const initialState: PlayerState = {
   stationArtists: [],
 };
 
+/**
+ * Where a step lands in a playback order, or null when it runs off the end.
+ *
+ * Pulled out of the store so it can be tested: every Next, every Previous and
+ * every natural track end routes through this, and it was reachable only by
+ * instantiating the store, its four providers and a DOM.
+ */
+export function stepWithin(
+  order: number[],
+  currentIndex: number,
+  step: number,
+  wrap: boolean,
+): number | null {
+  if (order.length === 0) return null;
+
+  const current = order.indexOf(currentIndex);
+  // An index outside the order — a collection that changed under a stale
+  // position. Step from the edge the move is coming *from*, so Previous still
+  // goes back; taking 0 for both directions made Previous move forward.
+  const position = current === -1 ? (step > 0 ? 0 : order.length - 1) : current + step;
+
+  if (position < 0 || position >= order.length) {
+    if (!wrap) return null;
+    const wrapped = ((position % order.length) + order.length) % order.length;
+    return order[wrapped] ?? null;
+  }
+  return order[position] ?? null;
+}
+
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
   function outputAmplitude(): number {
     const { muted, volume } = get();
@@ -229,18 +258,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
   function neighborIndex(step: number): number | null {
     const { playback, repeat } = get();
-    if (playback.tracks.length === 0) return null;
-
-    const order = playbackOrder();
-    const current = order.indexOf(playback.index);
-    const position = current === -1 ? 0 : current + step;
-
-    if (position < 0 || position >= order.length) {
-      if (repeat !== 'all') return null;
-      const wrapped = ((position % order.length) + order.length) % order.length;
-      return order[wrapped] ?? null;
-    }
-    return order[position] ?? null;
+    return stepWithin(playbackOrder(), playback.index, step, repeat === 'all');
   }
 
   /** Turn a context id into the tracks it stands for. */
@@ -687,7 +705,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     async playSingle(track) {
       set({
         playback: { id: 'single', tracks: [track], index: 0 },
-        shuffleOrder: [],
+        // `[0]`, not `[]`, when shuffle is on. `playbackOrder` needs the order
+        // and the track list to be the same length; an empty one could never
+        // match again, so a station run started from a single track spent the
+        // rest of its life sequential with the shuffle button still lit.
+        shuffleOrder: get().shuffle ? [0] : [],
       });
       await startTrack(0);
     },
@@ -876,7 +898,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
  * Local tracks are stored as a reference into the library; Spotify tracks carry
  * their metadata because nothing else holds it.
  */
-function toPlaylistItem(track: TrackMetadata): PlaylistItem | null {
+export function toPlaylistItem(track: TrackMetadata): PlaylistItem | null {
   if (track.source === 'spotify') {
     const item: PlaylistItem = {
       source: 'spotify',
