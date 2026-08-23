@@ -44,21 +44,47 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
   const spindle = Math.max(2, Math.round(size * 0.05));
   const detailed = size >= DETAILED_FROM;
 
-  // Groove texture. Finer at platter size, where the old 4px period read as
-  // corduroy rather than vinyl; the coarse one stays for small discs, where a
-  // 2px period would alias into noise.
-  const grooves = detailed
-    ? 'repeating-radial-gradient(circle at center, #191310 0px, #241b16 1px, #191310 2px)'
-    : 'repeating-radial-gradient(circle at center, #1c1512 0px, #241b16 1px, #1a1310 2px, #241b16 3px)';
+  // Every radial gradient here says `closest-side`, which is the difference
+  // between a percentage meaning what it reads as and meaning something 41%
+  // larger. The default is `farthest-corner`: on a square box that is the
+  // diagonal, so 100% was 107.5px on a 152px disc rather than the 76px radius,
+  // and every ring landed somewhere other than where it was written.
+  const extent = 'circle closest-side at center';
 
-  // The bands between tracks, and the lead-in at the rim: on a real pressing
-  // these are the smooth rings where the groove pitch widens, and they catch
-  // light differently from the music between them.
+  // The body of the record: a pressing is darkest where it turns away at the
+  // rim and holds a little more light across the middle.
+  const body = detailed
+    ? `radial-gradient(${extent}, #241c17 0%, #1e1714 42%, #171211 76%, #1c1613 92%, #120e0d 100%)`
+    : '#1c1512';
+
+  // Groove texture. The old one stepped between two colours every 1px, which
+  // at 152px is a square wave against the pixel grid — it read as corduroy and
+  // aliased into rings. This ramps instead of stepping, over a longer period,
+  // at a fraction of the contrast: grooves are meant to register as a sheen
+  // that catches the light, not as drawn lines.
+  const grooves = detailed
+    ? 'repeating-radial-gradient(circle at center,' +
+      ' rgba(255,246,232,0) 0px,' +
+      ' rgba(255,246,232,0.045) 1.1px,' +
+      ' rgba(0,0,0,0.16) 2.2px,' +
+      ' rgba(255,246,232,0) 3.1px)'
+    : 'repeating-radial-gradient(circle at center,' +
+      ' rgba(255,246,232,0) 0px,' +
+      ' rgba(255,246,232,0.05) 1.2px,' +
+      ' rgba(0,0,0,0.2) 2.4px,' +
+      ' rgba(255,246,232,0) 3.4px)';
+
+  // The bands between tracks: on a real pressing these are the rings where the
+  // groove pitch widens. Written with the highlight colour at zero alpha
+  // rather than `transparent` — `transparent` is *black* at zero alpha, so
+  // ramping to it drags a grey edge through the middle of every band.
   const bands =
-    'repeating-radial-gradient(circle at center,' +
-    ' transparent 0%, transparent 11.5%,' +
-    ' rgba(255,246,232,0.055) 11.9%, rgba(255,246,232,0.055) 12.4%,' +
-    ' transparent 12.8%)';
+    `repeating-radial-gradient(${extent},` +
+    ' rgba(255,246,232,0) 0%,' +
+    ' rgba(255,246,232,0) 9.4%,' +
+    ' rgba(255,246,232,0.03) 11.6%,' +
+    ' rgba(255,246,232,0.03) 12.6%,' +
+    ' rgba(255,246,232,0) 14.8%)';
 
   return (
     <div
@@ -67,9 +93,12 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
       style={{
         width: size,
         height: size,
-        background: detailed ? `${bands}, ${grooves}` : grooves,
+        background: detailed ? `${bands}, ${grooves}, ${body}` : `${grooves}, ${body}`,
+        // No rim highlight here any more: a glow on all sides at once is light
+        // arriving from everywhere, which is what made the edge read as drawn
+        // rather than lit. `DiscLight` puts it on the arc facing the light.
         boxShadow: detailed
-          ? '0 3px 10px rgba(0,0,0,0.55), inset 0 0 24px rgba(0,0,0,0.75), inset 0 0 2px rgba(255,246,232,0.14)'
+          ? '0 4px 12px rgba(0,0,0,0.5), inset 0 0 26px rgba(0,0,0,0.45)'
           : '0 1px 2px rgba(0,0,0,0.5), inset 0 0 4px rgba(0,0,0,0.7)',
       }}
     >
@@ -80,16 +109,25 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
             there is a point where it steps inward and the surface visibly
             breaks — the single most legible sign that a record is turning,
             and the reason the disc no longer needs the light to move.
+
+            Softened and faded at both ends since the first pass, where it was
+            a 0.45-alpha black edge running rim to label: at that contrast it
+            stopped reading as a step in the groove and started reading as a
+            crack across the record.
           */}
           <div
             className="absolute inset-0 rounded-full"
             style={{
               background:
                 'conic-gradient(from 8deg,' +
-                ' rgba(255,246,232,0.16) 0deg, rgba(255,246,232,0.03) 1.2deg,' +
-                ' transparent 2.4deg, transparent 358deg,' +
-                ' rgba(0,0,0,0.45) 359deg, rgba(0,0,0,0.2) 360deg)',
-              maskImage: 'radial-gradient(circle at center, transparent 21%, #000 23%, #000 100%)',
+                ' rgba(255,246,232,0.075) 0deg,' +
+                ' rgba(255,246,232,0.02) 2.5deg,' +
+                ' rgba(255,246,232,0) 6deg,' +
+                ' rgba(255,246,232,0) 351deg,' +
+                ' rgba(0,0,0,0.06) 355deg,' +
+                ' rgba(0,0,0,0.2) 360deg)',
+              maskImage: `radial-gradient(${extent}, rgba(0,0,0,0) 34%, #000 44%,` +
+                ' #000 88%, rgba(0,0,0,0.35) 97%, rgba(0,0,0,0) 100%)',
             }}
           />
 
@@ -105,9 +143,9 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
             style={{
               background:
                 'conic-gradient(from 130deg,' +
-                ' rgba(255,246,232,0.035) 0deg, transparent 60deg,' +
-                ' rgba(0,0,0,0.06) 140deg, transparent 220deg,' +
-                ' rgba(255,246,232,0.022) 290deg, transparent 360deg)',
+                ' rgba(255,246,232,0.03) 0deg, rgba(255,246,232,0) 60deg,' +
+                ' rgba(0,0,0,0.05) 140deg, rgba(0,0,0,0) 220deg,' +
+                ' rgba(255,246,232,0.02) 290deg, rgba(255,246,232,0) 360deg)',
             }}
           />
         </>

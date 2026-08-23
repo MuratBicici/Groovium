@@ -47,3 +47,18 @@ export function angleForRadius(radius: number): number {
   // a NaN in a transform silently drops the whole arm.
   return BASE_ANGLE - (Math.acos(Math.min(1, Math.max(-1, cosine))) * 180) / Math.PI;
 }
+
+/**
+ * Breathing room around the well for the arm to be drawn in.
+ *
+ * The SVG viewport used to be exactly `BOX`, and an SVG viewport clips — so did
+ * the CSS filter on the arm, since a filter region is clipped to it too. The
+ * counterweight sits ~31px *behind* the pivot, which put it at y ≈ -7.6, and the
+ * arm came out sliced flat across the top with its shadow missing.
+ *
+ * The drawing is offset by this much so nothing lands on a negative coordinate;
+ * the geometry above is unaffected, because an angle does not care where the
+ * origin is.
+ */
+export const PAD = 32;
+export const VIEW = BOX + PAD * 2;
