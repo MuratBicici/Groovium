@@ -82,7 +82,7 @@ export function ProgressBar() {
         }`}
       >
         {/* Track */}
-        <div className="h-1 w-full overflow-hidden rounded-full bg-shell-600">
+        <div className="groove-inset h-1 w-full overflow-hidden rounded-full">
           <div
             className="h-full rounded-full bg-gradient-to-r from-brass-600 to-brass-400"
             style={{ width: `${fraction * 100}%` }}
@@ -115,7 +115,7 @@ export function ProgressBar() {
         />
       </div>
 
-      <div className="mt-1 flex justify-between text-[10px] tabular-nums text-cream-400">
+      <div className="mt-1 flex justify-between text-meta tabular-nums text-cream-400">
         <span>{formatDuration(displayMs)}</span>
         <span>{formatDuration(durationMs)}</span>
       </div>

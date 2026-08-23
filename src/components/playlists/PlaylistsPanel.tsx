@@ -46,12 +46,12 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
     <div
       id={id}
       aria-hidden={!open}
-      className={`absolute inset-0 z-20 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
+      className={`absolute inset-0 z-20 groove-surface flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
         open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <span className="min-w-0 truncate text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
           {current ? current.name : `Playlists · ${playlists.length}`}
         </span>
         <div className="flex shrink-0 items-center gap-2">
@@ -59,7 +59,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
             <button
               type="button"
               onClick={() => setOpenId(null)}
-              className="text-[9px] tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
+              className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
             >
               Back
             </button>
@@ -81,7 +81,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
       {current ? (
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {current.items.length === 0 && (
-            <li className="px-2 py-4 text-center text-[10px] leading-relaxed text-cream-400/70">
+            <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
               Nothing here yet. Add songs from your library or from Spotify.
             </li>
           )}
@@ -113,15 +113,15 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                     <VinylDisc size={24} coverArtUrl={track?.coverArtUrl} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px]">
+                    <span className="block truncate text-body">
                       {track?.title ?? 'Unavailable'}
                     </span>
-                    <span className="block truncate text-[9px] text-cream-400">
+                    <span className="block truncate text-label text-cream-400">
                       {track ? `${track.artist} · ${track.source}` : 'Removed from library'}
                     </span>
                   </span>
                   {track && (
-                    <span className="shrink-0 text-[10px] tabular-nums text-cream-400">
+                    <span className="shrink-0 text-meta tabular-nums text-cream-400">
                       {formatDuration(track.duration)}
                     </span>
                   )}
@@ -152,13 +152,13 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && name.trim()) void create();
               }}
-              className="min-w-0 flex-1 rounded bg-shell-900 px-2 py-1 text-[10px] text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+              className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
             />
             <button
               type="button"
               disabled={!name.trim()}
               onClick={() => void create()}
-              className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-[9px] font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+              className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
             >
               Create
             </button>
@@ -166,7 +166,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
 
           <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
             {playlists.length === 0 && (
-              <li className="px-2 py-4 text-center text-[10px] leading-relaxed text-cream-400/70">
+              <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
                 No playlists yet. Make one to keep songs together.
               </li>
             )}
@@ -177,8 +177,8 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
                   onClick={() => setOpenId(playlist.id)}
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-cream-200 transition-colors hover:bg-shell-700/60"
                 >
-                  <span className="min-w-0 flex-1 truncate text-[11px]">{playlist.name}</span>
-                  <span className="shrink-0 text-[9px] text-cream-400">
+                  <span className="min-w-0 flex-1 truncate text-body">{playlist.name}</span>
+                  <span className="shrink-0 text-label text-cream-400">
                     {playlist.items.length}
                   </span>
                 </button>

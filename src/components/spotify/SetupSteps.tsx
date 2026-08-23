@@ -55,7 +55,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
   }
 
   return (
-    <div className="space-y-3 px-3 pb-3 text-[11px] leading-relaxed text-cream-200">
+    <div className="space-y-3 px-3 pb-3 text-body leading-relaxed text-cream-200">
       <p className="text-cream-400">
         <span className="text-cream-200">Spotify is optional.</span> Your own music
         plays without any of this — set it up only if you want to search Spotify
@@ -70,7 +70,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
         <button
           type="button"
           onClick={() => void openDashboard()}
-          className="mt-1 rounded-full bg-shell-700 px-2.5 py-1 text-[10px] tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
+          className="mt-1 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
         >
           Open Spotify Dashboard ↗
         </button>
@@ -79,13 +79,13 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
       <Step number={2} title="Add this redirect URI">
         <p className="text-cream-400">It must match exactly, with no trailing slash.</p>
         <div className="mt-1 flex items-center gap-1.5">
-          <code className="min-w-0 flex-1 truncate rounded bg-shell-900 px-2 py-1 text-[10px] text-brass-400 select-all">
+          <code className="min-w-0 flex-1 truncate groove-inset rounded px-2 py-1 text-meta text-brass-400 select-all">
             {uri || '…'}
           </code>
           <button
             type="button"
             onClick={() => void copyUri()}
-            className="shrink-0 rounded-full bg-shell-700 px-2.5 py-1 text-[10px] tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
+            className="shrink-0 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
             {copied ? 'Copied' : 'Copy'}
           </button>
@@ -111,13 +111,13 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && clientId.trim()) void save();
             }}
-            className="min-w-0 flex-1 rounded bg-shell-900 px-2 py-1 text-[10px] text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+            className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
           />
           <button
             type="button"
             disabled={!clientId.trim() || saving}
             onClick={() => void save()}
-            className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-[10px] font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+            className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
           >
             {saving ? 'Saving' : 'Save'}
           </button>
@@ -125,12 +125,12 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
       </Step>
 
       {error && (
-        <p className="rounded bg-red-950/70 px-2 py-1.5 text-[10px] leading-snug text-red-200">
+        <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
           {error}
         </p>
       )}
 
-      <p className="text-[10px] text-cream-400/70 italic">
+      <p className="text-meta text-cream-400/70 italic">
         Spotify Premium is required for playback.
       </p>
     </div>
@@ -148,7 +148,7 @@ function Step({
 }) {
   return (
     <div className="flex gap-2">
-      <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-shell-700 text-[9px] font-semibold text-brass-400">
+      <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-shell-700 text-label font-semibold text-brass-400">
         {number}
       </span>
       <div className="min-w-0 flex-1">

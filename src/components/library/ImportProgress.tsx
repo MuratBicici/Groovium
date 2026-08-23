@@ -33,7 +33,7 @@ export function ImportProgress() {
   return (
     <div className="shrink-0 bg-shell-900 px-3 py-1.5">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[10px] text-cream-200">
+        <span className="min-w-0 flex-1 truncate text-meta text-cream-200">
           Adding {importing.done + 1} of {importing.total}
           {importing.currentName && (
             <span className="text-cream-400"> · {importing.currentName}</span>

@@ -71,11 +71,11 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
         spellCheck={false}
         placeholder="Search Spotify for a song"
         onChange={(e) => setQuery(e.target.value)}
-        className="shrink-0 rounded bg-shell-900 px-2 py-1.5 text-[11px] text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+        className="shrink-0 groove-inset rounded px-2 py-1.5 text-body text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
       />
 
       {problem && (
-        <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-[10px] leading-snug text-red-200">
+        <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
           {problem}
         </p>
       )}
@@ -102,8 +102,8 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
                 <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[11px] text-cream-100">{track.title}</span>
-                <span className="block truncate text-[9px] text-cream-400">{track.artist}</span>
+                <span className="block truncate text-body text-cream-100">{track.title}</span>
+                <span className="block truncate text-label text-cream-400">{track.artist}</span>
               </span>
             </button>
             <span className="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
@@ -118,7 +118,7 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
 
 function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <li className="px-2 py-4 text-center text-[10px] leading-relaxed text-cream-400/70">
+    <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
       {children}
     </li>
   );

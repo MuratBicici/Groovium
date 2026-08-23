@@ -162,7 +162,7 @@ export default function App() {
           type="button"
           onClick={clearError}
           title="Dismiss"
-          className="shrink-0 bg-red-950/80 px-3 py-1.5 text-left text-[10px] leading-snug text-red-200"
+          className="shrink-0 bg-red-950/80 px-3 py-1.5 text-left text-meta leading-snug text-red-200"
         >
           {error}
         </button>

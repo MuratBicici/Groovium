@@ -49,12 +49,12 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
     <div
       id={id}
       aria-hidden={!open}
-      className={`absolute inset-0 z-20 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
+      className={`absolute inset-0 z-20 groove-surface flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
         open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <span className="text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
           Library · {library.length}
         </span>
         <div className="flex items-center gap-1.5">
@@ -77,7 +77,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
       {/* Copying duplicates the audio on disk, so the size is shown before it
           starts rather than discovered afterwards. */}
       {pending && (
-        <div className="mx-3 mb-2 shrink-0 rounded bg-shell-900/80 p-2 text-[10px] leading-snug text-cream-200">
+        <div className="mx-3 mb-2 shrink-0 rounded bg-shell-900/80 p-2 text-meta leading-snug text-cream-200">
           <p>
             Copy <strong>{pending.paths.length}</strong> file
             {pending.paths.length === 1 ? '' : 's'} ({formatBytes(pending.totalBytes)}) into your
@@ -100,7 +100,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
            rather than describing it. Nothing else — no account, no key — is
            needed to get from here to music playing. */
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
-          <p className="text-center text-[11px] leading-relaxed text-cream-400/70">
+          <p className="text-center text-body leading-relaxed text-cream-400/70">
             Nothing here yet. Add some music to get started — songs are copied
             in, so they keep playing even if you move or delete the original.
           </p>
@@ -137,10 +137,10 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
                     <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px]">{track.title}</span>
-                    <span className="block truncate text-[9px] text-cream-400">{track.artist}</span>
+                    <span className="block truncate text-body">{track.title}</span>
+                    <span className="block truncate text-label text-cream-400">{track.artist}</span>
                   </span>
-                  <span className="shrink-0 text-[10px] tabular-nums text-cream-400">
+                  <span className="shrink-0 text-meta tabular-nums text-cream-400">
                     {formatDuration(track.durationMs)}
                   </span>
                 </button>
@@ -167,7 +167,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
 
       {/* Deleting the app's copy is not reversible, so it is confirmed. */}
       {confirmRemove && (
-        <div className="shrink-0 bg-red-950/80 px-3 py-2 text-[10px] leading-snug text-red-100">
+        <div className="shrink-0 bg-red-950/80 px-3 py-2 text-meta leading-snug text-red-100">
           <p>Delete this song from your library? The copy this app keeps is removed for good.</p>
           <div className="mt-1.5 flex gap-1.5">
             <SmallButton
@@ -201,7 +201,7 @@ function SmallButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-2 py-1 text-[9px] font-medium tracking-wide uppercase transition-colors ${
+      className={`rounded-full px-2 py-1 text-label font-medium tracking-wide uppercase transition-colors ${
         primary
           ? 'bg-brass-600 text-shell-900 hover:bg-brass-500'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'

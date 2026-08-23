@@ -109,7 +109,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
       {/* Confirmation lives outside the sheet so it survives the close. */}
       {saved && (
         <div className="pointer-events-none absolute inset-x-0 bottom-14 z-40 flex justify-center">
-          <span className="rounded-full bg-shell-900/95 px-3 py-1 text-[10px] text-brass-400 shadow">
+          <span className="rounded-full bg-shell-900/95 px-3 py-1 text-meta text-brass-400 shadow">
             {saved}
           </span>
         </div>
@@ -127,18 +127,18 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
           <div
             role="dialog"
             aria-label="Add to playlist"
-            className="relative flex max-h-full w-full flex-col overflow-hidden rounded-lg bg-shell-800 ring-1 ring-shell-600"
+            className="relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600"
           >
             <div className="shrink-0 px-3 pt-2.5 pb-1.5">
-              <p className="text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+              <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
                 Add to playlist
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-cream-100">{track.title}</p>
+              <p className="mt-0.5 truncate text-body text-cream-100">{track.title}</p>
             </div>
 
             <ul className="min-h-0 flex-1 overflow-y-auto px-1.5">
               {playlists.length === 0 && (
-                <li className="px-1.5 py-2 text-center text-[10px] text-cream-400/70">
+                <li className="px-1.5 py-2 text-center text-meta text-cream-400/70">
                   No playlists yet — name one below.
                 </li>
               )}
@@ -153,14 +153,14 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                       className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1.5 text-left transition-colors hover:bg-shell-700 disabled:cursor-default disabled:hover:bg-transparent"
                     >
                       <span
-                        className={`min-w-0 flex-1 truncate text-[11px] ${
+                        className={`min-w-0 flex-1 truncate text-body ${
                           already ? 'text-cream-400/60' : 'text-cream-200'
                         }`}
                       >
                         {playlist.name}
                       </span>
                       {/* Saying so up front beats clicking and being told. */}
-                      <span className="shrink-0 text-[9px] text-cream-400">
+                      <span className="shrink-0 text-label text-cream-400">
                         {already ? 'Added' : playlist.items.length}
                       </span>
                     </button>
@@ -179,13 +179,13 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newName.trim()) void createAndAdd();
                 }}
-                className="min-w-0 flex-1 rounded bg-shell-900 px-2 py-1 text-[10px] text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+                className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
               />
               <button
                 type="button"
                 disabled={!newName.trim()}
                 onClick={() => void createAndAdd()}
-                className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-[9px] font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+                className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
               >
                 Create
               </button>

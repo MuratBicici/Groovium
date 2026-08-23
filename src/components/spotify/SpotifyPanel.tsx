@@ -87,12 +87,12 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
     <div
       id={id}
       aria-hidden={!open}
-      className={`absolute inset-0 z-20 flex flex-col rounded-t-lg bg-shell-800/95 backdrop-blur-sm transition-all duration-200 ease-out ${
+      className={`absolute inset-0 z-20 groove-surface flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
         open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <span className="min-w-0 truncate text-[9px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
           {stage === 'connected' && account ? `Spotify · ${account.displayName}` : 'Spotify'}
         </span>
         <div className="flex shrink-0 items-center gap-2">
@@ -100,7 +100,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
             <button
               type="button"
               onClick={() => void disconnect()}
-              className="text-[9px] tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
+              className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
             >
               Sign out
             </button>
@@ -131,7 +131,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
         {stage === 'connecting' && (
           <Centered>
             Waiting for authorisation in your browser…
-            <span className="mt-1 block text-[10px] text-cream-400/70">
+            <span className="mt-1 block text-meta text-cream-400/70">
               Approve the request, then come back here.
             </span>
           </Centered>
@@ -139,25 +139,25 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
 
         {stage === 'disconnected' && (
           <div className="space-y-3 px-4 py-3 text-center">
-            <p className="text-[11px] text-cream-400">
+            <p className="text-body text-cream-400">
               Your Client ID is saved. Connect your Spotify account to start playing.
             </p>
             <button
               type="button"
               onClick={() => void connect()}
-              className="rounded-full bg-brass-600 px-4 py-1.5 text-[10px] font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+              className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
             >
               Connect Spotify Account
             </button>
             {error && (
-              <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-[10px] leading-snug text-red-200">
+              <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-meta leading-snug text-red-200">
                 {error}
               </p>
             )}
             <button
               type="button"
               onClick={() => void changeClientId()}
-              className="block w-full text-[10px] text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
+              className="block w-full text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
             >
               Use a different Client ID
             </button>
@@ -167,7 +167,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
             {premiumWarning && (
-              <p className="shrink-0 rounded bg-shell-900/70 px-2 py-1.5 text-[10px] leading-snug text-brass-400">
+              <p className="shrink-0 rounded bg-shell-900/70 px-2 py-1.5 text-meta leading-snug text-brass-400">
                 {premiumWarning}
               </p>
             )}
@@ -182,7 +182,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center px-6">
-      <p className="text-center text-[11px] leading-relaxed text-cream-400">{children}</p>
+      <p className="text-center text-body leading-relaxed text-cream-400">{children}</p>
     </div>
   );
 }

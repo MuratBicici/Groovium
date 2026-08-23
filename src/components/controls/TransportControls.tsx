@@ -238,7 +238,7 @@ function RepeatIcon({ mode }: { mode: 'off' | 'one' | 'all' }) {
         <path d="M4 18h13a3 3 0 003-3v-1" strokeLinecap="round" />
       </svg>
       {mode === 'one' && (
-        <span className="absolute -right-1 -bottom-1 text-[8px] font-bold leading-none">1</span>
+        <span className="absolute -right-1 -bottom-1 text-micro font-bold leading-none">1</span>
       )}
     </span>
   );

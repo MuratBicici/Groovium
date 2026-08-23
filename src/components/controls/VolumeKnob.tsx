@@ -99,7 +99,7 @@ export function VolumeKnob() {
         <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
       </div>
 
-      <span className="w-7 text-[10px] tabular-nums text-cream-400">
+      <span className="w-7 text-meta tabular-nums text-cream-400">
         {Math.round(effectiveVolume * 100)}
       </span>
     </div>

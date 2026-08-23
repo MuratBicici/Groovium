@@ -75,7 +75,7 @@ export function VinylDisc({ size, coverArtUrl, sheen, eager, className }: VinylD
             {/* The wordmark is unreadable below platter size; a plain brass
                 label is what a real unlabeled pressing looks like anyway. */}
             {size >= 96 && (
-              <span className="text-[8px] font-bold tracking-widest text-shell-900 uppercase">
+              <span className="text-micro font-bold tracking-widest text-shell-900 uppercase">
                 Groove
               </span>
             )}

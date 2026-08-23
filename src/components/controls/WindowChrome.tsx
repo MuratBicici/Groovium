@@ -31,7 +31,7 @@ export function WindowChrome() {
     >
       <span
         data-tauri-drag-region
-        className="text-[10px] font-semibold tracking-[0.22em] text-brass-400/80 uppercase"
+        className="text-meta font-semibold tracking-[0.22em] text-brass-400/80 uppercase"
       >
         Groovium
       </span>
