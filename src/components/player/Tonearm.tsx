@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { useIsPlaying, useProgressFraction } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import {
@@ -44,8 +45,17 @@ import {
  * the wrist, and setting one down is the careful half of the gesture. The
  * translate rides on the `<svg>` so it composes with, rather than fights, the
  * rotation the `<g>` is already carrying.
+ *
+ * **How far is measured, not chosen.** A stowed arm keeps tracking, because the
+ * track it was stowed on keeps playing: the angle goes on opening from 96 to
+ * 118 degrees, and every degree of that carries the stylus further to the left.
+ * A distance that cleared the window at the start of a song did not clear it by
+ * the end, and the tip came creeping back in from the right. The whole viewport
+ * is pushed past the edge instead, which no angle can undo, since nothing is
+ * drawn outside it.
  */
 export function Tonearm({ stowed = false }: { stowed?: boolean }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const isPlaying = useIsPlaying();
   const progress = useProgressFraction();
 
@@ -59,8 +69,19 @@ export function Tonearm({ stowed = false }: { stowed?: boolean }) {
   const px = PIVOT_X + PAD;
   const py = PIVOT_Y + PAD;
 
+  // Written onto the well rather than the svg: the svg's own left moves when it
+  // is stowed, so measuring it again would compound, and React owns that
+  // element's style attribute while it does not own the well's.
+  useLayoutEffect(() => {
+    const well = svgRef.current?.parentElement;
+    if (!well) return;
+    const left = well.getBoundingClientRect().left - PAD;
+    well.style.setProperty('--stow-x', `${Math.ceil(window.innerWidth - left + 8)}px`);
+  }, []);
+
   return (
     <svg
+      ref={svgRef}
       viewBox={`0 0 ${VIEW} ${VIEW}`}
       className="pointer-events-none absolute"
       style={{
@@ -68,7 +89,8 @@ export function Tonearm({ stowed = false }: { stowed?: boolean }) {
         left: -PAD,
         width: VIEW,
         height: VIEW,
-        transform: stowed ? 'translateX(118px)' : 'translateX(0)',
+        // The fallback is only for the frame before the measurement lands.
+        transform: stowed ? 'translateX(var(--stow-x, 300px))' : 'translateX(0)',
         transition: prefersReducedMotion()
           ? 'none'
           : stowed
