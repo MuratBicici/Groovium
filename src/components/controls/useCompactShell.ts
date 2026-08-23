@@ -34,6 +34,19 @@ import { EXPANDED_HEIGHT, setWindowHeight } from '@/platform/window';
  * already put the new layout in the DOM, so measuring there gives the height
  * being animated to — and an animation from a number to itself is a jump. That
  * is exactly what shipped the first time.
+ *
+ * The record and the two lines of text travel between their two homes rather
+ * than being swapped: each one is measured in the layout it is leaving and in
+ * the layout it is arriving at, and the arriving element is animated from the
+ * first to the second. The two are different elements — a 152px deck and a
+ * 28px disc are not the same node — so this reads the old position from a
+ * recording rather than from the DOM, which is the only part that differs from
+ * an ordinary FLIP.
+ *
+ * For that to work the destination has to hold still. The stage centres its
+ * contents, so while it shrinks the target would drift upward and the arrival
+ * would never quite land; during a transition the contents are pinned to where
+ * they will end up, and only the box around them moves.
  */
 
 const DURATION_MS = 260;
@@ -48,7 +61,12 @@ export function useCompactShell(compact: boolean, ready: boolean) {
   const was = useRef(compact);
   const applied = useRef(false);
   /** The current state's geometry, taken while it is at rest. */
-  const settled = useRef<{ stage: number; bottom: number; chrome: number } | null>(null);
+  const settled = useRef<{
+    stage: number;
+    bottom: number;
+    chrome: number;
+    rects: Record<string, DOMRect>;
+  } | null>(null);
 
   const record = () => {
     const shell = shellRef.current;
@@ -63,6 +81,7 @@ export function useCompactShell(compact: boolean, ready: boolean) {
       // difference rather than added up, so no gap has to be accounted for by
       // hand.
       chrome: shell.offsetHeight - stage.offsetHeight - bottom.offsetHeight,
+      rects: morphRects(shell),
     };
   };
 
@@ -128,7 +147,15 @@ export function useCompactShell(compact: boolean, ready: boolean) {
     // `flex-1` would make flex-basis the stage's main size and ignore the
     // height being animated, so the stage stops growing for the duration.
     stage.style.flex = '0 0 auto';
+
+    // Hold the contents where they will finish, so what the record and the
+    // text are travelling towards does not move while they travel. The stage's
+    // top edge never moves, so its final centring is a padding away.
+    stage.style.justifyContent = 'flex-start';
+    stage.style.paddingTop = `${Math.max(0, (to.stage - naturalHeight(stage)) / 2)}px`;
     pin(from);
+
+    const arriving = morphRects(shell);
 
     // Two frames: one to paint the starting heights, one to change them. Both
     // in a single frame land in the same style recalculation, and the browser
@@ -138,6 +165,7 @@ export function useCompactShell(compact: boolean, ready: boolean) {
         stage.style.transition = `height ${DURATION_MS}ms ${EASING}`;
         bottom.style.transition = `height ${DURATION_MS}ms ${EASING}`;
         pin(to);
+        morph(shell, before.rects, arriving);
       });
     });
 
@@ -148,6 +176,8 @@ export function useCompactShell(compact: boolean, ready: boolean) {
         el.style.transition = '';
       }
       stage.style.flex = '';
+      stage.style.justifyContent = '';
+      stage.style.paddingTop = '';
       // Collapsed, the shell keeps sizing to its content rather than to the
       // window. The two are the same number once the resize lands, but this
       // way round the bar still looks right if the resize does not — and it is
@@ -167,6 +197,70 @@ export function useCompactShell(compact: boolean, ready: boolean) {
   }, [compact, ready]);
 
   return { shellRef, stageRef, trackRef, bottomRef };
+}
+
+/**
+ * Where each travelling piece is right now.
+ *
+ * Text is measured by its glyphs rather than by its box. The title is centred
+ * in a full-width block when the player is open and left-aligned in a flexible
+ * one when it is collapsed, so the boxes share no edge that means anything —
+ * but the first letter is the first letter in both, and lining those up is what
+ * makes the words look like they moved rather than jumped.
+ */
+function travelling(root: HTMLElement): Map<string, HTMLElement> {
+  const found = new Map<string, HTMLElement>();
+  for (const el of root.querySelectorAll<HTMLElement>('[data-morph]')) {
+    const name = el.dataset.morph;
+    // Anything inside a leaving layer is the copy being replaced, not the one
+    // arriving; both are in the tree at once while a collapse runs.
+    if (!name || el.closest('[data-leaving]')) continue;
+    found.set(name, el);
+  }
+  return found;
+}
+
+function morphRects(root: HTMLElement): Record<string, DOMRect> {
+  const rects: Record<string, DOMRect> = {};
+  for (const [name, el] of travelling(root)) {
+    rects[name] = name === 'disc' ? el.getBoundingClientRect() : glyphRect(el);
+  }
+  return rects;
+}
+
+function glyphRect(el: HTMLElement): DOMRect {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const rect = range.getBoundingClientRect();
+  // An empty line has no glyphs to measure; its box will do.
+  return rect.width > 0 ? rect : el.getBoundingClientRect();
+}
+
+/** Play each piece in from where its counterpart was. */
+function morph(
+  root: HTMLElement,
+  leaving: Record<string, DOMRect>,
+  arriving: Record<string, DOMRect>,
+): void {
+  for (const [name, el] of travelling(root)) {
+    const from = leaving[name];
+    const to = arriving[name];
+    if (!from || !to || to.height === 0 || from.height === 0) continue;
+
+    // Scaled by height in both cases: the record is square, and a line of text
+    // scales with its line height, which is what its font size moves.
+    const scale = from.height / to.height;
+    el.animate(
+      [
+        {
+          transformOrigin: 'left top',
+          transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`,
+        },
+        { transformOrigin: 'left top', transform: 'translate(0px, 0px) scale(1)' },
+      ],
+      { duration: DURATION_MS, easing: EASING },
+    );
+  }
 }
 
 /** An element's height as if nothing had been pinned. Never painted. */

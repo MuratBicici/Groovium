@@ -20,14 +20,18 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div className="flex items-center gap-2.5 px-4">
-        <span className="groove-spin shrink-0" data-spinning={isPlaying}>
-          <VinylDisc size={28} coverArtUrl={track?.coverArtUrl} />
+        {/* The `data-morph` wrapper does not spin; see the note in
+            `DiskPlatter` for why that matters to the measurement. */}
+        <span data-morph="disc" className="shrink-0">
+          <span className="groove-spin block" data-spinning={isPlaying}>
+            <VinylDisc size={28} coverArtUrl={track?.coverArtUrl} />
+          </span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-body font-semibold text-cream-50">
+          <span data-morph="title" className="block truncate text-body font-semibold text-cream-50">
             {track?.title ?? t('track.none')}
           </span>
-          <span className="block truncate text-meta text-cream-400">
+          <span data-morph="artist" className="block truncate text-meta text-cream-400">
             {track ? track.artist : t('status.IDLE')}
           </span>
         </span>
@@ -44,11 +48,14 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
       {/* Nothing sits beside the title on purpose: the block is centred, and a
           control next to it pulls the text off-centre. Saving the current track
           lives in the controls row instead. */}
-      <h1 className="mt-1 truncate text-title leading-tight font-semibold text-cream-50">
+      <h1
+        data-morph="title"
+        className="mt-1 truncate text-title leading-tight font-semibold text-cream-50"
+      >
         {track?.title ?? t('track.none')}
       </h1>
 
-      <p className="mt-0.5 truncate text-xs text-cream-400">
+      <p data-morph="artist" className="mt-0.5 truncate text-xs text-cream-400">
         {track ? `${track.artist} — ${track.album}` : t('track.hint')}
       </p>
     </div>

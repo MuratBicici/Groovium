@@ -139,7 +139,11 @@ export default function App() {
               height answers to the track display alone. It stays centred in
               the shrinking stage, which reads as the record being drawn down
               into the bar. */}
+          {/* `data-leaving` while collapsed: the deck and the bar both carry a
+              record, and without this the one on its way out would be animated
+              into place alongside the one arriving. */}
           <div
+            data-leaving={compact ? '' : undefined}
             className={`transition-opacity duration-200 ${
               compact
                 ? 'pointer-events-none absolute inset-0 flex items-center justify-center opacity-0'

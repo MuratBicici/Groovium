@@ -123,7 +123,16 @@ export function DiskPlatter() {
 
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
-      <div ref={dropRef} className="relative" style={{ opacity: awaitingLanding ? 0 : 1 }}>
+      {/* `data-morph` marks what the collapse animation measures. It sits on
+          this wrapper rather than on the spinning element because a rotating
+          square's bounding box grows toward its diagonal, and the measurement
+          would come back up to 1.41x too large depending on the angle. */}
+      <div
+        ref={dropRef}
+        data-morph="disc"
+        className="relative"
+        style={{ opacity: awaitingLanding ? 0 : 1 }}
+      >
         {/* The spin stays on its own element; entrance and exit transforms
             wrap it rather than fighting the keyframe for `transform`. */}
         <div className="groove-platter" data-spinning={isPlaying}>
