@@ -22,7 +22,7 @@ const SWAP_MS = 450;
  * click the platter stays *empty* instead — the disc is still in the air, and
  * the flying clone is the record until it lands.
  */
-export function DiskPlatter() {
+export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
   const isPlaying = useIsPlaying();
   const track = useCurrentTrack();
   const { registerPlatter, didJustLand } = useDiscFlight();
@@ -119,7 +119,11 @@ export function DiskPlatter() {
           shell. Inset rather than filling the wrapper: at the full 168 it left
           an 8px ring of near-black around a 152px record, which with the
           disc's own shadow on top read as a halo rather than as a recess. */}
-      <div className="groove-inset absolute inset-[4px] rounded-full" />
+      <div
+        className={`groove-inset absolute inset-[4px] rounded-full transition-opacity duration-150 ${
+          stowed ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
 
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
@@ -131,7 +135,11 @@ export function DiskPlatter() {
         ref={dropRef}
         data-morph="disc"
         className="relative"
-        style={{ opacity: awaitingLanding ? 0 : 1 }}
+        // No fade when the deck is stowed. The record arriving in the collapsed
+        // bar begins its travel at exactly this size and position, so this one
+        // can go at once and nothing shows the seam — where a fade left a
+        // second record sitting in the old place for the length of it.
+        style={{ opacity: awaitingLanding || stowed ? 0 : 1 }}
       >
         {/* The spin stays on its own element; entrance and exit transforms
             wrap it rather than fighting the keyframe for `transform`. */}
@@ -149,7 +157,7 @@ export function DiskPlatter() {
           Next with a menu open should not throw a disc over it. Keyed by track
           so a rapid second change restarts cleanly instead of sliding the
           outgoing disc back down. */}
-      {ghost && (
+      {ghost && !stowed && (
         <div
           key={ghost.id}
           ref={ghostRef}
@@ -165,7 +173,7 @@ export function DiskPlatter() {
         </div>
       )}
 
-      <Tonearm />
+      <Tonearm stowed={stowed} />
     </div>
   );
 }

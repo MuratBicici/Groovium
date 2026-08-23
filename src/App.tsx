@@ -144,13 +144,16 @@ export default function App() {
               into place alongside the one arriving. */}
           <div
             data-leaving={compact ? '' : undefined}
-            className={`transition-opacity duration-200 ${
+            className={
               compact
-                ? 'pointer-events-none absolute inset-0 flex items-center justify-center opacity-0'
-                : 'opacity-100'
-            }`}
+                ? 'pointer-events-none absolute inset-0 flex items-center justify-center'
+                : undefined
+            }
           >
-            <DiskPlatter />
+            {/* The deck puts itself away rather than being faded out from here:
+                its record has to vanish at once while its well fades and its
+                arm swings clear, and one opacity on the lot cannot do that. */}
+            <DiskPlatter stowed={compact} />
           </div>
           <div ref={trackRef}>
             <TrackDisplay compact={compact} />

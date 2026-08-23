@@ -37,7 +37,15 @@ import {
  * both un-memoised discs underneath it at 4Hz for the sake of a fifth of a
  * degree.
  */
-export function Tonearm() {
+/**
+ * `stowed` swings the whole arm clear of the deck.
+ *
+ * Out fast and in slowly on purpose: lifting an arm off a record is a flick of
+ * the wrist, and setting one down is the careful half of the gesture. The
+ * translate rides on the `<svg>` so it composes with, rather than fights, the
+ * rotation the `<g>` is already carrying.
+ */
+export function Tonearm({ stowed = false }: { stowed?: boolean }) {
   const isPlaying = useIsPlaying();
   const progress = useProgressFraction();
 
@@ -55,7 +63,18 @@ export function Tonearm() {
     <svg
       viewBox={`0 0 ${VIEW} ${VIEW}`}
       className="pointer-events-none absolute"
-      style={{ top: -PAD, left: -PAD, width: VIEW, height: VIEW }}
+      style={{
+        top: -PAD,
+        left: -PAD,
+        width: VIEW,
+        height: VIEW,
+        transform: stowed ? 'translateX(118px)' : 'translateX(0)',
+        transition: prefersReducedMotion()
+          ? 'none'
+          : stowed
+            ? 'transform 170ms cubic-bezier(0.4, 0, 1, 1)'
+            : 'transform 360ms cubic-bezier(0.16, 1, 0.3, 1) 60ms',
+      }}
       aria-hidden="true"
     >
       <g
