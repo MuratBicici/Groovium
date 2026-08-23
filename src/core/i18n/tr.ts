@@ -159,7 +159,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.close': 'Ayarları kapat',
   'settings.appearance': 'Görünüm',
   'settings.theme': 'Tema',
-  'settings.custom': 'Kendi temam',
+  'settings.custom': 'Özel',
   'settings.customPrimary': 'Yüzey',
   'settings.customSecondary': 'Vurgu',
   'settings.customWarning':
