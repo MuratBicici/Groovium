@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -105,6 +106,37 @@ struct ImportProgress {
 
 /// Lets the frontend stop a long copy. Checked before each file.
 #[derive(Default)]
+/// The files the picker has offered during this run.
+///
+/// `library_import` is handed a list of paths by the webview, which means the
+/// page names the files Rust will copy. That round trip is what makes the
+/// confirmation step possible — the summary goes up, a yes comes back — but it
+/// leaves Rust unable to tell a path someone chose in a dialog from one the
+/// page made up. Anything that ever reaches script execution in the webview
+/// could otherwise copy a file from anywhere on disk into the library, where
+/// the asset protocol will happily serve it back.
+///
+/// Remembering what was offered closes that loop: a path is importable only if
+/// it came out of a dialog. Paths accumulate rather than replacing each other,
+/// so a summary someone left sitting on screen while picking again is still
+/// good.
+pub struct PickedPaths(Mutex<HashSet<PathBuf>>);
+
+impl PickedPaths {
+    fn offer(&self, paths: &[PathBuf]) {
+        let mut offered = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        offered.extend(paths.iter().cloned());
+    }
+
+    fn was_offered(&self, path: &Path) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(path)
+    }
+}
+
+#[derive(Default)]
 pub struct ImportControl(AtomicBool);
 
 impl ImportControl {
@@ -119,6 +151,16 @@ impl ImportControl {
     }
 }
 
+/// A single path component, with no directory in it and no way out of one.
+fn is_bare_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.contains('\\')
+        && Path::new(name).components().count() == 1
+        && name != ".."
+        && name != "."
+}
+
 // --- Storage primitives, independent of Tauri so they can be tested ---------
 
 /// The directory holding our copies of imported audio.
@@ -131,8 +173,16 @@ impl Store {
         Self { root }
     }
 
-    pub fn path_of(&self, stored_file: &str) -> PathBuf {
-        self.root.join(stored_file)
+    /// Where a stored file lives, if its name is one this store could have
+    /// written.
+    ///
+    /// `Path::join` replaces the base outright when handed an absolute path,
+    /// and walks up for `..`. These names are read back from `library.json`,
+    /// which is an ordinary file that nothing stops anyone editing — so
+    /// without this check a doctored entry could aim `discard` at any file the
+    /// user is able to delete, or aim a cover read at any file they can read.
+    pub fn path_of(&self, stored_file: &str) -> Option<PathBuf> {
+        is_bare_name(stored_file).then(|| self.root.join(stored_file))
     }
 
     /// Copy a file in and return its name in the store.
@@ -167,7 +217,9 @@ impl Store {
     }
 
     pub fn discard(&self, stored_file: &str) -> Result<(), String> {
-        let path = self.path_of(stored_file);
+        let Some(path) = self.path_of(stored_file) else {
+            return Err(format!("{stored_file} is not a name this store wrote."));
+        };
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             // Already gone is the outcome we wanted.
@@ -226,7 +278,12 @@ fn backfill_covers(tracks: &mut [LibraryTrack], store: &Store) -> bool {
         if track.cover_file.is_some() || !track.has_cover_art {
             continue;
         }
-        match metadata::extract_picture_to(&store.path_of(&track.stored_file), &store.root, &track.id) {
+        // A name this store could not have written is a tampered record, not
+        // a track with artwork waiting to be found.
+        let extracted = store
+            .path_of(&track.stored_file)
+            .and_then(|copy| metadata::extract_picture_to(&copy, &store.root, &track.id));
+        match extracted {
             Some(name) => track.cover_file = Some(name),
             // Our copy is the source of truth; nothing extractable means the
             // flag was optimistic. Clearing it stops the retry every launch.
@@ -294,7 +351,10 @@ pub fn library_load(app: AppHandle) -> Result<Vec<LibraryTrack>, String> {
 
 /// Ask for files and report what importing them would involve.
 #[tauri::command(async)]
-pub fn library_pick_files(app: AppHandle) -> Result<Option<ScanSummary>, String> {
+pub fn library_pick_files(
+    app: AppHandle,
+    picked: State<'_, PickedPaths>,
+) -> Result<Option<ScanSummary>, String> {
     let selection = app
         .dialog()
         .file()
@@ -309,6 +369,7 @@ pub fn library_pick_files(app: AppHandle) -> Result<Option<ScanSummary>, String>
         .filter(|p| is_audio_file(p))
         .collect();
 
+    picked.offer(&paths);
     Ok(Some(summarize(&app, paths)?))
 }
 
@@ -317,7 +378,10 @@ pub fn library_pick_files(app: AppHandle) -> Result<Option<ScanSummary>, String>
 /// Separate from the copy so the frontend can say "240 files, 1.8 GB" and wait
 /// for a yes. Duplicating an archive silently would be rude.
 #[tauri::command(async)]
-pub fn library_pick_folder(app: AppHandle) -> Result<Option<ScanSummary>, String> {
+pub fn library_pick_folder(
+    app: AppHandle,
+    picked: State<'_, PickedPaths>,
+) -> Result<Option<ScanSummary>, String> {
     let Some(folder) = app
         .dialog()
         .file()
@@ -340,6 +404,7 @@ pub fn library_pick_folder(app: AppHandle) -> Result<Option<ScanSummary>, String
         .map(|e| e.path().to_path_buf())
         .collect();
 
+    picked.offer(&paths);
     Ok(Some(summarize(&app, paths)?))
 }
 
@@ -381,8 +446,24 @@ pub fn library_import(
     app: AppHandle,
     paths: Vec<String>,
     control: State<'_, ImportControl>,
+    picked: State<'_, PickedPaths>,
 ) -> Result<Vec<LibraryTrack>, String> {
     control.reset();
+
+    // A path that never came out of a dialog is not a file anyone asked for.
+    // Refused as a whole rather than quietly filtered, because in normal use
+    // this cannot happen: the frontend hands back exactly the list it was
+    // given. The count is reported and the paths are not, so nothing invented
+    // gets echoed into the interface.
+    let uninvited = paths
+        .iter()
+        .filter(|raw| !picked.was_offered(Path::new(raw)))
+        .count();
+    if uninvited > 0 {
+        return Err(format!(
+            "{uninvited} of these files were never chosen in a file dialog, so nothing was imported."
+        ));
+    }
 
     let store = store(&app)?;
     let library_path = library_path(&app)?;
@@ -430,10 +511,16 @@ pub fn library_import(
         // original disappears a moment later — but the filename fallback has to
         // come from the source. The copy is named after a generated id, and an
         // untagged file named after it would show a random string as its title.
-        let scanned = metadata::read_track_named(&store.path_of(&stored_file), &source);
+        // `take_in` generated this name, so it is always one the store could
+        // have written; the check is here because `path_of` promises it rather
+        // than because this call site is in doubt.
+        let Some(copy) = store.path_of(&stored_file) else {
+            continue;
+        };
+        let scanned = metadata::read_track_named(&copy, &source);
         // Artwork comes out now, while the copy is fresh — the sidecar is what
         // the webview renders, via the store directory's asset grant.
-        let cover_file = metadata::extract_picture_to(&store.path_of(&stored_file), &store.root, &id);
+        let cover_file = metadata::extract_picture_to(&copy, &store.root, &id);
         let track = LibraryTrack {
             id,
             stored_file,
@@ -559,9 +646,33 @@ mod tests {
 
         assert!(!source.exists());
         assert_eq!(
-            fs::read(store.path_of(&stored)).expect("stored copy readable"),
+            fs::read(store.path_of(&stored).expect("a bare name")).expect("stored copy readable"),
             b"audio-bytes"
         );
+    }
+
+    #[test]
+    fn a_stored_name_that_is_a_path_is_refused() {
+        // `library.json` is an ordinary file on disk. A doctored entry must not
+        // be able to aim the store at something outside itself — `join` swaps
+        // the base out entirely for an absolute path, and honours `..`.
+        let dir = TempDir::new();
+        let store = Store::new(dir.join("store"));
+
+        for hostile in [
+            "../../secrets.txt",
+            r"..\..\secrets.txt",
+            "/etc/passwd",
+            r"C:\Windows\System32\drivers\etc\hosts",
+            "sub/dir.mp3",
+            "..",
+            "",
+        ] {
+            assert!(store.path_of(hostile).is_none(), "{hostile} is not a bare name");
+            assert!(store.discard(hostile).is_err(), "{hostile} cannot be deleted");
+        }
+
+        assert!(store.path_of("abc123.mp3").is_some());
     }
 
     #[test]
@@ -579,10 +690,10 @@ mod tests {
         let source = write_source(&dir, "song.mp3", b"x");
 
         let stored = store.take_in(&source, "id2").unwrap();
-        assert!(store.path_of(&stored).exists());
+        assert!(store.path_of(&stored).expect("a bare name").exists());
 
         store.discard(&stored).expect("discard");
-        assert!(!store.path_of(&stored).exists());
+        assert!(!store.path_of(&stored).expect("a bare name").exists());
     }
 
     #[test]
@@ -601,8 +712,8 @@ mod tests {
         assert!(store.take_in(&missing, "id3").is_err());
 
         // Neither the partial nor the final name should be lying around.
-        assert!(!store.path_of("id3.partial").exists());
-        assert!(!store.path_of("id3.mp3").exists());
+        assert!(!store.path_of("id3.partial").expect("a bare name").exists());
+        assert!(!store.path_of("id3.mp3").expect("a bare name").exists());
     }
 
     #[test]
@@ -653,7 +764,7 @@ mod tests {
         let dir = TempDir::new();
         let store = Store::new(dir.join("store"));
         fs::create_dir_all(&store.root).unwrap();
-        fs::write(store.path_of("a.mp3"), b"not audio").unwrap();
+        fs::write(store.path_of("a.mp3").expect("a bare name"), b"not audio").unwrap();
 
         let mut tracks = vec![LibraryTrack {
             id: "a".into(),

@@ -54,25 +54,36 @@ export const EXPANDED_HEIGHT = 480;
  * retries with the flag lifted for the duration of the call. The check costs
  * one IPC round trip on a gesture that happens by hand, and it means the
  * uncertainty is answered at runtime instead of assumed.
+ *
+ * Every path is caught. Each of these calls is gated by a capability in
+ * `capabilities/default.json`, and a missing one is rejected rather than
+ * ignored — an uncaught rejection here would surface as an unhandled promise
+ * from a `void` call site with nothing to catch it, over a window that is
+ * merely the wrong height.
  */
 export async function setWindowHeight(height: number): Promise<void> {
   if (!isTauri()) return;
 
   const rounded = Math.round(height);
-  const { LogicalSize } = await import('@tauri-apps/api/dpi');
-  const window = await currentWindow();
 
-  await window.setSize(new LogicalSize(WIDTH, rounded));
-
-  const scale = await window.scaleFactor();
-  const applied = (await window.innerSize()).toLogical(scale);
-  if (Math.abs(applied.height - rounded) <= 1) return;
-
-  await window.setResizable(true);
   try {
+    const { LogicalSize } = await import('@tauri-apps/api/dpi');
+    const window = await currentWindow();
+
     await window.setSize(new LogicalSize(WIDTH, rounded));
-  } finally {
-    await window.setResizable(false);
+
+    const scale = await window.scaleFactor();
+    const applied = (await window.innerSize()).toLogical(scale);
+    if (Math.abs(applied.height - rounded) <= 1) return;
+
+    await window.setResizable(true);
+    try {
+      await window.setSize(new LogicalSize(WIDTH, rounded));
+    } finally {
+      await window.setResizable(false);
+    }
+  } catch (err) {
+    console.warn('[window] could not resize', err);
   }
 }
 

@@ -52,6 +52,18 @@ when the backlog is empty and the session is back under direct control.
       worse version of something already installed. Whether WebView2 opens the
       Windows picker, and whether that dialog behaves on a frameless
       always-on-top window, has only been tested in Chrome.
+- [ ] **The window permissions actually cover the resize.** `set-size`,
+      `set-resizable`, `inner-size` and `scale-factor` were missing from
+      `capabilities/default.json` until the security review found them, which
+      means compact mode's resize was being denied outright in the packaged app
+      — the browser preview has no capability system, so it never showed. They
+      are there now and `setWindowHeight` no longer throws when a call is
+      refused, but only the real app can confirm the grant is the right one.
+- [ ] **Importing still works end to end.** `library_import` now refuses any
+      path that did not come out of a file dialog. Picking files, picking a
+      folder, and confirming after leaving the dialog open a while should all
+      behave exactly as before; if anything now says files "were never chosen
+      in a file dialog", the gate is too tight and wants looking at.
 - [ ] **The tray menu changes language.** Rust holds no dictionary; it rebuilds
       the menu from strings handed over by the webview. Switch to Turkish, right
       click the tray icon, and check all five entries — Show / Previous /
@@ -88,6 +100,52 @@ when the backlog is empty and the session is back under direct control.
 - [ ] **Turkish throughout.** No panel overflows 340px and long titles truncate,
       but the wording itself has had no native reading. The setup panels in
       particular are long prose translated in one pass.
+
+## Security review, 2026-08-23
+
+Ran over the whole app rather than a diff. What it found is fixed; what it
+cleared is recorded so it does not get re-reviewed from scratch.
+
+**Fixed**
+
+- Missing window capabilities (above) — found while mapping the IPC surface.
+- `library_import` accepted any path the webview named. The picker runs in
+  Rust and hands paths up, the page hands them back, and Rust could not tell
+  those apart from invented ones — so anything reaching script execution could
+  have copied a file from anywhere into the library, where the asset protocol
+  serves it back. Rust now remembers what it offered and accepts nothing else.
+  Defence in depth: there is no known way in, the CSP is tight and there is no
+  `innerHTML` anywhere.
+- A stored file name from `library.json` was joined onto the store directory
+  without checking it was a name. `join` swaps the base out for an absolute
+  path and honours `..`, so a hand-edited record could have aimed a delete at
+  any file the user can delete. Now refused, with a test.
+
+**Checked and clean**
+
+- `npm audit`: 0 vulnerabilities. `cargo audit`: 0 vulnerabilities, 18
+  warnings — all `unmaintained` or `unsound`, and every one of them
+  (`gtk`, `gdk`, `atk`, `glib`) is absent from the Windows dependency graph,
+  which was confirmed rather than assumed.
+- The OAuth loopback binds `127.0.0.1` rather than all interfaces, checks
+  `state` before reading anything else from the query, and times out.
+- Last.fm goes over HTTPS with `Url::parse_with_params`, so no parameter can
+  break out of its encoding.
+- No secret appears in any log line; the callback page escapes both the title
+  and the message it echoes.
+- The asset protocol's static scope is empty on purpose and granted at runtime
+  to exactly the library directory. That is the right shape and was mistaken
+  for a finding at first.
+- `library_remove` looks its id up rather than turning it into a path.
+- No `innerHTML`, `eval` or `dangerouslySetInnerHTML` anywhere in the webview.
+
+**Accepted, not fixed**
+
+- `style-src 'unsafe-inline'` is required by the inline styles the animations
+  depend on. It weakens the CSP against an XSS that does not currently have a
+  way in.
+- `macOSPrivateApi: true` is set for window transparency and is irrelevant to a
+  Windows-only build, but it would matter if this ever shipped on macOS.
 
 ## Notes
 

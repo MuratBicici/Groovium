@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the Groovium widget window. Deliberately narrow: only what the custom titlebar needs. The file picker is not here on purpose — it runs in Rust (src/files.rs), so the webview has no dialog permission at all.",
+  "description": "Permissions for the Groovium widget window. Deliberately narrow: only what the custom titlebar and the collapse need. The file picker is not here on purpose — it runs in Rust (src/library.rs), so the webview has no dialog permission at all. set-size and set-resizable are for compact mode, which shrinks the window to its controls; without them the resize is denied and the bar is drawn inside a full-height window.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,6 +9,10 @@
     "core:window:allow-minimize",
     "core:window:allow-hide",
     "core:window:allow-set-always-on-top",
-    "core:window:allow-is-always-on-top"
+    "core:window:allow-is-always-on-top",
+    "core:window:allow-set-size",
+    "core:window:allow-inner-size",
+    "core:window:allow-scale-factor",
+    "core:window:allow-set-resizable"
   ]
 }

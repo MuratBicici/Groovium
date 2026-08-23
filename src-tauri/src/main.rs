@@ -38,6 +38,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(library::ImportControl::default())
+        .manage(library::PickedPaths::default())
         .manage(spotify::tokens::AccessTokenCache::default())
         .setup(|app| {
             tray::create(app.handle())?;
