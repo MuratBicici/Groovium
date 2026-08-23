@@ -107,7 +107,7 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
         // arriving from everywhere, which is what made the edge read as drawn
         // rather than lit. `DiscLight` puts it on the arc facing the light.
         boxShadow: detailed
-          ? '0 4px 12px rgba(0,0,0,0.5), inset 0 0 26px rgba(0,0,0,0.45)'
+          ? '0 2px 6px rgba(0,0,0,0.45), inset 0 0 26px rgba(0,0,0,0.45)'
           : '0 1px 2px rgba(0,0,0,0.5), inset 0 0 4px rgba(0,0,0,0.7)',
       }}
     >

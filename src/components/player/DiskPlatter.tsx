@@ -115,8 +115,11 @@ export function DiskPlatter() {
       ref={registerPlatter}
       className="relative mx-auto flex h-[168px] w-[168px] items-center justify-center"
     >
-      {/* Well the platter sits in, so the disk reads as recessed into the shell. */}
-      <div className="groove-inset absolute inset-0 rounded-full" />
+      {/* Well the platter sits in, so the disk reads as recessed into the
+          shell. Inset rather than filling the wrapper: at the full 168 it left
+          an 8px ring of near-black around a 152px record, which with the
+          disc's own shadow on top read as a halo rather than as a recess. */}
+      <div className="groove-inset absolute inset-[4px] rounded-full" />
 
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
