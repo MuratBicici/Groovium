@@ -70,11 +70,13 @@ The rule that keeps this modular: **components never import a provider**. They r
 
 ## Status
 
-Working: a managed local library the app owns copies of, real tags and cover art, folder scanning, playlists that mix local and Spotify tracks, Spotify sign-in and single-track search via OAuth + the Web Playback SDK, infinite play backed by Last.fm, tray icon, global media keys, always-on-top and remembered window position. Not built: YouTube Music, Apple Music, and the real visual design.
+Working: a managed local library the app owns copies of, real tags and cover art, folder scanning, playlists that mix local and Spotify tracks, Spotify sign-in and single-track search via OAuth + the Web Playback SDK, infinite play backed by Last.fm, tray icon, global media keys, always-on-top and remembered window position. Also the deck itself — a record with an anti-aliased groove field, a fixed light the grooves turn under, and a tonearm whose angle is solved from the groove it should be tracking — plus five palettes and a sixth built from two colours of your own, English and Turkish, a collapsed mode that takes the window down to its controls, and a settings panel. Not built: YouTube Music and Apple Music.
 
 `AudioProvider`'s method list has not changed since it was written. Spotify — a different transport, auth model and event shape — implements the same interface as an `HTMLAudioElement`, and one playback context can mix both sources because each track says which provider owns it. The only widening since has been a `trackId` on the `ended` event, to tell a genuine end from a late one.
 
-The current UI is a placeholder, kept deliberately plain and meant to be replaced wholesale — see *Replacing the UI* below. The disc rendering and its animations (`VinylDisc`, `DiscFlight`) and the layer table in `App.tsx` are the parts worth carrying over.
+The interface used to be a deliberate placeholder and is not one any more. It is not frozen either — *Replacing the UI* below still describes the contract a different one would code against, because the boundary that made replacing it cheap is worth keeping whether or not anybody uses it.
+
+Next after 1.0: **character theme packs** — themes where art is part of the design, installed separately, made by whoever wants to make one. The app will carry a format and a loader and no art of its own, for reasons that are legal rather than technical. The design is written down in [`docs/character-themes.md`](docs/character-themes.md) and the format's draft is in [`docs/theme-packs.md`](docs/theme-packs.md); neither is implemented and the format is not frozen, which is the point — it wants feedback from people who would write packs against it before it becomes a promise.
 
 ### Known caveats
 
@@ -162,12 +164,12 @@ await invoke('audio_backend_available');
 
 ## Replacing the UI
 
-Everything in `src/components/` is disposable. The contract a new UI codes against is:
+Everything in `src/components/` can be replaced without touching the core. That was the original plan for the placeholder interface; the interface is real now, so this is a boundary rather than an intention — but the boundary held, and it is what would make a second one cheap. The contract a new UI codes against is:
 
 - **`src/core/store/selectors.ts`** — narrow hooks (`useIsPlaying`, `useProgressFraction`, `useCurrentTrack`, …). Use these rather than reading the whole store, so a progress tick re-renders one component instead of the tree.
 - **`usePlayerStore` actions** — `togglePlayPause`, `next`, `previous`, `seek`, `setVolume`, `playFrom(contextId, index)`, `playSingle(track)`, `toggleStation`, …
 
-Three details in the placeholder components are worth carrying over, because each encodes a bug that was already hit once:
+Three details are worth carrying over into anything that replaces these, because each encodes a bug that was already hit once:
 
 1. `WindowChrome.tsx` — child buttons must opt out of `data-tauri-drag-region`, or they stop being clickable and become drag handles.
 2. `ProgressBar.tsx` — the `scrubMs` guard ignores incoming progress events while the user drags, otherwise every provider tick yanks the handle back.

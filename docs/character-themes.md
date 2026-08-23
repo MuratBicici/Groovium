@@ -1,10 +1,42 @@
 # Character themes — a design note
 
-Not built. This is a record of a design conversation, kept so it does not have
-to happen twice.
+Not built, and **not in 1.0** — see *When* below. This is a record of a design
+conversation, kept so it does not have to happen twice.
 
 The want: themes where a game character is **part of the design** rather than a
 colour scheme, installed **separately** from the app.
+
+---
+
+## When: after 1.0, not in it
+
+Asked directly: should this be in 1.0.0, so people can make themes the moment
+the repo is public? The answer is no, and the reason is the other two things
+1.0 carries — an installer and in-app updates.
+
+- **An updater is the one thing an update cannot fix.** Ship it broken and
+  everyone is stranded on the version they installed, with no remedy but
+  asking them to download again by hand. It deserves a release's whole
+  attention, and as of this decision it is entirely unbuilt: no plugin, no
+  signing key, no endpoint.
+- **A working updater inverts the cost of waiting.** The usual argument for
+  cramming a feature into 1.0 is that later versions do not reach people.
+  Once updates work, 1.1 reaches everyone by itself, so waiting costs almost
+  nothing.
+- **A format is a contract, and contracts want users first.** Freezing the
+  pack format in 1.0 freezes it before a single real pack has been written
+  against it. The first ten packs will show what is wrong with it. Changing it
+  today breaks nobody's work; changing it after release breaks other people's.
+- **The loader alone does not deliver the ask.** "People can make themes"
+  means loader *and* editor, and the editor is the largest single piece
+  described in this note.
+- **Security timing.** 1.0 is when the app first meets strangers. Introducing
+  its largest new attack surface — archive extraction, third-party art, asset
+  scope — in that same release, before the existing surface has had any
+  exposure, is the wrong order.
+
+Worth saying plainly: people can already make themes. The custom palette
+shipped before this decision. What is missing is art, not themability.
 
 ---
 

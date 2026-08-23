@@ -152,7 +152,15 @@ cleared is recorded so it does not get re-reviewed from scratch.
 - `docs/character-themes.md` — a design conversation about game-character theme
   packs and a tool for making them. Nothing was built; the note exists so the
   reasoning does not have to be reconstructed, particularly the part about why
-  the app must carry no art of its own.
+  the app must carry no art of its own. It now also records the decision to
+  hold the feature until 1.1.
+- `docs/theme-packs.md` — the format's draft, published unimplemented and
+  unfrozen so people who would write packs can say what is wrong with it before
+  it becomes a promise.
+- `README.md`'s Status section said the visual design was not built and the
+  interface was a placeholder meant to be thrown away. Both stopped being true
+  during this session. Corrected — it is the section anyone opening the repo
+  reads first.
 
 ## Notes
 
