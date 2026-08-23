@@ -28,6 +28,12 @@ import { EXPANDED_HEIGHT, setWindowHeight } from '@/platform/window';
  * of this is information the tree renders from: it is one element's height
  * moving to another over a quarter of a second, and re-rendering the player
  * four hundred times to express that would be the wrong instrument.
+ *
+ * The heights it animates *from* are recorded while each state is settled,
+ * rather than read when the toggle flips. A layout effect runs after React has
+ * already put the new layout in the DOM, so measuring there gives the height
+ * being animated to — and an animation from a number to itself is a jump. That
+ * is exactly what shipped the first time.
  */
 
 const DURATION_MS = 260;
@@ -41,6 +47,24 @@ export function useCompactShell(compact: boolean, ready: boolean) {
 
   const was = useRef(compact);
   const applied = useRef(false);
+  /** The current state's geometry, taken while it is at rest. */
+  const settled = useRef<{ stage: number; bottom: number; chrome: number } | null>(null);
+
+  const record = () => {
+    const shell = shellRef.current;
+    const stage = stageRef.current;
+    const bottom = bottomRef.current;
+    if (!shell || !stage || !bottom) return;
+    settled.current = {
+      stage: stage.offsetHeight,
+      bottom: bottom.offsetHeight,
+      // Everything that never changes height: the header, the progress bar,
+      // the controls, the gaps between them and the padding. Taken as a
+      // difference rather than added up, so no gap has to be accounted for by
+      // hand.
+      chrome: shell.offsetHeight - stage.offsetHeight - bottom.offsetHeight,
+    };
+  };
 
   useLayoutEffect(() => {
     const shell = shellRef.current;
@@ -60,18 +84,18 @@ export function useCompactShell(compact: boolean, ready: boolean) {
         shell.style.height = 'auto';
         void setWindowHeight(shell.offsetHeight);
       }
+      record();
       return;
     }
 
     if (was.current === compact) return;
     was.current = compact;
 
-    // Everything that never changes height: the header, the progress bar, the
-    // controls, the gaps between them and the padding. Taken as a difference
-    // rather than added up, so no gap has to be accounted for by hand.
-    const chrome = shell.offsetHeight - stage.offsetHeight - bottom.offsetHeight;
+    const before = settled.current;
+    if (!before) return;
+    const chrome = before.chrome;
 
-    const from = { stage: stage.offsetHeight, bottom: bottom.offsetHeight };
+    const from = { stage: before.stage, bottom: before.bottom };
     const to = compact
       ? // The track display is content-sized, so this is its true collapsed
         // height even though the stage around it is still pinned open.
@@ -85,7 +109,11 @@ export function useCompactShell(compact: boolean, ready: boolean) {
     if (!compact) void setWindowHeight(EXPANDED_HEIGHT);
 
     if (prefersReducedMotion()) {
-      if (compact) void setWindowHeight(chrome + to.stage + to.bottom);
+      if (compact) {
+        shell.style.height = 'auto';
+        void setWindowHeight(chrome + to.stage + to.bottom);
+      }
+      record();
       return;
     }
 
@@ -129,6 +157,7 @@ export function useCompactShell(compact: boolean, ready: boolean) {
       // Measured off the settled shell rather than predicted, so the window
       // ends up exactly as tall as what it is showing.
       if (compact && shellRef.current) void setWindowHeight(shellRef.current.offsetHeight);
+      record();
     }, DURATION_MS + 40);
 
     return () => {
