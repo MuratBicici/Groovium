@@ -167,7 +167,7 @@ export const en = {
   'settings.customPrimary': 'Surface',
   'settings.customSecondary': 'Accent',
   'settings.customWarning':
-    'Two colours of your choosing cannot be checked for legibility — text may end up hard to read against them. The palettes above were each measured.',
+    'Contrast ratios cannot be guaranteed for custom color combinations. All preset palettes are calibrated for optimal legibility.',
   'settings.language': 'Language',
   'settings.behaviour': 'Behaviour',
   'settings.reduceMotion': 'Reduce motion',

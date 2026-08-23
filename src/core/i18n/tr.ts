@@ -163,7 +163,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.customPrimary': 'Yüzey',
   'settings.customSecondary': 'Vurgu',
   'settings.customWarning':
-    'Kendi seçtiğiniz iki renk okunabilirlik açısından denetlenemez — metin bu renklerin üzerinde zor okunur hale gelebilir. Yukarıdaki paletlerin her biri ölçüldü.',
+    'Özel renk kombinasyonlarında kontrast oranları garanti edilemez. Ön tanımlı paletlerin tamamı optimum okunabilirlik için kalibre edilmiştir.',
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',
