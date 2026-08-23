@@ -12,6 +12,13 @@
  * family a colour belongs to; "Verdigris" is a particular colour with a
  * particular history, which is the difference between a label and a name.
  * Brands were avoided on purpose — the obvious ones here are trademarks.
+ *
+ * Sakura is the one that is not a pigment, and it is cherry blossom at night
+ * rather than in daylight: every palette here is dark, because the shadows, the
+ * recessed well and the light on the record are all built against a dark
+ * ground. A pale pink shell would need the whole deck relit, not a new set of
+ * variables. Deep plum with blossom on it is the same colour at the hour this
+ * app is usually open.
  */
 
 export interface Theme {
@@ -34,6 +41,7 @@ export const THEMES: readonly Theme[] = [
   { id: 'prussian-blue', name: 'Prussian Blue', swatch: ['#1b2740', '#c9b171'] },
   { id: 'oxblood', name: 'Oxblood', swatch: ['#341c1e', '#b8834f'] },
   { id: 'verdigris', name: 'Verdigris', swatch: ['#1d2e2a', '#9fbfa8'] },
+  { id: 'sakura', name: 'Sakura', swatch: ['#2e2136', '#e29ab1'] },
 ];
 
 export function isThemeId(value: unknown): value is string {

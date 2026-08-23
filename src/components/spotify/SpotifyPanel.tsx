@@ -99,7 +99,13 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        {/* A brand and, once connected, someone's name. Neither is a Turkish
+            word, and uppercasing under Turkish rules turned "Spotify" into
+            "SPOTİFY". */}
+        <span
+          lang="en"
+          className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase"
+        >
           {stage === 'connected' && account
             ? t('spotify.heading', { name: account.displayName })
             : t('panel.spotify')}

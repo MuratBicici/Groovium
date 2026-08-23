@@ -65,8 +65,13 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
 
       <Step number={1} title={t('setup.step1')}>
         <p className="text-cream-400">{t('setup.step1Body')}</p>
+        {/* `lang="en"` for the brand inside the label: uppercasing it under
+            Turkish rules gives "SPOTİFY". Safe for the rest of the sentence
+            only because it contains no Turkish i — see the note on the string
+            in `tr.ts`, which is where that has to stay true. */}
         <button
           type="button"
+          lang="en"
           onClick={() => void openDashboard()}
           className="mt-1 rounded-full bg-shell-700 px-2.5 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
         >

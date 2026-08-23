@@ -95,6 +95,23 @@
   --sheen: 255 243 236;
 }
 
+:root[data-theme='sakura'] {
+  --color-shell-900: #16101a;
+  --color-shell-800: #201826;
+  --color-shell-700: #2e2136;
+  --color-shell-600: #45324f;
+
+  --color-brass-400: #f0b9cb;
+  --color-brass-500: #e29ab1;
+  --color-brass-600: #c07691;
+
+  --color-cream-50: #f7edf1;
+  --color-cream-200: #e0cdd6;
+  --color-cream-400: #ab90a0;
+
+  --sheen: 255 240 246;
+}
+
 :root[data-theme='verdigris'] {
   --color-shell-900: #0c1614;
   --color-shell-800: #14201d;

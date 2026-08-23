@@ -35,7 +35,12 @@ export function WindowChrome() {
       data-tauri-drag-region
       className="flex h-8 shrink-0 items-center justify-between px-3"
     >
+      {/* `lang` because uppercasing is language-sensitive and this is a name,
+          not a word. In a Turkish document a lowercase i capitalises to İ, so
+          the wordmark came out "GROOVİUM" — correct for Turkish, wrong for a
+          product that is called the same thing everywhere. */}
       <span
+        lang="en"
         data-tauri-drag-region
         className="text-meta font-semibold tracking-[0.22em] text-brass-400/80 uppercase"
       >

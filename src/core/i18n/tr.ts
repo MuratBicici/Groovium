@@ -118,6 +118,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Spotify her kurulumun kendi uygulamasını kaydetmesini ister. Bu tek seferlik bir işlemdir.',
   'setup.step1': 'Bir uygulama oluşturun',
   'setup.step1Body': 'Herhangi bir ad ve açıklama olur.',
+  // Rendered inside a `lang="en"` button, because uppercasing "Spotify" under
+  // Turkish rules gives "SPOTİFY". That means no Turkish ı/i may appear here
+  // either — it would capitalise by English rules and come out wrong.
   'setup.openDashboard': 'Spotify Dashboard’u aç ↗',
   'setup.step2': 'Bu yönlendirme adresini ekleyin',
   'setup.step2Body': 'Sonunda eğik çizgi olmadan, birebir aynı olmalı.',
