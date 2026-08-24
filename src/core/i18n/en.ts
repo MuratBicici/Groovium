@@ -184,6 +184,22 @@ export const en = {
   'settings.customSecondary': 'Accent',
   'settings.customWarning':
     'Contrast ratios cannot be guaranteed for custom color combinations. All preset palettes are calibrated for optimal legibility.',
+  'settings.about': 'About',
+  'settings.version': 'Version {version}',
+
+  'update.waiting': 'An update is waiting',
+  'update.check': 'Check for updates',
+  'update.checking': 'Checking…',
+  'update.upToDate': 'Up to date.',
+  'update.available': 'Version {version} is available.',
+  'update.download': 'Download',
+  'update.downloading': 'Downloading… {percent}%',
+  'update.downloadingUnknown': 'Downloading…',
+  'update.ready': 'Installed. It takes effect the next time Groovium starts.',
+  'update.restart': 'Restart now',
+  'update.failed': 'Could not update: {message}',
+  'update.tryAgain': 'Try again',
+
   'settings.language': 'Language',
   'settings.behaviour': 'Behaviour',
   'settings.reduceMotion': 'Reduce motion',

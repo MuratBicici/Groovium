@@ -41,6 +41,14 @@ interface PanelButtonProps {
   open: boolean;
   onToggle: () => void;
   controls: string;
+  /**
+   * A mark saying there is something inside worth opening for.
+   *
+   * A dot rather than a count or a word: this row is icon-only because four
+   * buttons and a volume knob are most of a 340px window, and anything with
+   * text in it would have to resize when the language changes.
+   */
+  badge?: string | undefined;
 }
 
 /**
@@ -50,24 +58,36 @@ interface PanelButtonProps {
  * tooltip carries the name — which also means the row does not resize when the
  * language changes, since none of these labels are drawn.
  */
-export function PanelButton({ panel, open, onToggle, controls }: PanelButtonProps) {
+export function PanelButton({ panel, open, onToggle, controls, badge }: PanelButtonProps) {
   const t = useT();
   const name = t(`panel.${panel}`);
 
   return (
     <button
       type="button"
-      aria-label={open ? t('panel.close', { name }) : t('panel.open', { name })}
+      // The badge joins the label rather than being drawn and left unsaid: a
+      // dot is not something a screen reader can report on its own.
+      aria-label={`${open ? t('panel.close', { name }) : t('panel.open', { name })}${
+        badge ? ` — ${badge}` : ''
+      }`}
       aria-expanded={open}
       aria-controls={controls}
-      title={name}
+      title={badge ? `${name} — ${badge}` : name}
       onClick={onToggle}
-      className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+      className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
         open
           ? 'bg-brass-600 text-shell-900'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
       }`}
     >
+      {badge && (
+        <span
+          aria-hidden="true"
+          // Ringed in the shell's own colour so it reads as sitting on top of
+          // the button rather than as part of its edge.
+          className="absolute -top-px -right-px h-2 w-2 rounded-full bg-brass-400 ring-2 ring-shell-900"
+        />
+      )}
       <svg
         viewBox="0 0 24 24"
         className="h-3.5 w-3.5"

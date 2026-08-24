@@ -183,7 +183,7 @@ Two workflows. `check.yml` runs types, lint, tests, the frontend build and
 1.0 targets, because Spotify playback needs Widevine and only WebView2 has it.
 
 `release.yml` fires on a `v*` tag and drafts a GitHub release with the NSIS
-installer. It refuses to build if the tag and the three manifests disagree
+installer and the updater manifest. It refuses to build if the tag and the three manifests disagree
 about the version, since `package.json`, `Cargo.toml` and `tauri.conf.json`
 each carry it and the Cargo one also reaches Last.fm in the `User-Agent`.
 
@@ -192,20 +192,71 @@ each carry it and the Cargo one also reaches Last.fm in the `User-Agent`.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-### Code signing is not set up, and that is visible to users
+### The installer is a per-user wizard
+
+NSIS, in `installMode: currentUser` — the app lands in
+`%LOCALAPPDATA%Groovium` and **no administrator prompt appears**. That is
+Tauri's default for NSIS and it is written out in `tauri.conf.json` anyway:
+where an installer puts things, and whether it asks for the machine, is not a
+detail to leave to a default that could change.
+
+The wizard offers English and Turkish and asks which on the way in, matching
+the app.
+
+### Updating in place
+
+The app checks once at startup, quietly. If there is something newer, a dot
+appears on the settings button and Settings → About offers it — version,
+release notes, then a download with a progress bar and a restart. A check that
+fails at startup says nothing: no network is not an event anybody asked about.
+A check somebody pressed the button for reports what went wrong.
+
+Updates are served from the release itself:
+
+```
+https://github.com/MuratBicici/Groovium/releases/latest/download/latest.json
+```
+
+`tauri-action` writes that manifest and its signatures into the release when
+`createUpdaterArtifacts` is on. No server, no account, nothing to pay for.
+
+**Tagging does not ship an update.** `latest/download` resolves published
+releases only, and `release.yml` drafts rather than publishes — so pressing
+**Publish** on GitHub is what sends it, and that stays a deliberate act. It
+reaches everyone at once and cannot be taken back.
+
+The update is signed, and that signature is not optional: without a key the
+build cannot produce the artifact at all. The keypair is made once, locally:
+
+```bash
+npm run tauri signer generate -- -w "$HOME/.tauri/groovium.key"
+```
+
+The **public** half goes into `plugins.updater.pubkey` in
+`tauri.conf.json`. The **private** half and its password go into repository
+secrets as `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, which `release.yml` reads. The private
+key never enters the repository, and a local `tauri build` needs the same two
+in the environment.
+
+### Code signing is a separate thing, and is not set up
 
 An unsigned Windows installer triggers SmartScreen: *"Windows protected your
 PC"*, with the Run button behind **More info**. Nothing about the app is wrong;
 Windows simply has no idea who published it.
 
-Fixing it needs an Authenticode certificate — an OV certificate involves
-identity verification and an annual fee, and reputation still builds over
-downloads; an EV certificate on a hardware token clears SmartScreen
+**This is not the same key as the updater's**, and the two are easy to
+confuse — this file confused them until 1.0. `TAURI_SIGNING_PRIVATE_KEY` is
+minisign, it signs the *update manifest*, and it is generated with a command.
+Authenticode signs the *installer*, is what SmartScreen looks at, and cannot be
+generated at all.
+
+Fixing the warning needs an Authenticode certificate — an OV certificate
+involves identity verification and an annual fee, and reputation still builds
+over downloads; an EV certificate on a hardware token clears SmartScreen
 immediately and costs more. Either way it is a purchase and an identity check,
-so it cannot be done from inside this repository. The release workflow already
-reads `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-from repository secrets, so adding a certificate is configuration rather than
-code.
+so it cannot be done from inside this repository. When there is one, it is
+configured under `bundle.windows` rather than through the updater's variables.
 
 Until then, say so on the release page rather than letting people meet the
 warning cold.

@@ -15,6 +15,9 @@ if (import.meta.env.DEV) {
   void import('./core/settings/store').then(({ useSettingsStore }) => {
     (window as unknown as Record<string, unknown>).__grooviumSettings = useSettingsStore;
   });
+  void import('./core/updates/store').then(({ useUpdateStore }) => {
+    (window as unknown as Record<string, unknown>).__grooviumUpdates = useUpdateStore;
+  });
 }
 
 createRoot(container).render(

@@ -10,6 +10,7 @@ import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { StationSetup } from '@/components/station/StationSetup';
 import { ColourPicker } from '@/components/settings/ColourPicker';
 import { TransportControls } from '@/components/controls/TransportControls';
@@ -58,6 +59,8 @@ export default function App() {
   const t = useT();
   const initialize = usePlayerStore((s) => s.initialize);
   const initializeSettings = useSettingsStore((s) => s.initialize);
+  const checkForUpdates = useUpdateStore((s) => s.checkQuietly);
+  const updateWaiting = useUpdateWaiting();
   const language = useLanguage();
   const error = usePlayerError();
   const clearError = usePlayerStore((s) => s.clearError);
@@ -94,6 +97,14 @@ export default function App() {
     // a failure to read preferences must not stop music from working.
     void initializeSettings();
   }, [initializeSettings]);
+
+  useEffect(() => {
+    // Last of the three, and quiet. Startup already reads the library and the
+    // session, and music starting must not wait behind a network request that
+    // nobody asked for — a failure here is not an event, it is an offline
+    // launch. The mark on the settings button is the whole of the report.
+    void checkForUpdates();
+  }, [checkForUpdates]);
 
   useEffect(() => {
     // Tray menu and global media keys arrive as events from Rust.
@@ -229,6 +240,7 @@ export default function App() {
               open={shown === 'settings'}
               onToggle={() => toggle('settings')}
               controls={PANEL_IDS.settings}
+              badge={updateWaiting ? t('update.waiting') : undefined}
             />
           </div>
         </div>

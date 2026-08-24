@@ -5,6 +5,8 @@ import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/set
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
 import { isTauri } from '@/core/utils/env';
+import { useUpdateStore } from '@/core/updates/store';
+import { APP_VERSION } from '@/core/version';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -213,6 +215,10 @@ export function SettingsPanel({
           </div>
         </Section>
 
+        <Section title={t('settings.about')}>
+          <Updates />
+        </Section>
+
         {isTauri() && (
           <Section title={t('settings.connections')}>
             <Connection
@@ -273,6 +279,110 @@ function Colour({
       />
       <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
     </button>
+  );
+}
+
+/**
+ * The version, and whether there is a newer one.
+ *
+ * The check itself already ran, quietly, at startup — this is where its answer
+ * is, and the only place a failure is ever shown. A launch with no network is
+ * not a failure anybody asked about; a button somebody pressed is.
+ */
+function Updates() {
+  const t = useT();
+  const status = useUpdateStore((s) => s.status);
+  const version = useUpdateStore((s) => s.version);
+  const notes = useUpdateStore((s) => s.notes);
+  const progress = useUpdateStore((s) => s.progress);
+  const error = useUpdateStore((s) => s.error);
+  const checkNow = useUpdateStore((s) => s.checkNow);
+  const download = useUpdateStore((s) => s.download);
+  const restartNow = useUpdateStore((s) => s.restartNow);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-body text-cream-200">{t('settings.version', { version: APP_VERSION })}</p>
+
+      {status === 'idle' && (
+        <button
+          type="button"
+          onClick={() => void checkNow()}
+          className="text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
+        >
+          {t('update.check')}
+        </button>
+      )}
+
+      {status === 'checking' && <p className="text-meta text-cream-400">{t('update.checking')}</p>}
+
+      {status === 'available' && version && (
+        <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
+          <p className="text-meta text-cream-200">{t('update.available', { version })}</p>
+          {/* Whatever the release said, kept as written and left to scroll:
+              notes are the author's words, and truncating them is deciding
+              which half of a warning somebody gets. */}
+          {notes && (
+            <p className="max-h-20 overflow-y-auto text-meta leading-snug whitespace-pre-line text-cream-400">
+              {notes}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void download()}
+            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+          >
+            {t('update.download')}
+          </button>
+        </div>
+      )}
+
+      {status === 'downloading' && (
+        <div className="space-y-1">
+          <p className="text-meta text-cream-400">
+            {progress === null
+              ? t('update.downloadingUnknown')
+              : t('update.downloading', { percent: Math.round(progress * 100) })}
+          </p>
+          {progress !== null && (
+            <div className="groove-inset h-1 w-full overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-brass-600 to-brass-400 transition-[width] duration-150"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {status === 'ready' && (
+        <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
+          <p className="text-meta leading-snug text-cream-200">{t('update.ready')}</p>
+          <button
+            type="button"
+            onClick={() => void restartNow()}
+            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+          >
+            {t('update.restart')}
+          </button>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="space-y-1.5">
+          <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+            {t('update.failed', { message: error ?? '' })}
+          </p>
+          <button
+            type="button"
+            onClick={() => void checkNow()}
+            className="text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
+          >
+            {t('update.tryAgain')}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

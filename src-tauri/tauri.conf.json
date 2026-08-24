@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Groovium",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.groovium.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -54,6 +54,7 @@
     "targets": [
       "nsis"
     ],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -65,6 +66,23 @@
     "longDescription": "A lightweight, modern desktop music player widget with a vintage disk player aesthetic.",
     "publisher": "Murat Emre Bicici",
     "copyright": "Copyright © Murat Emre Bicici. MIT licensed.",
-    "category": "Music"
+    "category": "Music",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "Turkish"],
+        "displayLanguageSelector": true,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/MuratBicici/Groovium/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY"
+    }
   }
 }

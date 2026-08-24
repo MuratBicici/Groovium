@@ -1,7 +1,7 @@
 # Pending verification
 
-**One section is still open: §2.** Everything else here has been seen on a
-real machine.
+**Two sections are still open: §2 and §6.** Everything else here has been seen
+on a real machine.
 
 There was a §5, about making the window translucent and frosted. The
 frosting could not be made to work on Windows and the whole thing was taken
@@ -53,6 +53,53 @@ time. The record comes off now, the way a thrown one does.
       and play it. Same message, not the provider's own *Spotify player is not
       connected*. (The queue you were in is gone with the record, so this has
       to be reached from a panel rather than by pressing Next.)
+
+## 6. 1.0: the wizard and the updater
+
+Neither can be checked from here. The wizard has to be run, and the updater
+cannot be tested by the release that introduces it — it takes two.
+
+**Before any of this: the public key.** `plugins.updater.pubkey` in
+`tauri.conf.json` currently reads `REPLACE_WITH_PUBLIC_KEY`. Until it holds a
+real key the build cannot sign an update artifact and will fail. Generate the
+pair, keep the private half out of the repository:
+
+```bash
+npm run tauri signer generate -- -w "$HOME/.tauri/groovium.key"
+```
+
+Public half into `tauri.conf.json`; private half and password into repository
+secrets as `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+### The wizard
+
+- [ ] With the two variables set in the environment, `npm run tauri build`.
+      Run the `.exe` it leaves in `src-tauri/target/release/bundle/nsis/`.
+- [ ] Which pages does it show, is the icon Groovium's, and does the language
+      selector come up? **Say what it looks like** — the polish decisions
+      (`headerImage`, `sidebarImage`) are waiting on that.
+- [ ] It should install to `%LOCALAPPDATA%Groovium` and **never ask for
+      administrator**. If a UAC prompt appears, something is wrong with
+      `installMode`.
+
+### The updater, which needs two releases
+
+The first release cannot verify itself: there is nothing older to update from.
+The order is:
+
+- [ ] Tag `v1.0.0`, let the workflow draft the release, then **Publish** it on
+      GitHub. Check the release has `latest.json` attached alongside the
+      `.exe` — without it the updater has nothing to read.
+- [ ] Install 1.0.0 from that release and run it.
+- [ ] Bump the three manifests to `1.0.1`, tag, publish.
+- [ ] Open the installed 1.0.0. Within a moment of launch a **dot** should
+      appear on the settings button; Settings → About should offer 1.0.1 with
+      its notes.
+- [ ] Download it. The bar should move, then it should say it is installed and
+      offer a restart. Restart, and Settings → About should read 1.0.1.
+- [ ] **Pull the network and relaunch.** Nothing should happen at all: no dot,
+      no error, no banner. That is the whole point of the quiet check.
 
 ---
 

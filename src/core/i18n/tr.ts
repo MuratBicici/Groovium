@@ -176,6 +176,22 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.customSecondary': 'Vurgu',
   'settings.customWarning':
     'Özel renk kombinasyonlarında kontrast oranları garanti edilemez. Ön tanımlı paletlerin tamamı optimum okunabilirlik için kalibre edilmiştir.',
+  'settings.about': 'Hakkında',
+  'settings.version': 'Sürüm {version}',
+
+  'update.waiting': 'Bir güncelleme bekliyor',
+  'update.check': 'Güncellemeleri denetle',
+  'update.checking': 'Denetleniyor…',
+  'update.upToDate': 'Güncel.',
+  'update.available': '{version} sürümü hazır.',
+  'update.download': 'İndir',
+  'update.downloading': 'İndiriliyor… %{percent}',
+  'update.downloadingUnknown': 'İndiriliyor…',
+  'update.ready': 'Kuruldu. Groovium bir dahaki açılışında geçerli olacak.',
+  'update.restart': 'Şimdi yeniden başlat',
+  'update.failed': 'Güncellenemedi: {message}',
+  'update.tryAgain': 'Yeniden dene',
+
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',
