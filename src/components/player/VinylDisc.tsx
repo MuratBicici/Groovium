@@ -171,12 +171,30 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brass-500 to-brass-600">
-            {/* The wordmark is unreadable below platter size; a plain brass
-                label is what a real unlabeled pressing looks like anyway. */}
+            {/*
+              A four-pointed star where a wordmark used to be. It survives being
+              small in a way lettering does not, and it is drawn rather than
+              placed: four quadratic curves that all bend toward the exact
+              centre of the box. That one control point is the whole shape —
+              it is what makes the sides concave and the tips sharp, and it
+              keeps the star correct at any size without a second asset.
+
+              Still only above `DETAILED_FROM`: the label on a 24px row disc is
+              nine pixels across, and a five-pixel star there reads as a speck
+              of dirt rather than as a mark. A plain brass label is what an
+              unlabelled pressing looks like anyway.
+            */}
             {detailed && (
-              <span className="text-micro font-bold tracking-widest text-shell-900 uppercase">
-                Groove
-              </span>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-[58%] w-[58%] text-shell-900"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 0 Q12 12 24 12 Q12 12 12 24 Q12 12 0 12 Q12 12 12 0 Z"
+                  fill="currentColor"
+                />
+              </svg>
             )}
           </div>
         )}
