@@ -36,6 +36,12 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
 
   /** This track's disc is still flying; the deck must look empty. */
   const awaitingLanding = pendingTrackId !== null && track?.id === pendingTrackId;
+  /**
+   * Whether the deck is showing itself rather than a record. True before
+   * anything has played, and true again while a disc is still in the air —
+   * so the platter hands over to the record at the landing, not at the click.
+   */
+  const bare = !stowed && (!track || awaitingLanding);
 
   useEffect(() => {
     const prev = prevTrackRef.current;
@@ -125,32 +131,38 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
         }`}
       />
 
+      {/* The platter, laid over the well and taken away as a record arrives.
+          The well alone is a hole in the shell; what an empty turntable shows
+          is a surface. Faded rather than swapped, and both layers stay mounted,
+          so the hand-over is a dissolve and not a step. */}
+      <div
+        aria-hidden="true"
+        className={`groove-deck absolute inset-[4px] rounded-full transition-opacity duration-200 ${
+          bare ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+
+      {/* The spindle, which a record hides and an empty deck does not. Without
+          it the deck is just a disc of felt; with it the deck is a deck,
+          waiting for something to be put on it.
+
+          Centred by transform rather than by the flex row, because it now stays
+          mounted while a record is on the deck and two flex children would sit
+          side by side instead of on top of one another. Same centring as the
+          hole VinylDisc puts over it. */}
+      <div
+        aria-hidden="true"
+        className={`groove-spindle absolute top-1/2 left-1/2 h-[8px] w-[8px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-opacity duration-200 ${
+          bare ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
       {/* `data-morph` marks what the collapse animation measures. It sits on
           this wrapper rather than on the spinning element because a rotating
           square's bounding box grows toward its diagonal, and the measurement
           would come back up to 1.41x too large depending on the angle. */}
-      {/* The spindle, which a record hides and an empty deck does not. Without
-          it the well is just a dark circle; with it the deck is a deck, waiting
-          for something to be put on it. A flex child rather than an absolute
-          one, so the same centring that holds the record holds this. */}
-      {!track && (
-        <div
-          aria-hidden="true"
-          // `relative` so it paints above the well: the well is absolutely
-          // positioned, and a positioned element covers a static sibling
-          // whatever the order in the markup. The record's wrapper carries
-          // `relative` for the same reason.
-          className="relative h-[7px] w-[7px] rounded-full"
-          style={{
-            background:
-              'linear-gradient(155deg, var(--color-brass-400), var(--color-brass-600))',
-            boxShadow:
-              '0 1px 3px rgba(0,0,0,0.7), inset 0 1px 0 rgb(var(--sheen) / 0.5)',
-          }}
-        />
-      )}
 
       {/* No track, no record — the deck sits empty, the way a turntable does
           before you put something on it. The well and the arm stay: those are

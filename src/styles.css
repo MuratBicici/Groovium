@@ -254,6 +254,58 @@ body {
   box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6);
 }
 
+/*
+ * The platter, which is what an empty deck actually shows.
+ *
+ * The well behind a record is near-black on purpose: only a 4px ring of it is
+ * ever visible and that ring has to read as a recess. With no record on it that
+ * same fill reads as a hole cut through the shell, which is not what a
+ * turntable looks like when it is empty — what you see then is the platter, a
+ * surface, made of whatever the room is made of.
+ *
+ * So it is built from the shell ramp rather than from a colour of its own: a
+ * shade lighter than the shell around it, lit from above like every other
+ * surface here, and following the palette without either of them having to be
+ * told about the other.
+ */
+.groove-deck {
+  background:
+    /* the light from above, pooled on the upper half */
+    radial-gradient(
+      circle farthest-side at 50% 10%,
+      rgb(var(--sheen) / 0.06),
+      rgb(var(--sheen) / 0) 74%
+    ),
+    /* the mat itself, falling away toward its rim */
+    radial-gradient(
+      circle closest-side at 50% 50%,
+      var(--color-shell-600) 0%,
+      var(--color-shell-700) 64%,
+      var(--color-shell-800) 100%
+    );
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 0.5),
+    inset 0 0 0 1px rgb(var(--sheen) / 0.045);
+}
+
+/*
+ * The pin that the hole in a record goes over. Brass, like every other piece of
+ * metal on the machine, and sized to the hole VinylDisc draws, so the two read
+ * as parts of one object even though they are never on screen together.
+ */
+.groove-spindle {
+  background: radial-gradient(
+    circle at 34% 28%,
+    color-mix(in srgb, var(--color-brass-400) 62%, rgb(var(--sheen))) 0%,
+    var(--color-brass-400) 40%,
+    var(--color-brass-600) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 2px rgb(0 0 0 / 0.7),
+    inset 0 -1px 1px rgb(0 0 0 / 0.3);
+}
+
 @keyframes groove-spin {
   from {
     transform: rotate(0deg);
