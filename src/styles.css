@@ -275,6 +275,38 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * The window's own surface.
+ *
+ * The frame is undecorated and transparent, so this gradient is the only thing
+ * between the widget and the desktop. Written through `color-mix` against
+ * `transparent` rather than as an `opacity`, because opacity would take the
+ * record, the arm and every word in the window down with it — what should give
+ * way is the surface and nothing else.
+ *
+ * The alpha and the blur come from the settings store, which writes them onto
+ * the root. Neither belongs to a palette: every theme can be glass.
+ */
+.groove-shell {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-shell-700) var(--surface-alpha, 100%), transparent),
+    color-mix(in srgb, var(--color-shell-900) var(--surface-alpha, 100%), transparent)
+  );
+}
+
+/*
+ * Frosting, and only while there is something to frost.
+ *
+ * `backdrop-filter` is not free — it makes the compositor sample and blur what
+ * is behind the window every frame — and at full opacity nothing behind it can
+ * be seen anyway. The attribute is set by the store when the alpha drops below
+ * 100 and removed when it returns.
+ */
+:root[data-glass] .groove-shell {
+  backdrop-filter: blur(var(--surface-blur, 0px));
+}
+
 /* A recess: the well behind the platter, an input, a progress track. */
 .groove-inset {
   background: var(--color-shell-900);

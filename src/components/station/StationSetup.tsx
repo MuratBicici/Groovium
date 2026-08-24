@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSheet } from '@/core/utils/useSheet';
 import { openAccountPage, setApiKey } from '@/core/station';
 import { useT } from '@/core/i18n';
 
@@ -27,6 +28,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { present, shown } = useSheet(open);
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +45,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!present) return null;
 
   async function save() {
     setSaving(true);
@@ -64,13 +66,17 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
         type="button"
         aria-label={t('common.cancel')}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
+        className={`absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px] transition-opacity duration-[180ms] ${
+          shown ? 'opacity-100' : 'opacity-0'
+        }`}
       />
 
       <div
         role="dialog"
         aria-label={t('station.dialog')}
-        className="relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600"
+        className={`relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600 transition-all duration-[180ms] ease-out ${
+          shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
+        }`}
       >
         <div className="shrink-0 px-3 pt-2.5 pb-1">
           <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">

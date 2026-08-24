@@ -1,7 +1,7 @@
 # Pending verification
 
-**One section is still open: §2.** Everything else here has been seen on a
-real machine.
+**Two sections are still open: §2 and §5.** Everything else here has been seen
+on a real machine.
 
 The remote stretch ended on 2026-08-24. §2 is the last of it: a fix made in
 response to the run-through that closed it, extended on 2026-08-25 after a
@@ -48,6 +48,29 @@ time. The record comes off now, the way a thrown one does.
       and play it. Same message, not the provider's own *Spotify player is not
       connected*. (The queue you were in is gone with the record, so this has
       to be reached from a panel rather than by pressing Next.)
+
+## 5. Does the window actually frost?
+
+Settings → Appearance now has **Opacity** and **Blur**. Below 100% the shell's
+own background gives way and `backdrop-filter` frosts what shows through.
+
+**This is the one thing here I could not check, at all.** In a browser
+`backdrop-filter` blurs the page behind the element, and it does — measured,
+and it looks right. Whether it blurs the *desktop* through a transparent,
+undecorated WebView2 window is a different question with a different answer,
+and the honest position is that I do not know. If it does not, the feature
+degrades to plain see-through with no frost, and the fix is an OS-level effect
+(the `window-vibrancy` crate's acrylic) — which would work but takes the blur
+radius out of the user's hands, so it is a decision rather than a patch.
+
+- [ ] Put something recognisable behind the window — a browser, a photo — and
+      drag the **Opacity** slider down. The desktop should show through the
+      shell, while the record, the arm, the text and the buttons stay solid.
+- [ ] Now drag **Blur**. What shows through should frost, and go sharp again at
+      0. **If nothing frosts at any value, say so** — that is the WebView2
+      question above and it changes the approach.
+- [ ] Put Opacity back to 100. The blur slider should grey out, and the window
+      should look exactly as it did before any of this existed.
 
 ---
 

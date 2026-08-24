@@ -44,6 +44,19 @@ export interface Settings {
    */
   customPrimary: string | null;
   customSecondary: string | null;
+  /**
+   * How solid the window's surface is, 0-100.
+   *
+   * A property of the window rather than of a palette: the frame is
+   * undecorated and transparent, so this is the shell's own background giving
+   * way to whatever is behind the widget. Every theme can be glass.
+   *
+   * `null` is fully opaque — what every build before this one was, and what
+   * an untouched installation stays.
+   */
+  surfaceOpacity: number | null;
+  /** How far the surface frosts what is behind it, in px. Idle at full opacity. */
+  surfaceBlur: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -54,6 +67,8 @@ export const DEFAULT_SETTINGS: Settings = {
   compact: false,
   customPrimary: null,
   customSecondary: null,
+  surfaceOpacity: null,
+  surfaceBlur: null,
 };
 
 export async function loadSettings(): Promise<Settings> {

@@ -37,6 +37,7 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
+  setSurface: (surface: { opacity?: number; blur?: number }) => void;
 }
 
 /**
@@ -46,6 +47,15 @@ interface SettingsStore extends Settings {
  * choice to use English on a Turkish system — which is why `language: null` is
  * a distinct state from `language: 'en'` rather than a default value.
  */
+/**
+ * How far the surface frosts, when nobody has said.
+ *
+ * Not zero: raw transparency over whatever happens to be on the desktop is
+ * unreadable, and someone reaching for the opacity slider is asking for
+ * glass rather than for a hole.
+ */
+const DEFAULT_BLUR = 12;
+
 function systemLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
   return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
@@ -92,6 +102,18 @@ function applyToDocument(settings: Settings): void {
     }
   }
 
+  // The window's own surface. Written as an alpha and a blur radius rather
+  // than as a colour, so a palette and the glass it is made of stay separate
+  // facts: every theme reads these, and changing one does not touch the other.
+  const opacity = settings.surfaceOpacity ?? 100;
+  root.style.setProperty('--surface-alpha', `${opacity}%`);
+  root.style.setProperty('--surface-blur', `${settings.surfaceBlur ?? DEFAULT_BLUR}px`);
+  // A flag rather than a number, because `backdrop-filter` is not free: at
+  // full opacity nothing behind the window is visible anyway, and leaving the
+  // filter on would have the compositor sampling a backdrop nobody can see.
+  if (opacity < 100) root.dataset.glass = '';
+  else delete root.dataset.glass;
+
   if (settings.reduceMotion) {
     root.dataset.motion = 'off';
   } else {
@@ -120,7 +142,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
-    const { customPrimary, customSecondary } = get();
+    const { customPrimary, customSecondary, surfaceOpacity, surfaceBlur } = get();
     const settings = {
       theme,
       language,
@@ -129,6 +151,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       compact,
       customPrimary,
       customSecondary,
+      surfaceOpacity,
+      surfaceBlur,
     };
     applyToDocument(settings);
     void saveSettings(settings);
@@ -155,6 +179,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
     setCompact: (compact) => commit({ compact }),
+    setSurface: ({ opacity, blur }) =>
+      commit({
+        ...(opacity === undefined ? {} : { surfaceOpacity: opacity }),
+        ...(blur === undefined ? {} : { surfaceBlur: blur }),
+      }),
     setCustomColour: (which, colour) =>
       commit(
         which === 'primary'

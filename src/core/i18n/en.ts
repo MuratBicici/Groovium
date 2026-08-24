@@ -77,6 +77,11 @@ export const en = {
   'colour.brightness': 'Brightness',
   'colour.hex': 'Hex',
 
+  'settings.surfaceOpacity': 'Opacity',
+  'settings.surfaceBlur': 'Blur',
+  'settings.surfaceHint':
+    'Below 100% the window lets the desktop through. Blur frosts what shows.',
+
   'status.IDLE': 'Ready',
   'status.LOADING': 'Loading',
   'status.PLAYING': 'Now Playing',

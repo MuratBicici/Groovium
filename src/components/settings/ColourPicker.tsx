@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { CUSTOM_DEFAULTS } from '@/core/settings/themes';
 import { hexToHsv, hsvToHex, hsvToRgb, luminance, parseHex, toHex, type Hsv } from '@/core/utils/colour';
+import { prefersReducedMotion } from '@/core/utils/motion';
+import { useSheet } from '@/core/utils/useSheet';
 
 /**
  * The colour picker for a hand-rolled palette.
@@ -30,9 +32,15 @@ import { hexToHsv, hsvToHex, hsvToRgb, luminance, parseHex, toHex, type Hsv } fr
 /** Hues across the grid, and the columns it is drawn in. */
 const GRID_HUES = 12;
 
+/** How long the body takes to grow or shrink between two tabs. */
+const RESIZE_MS = 220;
+
 interface ColourPickerProps {
-  /** Which of the custom palette's two colours is being edited. */
-  editing: 'primary' | 'secondary';
+  /**
+   * Which of the custom palette's two colours is being edited, or null while
+   * the sheet is closed — it stays mounted so that it can animate out.
+   */
+  editing: 'primary' | 'secondary' | null;
   onClose: () => void;
 }
 
@@ -47,20 +55,53 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
   const setCustomColour = useSettingsStore((s) => s.setCustomColour);
 
-  const stored = editing === 'secondary' ? customSecondary : customPrimary;
+  const { present, shown } = useSheet(editing !== null);
+  /** Which colour the sheet is showing, which outlives the one it is for. */
+  const [showing, setShowing] = useState<'primary' | 'secondary'>(editing ?? 'primary');
 
   const [tab, setTab] = useState<Tab>('spectrum');
-  // Read once, at the opening. The caller mounts this fresh for each colour —
-  // `key` on the element — so an initialiser is the whole of the seeding, and
-  // there is no effect trying to keep two sources of the same fact in step.
-  const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(stored) ?? { h: 0, s: 0, v: 0 });
+  const [hsv, setHsv] = useState<Hsv>({ h: 0, s: 0, v: 0 });
   /** What the hex field shows while it is being typed in. */
   const [typed, setTyped] = useState<string | null>(null);
+  /** What `editing` was last render, so an opening can be noticed during this one. */
+  const [wasEditing, setWasEditing] = useState(editing);
+
+  // Seeded at the opening, adjusted during render rather than in an effect.
+  //
+  // This used to be a `key` on the element, which remounts and makes the state
+  // initialisers do the job — tidy, and it quietly destroyed the instance that
+  // was meant to animate the sheet closed. The seeding stays here so the sheet
+  // can outlive its own `editing` prop.
+  if (editing !== wasEditing) {
+    setWasEditing(editing);
+    if (editing) {
+      setShowing(editing);
+      setHsv(
+        hexToHsv(editing === 'secondary' ? customSecondary : customPrimary) ?? { h: 0, s: 0, v: 0 },
+      );
+      setTab('spectrum');
+      setTyped(null);
+    }
+  }
+
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * How tall the body was when the tab was last changed.
+   *
+   * Recorded at the click rather than measured afterwards: by the time an
+   * effect runs React has already committed the new tab, so measuring "from"
+   * there measures the destination. Same trap the collapse animation fell into.
+   */
+  const cameFrom = useRef<number | null>(null);
 
   // Escape closes it, like the other two sheets. Capture phase and
   // `stopImmediatePropagation`, for their reason: the shell has its own
   // listener on `window`, and only the immediate variant reaches it.
   useEffect(() => {
+    // Only while it is open. This component stays mounted so it can animate
+    // out, and an always-listening handler swallowed every Escape in the app —
+    // the station's sheet and the playlist picker could not be closed at all.
+    if (!editing) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopImmediatePropagation();
@@ -68,14 +109,36 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [onClose]);
+  }, [editing, onClose]);
+
+  // The sheet grows and shrinks between tabs rather than jumping: the grid is
+  // twice the height of the sliders, and a dialog that changes size under the
+  // pointer reads as a different dialog.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const from = cameFrom.current;
+    cameFrom.current = null;
+    if (!body || from === null || prefersReducedMotion()) return;
+
+    const to = body.getBoundingClientRect().height;
+    if (Math.abs(to - from) < 1) return;
+    body.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: RESIZE_MS,
+      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    });
+  }, [tab]);
+
+  function changeTab(next: Tab) {
+    cameFrom.current = bodyRef.current?.getBoundingClientRect().height ?? null;
+    setTab(next);
+  }
 
   const hex = hsvToHex(hsv);
 
   function apply(next: Hsv) {
     setHsv(next);
     setTyped(null);
-    setCustomColour(editing, hsvToHex(next));
+    setCustomColour(showing, hsvToHex(next));
   }
 
   function typeHex(text: string) {
@@ -86,8 +149,10 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
     // the way to whatever someone is pasting.
     if (!rgb) return;
     setHsv(hexToHsv(toHex(rgb)) ?? hsv);
-    setCustomColour(editing, toHex(rgb));
+    setCustomColour(showing, toHex(rgb));
   }
+
+  if (!present) return null;
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center p-4">
@@ -95,17 +160,21 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
         type="button"
         aria-label={t('common.close')}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
+        className={`absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px] transition-opacity duration-[180ms] ${
+          shown ? 'opacity-100' : 'opacity-0'
+        }`}
       />
 
       <div
         role="dialog"
         aria-label={t('colour.dialog')}
-        className="groove-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-shell-600"
+        className={`groove-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-shell-600 transition-all duration-[180ms] ease-out ${
+          shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
+        }`}
       >
         <div className="flex shrink-0 items-center justify-between px-3 pt-2.5 pb-2">
           <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-            {editing === 'primary' ? t('settings.customPrimary') : t('settings.customSecondary')}
+                {showing === 'primary' ? t('settings.customPrimary') : t('settings.customSecondary')}
           </span>
           <button
             type="button"
@@ -125,7 +194,7 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
               key={id}
               type="button"
               aria-pressed={tab === id}
-              onClick={() => setTab(id)}
+              onClick={() => changeTab(id)}
               className={`flex-1 rounded px-2 py-1 text-meta tracking-wide transition-colors ${
                 tab === id
                   ? 'bg-shell-600 text-cream-50'
@@ -137,7 +206,10 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3">
+        {/* `overflow-hidden` so the growing half of the move clips rather than
+            spilling, and the body owns its own height so animating it does not
+            fight the flex column above and below. */}
+        <div ref={bodyRef} className="shrink-0 overflow-hidden px-3">
           {tab === 'grid' && <Grid onPick={apply} />}
           {tab === 'spectrum' && <Spectrum hsv={hsv} onChange={apply} />}
           {tab === 'sliders' && <Sliders hsv={hsv} onChange={apply} />}

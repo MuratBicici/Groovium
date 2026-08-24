@@ -123,7 +123,7 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50"
+      className="groove-shell relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] ring-1 ring-black/50"
     >
       <PlaylistPickerProvider>
       <DiscFlightProvider>
@@ -237,16 +237,10 @@ export default function App() {
       {/* Out here rather than inside the settings panel, for the reason the
           station's setup is: these cover the whole window, and the panel only
           covers the stage. */}
-      {/* Keyed, so each opening is a fresh mount: the picker seeds itself from
-          the stored colour once and owns it from then on, which is an
-          initialiser rather than an effect chasing a prop. */}
-      {pickingColour && (
-        <ColourPicker
-          key={pickingColour}
-          editing={pickingColour}
-          onClose={() => setPickingColour(null)}
-        />
-      )}
+      {/* Not keyed. A key per colour would remount on every open, which is a
+          tidy way to seed the picker's state and destroys the instance that
+          was supposed to animate the sheet out. It seeds itself instead. */}
+      <ColourPicker editing={pickingColour} onClose={() => setPickingColour(null)} />
 
       <StationSetup
         open={stationSetup}

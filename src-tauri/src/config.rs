@@ -67,6 +67,15 @@ pub struct Settings {
     pub custom_primary: Option<String>,
     #[serde(default)]
     pub custom_secondary: Option<String>,
+    /// How solid the window's own surface is, 0-100. The window is transparent
+    /// and undecorated, so anything under 100 shows the desktop through it.
+    /// `None` is fully opaque, which is what every build before this was.
+    #[serde(default)]
+    pub surface_opacity: Option<u8>,
+    /// How far the surface frosts what is behind it, in pixels. Only visible
+    /// while `surface_opacity` is under 100.
+    #[serde(default)]
+    pub surface_blur: Option<u8>,
 }
 
 #[tauri::command]
@@ -159,6 +168,8 @@ mod tests {
             compact: true,
             custom_primary: Some("#2e231b".into()),
             custom_secondary: None,
+            surface_opacity: Some(70),
+            surface_blur: Some(14),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -167,6 +178,7 @@ mod tests {
         assert!(written.contains(r#""theme":"prussian-blue""#));
         assert!(written.contains(r#""reduceMotion":true"#));
         assert!(written.contains(r#""compact":true"#));
+        assert!(written.contains(r#""surfaceOpacity":70"#));
         // Two hashes: the value itself contains `"#`, which closes an
         // `r#"..."#` literal early.
         assert!(written.contains(r##""customPrimary":"#2e231b""##));

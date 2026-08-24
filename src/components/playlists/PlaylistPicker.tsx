@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { TrackMetadata } from '@/core/types';
 import type { PlaylistItem } from '@/core/library';
 import { usePlaylists, usePlayerStore } from '@/core/store';
+import { useSheet } from '@/core/utils/useSheet';
 import { useT } from '@/core/i18n';
 
 /**
@@ -63,6 +64,15 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
   const [newName, setNewName] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
 
+  const { present, shown } = useSheet(track !== null);
+  /**
+   * The track the sheet is showing, which outlives the one it is *for*.
+   * Closing clears `track` at once, and a sheet with 180ms left to live still
+   * has to say whose playlist it was asking about.
+   */
+  const [showing, setShowing] = useState<TrackMetadata | null>(track);
+  if (track && track !== showing) setShowing(track);
+
   const playlists = usePlaylists();
   const addTrackToPlaylist = usePlayerStore((s) => s.addTrackToPlaylist);
   const newPlaylist = usePlayerStore((s) => s.newPlaylist);
@@ -117,25 +127,29 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
         </div>
       )}
 
-      {track && (
+      {present && showing && (
         <div className="absolute inset-0 z-30 flex items-center justify-center p-5">
           <button
             type="button"
             aria-label={t('common.cancel')}
             onClick={close}
-            className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
+            className={`absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px] transition-opacity duration-[180ms] ${
+              shown ? 'opacity-100' : 'opacity-0'
+            }`}
           />
 
           <div
             role="dialog"
             aria-label={t('playlists.add')}
-            className="relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600"
+            className={`relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600 transition-all duration-[180ms] ease-out ${
+              shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
+            }`}
           >
             <div className="shrink-0 px-3 pt-2.5 pb-1.5">
               <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
                 {t('playlists.add')}
               </p>
-              <p className="mt-0.5 truncate text-body text-cream-100">{track.title}</p>
+              <p className="mt-0.5 truncate text-body text-cream-100">{showing.title}</p>
             </div>
 
             <ul className="min-h-0 flex-1 overflow-y-auto px-1.5">
@@ -145,7 +159,7 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
                 </li>
               )}
               {playlists.map((playlist) => {
-                const already = track ? containsTrack(playlist.items, track) : false;
+                const already = containsTrack(playlist.items, showing);
                 return (
                   <li key={playlist.id}>
                     <button

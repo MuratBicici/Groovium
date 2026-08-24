@@ -65,6 +65,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'colour.saturation': 'Doygunluk',
   'colour.brightness': 'Parlaklık',
   'colour.hex': 'Hex',
+
+  'settings.surfaceOpacity': 'Saydamlık',
+  'settings.surfaceBlur': 'Bulanıklık',
+  'settings.surfaceHint':
+    'Yüzde yüzün altında pencere masaüstünü geçirir. Bulanıklık, görüneni buzlandırır.',
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',
   'transport.unmute': 'Sesi aç',
