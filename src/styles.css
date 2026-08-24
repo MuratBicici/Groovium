@@ -248,6 +248,33 @@ body {
     0 -1px 12px rgb(0 0 0 / 0.35);
 }
 
+/*
+ * The colour picker's sliders.
+ *
+ * A native range, unlike the progress bar: there is no drawn fill that has to
+ * line up with the thumb here — the track is a gradient and the thumb is the
+ * only marker — so the half-thumb inset a native range keeps is invisible, and
+ * taking it means the keyboard gets the picker for free.
+ *
+ * The element carries the gradient itself, set inline per slider, so these
+ * rules only shape the thumb and get out of the way.
+ */
+.groove-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-cream-50);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.35),
+    0 1px 3px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+.groove-range:focus-visible {
+  outline: 2px solid var(--color-brass-400);
+  outline-offset: 2px;
+}
+
 /* A recess: the well behind the platter, an input, a progress track. */
 .groove-inset {
   background: var(--color-shell-900);

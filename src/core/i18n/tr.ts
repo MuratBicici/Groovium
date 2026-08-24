@@ -55,6 +55,16 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.seek': 'İleri sar',
 
   'deck.takeOff': 'Plağı yuvadan çıkar',
+
+  'colour.dialog': 'Renk seç',
+  'colour.grid': 'Izgara',
+  'colour.spectrum': 'Spektrum',
+  'colour.sliders': 'Kaydırıcılar',
+  'colour.field': 'Doygunluk ve parlaklık',
+  'colour.hue': 'Ton',
+  'colour.saturation': 'Doygunluk',
+  'colour.brightness': 'Parlaklık',
+  'colour.hex': 'Hex',
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',
   'transport.unmute': 'Sesi aç',

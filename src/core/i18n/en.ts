@@ -65,6 +65,18 @@ export const en = {
   // what a press does, since a press is all a keyboard can offer.
   'deck.takeOff': 'Take the record off the deck',
 
+  // The colour picker. "Brightness" rather than "value": V is what the letter
+  // in HSV stands for and nobody outside the acronym calls it that.
+  'colour.dialog': 'Choose a colour',
+  'colour.grid': 'Grid',
+  'colour.spectrum': 'Spectrum',
+  'colour.sliders': 'Sliders',
+  'colour.field': 'Saturation and brightness',
+  'colour.hue': 'Hue',
+  'colour.saturation': 'Saturation',
+  'colour.brightness': 'Brightness',
+  'colour.hex': 'Hex',
+
   'status.IDLE': 'Ready',
   'status.LOADING': 'Loading',
   'status.PLAYING': 'Now Playing',

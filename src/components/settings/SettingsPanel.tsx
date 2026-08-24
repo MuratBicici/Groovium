@@ -13,6 +13,11 @@ interface SettingsPanelProps {
   /** Connections send people to the setup that already exists, rather than repeating it. */
   onSetUpSpotify: () => void;
   onSetUpStation: () => void;
+  /**
+   * Open the colour picker. Raised rather than rendered here: the picker is a
+   * sheet over the whole window, and this panel only covers the stage.
+   */
+  onPickColour: (which: 'primary' | 'secondary') => void;
 }
 
 /**
@@ -30,6 +35,7 @@ export function SettingsPanel({
   id,
   onSetUpSpotify,
   onSetUpStation,
+  onPickColour,
 }: SettingsPanelProps) {
   const t = useT();
   const theme = useSettingsStore((s) => s.theme ?? DEFAULT_THEME);
@@ -39,7 +45,6 @@ export function SettingsPanel({
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
-  const setCustomColour = useSettingsStore((s) => s.setCustomColour);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
@@ -161,12 +166,12 @@ export function SettingsPanel({
                   <Colour
                     label={t('settings.customPrimary')}
                     value={customPrimary}
-                    onChange={(colour) => setCustomColour('primary', colour)}
+                    onClick={() => onPickColour('primary')}
                   />
                   <Colour
                     label={t('settings.customSecondary')}
                     value={customSecondary}
-                    onChange={(colour) => setCustomColour('secondary', colour)}
+                    onClick={() => onPickColour('secondary')}
                   />
                 </div>
                 <p className="text-meta leading-snug text-cream-400">
@@ -238,34 +243,36 @@ export function SettingsPanel({
 }
 
 /**
- * One colour of a hand-rolled palette.
+ * One colour of a hand-rolled palette: a swatch that opens the picker.
  *
- * A native `<input type="color">` rather than a picker of our own: the platform
- * already has one, it is the one people know, and reimplementing a colour
- * wheel inside a 340px widget would be a worse version of something already
- * installed. It is styled down to a swatch — the browser draws a bordered box
- * by default, which reads as a form control in a room full of physical ones.
+ * This was a native `<input type="color">`, on the argument that the platform
+ * already has a picker and it is the one people know. True, and still the
+ * wrong call here — the one Windows opens is a system dialog wearing system
+ * colours, and it arrived in the middle of a widget built to look like a
+ * physical object. `ColourPicker` is the replacement.
  */
 function Colour({
   label,
   value,
-  onChange,
+  onClick,
 }: {
   label: string;
   value: string;
-  onChange: (colour: string) => void;
+  onClick: () => void;
 }) {
   return (
-    <label className="flex min-w-0 flex-1 items-center gap-1.5">
-      <input
-        type="color"
-        value={value}
-        aria-label={label}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-6 w-8 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border [&::-webkit-color-swatch]:border-shell-600"
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-w-0 flex-1 items-center gap-1.5 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-brass-400"
+    >
+      <span
+        aria-hidden="true"
+        className="h-6 w-8 shrink-0 rounded ring-1 ring-shell-600"
+        style={{ background: value }}
       />
       <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
-    </label>
+    </button>
   );
 }
 

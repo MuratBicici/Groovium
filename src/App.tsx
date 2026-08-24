@@ -11,6 +11,7 @@ import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { StationSetup } from '@/components/station/StationSetup';
+import { ColourPicker } from '@/components/settings/ColourPicker';
 import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
@@ -75,6 +76,8 @@ export default function App() {
   // Not an `Overlay`: it is raised by the transport row rather than a panel
   // button, and it may sit over whichever panel happens to be open.
   const [stationSetup, setStationSetup] = useState(false);
+  /** Which custom colour the picker is open on, if any. */
+  const [pickingColour, setPickingColour] = useState<'primary' | 'secondary' | null>(null);
   const toggle = (which: Exclude<Overlay, 'none'>) =>
     setOverlay((current) => (current === which ? 'none' : which));
 
@@ -182,6 +185,7 @@ export default function App() {
             onClose={() => setOverlay('none')}
             onSetUpSpotify={() => setOverlay('spotify')}
             onSetUpStation={() => setStationSetup(true)}
+            onPickColour={setPickingColour}
           />
         </div>
 
@@ -229,6 +233,20 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Out here rather than inside the settings panel, for the reason the
+          station's setup is: these cover the whole window, and the panel only
+          covers the stage. */}
+      {/* Keyed, so each opening is a fresh mount: the picker seeds itself from
+          the stored colour once and owns it from then on, which is an
+          initialiser rather than an effect chasing a prop. */}
+      {pickingColour && (
+        <ColourPicker
+          key={pickingColour}
+          editing={pickingColour}
+          onClose={() => setPickingColour(null)}
+        />
+      )}
 
       <StationSetup
         open={stationSetup}

@@ -118,11 +118,13 @@ Compact mode, settings and restart, the tray menu in Turkish, the colour
 picker, library import and its new path gate, both playback fixes, Spotify
 sign-in, and the look of all six palettes. No problems observed.
 
-Two notes came out of it and are not bugs:
+Two notes came out of it, neither a bug, and both since overtaken:
 
-- The colour picker works but is the native Windows one and does not match the
-  theme. To be designed separately.
-- Restoring leaves the track paused rather than playing, by design.
+- The colour picker was the native Windows one and did not match the theme.
+  Replaced on 2026-08-25 by one built in the app — a sheet with a grid, a
+  spectrum and sliders, plus a hex field under all three.
+- Restoring left the track paused rather than playing. There is no restoring
+  any more: the deck starts empty.
 
 ---
 
