@@ -131,25 +131,52 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
           this wrapper rather than on the spinning element because a rotating
           square's bounding box grows toward its diagonal, and the measurement
           would come back up to 1.41x too large depending on the angle. */}
-      <div
-        ref={dropRef}
-        data-morph="disc"
-        className="relative"
-        // No fade when the deck is stowed. The record arriving in the collapsed
-        // bar begins its travel at exactly this size and position, so this one
-        // can go at once and nothing shows the seam — where a fade left a
-        // second record sitting in the old place for the length of it.
-        style={{ opacity: awaitingLanding || stowed ? 0 : 1 }}
-      >
-        {/* The spin stays on its own element; entrance and exit transforms
-            wrap it rather than fighting the keyframe for `transform`. */}
-        <div className="groove-platter" data-spinning={isPlaying}>
-          <VinylDisc size={DISC_SIZE} coverArtUrl={track?.coverArtUrl} />
+      {/* The spindle, which a record hides and an empty deck does not. Without
+          it the well is just a dark circle; with it the deck is a deck, waiting
+          for something to be put on it. A flex child rather than an absolute
+          one, so the same centring that holds the record holds this. */}
+      {!track && (
+        <div
+          aria-hidden="true"
+          // `relative` so it paints above the well: the well is absolutely
+          // positioned, and a positioned element covers a static sibling
+          // whatever the order in the markup. The record's wrapper carries
+          // `relative` for the same reason.
+          className="relative h-[7px] w-[7px] rounded-full"
+          style={{
+            background:
+              'linear-gradient(155deg, var(--color-brass-400), var(--color-brass-600))',
+            boxShadow:
+              '0 1px 3px rgba(0,0,0,0.7), inset 0 1px 0 rgb(var(--sheen) / 0.5)',
+          }}
+        />
+      )}
+
+      {/* No track, no record — the deck sits empty, the way a turntable does
+          before you put something on it. The well and the arm stay: those are
+          the machine, and the machine is there whether or not a record is. */}
+      {track && (
+        <div
+          ref={dropRef}
+          data-morph="disc"
+          className="relative"
+          // No fade when the deck is stowed. The record arriving in the
+          // collapsed bar begins its travel at exactly this size and position,
+          // so this one can go at once and nothing shows the seam — where a
+          // fade left a second record sitting in the old place for the length
+          // of it.
+          style={{ opacity: awaitingLanding || stowed ? 0 : 1 }}
+        >
+          {/* The spin stays on its own element; entrance and exit transforms
+              wrap it rather than fighting the keyframe for `transform`. */}
+          <div className="groove-platter" data-spinning={isPlaying}>
+            <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
+          </div>
+          {/* Sibling, not child: the light stays where it is while the record
+              turns under it. Inside the spinning element it orbited the room. */}
+          <DiscLight size={DISC_SIZE} />
         </div>
-        {/* Sibling, not child: the light stays where it is while the record
-            turns under it. Inside the spinning element it orbited the room. */}
-        <DiscLight size={DISC_SIZE} />
-      </div>
+      )}
 
       {/* The departing record, drawn over the live one while it lifts away.
           `z-10` puts it alongside the flight layer, so the two halves of one
