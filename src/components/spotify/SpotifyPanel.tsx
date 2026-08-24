@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  account as fetchAccount,
   beginAuth,
   clearClientId,
   hasClientId,
@@ -53,7 +54,23 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
     let cancelled = false;
     void (async () => {
       const next = await stageFor();
-      if (!cancelled) setStage(next);
+      if (cancelled) return;
+      setStage(next);
+      if (next !== 'connected') return;
+
+      // Whose account it is, for a session that did not do the signing in.
+      // The name used to arrive only as the return value of `beginAuth`, so it
+      // showed until the window closed and was gone on the next launch — even
+      // though the tokens that identify the account had outlived it.
+      //
+      // A failure here is not a failure to be signed in: the token is on disk
+      // either way, and being offline should cost the name and nothing else.
+      try {
+        const who = await fetchAccount();
+        if (!cancelled && who) setAccount(who);
+      } catch {
+        /* the panel works without a name */
+      }
     })();
     return () => {
       cancelled = true;

@@ -39,6 +39,19 @@ pub async fn spotify_access_token(
     tokens::access_token(&cache, &client_id).await
 }
 
+/// The signed-in account, for a session that did not do the signing in.
+///
+/// Reaches the network, unlike `spotify_is_authenticated`, which only asks
+/// whether a token is on disk. Both exist because the panel needs the cheap
+/// answer to decide what to show and this one to fill the name in.
+#[tauri::command]
+pub async fn spotify_account(
+    app: AppHandle,
+    cache: State<'_, AccessTokenCache>,
+) -> Result<Account, AuthError> {
+    auth::account(&app, &cache).await
+}
+
 #[tauri::command]
 pub fn spotify_is_authenticated() -> bool {
     tokens::is_authenticated()

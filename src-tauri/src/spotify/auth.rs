@@ -194,6 +194,20 @@ fn interpret_callback(
         .ok_or_else(|| AuthError::new("token_exchange_failed", "Redirect carried no code."))
 }
 
+/// Who is signed in, asked without signing in again.
+///
+/// The account comes back from `begin`, and used to come back only from there
+/// — so the name showed until the window was closed and was gone on the next
+/// launch, even though the tokens that identify the account had survived it.
+/// The stored refresh token is what the account *is*, so it can be asked at
+/// any time.
+pub async fn account(app: &AppHandle, cache: &AccessTokenCache) -> Result<Account, AuthError> {
+    let client_id = config::client_id(app)
+        .ok_or_else(|| AuthError::new("no_client_id", "No Spotify Client ID configured."))?;
+    let token = tokens::access_token(cache, &client_id).await?;
+    fetch_profile(&token).await
+}
+
 async fn fetch_profile(access_token: &str) -> Result<Account, AuthError> {
     let response = reqwest::Client::new()
         .get(PROFILE_ENDPOINT)

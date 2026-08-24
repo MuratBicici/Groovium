@@ -81,6 +81,24 @@ sound.
 - [ ] With **reduce motion** on: the drag still works, but nothing arcs — the
       record is small under the pointer at once and a throw is instant.
 
+## 4. The Spotify account name survives a restart
+
+The name showed after signing in and was gone on the next launch, even though
+the tokens that identify the account had survived it. It only ever arrived as
+the return value of the sign-in itself; nothing asked afterwards.
+
+There is now a `spotify_account` command, and the panel asks it when it opens
+onto an account that was already connected. Not checkable from here at all —
+it is a real network call against a real token.
+
+- [ ] Sign in, close the app from the tray, relaunch, open the Spotify panel.
+      The heading should carry your name, not just *Spotify*.
+- [ ] The **premium notice** should come back with it, if the account is not
+      premium — it rode on the same missing profile.
+- [ ] Pull the network and open the panel while signed in. It should still say
+      *connected* and show search; only the name goes missing. Being offline is
+      not being signed out.
+
 ---
 
 ## Passed on 2026-08-24

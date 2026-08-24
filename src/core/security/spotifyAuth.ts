@@ -75,6 +75,18 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
+ * Who is signed in.
+ *
+ * Separate from `isAuthenticated`, which only asks whether a token is on disk:
+ * this one reaches Spotify. The panel wants both — the cheap answer decides
+ * what it shows, and this fills in the name.
+ */
+export async function account(): Promise<SpotifyAccount | null> {
+  if (!isTauri()) return null;
+  return invoke<SpotifyAccount>('spotify_account');
+}
+
+/**
  * Run the full flow. Opens the system browser and resolves once the user has
  * approved and Rust has stored the refresh token.
  */

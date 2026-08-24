@@ -77,6 +77,7 @@ fn main() {
             session::save_session,
             spotify::spotify_begin_auth,
             spotify::spotify_access_token,
+            spotify::spotify_account,
             spotify::spotify_is_authenticated,
             spotify::spotify_sign_out,
             spotify::spotify_has_client_id,
