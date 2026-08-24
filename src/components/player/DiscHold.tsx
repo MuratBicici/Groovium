@@ -46,6 +46,9 @@ const DISC_SIZE = 152;
 /** How high the record hops on its way back down onto the spindle. */
 const SEAT_ARC = 22;
 
+/** How long after a throw the platter still treats the record as thrown. */
+const JUST_THREW_MS = 400;
+
 /** A keyboard eject is thrown for the user, up and to the right. */
 const EJECT_VELOCITY: Vector = { x: 760, y: -420 };
 /** Where the record lifts to before a keyboard eject flings it. */
@@ -70,6 +73,15 @@ interface DiscHoldActions {
   cancel: () => void;
   /** Take it off and throw it in one go. The keyboard's route. */
   eject: (grab: Grab) => void;
+  /**
+   * Whether this track's record left the deck by being thrown a moment ago.
+   *
+   * A ref read rather than state, for the reason `didJustLand` is one: the
+   * platter's effect can run in the same commit that empties the deck, and by
+   * then anything held in state has already been cleared. A ref is written
+   * synchronously, so the effect sees it.
+   */
+  didJustThrow: (trackId: string) => boolean;
 }
 
 const ActionsContext = createContext<DiscHoldActions>({
@@ -80,6 +92,7 @@ const ActionsContext = createContext<DiscHoldActions>({
   release: () => {},
   cancel: () => {},
   eject: () => {},
+  didJustThrow: () => false,
 });
 
 /** The track whose record is off the deck, so the platter can look empty. */
@@ -97,6 +110,8 @@ type Phase = 'pickup' | 'carry' | 'seat' | 'throw';
 
 interface Motion {
   phase: Phase;
+  /** Whose record this is, so a throw can be reported against it. */
+  trackId: string;
   /** Deck centre in layer coordinates — where the record came from and returns to. */
   origin: Vector;
   platterEl: HTMLElement;
@@ -229,6 +244,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const motion = useRef<Motion | null>(null);
   const frame = useRef<number>(0);
   const nextKey = useRef(0);
+  /** trackId → when it was thrown, for `didJustThrow`. */
+  const thrownAt = useRef(new Map<string, number>());
 
   /** Put the record's current pose on the screen. */
   const paint = useCallback(() => {
@@ -254,9 +271,25 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   }, [clear]);
 
   const finishThrow = useCallback(() => {
+    const trackId = motion.current?.trackId;
+    if (trackId) {
+      // Written before the deck is emptied, so the platter's effect can see it
+      // in the very commit the track goes away.
+      const now = performance.now();
+      thrownAt.current.set(trackId, now);
+      // Kept from growing across a long session; nothing else prunes it.
+      for (const [id, at] of thrownAt.current) {
+        if (now - at >= JUST_THREW_MS) thrownAt.current.delete(id);
+      }
+    }
     clear();
     void usePlayerStore.getState().discardRecord();
   }, [clear]);
+
+  const didJustThrow = useCallback((trackId: string) => {
+    const at = thrownAt.current.get(trackId);
+    return at !== undefined && performance.now() - at < JUST_THREW_MS;
+  }, []);
 
 
   /**
@@ -298,6 +331,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       const now = performance.now();
       motion.current = {
         phase: 'pickup',
+        trackId: grab.track.id,
         origin,
         platterEl: grab.platterEl,
         layer,
@@ -420,8 +454,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   );
 
   const actions = useMemo(
-    () => ({ grab, moveTo, release, cancel, eject }),
-    [grab, moveTo, release, cancel, eject],
+    () => ({ grab, moveTo, release, cancel, eject, didJustThrow }),
+    [grab, moveTo, release, cancel, eject, didJustThrow],
   );
 
   return (

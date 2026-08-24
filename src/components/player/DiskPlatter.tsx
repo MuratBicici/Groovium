@@ -31,7 +31,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
   const track = useCurrentTrack();
   const { registerPlatter, didJustLand } = useDiscFlight();
   const pendingTrackId = usePendingLanding();
-  const { grab, moveTo, release, cancel, eject } = useDiscHold();
+  const { grab, moveTo, release, cancel, eject, didJustThrow } = useDiscHold();
   const heldTrackId = useHeldTrack();
 
   /** Entrance transforms live here — the spin owns the disc's own transform. */
@@ -42,13 +42,14 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
 
   /** This track's disc is still flying; the deck must look empty. */
   const awaitingLanding = pendingTrackId !== null && track?.id === pendingTrackId;
-  /**
-   * Whether the deck is showing itself rather than a record. True before
-   * anything has played, and true again while a disc is still in the air —
-   * so the platter hands over to the record at the landing, not at the click.
-   */
   /** This track's record is in the user's hand rather than on the platter. */
   const inHand = heldTrackId !== null && track?.id === heldTrackId;
+  /**
+   * Whether the deck is showing itself rather than a record. True before
+   * anything has played, true again while a disc is still in the air — so the
+   * platter hands over at the landing rather than at the click — and true
+   * while the record is off being carried around.
+   */
   const bare = !stowed && (!track || awaitingLanding || inHand);
 
   /**
@@ -139,7 +140,11 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
 
     // The old record lifts away. Also during a flight: watching it leave while
     // the new one arcs in is the record-changer read.
-    if (prev) setGhost(prev);
+    //
+    // Not when it was thrown, though. That record has already left, in front of
+    // the user and by their own hand, and playing the changer's exit after it
+    // lifted a second copy of it out of an empty deck.
+    if (prev && !didJustThrow(prev.id)) setGhost(prev);
 
     const drop = dropRef.current;
     if (!drop || !track) return;

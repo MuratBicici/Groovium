@@ -70,6 +70,9 @@ sound.
 - [ ] **Throw it.** Flick it hard in any direction, or just let go of it away
       from the deck. It sails or falls out of the window, the deck is left
       showing the bare platter, the title clears, and the transport stays off.
+      **One** record leaves, and only one: the record changer's exit is
+      suppressed after a throw, so nothing should rise out of the empty deck
+      behind it.
 - [ ] **Afterwards**, relaunch. The library collection should still come back —
       throwing a record away empties the deck, not the memory of what you were
       listening to. (Same rule as §1, reached from a different direction.)
