@@ -22,8 +22,8 @@ vi.mock('@/core/security/spotifyAuth', async (importOriginal) => ({
  * went on holding suggestions that could no longer be reached.
  *
  * The distinction that matters is which side of the line the current track
- * falls on: a Spotify track stops with an explanation, and local playback is
- * none of Spotify's business.
+ * falls on: a Spotify track comes off the deck with an explanation, and local
+ * playback is none of Spotify's business.
  */
 
 const track = (id: string, source: 'local' | 'spotify'): TrackMetadata => ({
@@ -83,7 +83,7 @@ describe('signing out of Spotify', () => {
     registerProvider(new FakeProvider('spotify'));
   });
 
-  it('stops a Spotify track and says why', async () => {
+  it('takes a Spotify track off the deck and says why', async () => {
     nowPlaying('spotify');
     await usePlayerStore.getState().signOutOfSpotify();
 
@@ -91,6 +91,29 @@ describe('signing out of Spotify', () => {
     expect(state.playbackState).toBe('IDLE');
     expect(state.positionMs).toBe(0);
     expect(state.error).toMatch(/Connect your account/);
+  });
+
+  it('leaves nothing on the deck to press play on', async () => {
+    // Stopping it was not enough. The record stayed put and the transport
+    // stayed lit, so it read as something that could be started again, and
+    // pressing play only produced the same message a second time.
+    nowPlaying('spotify');
+    await usePlayerStore.getState().signOutOfSpotify();
+
+    const state = usePlayerStore.getState();
+    expect(state.currentTrack).toBeNull();
+    expect(state.playback.tracks).toEqual([]);
+    expect(state.playback.index).toBe(-1);
+  });
+
+  it('says why, rather than reporting whatever the provider made of it', async () => {
+    // Pausing runs after the tokens are gone, so it can fail on its own and
+    // report through the same field. The explanation has to be the one that
+    // survives.
+    nowPlaying('spotify');
+    await usePlayerStore.getState().signOutOfSpotify();
+
+    expect(usePlayerStore.getState().error).toMatch(/Connect your account/);
   });
 
   it('leaves local playback entirely alone', async () => {
@@ -103,6 +126,9 @@ describe('signing out of Spotify', () => {
     expect(state.playbackState).toBe('PLAYING');
     expect(state.positionMs).toBe(42000);
     expect(state.error).toBeNull();
+    // Still on the deck, and still in a collection worth pressing Next in.
+    expect(state.currentTrack?.id).toBe('local:1');
+    expect(state.playback.tracks).toHaveLength(1);
   });
 
   it('empties the suggestion queue either way', async () => {

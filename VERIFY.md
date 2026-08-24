@@ -35,20 +35,28 @@ omitting it deleted what was already there.
 - [ ] Look at `session.json` while doing it: `context` should stay `library`
       through the search track rather than disappearing.
 
-## 2. Signing out of Spotify stops Spotify playback
+## 2. Signing out of Spotify takes the record off
 
 It used to clear the tokens and nothing else, so a track kept playing until it
 failed on its own and the suggestion queue held tracks that could no longer be
 reached.
 
-- [ ] **Spotify track playing → sign out.** It stops, and the message reads
-      *Bağlantı kesildiği için çalma durduruldu. Dinlemeye devam etmek için
-      hesabınızı bağlayın.*
-- [ ] **Local track playing → sign out.** Nothing happens. This is the
-      distinction that matters and the one most annoying to get wrong.
-- [ ] **Afterwards**, with no account, try to play a Spotify track — from a
-      mixed playlist, or by pressing Next onto one. Same message, not the
-      provider's own *Spotify player is not connected*.
+A first pass on 2026-08-25 found the rest of it: stopping the track left the
+record sitting on the deck with the transport lit, which reads as something you
+can start again — and pressing play only produced the same message a second
+time. The record comes off now, the way a thrown one does.
+
+- [ ] **Spotify track playing → sign out.** The record lifts off the deck and
+      the deck is left bare. The transport greys out, the title goes back to
+      *Henüz bir şey çalmıyor*, and the message reads *Bağlantı kesildiği için
+      çalma durduruldu. Dinlemeye devam etmek için hesabınızı bağlayın.*
+- [ ] **Local track playing → sign out.** Nothing happens — the record stays on
+      the deck and keeps playing. This is the distinction that matters and the
+      one most annoying to get wrong.
+- [ ] **Afterwards**, with no account, open a playlist holding a Spotify track
+      and play it. Same message, not the provider's own *Spotify player is not
+      connected*. (The queue you were in is gone with the record, so this has
+      to be reached from a panel rather than by pressing Next.)
 
 ---
 

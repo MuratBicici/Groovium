@@ -1004,12 +1004,19 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // be interrupted by signing out of one.
       if (get().currentTrack?.source !== 'spotify') return;
 
-      await withProvider((provider) => provider.pause());
-      set({
-        playbackState: 'IDLE',
-        positionMs: 0,
-        error: say('error.spotifyDisconnected'),
-      });
+      // The record comes off, rather than being stopped where it stands.
+      //
+      // Stopping it was not enough: the record stayed on the deck and the
+      // transport stayed lit, so it read as something that could be started
+      // again — and pressing play only produced the same message a second
+      // time. A record that cannot be played is not on the deck. Same clearing
+      // a throw does, and it leaves `playback.id` as `single`, which
+      // `rememberedCollection` reads as "nothing resolvable is playing" and
+      // answers by keeping the collection already saved.
+      await get().discardRecord();
+      // After the clearing, so it survives it — and so a failure inside it,
+      // which reports through the same field, does not stand in for this.
+      set({ error: say('error.spotifyDisconnected') });
     },
 
     /**
