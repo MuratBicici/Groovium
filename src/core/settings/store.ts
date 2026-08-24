@@ -1,12 +1,10 @@
 import { create } from 'zustand';
 import {
   DEFAULT_SETTINGS,
-  applySurfaceEffect,
   loadSettings,
   saveSettings,
   type Language,
   type Settings,
-  type SurfaceEffect,
 } from '@/core/settings';
 import {
   CUSTOM_DEFAULTS,
@@ -32,13 +30,6 @@ import {
 interface SettingsStore extends Settings {
   /** False until disk has been read, so nothing saves over what is on it. */
   ready: boolean;
-  /**
-   * What the platform said when it refused a window effect, if it did.
-   *
-   * Not persisted: it is a fact about this machine and this attempt, and it
-   * belongs next to the button that was pressed rather than in a file.
-   */
-  surfaceError: string | null;
   initialize: () => Promise<void>;
   setTheme: (theme: string) => void;
   setLanguage: (language: Language) => void;
@@ -46,7 +37,6 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
-  setSurface: (surface: { opacity?: number; effect?: SurfaceEffect }) => void;
 }
 
 /**
@@ -56,19 +46,6 @@ interface SettingsStore extends Settings {
  * choice to use English on a Turkish system — which is why `language: null` is
  * a distinct state from `language: 'en'` rather than a default value.
  */
-/**
- * Which effect the window should actually be wearing.
- *
- * An opaque surface has nothing behind it to frost, and leaving an effect
- * attached anyway would keep the compositor blurring a backdrop nobody can
- * see. The choice is remembered either way, so turning the opacity back down
- * brings back the effect that was picked rather than starting from off.
- */
-function effectFor(settings: Settings): SurfaceEffect {
-  if ((settings.surfaceOpacity ?? 100) >= 100) return 'none';
-  return settings.surfaceEffect ?? 'none';
-}
-
 function systemLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
   return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
@@ -115,11 +92,6 @@ function applyToDocument(settings: Settings): void {
     }
   }
 
-  // How much of the window's own surface is there. The frosting behind it is
-  // not CSS's to do — see `applySurfaceEffect` — so this is the whole of what
-  // the document needs to know about glass.
-  root.style.setProperty('--surface-alpha', `${settings.surfaceOpacity ?? 100}%`);
-
   if (settings.reduceMotion) {
     root.dataset.motion = 'off';
   } else {
@@ -148,7 +120,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
-    const { customPrimary, customSecondary, surfaceOpacity, surfaceEffect } = get();
+    const { customPrimary, customSecondary } = get();
     const settings = {
       theme,
       language,
@@ -157,18 +129,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       compact,
       customPrimary,
       customSecondary,
-      surfaceOpacity,
-      surfaceEffect,
     };
     applyToDocument(settings);
-    void applySurfaceEffect(effectFor(settings)).then((error) => set({ surfaceError: error }));
     void saveSettings(settings);
   };
 
   return {
     ...DEFAULT_SETTINGS,
     ready: false,
-    surfaceError: null,
 
     async initialize() {
       if (get().ready) return;
@@ -179,9 +147,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         language: stored.language ?? systemLanguage(),
       };
       applyToDocument(settings);
-      // Startup does not report: an effect that has stopped working since the
-      // last run is not something anyone asked about while opening the app.
-      void applySurfaceEffect(effectFor(settings));
       set({ ...settings, ready: true });
     },
 
@@ -190,11 +155,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
     setCompact: (compact) => commit({ compact }),
-    setSurface: ({ opacity, effect }) =>
-      commit({
-        ...(opacity === undefined ? {} : { surfaceOpacity: opacity }),
-        ...(effect === undefined ? {} : { surfaceEffect: effect }),
-      }),
     setCustomColour: (which, colour) =>
       commit(
         which === 'primary'

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
-import { SURFACE_EFFECTS } from '@/core/settings';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
 import { isTauri } from '@/core/utils/env';
@@ -46,10 +45,6 @@ export function SettingsPanel({
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
-  const surfaceOpacity = useSettingsStore((s) => s.surfaceOpacity ?? 100);
-  const surfaceEffect = useSettingsStore((s) => s.surfaceEffect ?? 'none');
-  const surfaceError = useSettingsStore((s) => s.surfaceError);
-  const setSurface = useSettingsStore((s) => s.setSurface);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
@@ -186,68 +181,6 @@ export function SettingsPanel({
             )}
           </div>
 
-          {/* The window's own surface, not a palette's. Every theme can be
-              glass, so this sits beside the palettes rather than inside the
-              custom one. */}
-          <div className="space-y-1.5">
-            <Slider
-              label={t('settings.surfaceOpacity')}
-              value={surfaceOpacity}
-              min={20}
-              max={100}
-              suffix="%"
-              // The checker is the convention for "this is what is behind it",
-              // and it says what the control does without a sentence: the
-              // surface fades into whatever the window is sitting on.
-              track={`linear-gradient(to right, transparent, var(--color-shell-600)),
-                repeating-conic-gradient(
-                  rgb(var(--sheen) / 0.14) 0% 25%,
-                  transparent 0% 50%
-                ) 0 0 / 8px 8px`}
-              onChange={(opacity) => setSurface({ opacity })}
-            />
-            {/* A choice, not an amount. None of the platform's window effects
-                takes a blur radius, and the one API that does cannot see the
-                desktop from a Win32 window — `src-tauri/src/vibrancy.rs` has
-                the whole finding.
-
-                Dead at full opacity, and says so rather than sitting there
-                doing nothing: there is no backdrop to frost through a surface
-                that nothing can be seen behind. */}
-            <div className={surfaceOpacity >= 100 ? 'opacity-40' : ''}>
-              <span className="text-body text-cream-200">{t('settings.surfaceEffect')}</span>
-              <div className="mt-1 flex gap-1">
-                {SURFACE_EFFECTS.map((effect) => (
-                  <button
-                    key={effect}
-                    type="button"
-                    disabled={surfaceOpacity >= 100}
-                    aria-pressed={surfaceEffect === effect}
-                    onClick={() => setSurface({ effect })}
-                    className={`flex-1 rounded px-1 py-1 text-meta transition-colors disabled:cursor-not-allowed ${
-                      surfaceEffect === effect
-                        ? 'bg-shell-600 text-cream-50'
-                        : 'text-cream-400 hover:bg-shell-700 hover:text-cream-200'
-                    }`}
-                  >
-                    {t(`settings.effect.${effect}` as 'settings.effect.none')}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* What the platform said, where the button that asked is. Each of
-                these effects has a Windows version it needs and is simply not
-                there below it; the first attempt at this feature failed
-                silently for weeks, which is the reason this is on screen and
-                not in a console. */}
-            {surfaceError && (
-              <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
-                {t('settings.effectRefused', { message: surfaceError })}
-              </p>
-            )}
-            <p className="text-meta leading-snug text-cream-400">{t('settings.surfaceHint')}</p>
-          </div>
-
           <Toggle
             label={t('settings.reduceMotion')}
             hint={t('settings.reduceMotionHint')}
@@ -340,59 +273,6 @@ function Colour({
       />
       <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
     </button>
-  );
-}
-
-/**
- * A labelled range.
- *
- * Native, like the colour picker's: nothing has to line up with the thumb, and
- * the keyboard gets the control for free.
- */
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  suffix,
-  disabled,
-  track,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  suffix: string;
-  disabled?: boolean;
-  /** Painted on the track itself, when the slider can show what it does. */
-  track?: string;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className={`block ${disabled ? 'opacity-40' : ''}`}>
-      <span className="flex items-baseline justify-between gap-2">
-        <span className="text-body text-cream-200">{label}</span>
-        <span className="shrink-0 text-meta tabular-nums text-cream-400">
-          {Math.round(value)}
-          {suffix}
-        </span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={Math.round(value)}
-        disabled={disabled}
-        aria-label={label}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={track ? { background: track } : undefined}
-        className={`groove-range mt-1 h-3 w-full appearance-none rounded-full ring-1 ring-shell-600 disabled:cursor-not-allowed ${
-          track ? '' : 'groove-inset'
-        }`}
-      />
-    </label>
   );
 }
 

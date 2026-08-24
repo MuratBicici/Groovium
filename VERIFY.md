@@ -1,7 +1,12 @@
 # Pending verification
 
-**Two sections are still open: §2 and §5.** Everything else here has been seen
-on a real machine.
+**One section is still open: §2.** Everything else here has been seen on a
+real machine.
+
+There was a §5, about making the window translucent and frosted. The
+frosting could not be made to work on Windows and the whole thing was taken
+back out on 2026-08-25; `README.md` keeps the finding so it is not
+rediscovered.
 
 The remote stretch ended on 2026-08-24. §2 is the last of it: a fix made in
 response to the run-through that closed it, extended on 2026-08-25 after a
@@ -48,55 +53,6 @@ time. The record comes off now, the way a thrown one does.
       and play it. Same message, not the provider's own *Spotify player is not
       connected*. (The queue you were in is gone with the record, so this has
       to be reached from a panel rather than by pressing Next.)
-
-## 5. The window's frosting
-
-Settings → Appearance has **Opacity** and, under it, **Frost**: Off / Blur /
-Acrylic / Mica.
-
-The first attempt at this used CSS `backdrop-filter`, and a run on 2026-08-25
-established that it does nothing — it samples the page behind an element, and
-behind this one is the desktop, which belongs to the compositor rather than to
-the webview. It frosts correctly in a browser and not at all in the app, which
-is the worst possible way for a thing to be wrong.
-
-An adjustable radius turned out not to exist on Windows at all. The one API
-that has one, `Windows.UI.Composition`, needs `CreateHostBackdropBrush` to see
-the desktop and that returns a black visual outside UWP; every effect that
-*can* see the desktop has a fixed radius. So the control is a choice of effect,
-applied through `window-vibrancy` in `src-tauri/src/vibrancy.rs`, and the
-amount of *colour* over it stays with Opacity in CSS.
-
-A first try on 2026-08-25 reported that none of the three did anything, with
-nothing said about why. Two things came out of chasing that:
-
-- **Blur cannot work on this machine.** Tauri documents it as *Windows
-  7/10/11 22H1 only*, and this is build 26200. It is kept because the app is
-  not only for this machine, but it is expected to refuse here.
-- **Failures were invisible.** They went to the console, which is exactly the
-  way the CSS attempt survived. They now appear in red under the Frost row, in
-  the platform's own words. That is what the next run is really for.
-
-None of the four can be checked from here — they are platform window effects,
-and there is no window.
-
-- [ ] Drop **Opacity**, then press each of **Blur**, **Acrylic** and **Mica**.
-      **Report the red message if one appears, word for word** — that text is
-      the whole diagnosis. If a button produces no message and no visible
-      change, say that too: it means Windows accepted the effect and drew
-      nothing, which is a different problem with a different cause.
-- [ ] **Drag the window** with each. Acrylic is documented to lag on Windows 10
-      v1903+ and 11 build 22000, Blur on 11 build 22621+, and Mica is the one
-      with no such note. If dragging is bad, that decides which of them is
-      worth keeping.
-- [ ] Switch between two effects without going through Off. The old one should
-      not be left underneath the new one.
-- [ ] Put Opacity back to 100. The Frost row should grey out, the effect should
-      be cleared, and the window should look exactly as it did before any of
-      this existed.
-- [ ] Quit from the tray and relaunch. Both settings should come back, and the
-      effect should be applied at startup rather than only after the panel is
-      opened.
 
 ---
 

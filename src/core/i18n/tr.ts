@@ -176,15 +176,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.customSecondary': 'Vurgu',
   'settings.customWarning':
     'Özel renk kombinasyonlarında kontrast oranları garanti edilemez. Ön tanımlı paletlerin tamamı optimum okunabilirlik için kalibre edilmiştir.',
-  'settings.surfaceOpacity': 'Saydamlık',
-  'settings.surfaceEffect': 'Buzlanma',
-  'settings.effect.none': 'Kapalı',
-  'settings.effect.blur': 'Bulanık',
-  'settings.effect.acrylic': 'Akrilik',
-  'settings.effect.mica': 'Mica',
-  'settings.effectRefused': 'Windows bunu uygulamadı: {message}',
-  'settings.surfaceHint':
-    'Yüzde yüzün altında pencere masaüstünü geçirir. Buzlanma görüneni bulanıklaştırır — Mica onun yerine duvar kâğıdını alır ve pencere sürüklenirken takılmayan tek seçenek odur.',
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',

@@ -16,17 +16,6 @@ import { isTauri } from '@/core/utils/env';
 
 export type Language = 'en' | 'tr';
 
-/**
- * The window effects the platform offers, none of which takes a radius.
- *
- * `mica` samples the wallpaper rather than the windows behind, and is the
- * only one with no documented cost while the window is being dragged —
- * which for something that lives on top of everything else is worth knowing.
- */
-export type SurfaceEffect = 'none' | 'blur' | 'acrylic' | 'mica';
-
-export const SURFACE_EFFECTS: readonly SurfaceEffect[] = ['none', 'blur', 'acrylic', 'mica'];
-
 export interface Settings {
   /** `null` is the default palette — see `DEFAULT_THEME`. */
   theme: string | null;
@@ -55,25 +44,6 @@ export interface Settings {
    */
   customPrimary: string | null;
   customSecondary: string | null;
-  /**
-   * How solid the window's surface is, 0-100.
-   *
-   * A property of the window rather than of a palette: the frame is
-   * undecorated and transparent, so this is the shell's own background giving
-   * way to whatever is behind the widget. Every theme can be glass.
-   *
-   * `null` is fully opaque — what every build before this one was, and what
-   * an untouched installation stays.
-   */
-  surfaceOpacity: number | null;
-  /**
-   * Which whole-window effect frosts what shows through the surface.
-   *
-   * A choice rather than an amount because none of the platform effects takes
-   * a blur radius, and the one API that does cannot see the desktop from a
-   * Win32 window. `src-tauri/src/vibrancy.rs` has the whole finding.
-   */
-  surfaceEffect: SurfaceEffect | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -84,30 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   compact: false,
   customPrimary: null,
   customSecondary: null,
-  surfaceOpacity: null,
-  surfaceEffect: null,
 };
-
-/**
- * Ask the window to wear one of the platform's effects.
- *
- * Returns what went wrong, or null. Every one of these has a Windows version
- * it needs and simply is not there below it, and an effect that quietly does
- * nothing is precisely the failure this whole feature already had once — the
- * caller puts this on screen next to the button that was pressed.
- *
- * A no-op outside Tauri, where there is no window to put an effect on.
- */
-export async function applySurfaceEffect(effect: SurfaceEffect): Promise<string | null> {
-  if (!isTauri()) return null;
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('set_surface_effect', { effect });
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err);
-  }
-}
 
 export async function loadSettings(): Promise<Settings> {
   if (!isTauri()) return DEFAULT_SETTINGS;

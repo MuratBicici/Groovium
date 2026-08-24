@@ -279,32 +279,6 @@ body {
   outline-offset: 2px;
 }
 
-/*
- * The window's own surface.
- *
- * The frame is undecorated and transparent, so this gradient is the only thing
- * between the widget and the desktop. Written through `color-mix` against
- * `transparent` rather than as an `opacity`, because opacity would take the
- * record, the arm and every word in the window down with it — what should give
- * way is the surface and nothing else.
- *
- * The alpha comes from the settings store, which writes it onto the root. It
- * does not belong to a palette: every theme can be glass.
- *
- * The *frosting* is not here and cannot be. `backdrop-filter` samples the page
- * behind an element, and behind this one is the desktop, which is the
- * compositor's and not the webview's — it frosts correctly in a browser and
- * does nothing at all in the app. That job belongs to a platform window effect;
- * see `src-tauri/src/vibrancy.rs`.
- */
-.groove-shell {
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--color-shell-700) var(--surface-alpha, 100%), transparent),
-    color-mix(in srgb, var(--color-shell-900) var(--surface-alpha, 100%), transparent)
-  );
-}
-
 /* A recess: the well behind the platter, an input, a progress track. */
 .groove-inset {
   background: var(--color-shell-900);

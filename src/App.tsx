@@ -123,7 +123,7 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      className="groove-shell relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] ring-1 ring-black/50"
+      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50"
     >
       <PlaylistPickerProvider>
       <DiscFlightProvider>
