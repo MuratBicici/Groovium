@@ -1,10 +1,14 @@
 # Pending verification
 
-The first run-through is done — all eight sections passed, so everything built
-during the remote stretch is confirmed except what that run-through itself
-turned up. What is left is two fixes made in response to it, plus one feature
-built since. All three have tests, and the feature was measured frame by frame
-in the browser; none of them has been used on a real machine.
+**Two sections are still open: §1 and §2.** Everything else here has been
+seen on a real machine.
+
+The remote stretch ended on 2026-08-24. What is left of it is the two fixes
+made in response to the run-through that closed it — both have tests, neither
+has ever run on the desktop. §3 and §4 were built after the session came back
+under direct control and were tried in use as they were built; they are kept
+below as a record of what to look at if either turns out to be wrong, not as
+work still owed.
 
 ---
 
@@ -46,6 +50,14 @@ reached.
       mixed playlist, or by pressing Next onto one. Same message, not the
       provider's own *Spotify player is not connected*.
 
+---
+
+## Used and working, kept for reference
+
+Built after the remote stretch, with the user trying each piece as it landed.
+Recorded so that a later problem starts from what was intended rather than from
+scratch.
+
 ## 3. Taking the record off the deck
 
 New. Press the record on the deck and drag: it comes off, shrinks into the hand
@@ -59,26 +71,26 @@ the deck's centre, and leaves through the edge of the window when thrown. What
 the browser cannot check is the one thing this feature is *about*, which is the
 sound.
 
-- [ ] **Pick it up while a song is playing.** The sound stops as it leaves the
+- **Pick it up while a song is playing.** The sound stops as it leaves the
       deck, the label reads *Duraklatıldı*, the arm swings back to its rest,
       and the transport row greys out.
-- [ ] **Put it back over the deck.** It drops onto the spindle and carries on
+- **Put it back over the deck.** It drops onto the spindle and carries on
       **from the same second** — not from the beginning.
-- [ ] **Pause a song, then pick it up and put it back.** It stays paused. This
+- **Pause a song, then pick it up and put it back.** It stays paused. This
       is the distinction that matters: putting a record down is not pressing
       play.
-- [ ] **Throw it.** Flick it hard in any direction, or just let go of it away
+- **Throw it.** Flick it hard in any direction, or just let go of it away
       from the deck. It sails or falls out of the window, the deck is left
       showing the bare platter, the title clears, and the transport stays off.
       **One** record leaves, and only one: the record changer's exit is
       suppressed after a throw, so nothing should rise out of the empty deck
       behind it.
-- [ ] **Afterwards**, relaunch. The library collection should still come back —
+- **Afterwards**, relaunch. The library collection should still come back —
       throwing a record away empties the deck, not the memory of what you were
       listening to. (Same rule as §1, reached from a different direction.)
-- [ ] **Tab to the record and press Enter.** It should be thrown for you.
+- **Tab to the record and press Enter.** It should be thrown for you.
       A plain *click* on the record should do nothing at all.
-- [ ] With **reduce motion** on: the drag still works, but nothing arcs — the
+- With **reduce motion** on: the drag still works, but nothing arcs — the
       record is small under the pointer at once and a throw is instant.
 
 ## 4. The Spotify account name survives a restart
@@ -91,11 +103,11 @@ There is now a `spotify_account` command, and the panel asks it when it opens
 onto an account that was already connected. Not checkable from here at all —
 it is a real network call against a real token.
 
-- [ ] Sign in, close the app from the tray, relaunch, open the Spotify panel.
+- Sign in, close the app from the tray, relaunch, open the Spotify panel.
       The heading should carry your name, not just *Spotify*.
-- [ ] The **premium notice** should come back with it, if the account is not
+- The **premium notice** should come back with it, if the account is not
       premium — it rode on the same missing profile.
-- [ ] Pull the network and open the panel while signed in. It should still say
+- Pull the network and open the panel while signed in. It should still say
       *connected* and show search; only the name goes missing. Being offline is
       not being signed out.
 
