@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
+import { SURFACE_EFFECTS } from '@/core/settings';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
 import { isTauri } from '@/core/utils/env';
@@ -46,7 +47,7 @@ export function SettingsPanel({
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
   const surfaceOpacity = useSettingsStore((s) => s.surfaceOpacity ?? 100);
-  const surfaceBlur = useSettingsStore((s) => s.surfaceBlur ?? 12);
+  const surfaceEffect = useSettingsStore((s) => s.surfaceEffect ?? 'none');
   const setSurface = useSettingsStore((s) => s.setSurface);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
@@ -204,18 +205,35 @@ export function SettingsPanel({
                 ) 0 0 / 8px 8px`}
               onChange={(opacity) => setSurface({ opacity })}
             />
-            {/* Dead at full opacity, and says so rather than sitting there
+            {/* A choice, not an amount. None of the platform's window effects
+                takes a blur radius, and the one API that does cannot see the
+                desktop from a Win32 window — `src-tauri/src/vibrancy.rs` has
+                the whole finding.
+
+                Dead at full opacity, and says so rather than sitting there
                 doing nothing: there is no backdrop to frost through a surface
                 that nothing can be seen behind. */}
-            <Slider
-              label={t('settings.surfaceBlur')}
-              value={surfaceBlur}
-              min={0}
-              max={30}
-              suffix="px"
-              disabled={surfaceOpacity >= 100}
-              onChange={(blur) => setSurface({ blur })}
-            />
+            <div className={surfaceOpacity >= 100 ? 'opacity-40' : ''}>
+              <span className="text-body text-cream-200">{t('settings.surfaceEffect')}</span>
+              <div className="mt-1 flex gap-1">
+                {SURFACE_EFFECTS.map((effect) => (
+                  <button
+                    key={effect}
+                    type="button"
+                    disabled={surfaceOpacity >= 100}
+                    aria-pressed={surfaceEffect === effect}
+                    onClick={() => setSurface({ effect })}
+                    className={`flex-1 rounded px-1 py-1 text-meta transition-colors disabled:cursor-not-allowed ${
+                      surfaceEffect === effect
+                        ? 'bg-shell-600 text-cream-50'
+                        : 'text-cream-400 hover:bg-shell-700 hover:text-cream-200'
+                    }`}
+                  >
+                    {t(`settings.effect.${effect}` as 'settings.effect.none')}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="text-meta leading-snug text-cream-400">{t('settings.surfaceHint')}</p>
           </div>
 

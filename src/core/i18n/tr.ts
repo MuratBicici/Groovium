@@ -53,6 +53,12 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.repeat': 'Tekrar: {mode}',
   'transport.station': 'Sonsuz çalma: {state}',
   'transport.seek': 'İleri sar',
+  'transport.volume': 'Ses',
+  'transport.mute': 'Sesi kapat',
+  'transport.unmute': 'Sesi aç',
+  'repeat.off': 'kapalı',
+  'repeat.one': 'tek şarkı',
+  'repeat.all': 'tümü',
 
   'deck.takeOff': 'Plağı yuvadan çıkar',
 
@@ -65,17 +71,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'colour.saturation': 'Doygunluk',
   'colour.brightness': 'Parlaklık',
   'colour.hex': 'Hex',
-
-  'settings.surfaceOpacity': 'Saydamlık',
-  'settings.surfaceBlur': 'Bulanıklık',
-  'settings.surfaceHint':
-    'Yüzde yüzün altında pencere masaüstünü geçirir. Bulanıklık, görüneni buzlandırır.',
-  'transport.volume': 'Ses',
-  'transport.mute': 'Sesi kapat',
-  'transport.unmute': 'Sesi aç',
-  'repeat.off': 'kapalı',
-  'repeat.one': 'tek şarkı',
-  'repeat.all': 'tümü',
 
   'status.IDLE': 'Hazır',
   'status.LOADING': 'Yükleniyor',
@@ -181,6 +176,14 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.customSecondary': 'Vurgu',
   'settings.customWarning':
     'Özel renk kombinasyonlarında kontrast oranları garanti edilemez. Ön tanımlı paletlerin tamamı optimum okunabilirlik için kalibre edilmiştir.',
+  'settings.surfaceOpacity': 'Saydamlık',
+  'settings.surfaceEffect': 'Buzlanma',
+  'settings.effect.none': 'Kapalı',
+  'settings.effect.blur': 'Bulanık',
+  'settings.effect.acrylic': 'Akrilik',
+  'settings.effect.mica': 'Mica',
+  'settings.surfaceHint':
+    'Yüzde yüzün altında pencere masaüstünü geçirir. Buzlanma görüneni bulanıklaştırır — Mica onun yerine duvar kâğıdını alır ve pencere sürüklenirken takılmayan tek seçenek odur.',
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',

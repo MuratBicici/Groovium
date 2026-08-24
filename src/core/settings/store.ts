@@ -1,15 +1,18 @@
 import { create } from 'zustand';
 import {
   DEFAULT_SETTINGS,
+  applySurfaceEffect,
   loadSettings,
   saveSettings,
   type Language,
   type Settings,
+  type SurfaceEffect,
 } from '@/core/settings';
 import {
   CUSTOM_DEFAULTS,
   CUSTOM_THEME,
   DEFAULT_THEME,
+  THEMES,
   isThemeId,
 } from '@/core/settings/themes';
 
@@ -37,7 +40,7 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
-  setSurface: (surface: { opacity?: number; blur?: number }) => void;
+  setSurface: (surface: { opacity?: number; effect?: SurfaceEffect }) => void;
 }
 
 /**
@@ -48,13 +51,32 @@ interface SettingsStore extends Settings {
  * a distinct state from `language: 'en'` rather than a default value.
  */
 /**
- * How far the surface frosts, when nobody has said.
+ * Which effect the window should actually be wearing.
  *
- * Not zero: raw transparency over whatever happens to be on the desktop is
- * unreadable, and someone reaching for the opacity slider is asking for
- * glass rather than for a hole.
+ * An opaque surface has nothing behind it to frost, and leaving an effect
+ * attached anyway would keep the compositor blurring a backdrop nobody can
+ * see. The choice is remembered either way, so turning the opacity back down
+ * brings back the effect that was picked rather than starting from off.
  */
-const DEFAULT_BLUR = 12;
+function effectFor(settings: Settings): SurfaceEffect {
+  if ((settings.surfaceOpacity ?? 100) >= 100) return 'none';
+  return settings.surfaceEffect ?? 'none';
+}
+
+/**
+ * The colour the window's surface is painted in — `--color-shell-700`, arrived
+ * at without asking the document.
+ *
+ * The computed value of that custom property is not a colour for a hand-rolled
+ * palette: it is the `color-mix` expression that produces one. Every palette's
+ * shell-700 is either its own first swatch or, for the custom one, the primary
+ * itself, so it can be read off the catalogue instead.
+ */
+function surfaceColour(settings: Settings): string {
+  if (settings.theme === CUSTOM_THEME) return settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
+  const theme = THEMES.find((entry) => entry.id === (settings.theme ?? DEFAULT_THEME));
+  return theme?.swatch[0] ?? CUSTOM_DEFAULTS.primary;
+}
 
 function systemLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
@@ -102,17 +124,10 @@ function applyToDocument(settings: Settings): void {
     }
   }
 
-  // The window's own surface. Written as an alpha and a blur radius rather
-  // than as a colour, so a palette and the glass it is made of stay separate
-  // facts: every theme reads these, and changing one does not touch the other.
-  const opacity = settings.surfaceOpacity ?? 100;
-  root.style.setProperty('--surface-alpha', `${opacity}%`);
-  root.style.setProperty('--surface-blur', `${settings.surfaceBlur ?? DEFAULT_BLUR}px`);
-  // A flag rather than a number, because `backdrop-filter` is not free: at
-  // full opacity nothing behind the window is visible anyway, and leaving the
-  // filter on would have the compositor sampling a backdrop nobody can see.
-  if (opacity < 100) root.dataset.glass = '';
-  else delete root.dataset.glass;
+  // How much of the window's own surface is there. The frosting behind it is
+  // not CSS's to do — see `applySurfaceEffect` — so this is the whole of what
+  // the document needs to know about glass.
+  root.style.setProperty('--surface-alpha', `${settings.surfaceOpacity ?? 100}%`);
 
   if (settings.reduceMotion) {
     root.dataset.motion = 'off';
@@ -142,7 +157,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
-    const { customPrimary, customSecondary, surfaceOpacity, surfaceBlur } = get();
+    const { customPrimary, customSecondary, surfaceOpacity, surfaceEffect } = get();
     const settings = {
       theme,
       language,
@@ -152,9 +167,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       customPrimary,
       customSecondary,
       surfaceOpacity,
-      surfaceBlur,
+      surfaceEffect,
     };
     applyToDocument(settings);
+    void applySurfaceEffect(effectFor(settings), surfaceColour(settings));
     void saveSettings(settings);
   };
 
@@ -171,6 +187,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         language: stored.language ?? systemLanguage(),
       };
       applyToDocument(settings);
+      void applySurfaceEffect(effectFor(settings), surfaceColour(settings));
       set({ ...settings, ready: true });
     },
 
@@ -179,10 +196,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
     setCompact: (compact) => commit({ compact }),
-    setSurface: ({ opacity, blur }) =>
+    setSurface: ({ opacity, effect }) =>
       commit({
         ...(opacity === undefined ? {} : { surfaceOpacity: opacity }),
-        ...(blur === undefined ? {} : { surfaceBlur: blur }),
+        ...(effect === undefined ? {} : { surfaceEffect: effect }),
       }),
     setCustomColour: (which, colour) =>
       commit(

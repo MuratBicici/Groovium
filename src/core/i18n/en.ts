@@ -77,11 +77,6 @@ export const en = {
   'colour.brightness': 'Brightness',
   'colour.hex': 'Hex',
 
-  'settings.surfaceOpacity': 'Opacity',
-  'settings.surfaceBlur': 'Blur',
-  'settings.surfaceHint':
-    'Below 100% the window lets the desktop through. Blur frosts what shows.',
-
   'status.IDLE': 'Ready',
   'status.LOADING': 'Loading',
   'status.PLAYING': 'Now Playing',
@@ -189,6 +184,16 @@ export const en = {
   'settings.customSecondary': 'Accent',
   'settings.customWarning':
     'Contrast ratios cannot be guaranteed for custom color combinations. All preset palettes are calibrated for optimal legibility.',
+  'settings.surfaceOpacity': 'Opacity',
+  'settings.surfaceEffect': 'Frost',
+  // Names of the platform's own effects. Mica is Microsoft's name for one of
+  // them, not a word being borrowed, so it stays as it is in every language.
+  'settings.effect.none': 'Off',
+  'settings.effect.blur': 'Blur',
+  'settings.effect.acrylic': 'Acrylic',
+  'settings.effect.mica': 'Mica',
+  'settings.surfaceHint':
+    'Below 100% the window lets the desktop through. Frost blurs what shows — Mica takes the wallpaper instead, and is the one that stays smooth while the window is dragged.',
   'settings.language': 'Language',
   'settings.behaviour': 'Behaviour',
   'settings.reduceMotion': 'Reduce motion',

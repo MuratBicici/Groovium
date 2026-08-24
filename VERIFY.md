@@ -49,28 +49,43 @@ time. The record comes off now, the way a thrown one does.
       connected*. (The queue you were in is gone with the record, so this has
       to be reached from a panel rather than by pressing Next.)
 
-## 5. Does the window actually frost?
+## 5. The window's frosting
 
-Settings → Appearance now has **Opacity** and **Blur**. Below 100% the shell's
-own background gives way and `backdrop-filter` frosts what shows through.
+Settings → Appearance has **Opacity** and, under it, **Frost**: Off / Blur /
+Acrylic / Mica.
 
-**This is the one thing here I could not check, at all.** In a browser
-`backdrop-filter` blurs the page behind the element, and it does — measured,
-and it looks right. Whether it blurs the *desktop* through a transparent,
-undecorated WebView2 window is a different question with a different answer,
-and the honest position is that I do not know. If it does not, the feature
-degrades to plain see-through with no frost, and the fix is an OS-level effect
-(the `window-vibrancy` crate's acrylic) — which would work but takes the blur
-radius out of the user's hands, so it is a decision rather than a patch.
+The first attempt at this used CSS `backdrop-filter`, and a run on 2026-08-25
+established that it does nothing — it samples the page behind an element, and
+behind this one is the desktop, which belongs to the compositor rather than to
+the webview. It frosts correctly in a browser and not at all in the app, which
+is the worst possible way for a thing to be wrong.
 
-- [ ] Put something recognisable behind the window — a browser, a photo — and
-      drag the **Opacity** slider down. The desktop should show through the
-      shell, while the record, the arm, the text and the buttons stay solid.
-- [ ] Now drag **Blur**. What shows through should frost, and go sharp again at
-      0. **If nothing frosts at any value, say so** — that is the WebView2
-      question above and it changes the approach.
-- [ ] Put Opacity back to 100. The blur slider should grey out, and the window
-      should look exactly as it did before any of this existed.
+An adjustable radius turned out not to exist on Windows at all. The one API
+that has one, `Windows.UI.Composition`, needs `CreateHostBackdropBrush` to see
+the desktop and that returns a black visual outside UWP; every effect that
+*can* see the desktop has a fixed radius. So the control is a choice of effect,
+applied through `window-vibrancy` in `src-tauri/src/vibrancy.rs`, and the
+amount of *colour* over it stays with Opacity in CSS.
+
+None of the four can be checked from here — they are platform window effects,
+and there is no window.
+
+- [ ] Put something recognisable behind the window, drop **Opacity**, and try
+      each of **Blur**, **Acrylic** and **Mica** in turn. Say which ones do
+      anything. Blur is Windows 7/10/11-22H1, Acrylic is 10 v1809+, Mica is 11
+      — on this machine some may simply not apply.
+- [ ] **Drag the window** with each. Acrylic is documented to lag on Windows 10
+      v1903+ and 11 build 22000, Blur on 11 build 22621+, and Mica is the one
+      with no such note. If dragging is bad, that decides which of them is
+      worth keeping.
+- [ ] Switch between two effects without going through Off. The old one should
+      not be left underneath the new one.
+- [ ] Put Opacity back to 100. The Frost row should grey out, the effect should
+      be cleared, and the window should look exactly as it did before any of
+      this existed.
+- [ ] Quit from the tray and relaunch. Both settings should come back, and the
+      effect should be applied at startup rather than only after the panel is
+      opened.
 
 ---
 

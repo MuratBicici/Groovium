@@ -288,8 +288,14 @@ body {
  * record, the arm and every word in the window down with it — what should give
  * way is the surface and nothing else.
  *
- * The alpha and the blur come from the settings store, which writes them onto
- * the root. Neither belongs to a palette: every theme can be glass.
+ * The alpha comes from the settings store, which writes it onto the root. It
+ * does not belong to a palette: every theme can be glass.
+ *
+ * The *frosting* is not here and cannot be. `backdrop-filter` samples the page
+ * behind an element, and behind this one is the desktop, which is the
+ * compositor's and not the webview's — it frosts correctly in a browser and
+ * does nothing at all in the app. That job belongs to a platform window effect;
+ * see `src-tauri/src/vibrancy.rs`.
  */
 .groove-shell {
   background: linear-gradient(
@@ -297,18 +303,6 @@ body {
     color-mix(in srgb, var(--color-shell-700) var(--surface-alpha, 100%), transparent),
     color-mix(in srgb, var(--color-shell-900) var(--surface-alpha, 100%), transparent)
   );
-}
-
-/*
- * Frosting, and only while there is something to frost.
- *
- * `backdrop-filter` is not free — it makes the compositor sample and blur what
- * is behind the window every frame — and at full opacity nothing behind it can
- * be seen anyway. The attribute is set by the store when the alpha drops below
- * 100 and removed when it returns.
- */
-:root[data-glass] .groove-shell {
-  backdrop-filter: blur(var(--surface-blur, 0px));
 }
 
 /* A recess: the well behind the platter, an input, a progress track. */

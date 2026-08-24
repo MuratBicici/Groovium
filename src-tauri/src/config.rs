@@ -72,10 +72,11 @@ pub struct Settings {
     /// `None` is fully opaque, which is what every build before this was.
     #[serde(default)]
     pub surface_opacity: Option<u8>,
-    /// How far the surface frosts what is behind it, in pixels. Only visible
-    /// while `surface_opacity` is under 100.
+    /// Which whole-window effect frosts what shows through: "none", "blur",
+    /// "acrylic" or "mica". Not a radius — none of the platform effects takes
+    /// one. See `vibrancy.rs`.
     #[serde(default)]
-    pub surface_blur: Option<u8>,
+    pub surface_effect: Option<String>,
 }
 
 #[tauri::command]
@@ -169,7 +170,7 @@ mod tests {
             custom_primary: Some("#2e231b".into()),
             custom_secondary: None,
             surface_opacity: Some(70),
-            surface_blur: Some(14),
+            surface_effect: Some("acrylic".into()),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");

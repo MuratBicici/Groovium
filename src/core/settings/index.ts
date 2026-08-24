@@ -16,6 +16,17 @@ import { isTauri } from '@/core/utils/env';
 
 export type Language = 'en' | 'tr';
 
+/**
+ * The window effects the platform offers, none of which takes a radius.
+ *
+ * `mica` samples the wallpaper rather than the windows behind, and is the
+ * only one with no documented cost while the window is being dragged —
+ * which for something that lives on top of everything else is worth knowing.
+ */
+export type SurfaceEffect = 'none' | 'blur' | 'acrylic' | 'mica';
+
+export const SURFACE_EFFECTS: readonly SurfaceEffect[] = ['none', 'blur', 'acrylic', 'mica'];
+
 export interface Settings {
   /** `null` is the default palette — see `DEFAULT_THEME`. */
   theme: string | null;
@@ -55,8 +66,14 @@ export interface Settings {
    * an untouched installation stays.
    */
   surfaceOpacity: number | null;
-  /** How far the surface frosts what is behind it, in px. Idle at full opacity. */
-  surfaceBlur: number | null;
+  /**
+   * Which whole-window effect frosts what shows through the surface.
+   *
+   * A choice rather than an amount because none of the platform effects takes
+   * a blur radius, and the one API that does cannot see the desktop from a
+   * Win32 window. `src-tauri/src/vibrancy.rs` has the whole finding.
+   */
+  surfaceEffect: SurfaceEffect | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -68,8 +85,37 @@ export const DEFAULT_SETTINGS: Settings = {
   customPrimary: null,
   customSecondary: null,
   surfaceOpacity: null,
-  surfaceBlur: null,
+  surfaceEffect: null,
 };
+
+/**
+ * Ask the window to wear one of the platform's effects.
+ *
+ * A no-op outside Tauri, where there is no window to frost and `backdrop-filter`
+ * in the shell's own CSS is doing the equivalent job against the page.
+ */
+export async function applySurfaceEffect(effect: SurfaceEffect, tint: string): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_surface_effect', { effect, tint: rgbTriple(tint) });
+  } catch (err) {
+    // Reported to the console rather than to the user: the effects fail on the
+    // Windows versions that do not have them, and that is a fact about the
+    // machine rather than something anyone can act on from a settings panel.
+    console.warn('[settings] the window effect was refused', err);
+  }
+}
+
+/** `#rrggbb` to the byte triple Rust wants. */
+function rgbTriple(hex: string): [number, number, number] {
+  const text = hex.replace('#', '');
+  return [
+    parseInt(text.slice(0, 2), 16) || 0,
+    parseInt(text.slice(2, 4), 16) || 0,
+    parseInt(text.slice(4, 6), 16) || 0,
+  ];
+}
 
 export async function loadSettings(): Promise<Settings> {
   if (!isTauri()) return DEFAULT_SETTINGS;

@@ -14,6 +14,7 @@ mod session;
 mod shortcuts;
 mod spotify;
 mod tray;
+mod vibrancy;
 
 use tauri::WindowEvent;
 use tauri_plugin_window_state::StateFlags;
@@ -77,6 +78,7 @@ fn main() {
             session::save_session,
             spotify::spotify_begin_auth,
             spotify::spotify_access_token,
+            vibrancy::set_surface_effect,
             spotify::spotify_account,
             spotify::spotify_is_authenticated,
             spotify::spotify_sign_out,
