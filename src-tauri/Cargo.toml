@@ -1,6 +1,6 @@
 [package]
 name = "groovium"
-version = "1.0.0"
+version = "1.0.1"
 description = "A lightweight, modern desktop music player widget with a vintage disk player aesthetic."
 authors = ["Murat Emre Bicici"]
 license = "MIT"
