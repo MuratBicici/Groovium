@@ -261,13 +261,17 @@ body {
  */
 .groove-range::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  /* Taller than the 12px track it rides, so it reads as a knob sitting on a
+     rail rather than a bead threaded through one. Nothing may clip it: an
+     `overflow: hidden` on the track takes a slice off the top and bottom and
+     the whole thing sinks into the groove. */
+  width: 16px;
+  height: 16px;
   border-radius: 9999px;
   background: var(--color-cream-50);
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.35),
-    0 1px 3px rgb(0 0 0 / 0.5);
+    0 0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 4px rgb(0 0 0 / 0.55);
   cursor: pointer;
 }
 .groove-range:focus-visible {

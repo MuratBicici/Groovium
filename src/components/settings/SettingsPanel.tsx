@@ -359,7 +359,7 @@ function Slider({
         aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         style={track ? { background: track } : undefined}
-        className={`groove-range mt-1 h-3 w-full appearance-none overflow-hidden rounded-full ring-1 ring-shell-600 disabled:cursor-not-allowed ${
+        className={`groove-range mt-1 h-3 w-full appearance-none rounded-full ring-1 ring-shell-600 disabled:cursor-not-allowed ${
           track ? '' : 'groove-inset'
         }`}
       />
