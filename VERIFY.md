@@ -1,173 +1,224 @@
 # Pending verification
 
-Things built without a pair of eyes on them, waiting for someone to check.
+A run-through for someone sitting at the machine. Everything below was built
+while the session was remote, so it has either never been seen running, or been
+confirmed only by measurement — and a measurement can be right about the number
+and wrong about whether the thing is any good.
 
-This exists because the session went remote: work continues, but nothing can be
-confirmed by looking at the running desktop app until whoever owns it is back at
-the keyboard. Everything below is either **unverifiable from here** — it needs
-the packaged Tauri app rather than the browser preview — or verified only by
-measurement, where a measurement can be right about the number and wrong about
-whether it looks any good.
+Ordered so that checks sharing a setup happen together. Top to bottom should
+take well under an hour, minus the parts needing a Spotify account or a
+Last.fm key.
 
-Kept until told otherwise. Tick items off as they are checked; delete the file
-when the backlog is empty and the session is back under direct control.
-
----
-
-## How to read this
-
-- **Needs the desktop app** — the browser preview has no window to resize, no
-  tray, no keyring and no `config.json`, so these cannot be exercised here at
-  all.
-- **Measured, not seen** — the numbers say it works. Whether it looks right is a
-  separate question, and one only a person can answer.
+Tick as you go. When the list is empty, delete the file.
 
 ---
 
-## Needs the desktop app
+## Setup, once
 
-- [ ] **The window actually resizes when collapsing.** The window is declared
-      `resizable: false`, which should govern dragging rather than code.
-      `setWindowHeight` (`src/platform/window.ts`) reads the size back and
-      retries with the flag lifted if nothing moved, so a failure should
-      self-correct — but neither the first path nor the fallback has run on a
-      real window.
-- [ ] **The top edge stays put while it collapses.** Windows anchors a resize at
-      the top left, which is what the collapse relies on. If it turns out to
-      anchor elsewhere, the bar will appear to slide up the screen.
-- [ ] **Settings survive a restart.** Theme, language, reduce-motion,
-      always-on-top and compact all go into `config.json` through the same
-      read-mutate-write path as the Spotify Client ID and the Last.fm key.
-      Check the two keys are still in the file afterwards — that is the whole
-      reason `config.rs` has an `update` function.
-- [ ] **Starting collapsed.** The window opens at the size in `tauri.conf.json`
-      every launch, because the state plugin saves position only. If `compact`
-      is stored, the app brings the window down to size once at startup without
-      animating. Nobody has watched that happen.
-- [ ] **Always-on-top is restored at startup.** Same shape: the stored value is
-      applied to the window once settings load.
-- [ ] **The colour picker opens.** The custom theme uses a native
-      `<input type="color">`, on the reasoning that the platform already has a
-      picker and reimplementing a colour wheel inside a 340px widget would be a
-      worse version of something already installed. Whether WebView2 opens the
-      Windows picker, and whether that dialog behaves on a frameless
-      always-on-top window, has only been tested in Chrome.
-- [ ] **The window permissions actually cover the resize.** `set-size`,
-      `set-resizable`, `inner-size` and `scale-factor` were missing from
-      `capabilities/default.json` until the security review found them, which
-      means compact mode's resize was being denied outright in the packaged app
-      — the browser preview has no capability system, so it never showed. They
-      are there now and `setWindowHeight` no longer throws when a call is
-      refused, but only the real app can confirm the grant is the right one.
-- [ ] **Importing still works end to end.** `library_import` now refuses any
-      path that did not come out of a file dialog. Picking files, picking a
-      folder, and confirming after leaving the dialog open a while should all
-      behave exactly as before; if anything now says files "were never chosen
-      in a file dialog", the gate is too tight and wants looking at.
-- [ ] **The tray menu changes language.** Rust holds no dictionary; it rebuilds
-      the menu from strings handed over by the webview. Switch to Turkish, right
-      click the tray icon, and check all five entries — Show / Previous /
-      Play-Pause / Next / Quit — read Turkish **and still work**, since the menu
-      is rebuilt rather than relabelled in place.
+```bash
+npm run tauri dev
+```
 
-## Measured, not seen
+The real app with real Tauri APIs — capabilities, tray, keyring, the asset
+protocol, all of it. Nothing on this list needs the packaged installer, and
+`dev` is far quicker to iterate on.
 
-- [ ] **The collapse and the morph.** The shell passes through ~38 intermediate
-      heights, the record through 49 widths as it shrinks from 152px to 28 and
-      moves left, and the title through 43 positions. That says it animates. It
-      does not say it feels good at 260ms, or that the easing is right.
-- [ ] **The arm leaving and returning.** Out in 170ms, back in 360ms after a
-      60ms delay. Chosen to read as a flick of the wrist out and a careful hand
-      back; only a person can say whether it does.
-- [ ] **Six palettes.** Every text pairing clears WCAG AA in all six, which is
-      a floor rather than a verdict on how they look — particularly Sakura,
-      which was added without anyone seeing it on a real screen.
+Three things worth knowing before starting:
 
-      The numbers were re-measured on 2026-08-23 after the first method turned
-      out to be wrong: it probed with a `bg-shell-800` class, and Tailwind v4
-      only generates the utilities it finds in the source, where that one is
-      used exactly zero times. Three of the six pairings were therefore
-      measured against transparent — that is, against black — and came back
-      higher than the truth. Espresso's body text reads 6.11 against its panel,
-      not the 7.41 first reported. Nothing actually fell below the line, but
-      the earlier figures should not be quoted.
-- [ ] **A palette built by hand.** Two free colours cannot be checked for
-      legibility and the panel says so, but somebody should still try a few and
-      see whether the derived ramp holds up. From Espresso's own two colours it
-      lands within a hair of Espresso (lowest pairing 4.94 against Espresso's
-      4.56). From a pale surface it collapses to 1.49, which is the warning
-      doing its job rather than a bug.
-- [ ] **Turkish throughout.** No panel overflows 340px and long titles truncate,
-      but the wording itself has had no native reading. The setup panels in
-      particular are long prose translated in one pass.
+- **Closing the window hides it.** Quitting is on the tray icon's right-click
+  menu. Several checks below need a real quit, not a hide.
+- **App data is `%APPDATA%\com.groovium.desktop\`** — `config.json` (settings
+  and provider keys), `session.json`, `library.json`, and the `library\` folder
+  holding imported copies. Worth leaving an Explorer window open there.
+- **Keep devtools open** (F12). Two things below fail *quietly* by design and
+  announce themselves only in the console.
 
-## Security review, 2026-08-23
+---
 
-Ran over the whole app rather than a diff. What it found is fixed; what it
-cleared is recorded so it does not get re-reviewed from scratch.
+## 1. Compact mode — the likeliest thing to still be broken
 
-**Fixed**
+The collapse resizes the window, and the permissions for that were missing
+entirely until a security pass caught it: `set-size`, `set-resizable`,
+`inner-size` and `scale-factor` were absent from `capabilities/default.json`,
+so the resize was being denied outright. The browser preview has no capability
+system, which is why nothing showed. They are there now, unverified.
 
-- Missing window capabilities (above) — found while mapping the IPC surface.
-- `library_import` accepted any path the webview named. The picker runs in
-  Rust and hands paths up, the page hands them back, and Rust could not tell
-  those apart from invented ones — so anything reaching script execution could
-  have copied a file from anywhere into the library, where the asset protocol
-  serves it back. Rust now remembers what it offered and accepts nothing else.
-  Defence in depth: there is no known way in, the CSP is tight and there is no
-  `innerHTML` anywhere.
-- A stored file name from `library.json` was joined onto the store directory
-  without checking it was a name. `join` swaps the base out for an absolute
-  path and honours `..`, so a hand-edited record could have aimed a delete at
-  any file the user can delete. Now refused, with a test.
+- [ ] **It collapses.** The button beside the pin in the titlebar. The window
+      should shrink to title, progress and controls — around 193px tall at 100%
+      display scaling. A different number is fine: the height is measured from
+      the content at runtime, not hardcoded.
+      *If the window stays 480 tall while the bar draws inside it:* check the
+      console for `[window] could not resize`. That means a capability is still
+      missing or misnamed.
+- [ ] **The top edge does not move.** Note where it sits, collapse, check it is
+      unchanged. This is the whole point of the gesture and it rests on Windows
+      anchoring a resize at the top left — never confirmed here. If the bar
+      slides up the screen, the anchoring has to be done by hand.
+- [ ] **It opens back up** to full height, with the arm sliding in from the
+      right.
+- [ ] **Nothing peeks while collapsed.** Leave it collapsed with a track
+      playing and let it run. The arm keeps tracking while stowed, and an
+      earlier version did not push it far enough — the stylus crept back in from
+      the right as the song progressed. Nothing should appear at the right edge
+      at any point in a track.
 
-**Checked and clean**
+## 2. Settings, and surviving a restart
 
-- `npm audit`: 0 vulnerabilities. `cargo audit`: 0 vulnerabilities, 18
-  warnings — all `unmaintained` or `unsound`, and every one of them
-  (`gtk`, `gdk`, `atk`, `glib`) is absent from the Windows dependency graph,
-  which was confirmed rather than assumed.
-- The OAuth loopback binds `127.0.0.1` rather than all interfaces, checks
-  `state` before reading anything else from the query, and times out.
-- Last.fm goes over HTTPS with `Url::parse_with_params`, so no parameter can
-  break out of its encoding.
-- No secret appears in any log line; the callback page escapes both the title
-  and the message it echoes.
-- The asset protocol's static scope is empty on purpose and granted at runtime
-  to exactly the library directory. That is the right shape and was mistaken
-  for a finding at first.
-- `library_remove` looks its id up rather than turning it into a path.
-- No `innerHTML`, `eval` or `dangerouslySetInnerHTML` anywhere in the webview.
+One restart covers all five.
 
-**Accepted, not fixed**
+- [ ] **Change everything:** another palette, Turkish, reduce motion on, keep
+      on top on, collapsed on.
+- [ ] **Quit properly** — tray, right click, Quit. The window's close button
+      only hides.
+- [ ] **Relaunch.** All five come back, and the window opens already collapsed
+      and already pinned without animating something nobody asked to watch.
+- [ ] **`config.json` still holds the keys.** Open it: `spotifyClientId` and
+      `lastfmApiKey` must still be there beside the new `settings` block. That
+      file has a read-modify-write helper for exactly this reason and now a test
+      as well, but a test is not the real file.
 
-- `style-src 'unsafe-inline'` is required by the inline styles the animations
-  depend on. It weakens the CSP against an XSS that does not currently have a
-  way in.
-- `macOSPrivateApi: true` is set for window transparency and is irrelevant to a
-  Windows-only build, but it would matter if this ever shipped on macOS.
+## 3. Tray menu in Turkish
 
-## Not verification, just recorded
+Rust holds no dictionary — it rebuilds the menu from strings the webview hands
+over, so the labels and the click handling are separate things and both have to
+survive.
 
-- `docs/character-themes.md` — a design conversation about game-character theme
-  packs and a tool for making them. Nothing was built; the note exists so the
-  reasoning does not have to be reconstructed, particularly the part about why
-  the app must carry no art of its own. It now also records the decision to
-  hold the feature until 1.1.
+- [ ] In Turkish, right-click the tray icon. The five entries read, exactly:
+      `Groovium’u göster`, `Önceki`, `Çal / Duraklat`, `Sonraki`,
+      `Groovium’dan çık`.
+- [ ] **Each entry still does its job**, Quit especially — the menu is rebuilt
+      rather than relabelled, so a wrong id would look perfect and do nothing.
+
+## 4. The colour picker
+
+- [ ] Settings → the sixth swatch (Özel) → click either colour. The Windows
+      picker should open. It has only been tested in Chrome, and this window is
+      frameless, transparent and possibly always-on-top — exactly the sort of
+      thing that upsets a native dialog.
+- [ ] The choice recolours the app at once and survives the restart in §2.
+
+## 5. Library import — a gate was added here
+
+`library_import` now refuses any path that did not come out of a file dialog.
+Normal use cannot trip it, but the gate is new.
+
+- [ ] **Add Files** → pick a few → confirm. They import.
+- [ ] **Add Folder** → pick one → confirm. It imports.
+- [ ] **The awkward case:** open Add Files, pick some, and leave the
+      confirmation showing. Open Add Files again, pick different ones, confirm.
+      It should import without complaint.
+      *If it says files "were never chosen in a file dialog":* the gate replaces
+      instead of accumulating, and needs fixing.
+- [ ] **Cover art renders.** Import something with embedded artwork and check
+      it reaches the record label. The art is served through the asset protocol
+      under a grant made at runtime for the library folder alone — right by
+      design, never seen working in the real app.
+
+## 6. Two playback bugs fixed blind
+
+Both need a Last.fm key — Settings → Bağlantılar, or the infinite-play button
+offers to set one up. Both were reproduced and fixed against fakes in a
+browser, never against real playback.
+
+- [ ] **Suggestions follow the current song.** Play something, let infinite play
+      stock its queue, then play something entirely different from Spotify
+      search. When *that* ends, what follows should resemble it — not the song
+      from before.
+- [ ] **The toggle governs the trail.** Play a track, press Next twice so the
+      station appends two picks of its own, walk back to the first with
+      Previous, switch infinite play off, let it end. It should stop. Before the
+      fix it carried on into the trail.
+
+## 7. Spotify still signs in
+
+Not new work — a regression check, because the capability file changed and
+sign-in is the most fragile path in the app.
+
+- [ ] Sign out and back in: browser opens, callback lands, panel shows the
+      account.
+
+## 8. How it looks and feels
+
+No pass or fail here. These were built to measurements, the measurements hold,
+and whether the result is any *good* is the one question a remote session
+cannot answer. Say what to change.
+
+- [ ] **The collapse** — 260ms, the record shrinking away to the left while the
+      title and artist travel to their new places. Too fast, too slow, wrong
+      curve?
+- [ ] **The arm** — out in 170ms, back in 360ms after a 60ms pause, meant to
+      read as a flick of the wrist out and a careful hand back.
+- [ ] **Six palettes.** All six clear WCAG AA on every text pairing, which is a
+      floor rather than a verdict. Sakura especially: added without anyone
+      seeing it on a real screen.
+- [ ] **A palette of your own.** Try a few pairs. From Espresso's own two
+      colours the derived ramp lands within a hair of Espresso; from a pale
+      surface it falls to 1.49 and becomes unreadable, which is the warning
+      earning its keep rather than a bug.
+- [ ] **Turkish wording.** Nothing overflows and long titles truncate, but the
+      prose has had no native reading. The Spotify and Last.fm setup panels are
+      the longest and the least reviewed.
+
+---
+
+## Background
+
+Why these could not be checked from here, and what *was* settled — so none of it
+gets re-derived.
+
+### What the browser preview cannot reach
+
+`npm run dev` covers layout, animation, palettes and language, and all of that
+was verified there, frame by frame where it mattered. It has no window to
+resize, no tray, no keyring, no capability system and no `config.json`, so
+everything in §1 to §5 is invisible to it.
+
+### The palette contrast figures were wrong once
+
+First measured with a `bg-shell-800` class. Tailwind v4 only generates the
+utilities it finds in the source and that one appears exactly zero times, so
+three of six pairings were measured against transparent — against black — and
+came back higher than the truth. Re-measured through `var()`: Espresso's body
+text reads 6.11 against its panel, not the 7.41 first reported. Nothing
+actually fell below the line, but the old numbers should not be quoted.
+
+### Security review, 2026-08-23
+
+Over the whole app rather than a diff.
+
+**Fixed:** the missing window capabilities (§1); `library_import` accepting any
+path the webview named (§5); and a stored file name from `library.json` joined
+onto the store directory unchecked, where `join` swaps the base out for an
+absolute path and honours `..`.
+
+**Clean:** `npm audit` and `cargo audit` both report no vulnerabilities —
+`cargo audit`'s 18 warnings are unmaintained GTK crates, none of which appear in
+the Windows dependency graph, confirmed with `cargo tree --target` rather than
+assumed. The OAuth loopback binds `127.0.0.1`, checks `state` before reading
+anything else, and times out. Last.fm goes over HTTPS through
+`Url::parse_with_params`. No secret reaches any log line. The callback page
+escapes what it echoes. The asset protocol's static scope is empty on purpose
+and granted at runtime to one directory. No `innerHTML`, `eval` or
+`dangerouslySetInnerHTML` anywhere.
+
+**Accepted:** `style-src 'unsafe-inline'`, required by the inline styles the
+animations depend on. `macOSPrivateApi`, irrelevant to a Windows-only build but
+not to macOS.
+
+### Recorded, not awaiting verification
+
+- `docs/character-themes.md` — the character theme design and the decision to
+  hold it for 1.1 rather than 1.0.
 - `docs/theme-packs.md` — the format's draft, published unimplemented and
-  unfrozen so people who would write packs can say what is wrong with it before
-  it becomes a promise.
-- `README.md`'s Status section said the visual design was not built and the
-  interface was a placeholder meant to be thrown away. Both stopped being true
-  during this session. Corrected — it is the section anyone opening the repo
-  reads first.
+  unfrozen so it can take feedback before it becomes a promise.
+- `README.md`'s Status section claimed the visual design was not built and the
+  interface was a placeholder meant to be thrown away. Neither survived this
+  session; corrected.
 
-## Notes
+### Verification tooling
 
-- The browser preview at `npm run dev` covers layout, animation, themes and
-  language. It cannot cover anything in the first list.
-- Verification scripts live in this session's scratchpad, not in the repo:
-  screenshots at any pixel density, frame-by-frame sampling of an animation,
-  contrast measurement across palettes. They drive the installed Chrome through
-  `playwright-core`. If they would be useful again, they are worth moving into
-  the repo rather than rebuilding.
+The scripts used from here live in the session scratchpad, not the repo:
+screenshots at any pixel density, frame-by-frame sampling of an animation,
+contrast measurement across palettes, hostile-input probes. They drive the
+installed Chrome through `playwright-core`. If any of it would be useful again,
+it is worth moving into the repo rather than rebuilding.
