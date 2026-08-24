@@ -226,21 +226,6 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
         }`}
       />
 
-      {/* The spindle, which a record hides and an empty deck does not. Without
-          it the deck is just a disc of felt; with it the deck is a deck,
-          waiting for something to be put on it.
-
-          Centred by transform rather than by the flex row, because it now stays
-          mounted while a record is on the deck and two flex children would sit
-          side by side instead of on top of one another. Same centring as the
-          hole VinylDisc puts over it. */}
-      <div
-        aria-hidden="true"
-        className={`groove-spindle absolute top-1/2 left-1/2 h-[8px] w-[8px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-opacity duration-200 ${
-          bare ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
-
       {/* Opacity, never transform: the spin below owns `transform`, and the
           flight measures this wrapper's centre, which must not move. */}
       {/* `data-morph` marks what the collapse animation measures. It sits on
@@ -305,6 +290,26 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
           </div>
         </div>
       )}
+
+      {/* The spindle.
+          
+          Last, so it paints over the record rather than under it: a spindle is
+          part of the deck and a record goes *onto* it, hole first. Drawn under
+          the record, the pin read as something the record had covered up, which
+          is the one thing a spindle never is.
+
+          Sized to the hole VinylDisc draws, so it fills it exactly, and its
+          own dark ring spills the pixel that reads as the rim of the hole.
+
+          Centred by transform rather than by the flex row: it stays mounted
+          whether or not a record is on the deck, and two flex children would
+          sit side by side instead of on top of one another. */}
+      <div
+        aria-hidden="true"
+        className={`groove-spindle pointer-events-none absolute top-1/2 left-1/2 h-[8px] w-[8px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-opacity duration-200 ${
+          stowed ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
 
       <Tonearm stowed={stowed} lifted={inHand} />
     </div>
