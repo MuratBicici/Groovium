@@ -84,7 +84,7 @@ Next after 1.0: **character theme packs** — themes where art is part of the de
 - Importing copies every file, so a large folder takes as long as copying it and occupies disk twice. Scanning a folder is quick by comparison: it walks 8 levels deep collecting paths and sizes, and reads no tags. The library itself *is* indexed between runs, in `library.json`.
 - Embedded artwork over 8 MB is skipped. Anything smaller is extracted once at import into a sidecar image beside the audio copy.
 - The native audio backend (`src-tauri/src/audio.rs`) is an inert stub, and testing so far says it can stay one. Playback runs on an `HTMLAudioElement`. See that file for the conditions that would justify switching to `rodio`/`symphonia`.
-- Reopening restores the collection you were on and which track, paused rather than playing. What it stores is a pointer — the collection's id and an index — so a library that changed in between simply resolves to the right list instead of a stale copy. A Spotify search result is the exception: it plays on its own and has nothing to resolve back from. Position within a track is not kept.
+- **The deck starts empty.** Reopening restores your settings — volume, mute, repeat, shuffle, infinite play — and nothing else: no track is loaded and there is nothing to press play on until you put a record on. Earlier versions reopened the collection you were on, paused; that is gone, and `session.json` no longer carries a pointer to it.
 - If Vite HMR misbehaves under `tauri dev`, the CSP in `src-tauri/tauri.conf.json` is the first thing to check — temporarily setting `app.security.csp` to `null` isolates it.
 
 ## Spotify setup

@@ -20,12 +20,6 @@ export interface PersistedSession {
   shuffle: boolean;
   /** Infinite play. Absent in files written before it existed. */
   station?: boolean;
-  /**
-   * Which collection was playing, as a pointer rather than a copy — the store
-   * resolves it against whatever the library and playlists hold now.
-   */
-  context?: string;
-  contextIndex?: number;
 }
 
 export async function loadSession(): Promise<PersistedSession | null> {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { rememberedCollection, usePlayerStore } from './playerStore';
+import { usePlayerStore } from './playerStore';
 import { registerProvider } from '@/core/providers/registry';
 import type {
   AudioProvider,
@@ -13,8 +13,8 @@ import type {
  *
  * The animation is not what these are about. What they are about is that the
  * music stops while the record is in the air, that putting it back does not
- * *start* a record that was paused, and that throwing it away empties the deck
- * without also emptying the collection the next launch is supposed to restore.
+ * *start* a record that was paused, and that throwing it away leaves the
+ * transport nothing to act on.
  */
 
 const track = (id: string): TrackMetadata => ({
@@ -150,20 +150,6 @@ describe('throwing the record away', () => {
 
     expect(usePlayerStore.getState().playback.tracks).toEqual([]);
     expect(usePlayerStore.getState().playback.index).toBe(-1);
-  });
-
-  it('does not cost the next launch its library', async () => {
-    // Emptying `playback` leaves its id as `single`, which is exactly the shape
-    // `rememberedCollection` is built to survive — it keeps the collection
-    // already saved rather than overwriting it with nothing. Throwing a record
-    // away must not do what playing a search result once used to do.
-    onTheDeck('PLAYING');
-    await usePlayerStore.getState().discardRecord();
-
-    expect(rememberedCollection({ context: 'library', contextIndex: 3 }, usePlayerStore.getState().playback)).toEqual({
-      context: 'library',
-      contextIndex: 3,
-    });
   });
 
   it('forgets the suggestions that were lined up behind it', async () => {

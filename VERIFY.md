@@ -1,14 +1,19 @@
 # Pending verification
 
-**Two sections are still open: §1 and §2.** Everything else here has been
-seen on a real machine.
+**One section is still open: §2.** Everything else here has been seen on a
+real machine.
 
-The remote stretch ended on 2026-08-24. What is left of it is the two fixes
-made in response to the run-through that closed it — both have tests, neither
-has ever run on the desktop. §3 and §4 were built after the session came back
-under direct control and were tried in use as they were built; they are kept
-below as a record of what to look at if either turns out to be wrong, not as
-work still owed.
+The remote stretch ended on 2026-08-24. §2 is the last of it: a fix made in
+response to the run-through that closed it, extended on 2026-08-25 after a
+first pass found the half of it that was still wrong. §3 and §4 were built
+after the session came back under direct control and were tried in use as they
+were built; they are kept below as a record of what to look at if either turns
+out to be wrong, not as work still owed.
+
+There was a §1 — reopening the collection that was playing when the app last
+closed, and a bug where playing one search result erased it. **The app no
+longer reopens anything**: the deck starts empty by design, so there is nothing
+saved to be erased and nothing to check. The section is gone with the feature.
 
 ---
 
@@ -20,20 +25,6 @@ npm run tauri dev
 
 Closing the window hides it; quitting is on the tray icon's right-click menu.
 App data is `%APPDATA%\com.groovium.desktop\`.
-
-## 1. A single track no longer erases the last collection
-
-Playing something from Spotify search used to wipe the saved collection, so the
-next launch had nothing to restore. The session payload omitted the field while
-a single played, and because Rust writes the whole document and skips a `None`,
-omitting it deleted what was already there.
-
-- [ ] Play a few tracks **from the library**, then play something **from Spotify
-      search**, then quit from the tray and relaunch. The library collection
-      should come back, on the track you left it at — paused, which is by
-      design.
-- [ ] Look at `session.json` while doing it: `context` should stay `library`
-      through the search track rather than disappearing.
 
 ## 2. Signing out of Spotify takes the record off
 

@@ -250,31 +250,6 @@ const initialState: PlayerState = {
   holdingRecord: false,
 };
 
-export interface RememberedCollection {
-  context: string;
-  contextIndex: number;
-}
-
-/**
- * Which collection the next launch should put back.
- *
- * A single track — a Spotify search result — has nowhere to be resolved back
- * from, so it is never itself remembered. The bug was what happened next: the
- * session payload simply omitted the field while playing one, and since Rust
- * writes the whole document and skips a `None`, omitting it *erased* whatever
- * collection had been saved before. Play an album, then play one song from
- * search, and the album was gone.
- *
- * So a single leaves the memory alone rather than clearing it.
- */
-export function rememberedCollection(
-  previous: RememberedCollection | null,
-  playback: { id: string; index: number },
-): RememberedCollection | null {
-  if (playback.id === 'single') return previous;
-  return { context: playback.id, contextIndex: Math.max(playback.index, 0) };
-}
-
 /**
  * Where a step lands in a playback order, or null when it runs off the end.
  *
@@ -526,30 +501,6 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     return true;
   }
 
-  /**
-   * Re-open the collection that was playing when the app last closed.
-   *
-   * Resolved rather than reloaded: the id is a pointer, so a library that
-   * changed in between simply produces a different — and correct — list. The
-   * track is loaded into the context and left paused.
-   */
-  function restoreContext(contextId: string | undefined, index: number): void {
-    if (!contextId || contextId === 'single') return;
-    if (contextId !== 'library' && !contextId.startsWith('playlist:')) return;
-
-    const id = contextId as ContextId;
-    const tracks = resolveContext(id);
-    if (tracks.length === 0) return;
-
-    const at = Math.min(Math.max(index, 0), tracks.length - 1);
-    set({
-      playback: { id, tracks, index: at },
-      currentTrack: tracks[at] ?? null,
-      durationMs: tracks[at]?.duration ?? 0,
-      shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, at) : [],
-    });
-  }
-
   function rememberPlayed(track: TrackMetadata): void {
     const artist = artistKey(track.artist);
     const artists = get().stationArtists.filter((entry) => entry !== artist);
@@ -715,8 +666,6 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   }
 
   /** The last collection worth restoring, kept across single-track detours. */
-  let remembered: RememberedCollection | null = null;
-
   /**
    * Whether the record was playing when it was picked up.
    *
@@ -742,24 +691,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         state.muted === prev.muted &&
         state.repeat === prev.repeat &&
         state.shuffle === prev.shuffle &&
-        state.station === prev.station &&
-        state.playback.id === prev.playback.id &&
-        state.playback.index === prev.playback.index;
+        state.station === prev.station;
       if (unchanged) return;
 
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        const { volume, muted, repeat, shuffle, station, playback } = get();
-        remembered = rememberedCollection(remembered, playback);
-        void saveSession({
-          volume,
-          muted,
-          repeat,
-          shuffle,
-          station,
-          ...(remembered ?? {}),
-        }).then((saved) => {
+        const { volume, muted, repeat, shuffle, station } = get();
+        void saveSession({ volume, muted, repeat, shuffle, station }).then((saved) => {
           // Once per session. Every settings change would otherwise report the
           // same failure again, which is noise rather than information.
           if (saved || warnedAboutSaving) return;
@@ -802,23 +741,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
             // runs would otherwise leave the button lit and doing nothing.
             station: session.station === true && (await hasLastfmKey()),
           });
-          // Seeded from disk, so a launch that only ever plays search results
-          // still writes back the collection it started with.
-          if (session.context) {
-            remembered = {
-              context: session.context,
-              contextIndex: session.contextIndex ?? 0,
-            };
-          }
         }
 
         set({ storeDir: await libraryStoreDir() });
         await get().refreshLibrary();
         await get().refreshPlaylists();
-        // Put the last collection back, ready but not playing. Restoring is one
-        // thing; deciding on the user's behalf that the room should suddenly
-        // have music in it is another.
-        restoreContext(session?.context, session?.contextIndex ?? 0);
         await withProvider((provider) => provider.setVolume(outputAmplitude()));
         startPersisting();
         set({ initialized: true });
@@ -1009,10 +936,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // Stopping it was not enough: the record stayed on the deck and the
       // transport stayed lit, so it read as something that could be started
       // again — and pressing play only produced the same message a second
-      // time. A record that cannot be played is not on the deck. Same clearing
-      // a throw does, and it leaves `playback.id` as `single`, which
-      // `rememberedCollection` reads as "nothing resolvable is playing" and
-      // answers by keeping the collection already saved.
+      // time. A record that cannot be played is not on the deck, so this is
+      // the same clearing a throw does.
       await get().discardRecord();
       // After the clearing, so it survives it — and so a failure inside it,
       // which reports through the same field, does not stand in for this.
@@ -1061,10 +986,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
      *
      * `playback` goes back to empty so the transport has nothing to act on —
      * an empty deck with a working Next button would put a record back that
-     * nobody asked for. That leaves `playback.id` as `single`, which
-     * `rememberedCollection` reads as "nothing resolvable is playing" and
-     * answers by keeping the collection already saved, so throwing a record
-     * away does not cost the next launch its library.
+     * nobody asked for.
      */
     async discardRecord() {
       if (!get().currentTrack) return;

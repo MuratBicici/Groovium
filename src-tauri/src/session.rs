@@ -41,17 +41,6 @@ pub struct SessionState {
     /// discarded over one new boolean.
     #[serde(default)]
     pub station: bool,
-    /// Which collection was playing, as a pointer rather than a copy.
-    ///
-    /// Version 1 stored the queue itself — a second copy of data the library
-    /// already owned. This is the id the store resolves against whatever the
-    /// library and playlists hold now, so nothing can go stale or disagree.
-    /// `single` is never written: a Spotify search result has nowhere to be
-    /// resolved back from.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    #[serde(default)]
-    pub context_index: usize,
 }
 
 fn default_volume() -> f64 {
@@ -70,8 +59,6 @@ impl Default for SessionState {
             repeat: default_repeat(),
             shuffle: false,
             station: false,
-            context: None,
-            context_index: 0,
         }
     }
 }
@@ -163,8 +150,6 @@ mod tests {
             repeat: "one".to_owned(),
             shuffle: true,
             station: true,
-            context: Some("library".into()),
-            context_index: 3,
             ..SessionState::default()
         };
         let parsed: SessionState =
@@ -174,20 +159,26 @@ mod tests {
         assert!(parsed.muted);
         assert_eq!(parsed.repeat, "one");
         assert!(parsed.station);
-        assert_eq!(parsed.context.as_deref(), Some("library"));
-        assert_eq!(parsed.context_index, 3);
     }
 
     #[test]
-    fn a_file_written_before_the_context_existed_still_loads() {
-        // Added the same way `station` was — a defaulted field rather than a
-        // version bump, so an existing file keeps its settings.
-        let raw = r#"{"version":2,"volume":0.4,"muted":false,"repeat":"off","shuffle":false,"station":true}"#;
+    fn a_file_still_carrying_the_old_collection_pointer_loads_anyway() {
+        // The app used to reopen the collection that was playing, and wrote a
+        // pointer to it here. It does not any more — the deck starts empty —
+        // so the field is gone from the struct. Every file already on disk
+        // still has it, and dropping a field must not cost anyone their
+        // settings: serde ignores what it does not know, and the next save
+        // writes the shorter document.
+        let raw = r#"{"version":2,"volume":0.4,"muted":false,"repeat":"off","shuffle":false,"station":true,"context":"library","contextIndex":3}"#;
         let parsed: SessionState = serde_json::from_str(raw).expect("parses");
 
         assert_eq!(parsed.version, SESSION_VERSION);
-        assert!(parsed.station, "settings survive");
-        assert_eq!(parsed.context, None, "the new pointer reads as absent");
+        assert_eq!(parsed.volume, 0.4, "settings survive");
+        assert!(parsed.station);
+        assert!(
+            !serde_json::to_string(&parsed).unwrap().contains("context"),
+            "and it is not written back out"
+        );
     }
 
     #[test]
