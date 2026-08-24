@@ -1,6 +1,14 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useMuted, usePlayerStore, useVolume } from '@/core/store';
 import { useT } from '@/core/i18n';
+import {
+  accumulate,
+  angleAt,
+  angleDelta,
+  inDeadZone,
+  rotationFor,
+  volumeAfter,
+} from './knob';
 
 /**
  * Current volume read straight from the store rather than from a render
@@ -13,17 +21,34 @@ function liveVolume(): number {
   return muted ? 0 : volume;
 }
 
-/** Pixels of vertical drag that sweep the knob across its full range. */
-const DRAG_RANGE_PX = 120;
-/** Degrees of rotation between silence and full volume. */
-const SWEEP_DEGREES = 270;
+/** What one gesture needs to remember. */
+interface Turn {
+  centre: { x: number; y: number };
+  /**
+   * The angle the pointer was last at, or null while it is too near the middle
+   * to have one. Null again on the way out, so leaving the dead zone resumes
+   * from wherever the hand is instead of applying the sweep it made inside.
+   */
+  from: number | null;
+  /** Degrees turned so far, stopped at both ends of the sweep. */
+  turned: number;
+  startVolume: number;
+}
 
 /**
  * Tactile rotary volume knob.
  *
- * Dragging vertically is what people expect from a knob in software — a true
- * circular gesture is fiddly with a mouse. Keyboard access goes through the
- * standard slider role so this is not pointer-only.
+ * It is turned, which sounds obvious and was not always true here. This used to
+ * be dragged up and down, on the argument that a circular gesture is fiddly
+ * with a mouse — and it is, if the gesture has to stay on a 32px knob. Pointer
+ * capture is what settles it: grab the knob, move away from it, and the lever
+ * arm grows with the distance. Small movements far out are fine adjustments,
+ * which is how a rotary in any audio application behaves.
+ *
+ * Relative rather than absolute: the turn is measured from wherever the hand
+ * started, so grabbing the body does not snap the indicator under the pointer.
+ * Keyboard access goes through the standard slider role, so this is not
+ * pointer-only, and the wheel still works.
  */
 export function VolumeKnob() {
   const t = useT();
@@ -32,29 +57,64 @@ export function VolumeKnob() {
   const setVolume = usePlayerStore((s) => s.setVolume);
   const toggleMute = usePlayerStore((s) => s.toggleMute);
 
-  const dragStart = useRef<{ y: number; volume: number } | null>(null);
+  // A ref, not state: `pointermove` fires far faster than React re-renders, and
+  // the running total has to be what the previous event left, not what the last
+  // commit did. Same reason the scrubber keeps its drag flag in one.
+  const turn = useRef<Turn | null>(null);
+  const [turning, setTurning] = useState(false);
 
   const effectiveVolume = muted ? 0 : volume;
-  const rotation = -SWEEP_DEGREES / 2 + effectiveVolume * SWEEP_DEGREES;
+  const rotation = rotationFor(effectiveVolume);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    const dx = e.clientX - centre.x;
+    const dy = e.clientY - centre.y;
+
+    // Captured so the hand can leave the knob and keep turning it — which is
+    // the point, since the further out it goes the finer the control gets.
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragStart.current = { y: e.clientY, volume: effectiveVolume };
+    turn.current = {
+      centre,
+      from: inDeadZone(dx, dy) ? null : angleAt(dx, dy),
+      turned: 0,
+      startVolume: effectiveVolume,
+    };
+    setTurning(true);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    const start = dragStart.current;
-    if (!start) return;
-    // Up increases, which is why the delta is inverted.
-    const delta = (start.y - e.clientY) / DRAG_RANGE_PX;
-    void setVolume(start.volume + delta);
+    const gesture = turn.current;
+    if (!gesture) return;
+
+    const dx = e.clientX - gesture.centre.x;
+    const dy = e.clientY - gesture.centre.y;
+    if (inDeadZone(dx, dy)) {
+      // Passing through the middle is not a turn. Forgetting the reference
+      // angle here is what stops the knob spinning on the way across.
+      gesture.from = null;
+      return;
+    }
+
+    const angle = angleAt(dx, dy);
+    if (gesture.from === null) {
+      gesture.from = angle;
+      return;
+    }
+
+    gesture.turned = accumulate(gesture.turned, angleDelta(gesture.from, angle), gesture.startVolume);
+    gesture.from = angle;
+    void setVolume(volumeAfter(gesture.startVolume, gesture.turned));
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    dragStart.current = null;
+    turn.current = null;
+    setTurning(false);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -80,6 +140,10 @@ export function VolumeKnob() {
         <SpeakerIcon muted={muted} />
       </button>
 
+      {/* The body does not turn. Its gradient is the light falling on it and
+          its shadow is the light it blocks, and neither of those follows a
+          knob round — the same reason `DiscLight` is the spinning record's
+          sibling rather than its child. Only the layer inside rotates. */}
       <div
         role="slider"
         tabIndex={0}
@@ -87,18 +151,24 @@ export function VolumeKnob() {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(effectiveVolume * 100)}
-        aria-valuetext={`${Math.round(effectiveVolume * 100)} percent`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onKeyDown={onKeyDown}
         onWheel={(e) => void setVolume(liveVolume() - Math.sign(e.deltaY) * 0.05)}
-        className="relative h-8 w-8 cursor-ns-resize touch-none rounded-full bg-gradient-to-b from-shell-600 to-shell-800 shadow-[0_2px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-shell-900 outline-none focus-visible:ring-2 focus-visible:ring-brass-400"
-        style={{ transform: `rotate(${rotation}deg)` }}
+        className={`relative h-8 w-8 touch-none rounded-full bg-gradient-to-b from-shell-600 to-shell-800 shadow-[0_2px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-shell-900 outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${
+          turning ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
       >
-        {/* Pointer line marking the knob's current angle. */}
-        <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
+        <span
+          aria-hidden="true"
+          className="absolute inset-0"
+          style={{ transform: `rotate(${rotation}deg)` }}
+        >
+          {/* Pointer line marking the knob's current angle. */}
+          <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
+        </span>
       </div>
 
       <span className="w-7 text-meta tabular-nums text-cream-400">
