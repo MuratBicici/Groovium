@@ -82,7 +82,7 @@
       "endpoints": [
         "https://github.com/MuratBicici/Groovium/releases/latest/download/latest.json"
       ],
-      "pubkey": "REPLACE_WITH_PUBLIC_KEY"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2MTczQjczMTE0Qjg1NjQKUldSa2hVc1JjenNYTm5WM3Jma3VQS2RyWlQrYjlGZU5oT1JuN2E0dGRBYU9zaHJacGd0cFFPY0MK"
     }
   }
 }
