@@ -26,17 +26,6 @@ tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-opener = "2"
 
-# The window's frosting.
-#
-# CSS cannot do this: `backdrop-filter` samples the page behind an element, and
-# for a transparent, undecorated window there is no page behind it — the
-# desktop is not part of the webview's compositing. This crate reaches the
-# platform effects that are, and it is the only route to them that does not
-# involve a private API by hand.
-#
-# The blur radius is not adjustable through any of them, which is why the
-# setting is a choice of effect rather than a slider.
-window-vibrancy = "0.8"
 
 # Spotify OAuth. `rustls` rather than the platform TLS stack so building on
 # Linux does not need OpenSSL headers.

@@ -67,13 +67,24 @@ the desktop and that returns a black visual outside UWP; every effect that
 applied through `window-vibrancy` in `src-tauri/src/vibrancy.rs`, and the
 amount of *colour* over it stays with Opacity in CSS.
 
+A first try on 2026-08-25 reported that none of the three did anything, with
+nothing said about why. Two things came out of chasing that:
+
+- **Blur cannot work on this machine.** Tauri documents it as *Windows
+  7/10/11 22H1 only*, and this is build 26200. It is kept because the app is
+  not only for this machine, but it is expected to refuse here.
+- **Failures were invisible.** They went to the console, which is exactly the
+  way the CSS attempt survived. They now appear in red under the Frost row, in
+  the platform's own words. That is what the next run is really for.
+
 None of the four can be checked from here — they are platform window effects,
 and there is no window.
 
-- [ ] Put something recognisable behind the window, drop **Opacity**, and try
-      each of **Blur**, **Acrylic** and **Mica** in turn. Say which ones do
-      anything. Blur is Windows 7/10/11-22H1, Acrylic is 10 v1809+, Mica is 11
-      — on this machine some may simply not apply.
+- [ ] Drop **Opacity**, then press each of **Blur**, **Acrylic** and **Mica**.
+      **Report the red message if one appears, word for word** — that text is
+      the whole diagnosis. If a button produces no message and no visible
+      change, say that too: it means Windows accepted the effect and drew
+      nothing, which is a different problem with a different cause.
 - [ ] **Drag the window** with each. Acrylic is documented to lag on Windows 10
       v1903+ and 11 build 22000, Blur on 11 build 22621+, and Mica is the one
       with no such note. If dragging is bad, that decides which of them is

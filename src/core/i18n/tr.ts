@@ -182,6 +182,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.effect.blur': 'Bulanık',
   'settings.effect.acrylic': 'Akrilik',
   'settings.effect.mica': 'Mica',
+  'settings.effectRefused': 'Windows bunu uygulamadı: {message}',
   'settings.surfaceHint':
     'Yüzde yüzün altında pencere masaüstünü geçirir. Buzlanma görüneni bulanıklaştırır — Mica onun yerine duvar kâğıdını alır ve pencere sürüklenirken takılmayan tek seçenek odur.',
   'settings.language': 'Dil',

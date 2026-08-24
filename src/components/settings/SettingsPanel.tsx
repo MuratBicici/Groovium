@@ -48,6 +48,7 @@ export function SettingsPanel({
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
   const surfaceOpacity = useSettingsStore((s) => s.surfaceOpacity ?? 100);
   const surfaceEffect = useSettingsStore((s) => s.surfaceEffect ?? 'none');
+  const surfaceError = useSettingsStore((s) => s.surfaceError);
   const setSurface = useSettingsStore((s) => s.setSurface);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
@@ -234,6 +235,16 @@ export function SettingsPanel({
                 ))}
               </div>
             </div>
+            {/* What the platform said, where the button that asked is. Each of
+                these effects has a Windows version it needs and is simply not
+                there below it; the first attempt at this feature failed
+                silently for weeks, which is the reason this is on screen and
+                not in a console. */}
+            {surfaceError && (
+              <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+                {t('settings.effectRefused', { message: surfaceError })}
+              </p>
+            )}
             <p className="text-meta leading-snug text-cream-400">{t('settings.surfaceHint')}</p>
           </div>
 

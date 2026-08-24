@@ -192,6 +192,7 @@ export const en = {
   'settings.effect.blur': 'Blur',
   'settings.effect.acrylic': 'Acrylic',
   'settings.effect.mica': 'Mica',
+  'settings.effectRefused': 'Windows would not apply that: {message}',
   'settings.surfaceHint':
     'Below 100% the window lets the desktop through. Frost blurs what shows — Mica takes the wallpaper instead, and is the one that stays smooth while the window is dragged.',
   'settings.language': 'Language',

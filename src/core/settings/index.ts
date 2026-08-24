@@ -91,30 +91,22 @@ export const DEFAULT_SETTINGS: Settings = {
 /**
  * Ask the window to wear one of the platform's effects.
  *
- * A no-op outside Tauri, where there is no window to frost and `backdrop-filter`
- * in the shell's own CSS is doing the equivalent job against the page.
+ * Returns what went wrong, or null. Every one of these has a Windows version
+ * it needs and simply is not there below it, and an effect that quietly does
+ * nothing is precisely the failure this whole feature already had once — the
+ * caller puts this on screen next to the button that was pressed.
+ *
+ * A no-op outside Tauri, where there is no window to put an effect on.
  */
-export async function applySurfaceEffect(effect: SurfaceEffect, tint: string): Promise<void> {
-  if (!isTauri()) return;
+export async function applySurfaceEffect(effect: SurfaceEffect): Promise<string | null> {
+  if (!isTauri()) return null;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('set_surface_effect', { effect, tint: rgbTriple(tint) });
+    await invoke('set_surface_effect', { effect });
+    return null;
   } catch (err) {
-    // Reported to the console rather than to the user: the effects fail on the
-    // Windows versions that do not have them, and that is a fact about the
-    // machine rather than something anyone can act on from a settings panel.
-    console.warn('[settings] the window effect was refused', err);
+    return err instanceof Error ? err.message : String(err);
   }
-}
-
-/** `#rrggbb` to the byte triple Rust wants. */
-function rgbTriple(hex: string): [number, number, number] {
-  const text = hex.replace('#', '');
-  return [
-    parseInt(text.slice(0, 2), 16) || 0,
-    parseInt(text.slice(2, 4), 16) || 0,
-    parseInt(text.slice(4, 6), 16) || 0,
-  ];
 }
 
 export async function loadSettings(): Promise<Settings> {

@@ -12,7 +12,6 @@ import {
   CUSTOM_DEFAULTS,
   CUSTOM_THEME,
   DEFAULT_THEME,
-  THEMES,
   isThemeId,
 } from '@/core/settings/themes';
 
@@ -33,6 +32,13 @@ import {
 interface SettingsStore extends Settings {
   /** False until disk has been read, so nothing saves over what is on it. */
   ready: boolean;
+  /**
+   * What the platform said when it refused a window effect, if it did.
+   *
+   * Not persisted: it is a fact about this machine and this attempt, and it
+   * belongs next to the button that was pressed rather than in a file.
+   */
+  surfaceError: string | null;
   initialize: () => Promise<void>;
   setTheme: (theme: string) => void;
   setLanguage: (language: Language) => void;
@@ -61,21 +67,6 @@ interface SettingsStore extends Settings {
 function effectFor(settings: Settings): SurfaceEffect {
   if ((settings.surfaceOpacity ?? 100) >= 100) return 'none';
   return settings.surfaceEffect ?? 'none';
-}
-
-/**
- * The colour the window's surface is painted in — `--color-shell-700`, arrived
- * at without asking the document.
- *
- * The computed value of that custom property is not a colour for a hand-rolled
- * palette: it is the `color-mix` expression that produces one. Every palette's
- * shell-700 is either its own first swatch or, for the custom one, the primary
- * itself, so it can be read off the catalogue instead.
- */
-function surfaceColour(settings: Settings): string {
-  if (settings.theme === CUSTOM_THEME) return settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
-  const theme = THEMES.find((entry) => entry.id === (settings.theme ?? DEFAULT_THEME));
-  return theme?.swatch[0] ?? CUSTOM_DEFAULTS.primary;
 }
 
 function systemLanguage(): Language {
@@ -170,13 +161,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       surfaceEffect,
     };
     applyToDocument(settings);
-    void applySurfaceEffect(effectFor(settings), surfaceColour(settings));
+    void applySurfaceEffect(effectFor(settings)).then((error) => set({ surfaceError: error }));
     void saveSettings(settings);
   };
 
   return {
     ...DEFAULT_SETTINGS,
     ready: false,
+    surfaceError: null,
 
     async initialize() {
       if (get().ready) return;
@@ -187,7 +179,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         language: stored.language ?? systemLanguage(),
       };
       applyToDocument(settings);
-      void applySurfaceEffect(effectFor(settings), surfaceColour(settings));
+      // Startup does not report: an effect that has stopped working since the
+      // last run is not something anyone asked about while opening the app.
+      void applySurfaceEffect(effectFor(settings));
       set({ ...settings, ready: true });
     },
 
