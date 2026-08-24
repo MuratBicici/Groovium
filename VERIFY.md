@@ -1,163 +1,63 @@
 # Pending verification
 
-A run-through for someone sitting at the machine. Everything below was built
-while the session was remote, so it has either never been seen running, or been
-confirmed only by measurement — and a measurement can be right about the number
-and wrong about whether the thing is any good.
-
-Ordered so that checks sharing a setup happen together. Top to bottom should
-take well under an hour, minus the parts needing a Spotify account or a
-Last.fm key.
-
-Tick as you go. When the list is empty, delete the file.
+The first run-through is done — all eight sections passed, so everything built
+during the remote stretch is confirmed except what that run-through itself
+turned up. What is left is two fixes made in response to it, which have tests
+but have not been seen on a real machine.
 
 ---
 
-## Setup, once
+## Setup
 
 ```bash
 npm run tauri dev
 ```
 
-The real app with real Tauri APIs — capabilities, tray, keyring, the asset
-protocol, all of it. Nothing on this list needs the packaged installer, and
-`dev` is far quicker to iterate on.
+Closing the window hides it; quitting is on the tray icon's right-click menu.
+App data is `%APPDATA%\com.groovium.desktop\`.
 
-Three things worth knowing before starting:
+## 1. A single track no longer erases the last collection
 
-- **Closing the window hides it.** Quitting is on the tray icon's right-click
-  menu. Several checks below need a real quit, not a hide.
-- **App data is `%APPDATA%\com.groovium.desktop\`** — `config.json` (settings
-  and provider keys), `session.json`, `library.json`, and the `library\` folder
-  holding imported copies. Worth leaving an Explorer window open there.
-- **Keep devtools open** (F12). Two things below fail *quietly* by design and
-  announce themselves only in the console.
+Playing something from Spotify search used to wipe the saved collection, so the
+next launch had nothing to restore. The session payload omitted the field while
+a single played, and because Rust writes the whole document and skips a `None`,
+omitting it deleted what was already there.
+
+- [ ] Play a few tracks **from the library**, then play something **from Spotify
+      search**, then quit from the tray and relaunch. The library collection
+      should come back, on the track you left it at — paused, which is by
+      design.
+- [ ] Look at `session.json` while doing it: `context` should stay `library`
+      through the search track rather than disappearing.
+
+## 2. Signing out of Spotify stops Spotify playback
+
+It used to clear the tokens and nothing else, so a track kept playing until it
+failed on its own and the suggestion queue held tracks that could no longer be
+reached.
+
+- [ ] **Spotify track playing → sign out.** It stops, and the message reads
+      *Bağlantı kesildiği için çalma durduruldu. Dinlemeye devam etmek için
+      hesabınızı bağlayın.*
+- [ ] **Local track playing → sign out.** Nothing happens. This is the
+      distinction that matters and the one most annoying to get wrong.
+- [ ] **Afterwards**, with no account, try to play a Spotify track — from a
+      mixed playlist, or by pressing Next onto one. Same message, not the
+      provider's own *Spotify player is not connected*.
 
 ---
 
-## 1. Compact mode — the likeliest thing to still be broken
+## Passed on 2026-08-24
 
-The collapse resizes the window, and the permissions for that were missing
-entirely until a security pass caught it: `set-size`, `set-resizable`,
-`inner-size` and `scale-factor` were absent from `capabilities/default.json`,
-so the resize was being denied outright. The browser preview has no capability
-system, which is why nothing showed. They are there now, unverified.
+Compact mode, settings and restart, the tray menu in Turkish, the colour
+picker, library import and its new path gate, both playback fixes, Spotify
+sign-in, and the look of all six palettes. No problems observed.
 
-- [ ] **It collapses.** The button beside the pin in the titlebar. The window
-      should shrink to title, progress and controls — around 193px tall at 100%
-      display scaling. A different number is fine: the height is measured from
-      the content at runtime, not hardcoded.
-      *If the window stays 480 tall while the bar draws inside it:* check the
-      console for `[window] could not resize`. That means a capability is still
-      missing or misnamed.
-- [ ] **The top edge does not move.** Note where it sits, collapse, check it is
-      unchanged. This is the whole point of the gesture and it rests on Windows
-      anchoring a resize at the top left — never confirmed here. If the bar
-      slides up the screen, the anchoring has to be done by hand.
-- [ ] **It opens back up** to full height, with the arm sliding in from the
-      right.
-- [ ] **Nothing peeks while collapsed.** Leave it collapsed with a track
-      playing and let it run. The arm keeps tracking while stowed, and an
-      earlier version did not push it far enough — the stylus crept back in from
-      the right as the song progressed. Nothing should appear at the right edge
-      at any point in a track.
+Two notes came out of it and are not bugs:
 
-## 2. Settings, and surviving a restart
-
-One restart covers all five.
-
-- [ ] **Change everything:** another palette, Turkish, reduce motion on, keep
-      on top on, collapsed on.
-- [ ] **Quit properly** — tray, right click, Quit. The window's close button
-      only hides.
-- [ ] **Relaunch.** All five come back, and the window opens already collapsed
-      and already pinned without animating something nobody asked to watch.
-- [ ] **`config.json` still holds the keys.** Open it: `spotifyClientId` and
-      `lastfmApiKey` must still be there beside the new `settings` block. That
-      file has a read-modify-write helper for exactly this reason and now a test
-      as well, but a test is not the real file.
-
-## 3. Tray menu in Turkish
-
-Rust holds no dictionary — it rebuilds the menu from strings the webview hands
-over, so the labels and the click handling are separate things and both have to
-survive.
-
-- [ ] In Turkish, right-click the tray icon. The five entries read, exactly:
-      `Groovium’u göster`, `Önceki`, `Çal / Duraklat`, `Sonraki`,
-      `Groovium’dan çık`.
-- [ ] **Each entry still does its job**, Quit especially — the menu is rebuilt
-      rather than relabelled, so a wrong id would look perfect and do nothing.
-
-## 4. The colour picker
-
-- [ ] Settings → the sixth swatch (Özel) → click either colour. The Windows
-      picker should open. It has only been tested in Chrome, and this window is
-      frameless, transparent and possibly always-on-top — exactly the sort of
-      thing that upsets a native dialog.
-- [ ] The choice recolours the app at once and survives the restart in §2.
-
-## 5. Library import — a gate was added here
-
-`library_import` now refuses any path that did not come out of a file dialog.
-Normal use cannot trip it, but the gate is new.
-
-- [ ] **Add Files** → pick a few → confirm. They import.
-- [ ] **Add Folder** → pick one → confirm. It imports.
-- [ ] **The awkward case:** open Add Files, pick some, and leave the
-      confirmation showing. Open Add Files again, pick different ones, confirm.
-      It should import without complaint.
-      *If it says files "were never chosen in a file dialog":* the gate replaces
-      instead of accumulating, and needs fixing.
-- [ ] **Cover art renders.** Import something with embedded artwork and check
-      it reaches the record label. The art is served through the asset protocol
-      under a grant made at runtime for the library folder alone — right by
-      design, never seen working in the real app.
-
-## 6. Two playback bugs fixed blind
-
-Both need a Last.fm key — Settings → Bağlantılar, or the infinite-play button
-offers to set one up. Both were reproduced and fixed against fakes in a
-browser, never against real playback.
-
-- [ ] **Suggestions follow the current song.** Play something, let infinite play
-      stock its queue, then play something entirely different from Spotify
-      search. When *that* ends, what follows should resemble it — not the song
-      from before.
-- [ ] **The toggle governs the trail.** Play a track, press Next twice so the
-      station appends two picks of its own, walk back to the first with
-      Previous, switch infinite play off, let it end. It should stop. Before the
-      fix it carried on into the trail.
-
-## 7. Spotify still signs in
-
-Not new work — a regression check, because the capability file changed and
-sign-in is the most fragile path in the app.
-
-- [ ] Sign out and back in: browser opens, callback lands, panel shows the
-      account.
-
-## 8. How it looks and feels
-
-No pass or fail here. These were built to measurements, the measurements hold,
-and whether the result is any *good* is the one question a remote session
-cannot answer. Say what to change.
-
-- [ ] **The collapse** — 260ms, the record shrinking away to the left while the
-      title and artist travel to their new places. Too fast, too slow, wrong
-      curve?
-- [ ] **The arm** — out in 170ms, back in 360ms after a 60ms pause, meant to
-      read as a flick of the wrist out and a careful hand back.
-- [ ] **Six palettes.** All six clear WCAG AA on every text pairing, which is a
-      floor rather than a verdict. Sakura especially: added without anyone
-      seeing it on a real screen.
-- [ ] **A palette of your own.** Try a few pairs. From Espresso's own two
-      colours the derived ramp lands within a hair of Espresso; from a pale
-      surface it falls to 1.49 and becomes unreadable, which is the warning
-      earning its keep rather than a bug.
-- [ ] **Turkish wording.** Nothing overflows and long titles truncate, but the
-      prose has had no native reading. The Spotify and Last.fm setup panels are
-      the longest and the least reviewed.
+- The colour picker works but is the native Windows one and does not match the
+  theme. To be designed separately.
+- Restoring leaves the track paused rather than playing, by design.
 
 ---
 

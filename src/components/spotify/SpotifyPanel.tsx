@@ -4,9 +4,9 @@ import {
   clearClientId,
   hasClientId,
   isAuthenticated,
-  signOut,
   type SpotifyAccount,
 } from '@/core/security/spotifyAuth';
+import { usePlayerStore } from '@/core/store';
 import { describeAuthError, describeProduct } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
@@ -30,6 +30,7 @@ interface SpotifyPanelProps {
  */
 export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
   const t = useT();
+  const signOutOfSpotify = usePlayerStore((s) => s.signOutOfSpotify);
   const [stage, setStage] = useState<Stage>('loading');
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +73,9 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
   }
 
   async function disconnect() {
-    await signOut();
+    // Through the store rather than straight to `signOut`, so clearing the
+    // tokens and stopping what they were playing cannot drift apart.
+    await signOutOfSpotify();
     setAccount(null);
     setStage('disconnected');
   }

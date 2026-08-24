@@ -186,6 +186,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
 
   'error.settingsNotSaved':
     'Ayarlar kaydedilmiyor — ses düzeyi ve tekrar, yeniden başlatınca sıfırlanacak.',
+  'error.spotifyDisconnected':
+    'Bağlantı kesildiği için çalma durduruldu. Dinlemeye devam etmek için hesabınızı bağlayın.',
   'error.notPlayable': 'Bu şarkı bir çalma listesine kaydedilemez.',
   'error.startup': 'Başlatılamadı: {message}',
   'error.providerUnavailable': '{provider} kullanılamıyor.',

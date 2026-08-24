@@ -37,7 +37,10 @@ import {
   type ScanSummary,
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
-import { isAuthenticated as spotifyIsAuthenticated } from '@/core/security/spotifyAuth';
+import {
+  isAuthenticated as spotifyIsAuthenticated,
+  signOut as spotifySignOut,
+} from '@/core/security/spotifyAuth';
 import { artistKey, hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
 import { searchTracks } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
@@ -177,6 +180,8 @@ export interface PlayerActions {
   toggleShuffle: () => void;
   /** Resolves false when there is no Last.fm key yet, so the UI can ask for one. */
   toggleStation: () => Promise<boolean>;
+  /** Sign out, and stop anything that was playing because of that account. */
+  signOutOfSpotify: () => Promise<void>;
   clearError: () => void;
 
   /** Open a picker and report what importing would copy. */
@@ -226,6 +231,31 @@ const initialState: PlayerState = {
   stationArtists: [],
   stationAdded: [],
 };
+
+export interface RememberedCollection {
+  context: string;
+  contextIndex: number;
+}
+
+/**
+ * Which collection the next launch should put back.
+ *
+ * A single track — a Spotify search result — has nowhere to be resolved back
+ * from, so it is never itself remembered. The bug was what happened next: the
+ * session payload simply omitted the field while playing one, and since Rust
+ * writes the whole document and skips a `None`, omitting it *erased* whatever
+ * collection had been saved before. Play an album, then play one song from
+ * search, and the album was gone.
+ *
+ * So a single leaves the memory alone rather than clearing it.
+ */
+export function rememberedCollection(
+  previous: RememberedCollection | null,
+  playback: { id: string; index: number },
+): RememberedCollection | null {
+  if (playback.id === 'single') return previous;
+  return { context: playback.id, contextIndex: Math.max(playback.index, 0) };
+}
 
 /**
  * Where a step lands in a playback order, or null when it runs off the end.
@@ -633,6 +663,18 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     if (!continuingStation) discardStationQueue();
 
+    // Signing out does not empty the collections a Spotify track is sitting in,
+    // so stepping onto one afterwards is ordinary. Without this it reached the
+    // provider and came back as "Spotify player is not connected." — true, and
+    // no help at all to someone who simply needs to sign in again.
+    //
+    // One extra call, and only on the Spotify path, which already makes several
+    // to fetch a token and find a device.
+    if (track.source === 'spotify' && !(await spotifyIsAuthenticated())) {
+      set({ playbackState: 'IDLE', positionMs: 0, error: say('error.spotifyDisconnected') });
+      return;
+    }
+
     // A collection can mix sources; the track says which provider owns it.
     if (track.source !== get().activeProviderId) {
       await withProvider((provider) => provider.pause());
@@ -653,6 +695,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // Deliberately not awaited: finding the successor must not delay playback.
     void prefetchStationTrack();
   }
+
+  /** The last collection worth restoring, kept across single-track detours. */
+  let remembered: RememberedCollection | null = null;
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceStarted = false;
@@ -680,17 +725,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       saveTimer = setTimeout(() => {
         saveTimer = null;
         const { volume, muted, repeat, shuffle, station, playback } = get();
+        remembered = rememberedCollection(remembered, playback);
         void saveSession({
           volume,
           muted,
           repeat,
           shuffle,
           station,
-          // `single` is deliberately not written: a Spotify search result has
-          // nothing to be resolved back from on the next launch.
-          ...(playback.id === 'single'
-            ? {}
-            : { context: playback.id, contextIndex: Math.max(playback.index, 0) }),
+          ...(remembered ?? {}),
         }).then((saved) => {
           // Once per session. Every settings change would otherwise report the
           // same failure again, which is noise rather than information.
@@ -734,6 +776,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
             // runs would otherwise leave the button lit and doing nothing.
             station: session.station === true && (await hasLastfmKey()),
           });
+          // Seeded from disk, so a launch that only ever plays search results
+          // still writes back the collection it started with.
+          if (session.context) {
+            remembered = {
+              context: session.context,
+              contextIndex: session.contextIndex ?? 0,
+            };
+          }
         }
 
         set({ storeDir: await libraryStoreDir() });
@@ -913,6 +963,26 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       set({
         shuffle,
         shuffleOrder: shuffle ? shuffledIndices(playback.tracks.length, playback.index) : [],
+      });
+    },
+
+    async signOutOfSpotify() {
+      await spotifySignOut();
+
+      // Suggestions were found while signed in and some of them are Spotify
+      // tracks, which can no longer play. Better none than a queue that fails
+      // one track at a time.
+      discardStationQueue();
+
+      // Local playback has nothing to do with a Spotify account and must not
+      // be interrupted by signing out of one.
+      if (get().currentTrack?.source !== 'spotify') return;
+
+      await withProvider((provider) => provider.pause());
+      set({
+        playbackState: 'IDLE',
+        positionMs: 0,
+        error: say('error.spotifyDisconnected'),
       });
     },
 

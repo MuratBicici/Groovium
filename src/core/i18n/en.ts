@@ -193,6 +193,8 @@ export const en = {
   // Errors the store raises
   'error.settingsNotSaved':
     'Settings are not being saved — volume and repeat will reset on restart.',
+  'error.spotifyDisconnected':
+    'Playback stopped because the Spotify connection ended. Connect your account to keep listening.',
   'error.notPlayable': 'That track cannot be saved to a playlist.',
   'error.startup': 'Could not start up: {message}',
   'error.providerUnavailable': '{provider} is unavailable.',
