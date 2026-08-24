@@ -2,8 +2,9 @@
 
 The first run-through is done — all eight sections passed, so everything built
 during the remote stretch is confirmed except what that run-through itself
-turned up. What is left is two fixes made in response to it, which have tests
-but have not been seen on a real machine.
+turned up. What is left is two fixes made in response to it, plus one feature
+built since. All three have tests, and the feature was measured frame by frame
+in the browser; none of them has been used on a real machine.
 
 ---
 
@@ -44,6 +45,38 @@ reached.
 - [ ] **Afterwards**, with no account, try to play a Spotify track — from a
       mixed playlist, or by pressing Next onto one. Same message, not the
       provider's own *Spotify player is not connected*.
+
+## 3. Taking the record off the deck
+
+New. Press the record on the deck and drag: it comes off, shrinks into the hand
+and follows the pointer. Put it back over the deck and it drops onto the
+spindle. Let go of it anywhere else and it falls out of the window, which is
+how the deck gets emptied — there was no other way to do that before.
+
+The browser can be driven through all of this and was: the record shrinks to
+0.42 across a hundred distinct sizes with no jump, lands within half a pixel of
+the deck's centre, and leaves through the edge of the window when thrown. What
+the browser cannot check is the one thing this feature is *about*, which is the
+sound.
+
+- [ ] **Pick it up while a song is playing.** The sound stops as it leaves the
+      deck, the label reads *Duraklatıldı*, the arm swings back to its rest,
+      and the transport row greys out.
+- [ ] **Put it back over the deck.** It drops onto the spindle and carries on
+      **from the same second** — not from the beginning.
+- [ ] **Pause a song, then pick it up and put it back.** It stays paused. This
+      is the distinction that matters: putting a record down is not pressing
+      play.
+- [ ] **Throw it.** Flick it hard in any direction, or just let go of it away
+      from the deck. It sails or falls out of the window, the deck is left
+      showing the bare platter, the title clears, and the transport stays off.
+- [ ] **Afterwards**, relaunch. The library collection should still come back —
+      throwing a record away empties the deck, not the memory of what you were
+      listening to. (Same rule as §1, reached from a different direction.)
+- [ ] **Tab to the record and press Enter.** It should be thrown for you.
+      A plain *click* on the record should do nothing at all.
+- [ ] With **reduce motion** on: the drag still works, but nothing arcs — the
+      record is small under the pointer at once and a throw is instant.
 
 ---
 

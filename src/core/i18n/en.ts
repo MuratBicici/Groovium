@@ -61,6 +61,10 @@ export const en = {
   'repeat.all': 'all',
 
   // What is playing
+  // The record on the deck can be picked up and thrown away. The label says
+  // what a press does, since a press is all a keyboard can offer.
+  'deck.takeOff': 'Take the record off the deck',
+
   'status.IDLE': 'Ready',
   'status.LOADING': 'Loading',
   'status.PLAYING': 'Now Playing',

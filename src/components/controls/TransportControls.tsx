@@ -3,6 +3,7 @@ import {
   usePlaybackState,
   usePlayerStore,
   useHasPlayback,
+  useHoldingRecord,
   useRepeatMode,
   useShuffle,
   useStation,
@@ -21,7 +22,8 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const t = useT();
   const playbackState = usePlaybackState();
   const currentTrack = useCurrentTrack();
-  const hasQueue = useHasPlayback();
+  const holdingRecord = useHoldingRecord();
+  const havePlayback = useHasPlayback();
   const repeat = useRepeatMode();
   const shuffle = useShuffle();
   const station = useStation();
@@ -33,6 +35,11 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
+
+  // Nothing to act on while the record is in someone's hand: it is off the
+  // deck, and skipping to the next one is not a thing that can happen from
+  // there. Once it has been thrown away `playback` is empty anyway.
+  const hasQueue = havePlayback && !holdingRecord;
 
   const isPlaying = playbackState === 'PLAYING';
   const isLoading = playbackState === 'LOADING';

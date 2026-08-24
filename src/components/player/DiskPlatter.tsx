@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { useCurrentTrack, useIsPlaying } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useDiscFlight, usePendingLanding } from './DiscFlight';
+import { useDiscHold, useHeldTrack } from './DiscHold';
+import { PICKUP_SLOP } from './discPhysics';
+import { useT } from '@/core/i18n';
 import { DiscLight } from './DiscLight';
 import { Tonearm } from './Tonearm';
 import { VinylDisc } from './VinylDisc';
@@ -23,10 +26,13 @@ const SWAP_MS = 450;
  * the flying clone is the record until it lands.
  */
 export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
+  const t = useT();
   const isPlaying = useIsPlaying();
   const track = useCurrentTrack();
   const { registerPlatter, didJustLand } = useDiscFlight();
   const pendingTrackId = usePendingLanding();
+  const { grab, moveTo, release, cancel, eject } = useDiscHold();
+  const heldTrackId = useHeldTrack();
 
   /** Entrance transforms live here — the spin owns the disc's own transform. */
   const dropRef = useRef<HTMLDivElement | null>(null);
@@ -41,7 +47,80 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
    * anything has played, and true again while a disc is still in the air —
    * so the platter hands over to the record at the landing, not at the click.
    */
-  const bare = !stowed && (!track || awaitingLanding);
+  /** This track's record is in the user's hand rather than on the platter. */
+  const inHand = heldTrackId !== null && track?.id === heldTrackId;
+  const bare = !stowed && (!track || awaitingLanding || inHand);
+
+  /**
+   * The wrapper, kept for ourselves as well as handed to the flight layer.
+   * A hold needs to know where home is, and re-measures it on the way back.
+   */
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const setWrapper = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      registerPlatter(el);
+    },
+    [registerPlatter],
+  );
+
+  /**
+   * The press that may or may not become a lift.
+   *
+   * A ref because `pointerup` has to see what `pointerdown` wrote in the same
+   * tick, the reason the scrubber keeps its drag flag in one too. Nothing
+   * renders from it.
+   */
+  const press = useRef<{ id: number; x: number; y: number; lifted: boolean } | null>(null);
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (stowed || !track || e.button !== 0) return;
+    // Captured so a drag that leaves the widget still ends here — and so the
+    // record can be thrown at the edge of the window rather than only inside it.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, lifted: false };
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const current = press.current;
+    if (!current || current.id !== e.pointerId) return;
+
+    if (!current.lifted) {
+      // Below the slop this is still a click, and a click on the record does
+      // nothing. Without the threshold the smallest twitch during a press
+      // would take the record off the deck.
+      if (Math.hypot(e.clientX - current.x, e.clientY - current.y) < PICKUP_SLOP) return;
+      // The record can end between the press and the move — a track ending, or
+      // the station handing over — and there is then nothing to pick up.
+      if (!track || !wrapperRef.current) return;
+      current.lifted = true;
+      grab({ track, platterEl: wrapperRef.current, pointer: { x: e.clientX, y: e.clientY } });
+    }
+    moveTo(e.clientX, e.clientY);
+  }
+
+  function endPress(e: React.PointerEvent<HTMLDivElement>, interrupted: boolean) {
+    const current = press.current;
+    if (!current || current.id !== e.pointerId) return;
+    press.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (!current.lifted) return;
+    // An interrupted gesture is not a decision, so the record goes back.
+    if (interrupted) cancel();
+    else release();
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // The pointer route is a gesture, and a gesture is not something a keyboard
+    // can make. Taking the record off is still a thing the app does, so the
+    // keyboard gets the outcome without the drag: one press throws it.
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (stowed || !track || !wrapperRef.current) return;
+    e.preventDefault();
+    eject({ track, platterEl: wrapperRef.current });
+  }
 
   useEffect(() => {
     const prev = prevTrackRef.current;
@@ -118,7 +197,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
 
   return (
     <div
-      ref={registerPlatter}
+      ref={setWrapper}
       className="relative mx-auto flex h-[168px] w-[168px] items-center justify-center"
     >
       {/* Well the platter sits in, so the disk reads as recessed into the
@@ -171,13 +250,23 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
         <div
           ref={dropRef}
           data-morph="disc"
-          className="relative"
+          role="button"
+          tabIndex={stowed ? -1 : 0}
+          aria-label={t('deck.takeOff')}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={(e) => endPress(e, false)}
+          onPointerCancel={(e) => endPress(e, true)}
+          onKeyDown={onKeyDown}
+          className={`relative touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${
+            inHand ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
           // No fade when the deck is stowed. The record arriving in the
           // collapsed bar begins its travel at exactly this size and position,
           // so this one can go at once and nothing shows the seam — where a
           // fade left a second record sitting in the old place for the length
           // of it.
-          style={{ opacity: awaitingLanding || stowed ? 0 : 1 }}
+          style={{ opacity: awaitingLanding || stowed || inHand ? 0 : 1 }}
         >
           {/* The spin stays on its own element; entrance and exit transforms
               wrap it rather than fighting the keyframe for `transform`. */}
@@ -212,7 +301,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
         </div>
       )}
 
-      <Tonearm stowed={stowed} />
+      <Tonearm stowed={stowed} lifted={inHand} />
     </div>
   );
 }

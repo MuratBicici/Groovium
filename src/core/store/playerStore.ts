@@ -156,6 +156,16 @@ export interface PlayerState {
    * into a station pick, because by then it was simply "the next track".
    */
   stationAdded: string[];
+
+  /**
+   * The record is in the user's hand, lifted off the deck.
+   *
+   * Playback truth rather than animation state: the deck's own drag lives in
+   * refs and gets written to the DOM frame by frame, and none of that belongs
+   * in a store. What belongs here is that the machine is waiting — nothing is
+   * on the platter, so the transport has nothing to act on.
+   */
+  holdingRecord: boolean;
 }
 
 export interface PlayerActions {
@@ -182,6 +192,13 @@ export interface PlayerActions {
   toggleStation: () => Promise<boolean>;
   /** Sign out, and stop anything that was playing because of that account. */
   signOutOfSpotify: () => Promise<void>;
+
+  /** Take the record off the deck: the music stops while it is off. */
+  liftRecord: () => Promise<void>;
+  /** Put it back, and carry on if it was playing when it was picked up. */
+  lowerRecord: () => Promise<void>;
+  /** It did not go back. Empty the deck and forget what was lined up. */
+  discardRecord: () => Promise<void>;
   clearError: () => void;
 
   /** Open a picker and report what importing would copy. */
@@ -230,6 +247,7 @@ const initialState: PlayerState = {
   stationHistory: [],
   stationArtists: [],
   stationAdded: [],
+  holdingRecord: false,
 };
 
 export interface RememberedCollection {
@@ -699,6 +717,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   /** The last collection worth restoring, kept across single-track detours. */
   let remembered: RememberedCollection | null = null;
 
+  /**
+   * Whether the record was playing when it was picked up.
+   *
+   * A closure latch rather than store state: nothing renders from it, and it is
+   * only ever true between one action and the next.
+   */
+  let resumeAfterHold = false;
+
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceStarted = false;
   /** Startup in progress. Separate from `initialized`, which means it worked. */
@@ -983,6 +1009,74 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         playbackState: 'IDLE',
         positionMs: 0,
         error: say('error.spotifyDisconnected'),
+      });
+    },
+
+    /**
+     * Lift the record off the deck.
+     *
+     * The music stops, because a record that is not on the platter is not
+     * under the needle. What it was doing is remembered rather than assumed:
+     * a paused record has to still be paused when it goes back down.
+     */
+    async liftRecord() {
+      const { currentTrack, playbackState, holdingRecord } = get();
+      if (!currentTrack || holdingRecord) return;
+
+      resumeAfterHold = playbackState === 'PLAYING';
+      set({ holdingRecord: true });
+      if (!resumeAfterHold) return;
+
+      await withProvider((provider) => provider.pause());
+      // Said here rather than left to the provider's own event, the way
+      // signing out does it. The events do arrive, but a frame or two later,
+      // and for those frames the widget read "Now Playing" over an empty deck
+      // with the record visibly in someone's hand.
+      set({ playbackState: 'PAUSED' });
+    },
+
+    async lowerRecord() {
+      if (!get().holdingRecord) return;
+      set({ holdingRecord: false });
+
+      // Only if it was playing when it was picked up. Putting a paused record
+      // back on the deck is not a request to play it.
+      if (!resumeAfterHold) return;
+      resumeAfterHold = false;
+      await withProvider((provider) => provider.resume());
+    },
+
+    /**
+     * The record did not go back on. Empty the deck.
+     *
+     * Not gated on holding: this is also what the keyboard route does, where
+     * the record is taken off and thrown in one gesture.
+     *
+     * `playback` goes back to empty so the transport has nothing to act on —
+     * an empty deck with a working Next button would put a record back that
+     * nobody asked for. That leaves `playback.id` as `single`, which
+     * `rememberedCollection` reads as "nothing resolvable is playing" and
+     * answers by keeping the collection already saved, so throwing a record
+     * away does not cost the next launch its library.
+     */
+    async discardRecord() {
+      if (!get().currentTrack) return;
+      resumeAfterHold = false;
+
+      await withProvider((provider) => provider.pause());
+      // Suggestions were found for the record that just left, so they are
+      // answers to a question nobody is asking any more.
+      discardStationQueue();
+
+      set({
+        holdingRecord: false,
+        currentTrack: null,
+        playbackState: 'IDLE',
+        positionMs: 0,
+        durationMs: 0,
+        playback: EMPTY_CONTEXT,
+        shuffleOrder: [],
+        stationAdded: [],
       });
     },
 

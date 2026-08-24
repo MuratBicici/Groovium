@@ -7,6 +7,7 @@ import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
+import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -123,6 +124,7 @@ export default function App() {
     >
       <PlaylistPickerProvider>
       <DiscFlightProvider>
+      <DiscHoldProvider>
       <WindowChrome />
 
       <main className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
@@ -250,6 +252,7 @@ export default function App() {
           {error}
         </button>
       )}
+      </DiscHoldProvider>
       </DiscFlightProvider>
       </PlaylistPickerProvider>
     </div>

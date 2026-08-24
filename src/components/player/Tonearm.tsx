@@ -53,13 +53,29 @@ import {
  * the end, and the tip came creeping back in from the right. The whole viewport
  * is pushed past the edge instead, which no angle can undo, since nothing is
  * drawn outside it.
+ *
+ * `lifted` is the record being off the deck — in someone's hand, on its way
+ * out of the window. A separate prop from `stowed` because the two are
+ * different moves: stowing throws the whole arm off to the right so the widget
+ * can collapse, while a lifted record just means there is nothing to track, and
+ * the arm returns to its rest the way it does between songs.
  */
-export function Tonearm({ stowed = false }: { stowed?: boolean }) {
+export function Tonearm({
+  stowed = false,
+  lifted = false,
+}: {
+  stowed?: boolean;
+  lifted?: boolean;
+}) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const isPlaying = useIsPlaying();
   const progress = useProgressFraction();
 
-  const radius = isPlaying
+  // Playing is not enough on its own: the music pauses when the record comes
+  // off, but the pause and the lift are two state updates, and for the frame
+  // between them the arm would still be tracking a record that had gone.
+  const tracking = isPlaying && !lifted;
+  const radius = tracking
     ? OUTER_GROOVE + (INNER_GROOVE - OUTER_GROOVE) * progress
     : PARK_RADIUS;
   const angle = angleForRadius(radius);
@@ -114,7 +130,7 @@ export function Tonearm({ stowed = false }: { stowed?: boolean }) {
           transition: prefersReducedMotion() ? 'none' : 'transform 300ms ease-out',
           transformOrigin: `${px}px ${py}px`,
           // Lifted while parked: the shadow falls further from the arm.
-          filter: isPlaying
+          filter: tracking
             ? 'drop-shadow(0 1px 1px rgba(0,0,0,0.55))'
             : 'drop-shadow(0 4px 4px rgba(0,0,0,0.5))',
         }}

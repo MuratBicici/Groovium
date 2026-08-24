@@ -53,6 +53,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.repeat': 'Tekrar: {mode}',
   'transport.station': 'Sonsuz çalma: {state}',
   'transport.seek': 'İleri sar',
+
+  'deck.takeOff': 'Plağı yuvadan çıkar',
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',
   'transport.unmute': 'Sesi aç',

@@ -31,6 +31,9 @@ export const useStationSearching = () => usePlayerStore((s) => s.stationSearchin
 /** True while a track is actually producing sound. */
 export const useIsPlaying = () => usePlayerStore((s) => s.playbackState === 'PLAYING');
 
+/** True while the record is off the deck, in someone's hand. */
+export const useHoldingRecord = () => usePlayerStore((s) => s.holdingRecord);
+
 /** True when there is something to press play on. */
 export const useHasPlayback = () => usePlayerStore((s) => s.playback.tracks.length > 0);
 
