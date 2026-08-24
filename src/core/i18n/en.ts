@@ -67,7 +67,7 @@ export const en = {
   'status.PAUSED': 'Paused',
   'status.ERROR': 'Error',
   'track.none': 'No track loaded',
-  'track.hint': 'Add songs to your library to get started',
+  'track.hint': 'Open a song to get started',
 
   // Library
   'library.heading': 'Library · {count}',

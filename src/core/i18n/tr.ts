@@ -66,7 +66,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'status.PAUSED': 'Duraklatıldı',
   'status.ERROR': 'Hata',
   'track.none': 'Şarkı yüklenmedi',
-  'track.hint': 'Başlamak için kitaplığınıza şarkı ekleyin',
+  'track.hint': 'Başlamak için bir şarkı açın',
 
   'library.heading': 'Kitaplık · {count}',
   'library.close': 'Kitaplığı kapat',
