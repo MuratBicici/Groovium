@@ -323,7 +323,7 @@ function Updates() {
               notes are the author's words, and truncating them is deciding
               which half of a warning somebody gets. */}
           {notes && (
-            <p className="max-h-20 overflow-y-auto text-meta leading-snug whitespace-pre-line text-cream-400">
+            <p className="max-h-40 overflow-y-auto text-meta leading-snug whitespace-pre-line text-cream-400">
               {notes}
             </p>
           )}

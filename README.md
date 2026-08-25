@@ -187,8 +187,16 @@ installer and the updater manifest. It refuses to build if the tag and the three
 about the version, since `package.json`, `Cargo.toml` and `tauri.conf.json`
 each carry it and the Cargo one also reaches Last.fm in the `User-Agent`.
 
+It also refuses to build if `CHANGELOG.md` has no section for the tag. That is
+not tidiness: the job creates the release, builds, and uploads `latest.json`
+with the notes baked into it, so **notes typed into the draft afterwards never
+reach the in-app updater**. They have to be in the repository before the tag is
+pushed. The section body is passed through verbatim and shown in the app's
+update panel, which renders plain text — hence the changelog's format, which is
+prose and `·` rather than Markdown.
+
 ```bash
-# after bumping all three to the same number
+# after bumping all three to the same number and writing the CHANGELOG section
 git tag v0.2.0 && git push origin v0.2.0
 ```
 

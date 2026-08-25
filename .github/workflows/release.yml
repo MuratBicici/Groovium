@@ -26,6 +26,32 @@ jobs:
           found=$(grep -m1 '^version' src-tauri/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           [ "$found" = "$tag" ] || { echo "Cargo.toml says $found, tag says $tag"; exit 1; }
 
+      # The notes have to come from the repository, not from the draft. This
+      # job creates the release, builds, and uploads `latest.json` with the
+      # notes baked into it — so anything typed into the draft afterwards is
+      # already too late to reach the in-app updater.
+      - name: Release notes for this tag
+        id: notes
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          notes=$(awk -v v="$tag" '
+            index($0, "## " v " ") == 1 { found = 1; next }
+            found && index($0, "## ") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md)
+
+          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+            echo "CHANGELOG.md has no section for $tag — add one before tagging."
+            exit 1
+          fi
+
+          {
+            echo "body<<GROOVIUM_NOTES_EOF"
+            printf '%s\n' "$notes"
+            echo "GROOVIUM_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -48,5 +74,6 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Groovium ${{ github.ref_name }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
