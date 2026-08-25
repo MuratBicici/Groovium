@@ -110,8 +110,28 @@ export class SpotifyProvider extends BaseProvider {
   /** True between noticing the silence and hearing something again. */
   private stalled = false;
 
+  /**
+   * The connection going away, watched directly.
+   *
+   * The first attempt at this inferred silence from the SDK's reported
+   * position ceasing to move, and it never fired: that position is
+   * extrapolated locally too, so during an outage the SDK goes on counting
+   * exactly as confidently as this provider did. Measured, after guessing
+   * wrong about it twice.
+   *
+   * So the thing that actually changed gets watched instead. `offline` is
+   * immediate, costs no traffic, and is the same event Spotify's own failure
+   * is downstream of. It answers "is there a network", not "is audio coming
+   * out" — the position watchdog stays as a second line for a stall that
+   * happens with the network up.
+   */
+  private onOffline = () => this.enterStall('offline');
+  private onOnline = () => this.leaveStall('back online');
+
   constructor() {
     super();
+    window.addEventListener('offline', this.onOffline);
+    window.addEventListener('online', this.onOnline);
     // Announced at construction rather than at `initialize()`, which does not
     // run until Spotify is actually used. The handle exists to answer "is this
     // code even loaded", and it cannot do that if it appears only once the
@@ -139,7 +159,18 @@ export class SpotifyProvider extends BaseProvider {
         // Called on connect and again whenever the token expires. Rust refreshes
         // transparently, so this always hands back a live token.
         getOAuthToken: (cb) => {
-          void accessToken().then(cb, (err) => this.fail(describe(err)));
+          void accessToken().then(cb, (err) => {
+            // Not a failure when there is simply no network. Refreshing the
+            // token goes through Rust to Spotify, so an outage lands here
+            // first — and reporting it as an authentication error told the
+            // user their account was broken when their wifi was off, then
+            // left the provider in a state it could not come back from.
+            if (!navigator.onLine) {
+              this.enterStall('token refresh while offline');
+              return;
+            }
+            this.fail(describe(err));
+          });
         },
         volume: this.volume,
       });
@@ -213,6 +244,8 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   override dispose(): void {
+    window.removeEventListener('offline', this.onOffline);
+    window.removeEventListener('online', this.onOnline);
     this.stopTicker();
     this.stopVerifier();
     this.player?.disconnect();
@@ -381,6 +414,7 @@ export class SpotifyProvider extends BaseProvider {
     (window as unknown as Record<string, unknown>).__grooviumSpotify = {
       at: new Date().toISOString().slice(11, 19),
       note,
+      online: navigator.onLine,
       sdkPosition: reported,
       localClock: this.positionMs,
       watch: this.watch,
@@ -392,6 +426,15 @@ export class SpotifyProvider extends BaseProvider {
   private async verify(): Promise<void> {
     const player = this.player;
     if (!player) return;
+
+    // Nothing the SDK says while the network is down is worth reading. Its
+    // position goes on advancing regardless — that is what made the first
+    // version of this watchdog useless — so asking would only produce
+    // "movement" and undo the stall the outage just caused.
+    if (!navigator.onLine) {
+      this.report('waiting for the network');
+      return;
+    }
 
     // Null means the SDK had nothing to say, which is a symptom rather than an
     // absence of one — a player that cannot answer is not a player that is fine.
@@ -409,28 +452,52 @@ export class SpotifyProvider extends BaseProvider {
 
     if (this.stalled && hasRecovered(this.watch, reported)) {
       this.watch = observe(this.watch, reported);
-      this.stalled = false;
-      // Reseeded from the SDK rather than resumed from the frozen count: the
-      // silence was real, and whatever it cost belongs to the position.
-      this.positionMs = reported ?? this.positionMs;
-      this.lastTickAt = Date.now();
-      this.setState('PLAYING');
-      this.startTicker();
-      this.emitProgress();
+      this.leaveStall('position moving again', reported);
       return;
     }
 
     this.watch = observe(this.watch, reported);
 
-    if (!this.stalled && hasStalled(this.watch)) {
-      this.stalled = true;
-      // The clock stops with it, so the position freezes where it was last
-      // known to be true rather than running on into a song nobody can hear.
-      this.stopTicker();
-      // LOADING, not IDLE: the track has not ended and nobody asked for this.
-      // It is waiting, which is what LOADING means everywhere else here.
-      this.setState('LOADING');
+    if (!this.stalled && hasStalled(this.watch)) this.enterStall('position frozen');
+  }
+
+  /**
+   * Stop believing the clock.
+   *
+   * The clock stops, which freezes the bar where it was last known to be true
+   * rather than running on into a song nobody can hear; the record stops with
+   * it, since both follow whether this is playing. LOADING and not IDLE,
+   * because the track has not ended and nobody asked for this — it is waiting,
+   * which is what LOADING means everywhere else here.
+   */
+  /**
+   * Start believing it again.
+   *
+   * The position is reseeded from the SDK rather than resumed from the frozen
+   * count: the silence was real, and whatever it cost belongs to the position
+   * rather than being quietly given back.
+   */
+  private leaveStall(why: string, reported: number | null = null): void {
+    if (!this.stalled) {
+      this.report(why);
+      return;
     }
+    this.stalled = false;
+    this.watch = freshWatch;
+    if (reported !== null) this.positionMs = reported;
+    this.lastTickAt = Date.now();
+    this.setState('PLAYING');
+    this.startTicker();
+    this.emitProgress();
+    this.report(`resumed: ${why}`);
+  }
+
+  private enterStall(why: string): void {
+    if (this.stalled || this.state !== 'PLAYING') return;
+    this.stalled = true;
+    this.stopTicker();
+    this.setState('LOADING');
+    this.report(`stalled: ${why}`);
   }
 
   private emitProgress(): void {
