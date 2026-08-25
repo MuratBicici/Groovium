@@ -1,7 +1,7 @@
 # Pending verification
 
-**Two sections are still open: §2 and §6.** Everything else here has been seen
-on a real machine.
+**§2 is open, and §6 is mostly done** — the updater shipped a real update on
+2026-08-25, with two loose ends noted there.
 
 There was a §5, about making the window translucent and frosted. The
 frosting could not be made to work on Windows and the whole thing was taken
@@ -54,52 +54,44 @@ time. The record comes off now, the way a thrown one does.
       connected*. (The queue you were in is gone with the record, so this has
       to be reached from a panel rather than by pressing Next.)
 
-## 6. 1.0: the wizard and the updater
+## 6. The updater works, and does not always announce itself
 
-Neither can be checked from here. The wizard has to be run, and the updater
-cannot be tested by the release that introduces it — it takes two.
+Done on 2026-08-25, against two real published releases. The chain was verified
+end to end from here as well: the manifest was fetched, the published `.exe`
+downloaded, and its signature checked against the public key the app ships —
+key id `64854b11733b1736` on both sides, signature valid, for 1.0.0 and 1.0.1.
 
-**Before any of this: the public key.** `plugins.updater.pubkey` in
-`tauri.conf.json` currently reads `REPLACE_WITH_PUBLIC_KEY`. Until it holds a
-real key the build cannot sign an update artifact and will fail. Generate the
-pair, keep the private half out of the repository:
+The update was offered, downloaded and installed, and 1.0.1 came back with the
+volume knob turning. What the release machinery does, it does.
 
-```bash
-npm run tauri signer generate -- -w "$HOME/.tauri/groovium.key"
-```
+**One thing did not happen: the dot never appeared on its own.** The update was
+only found after pressing *Check for updates*. Not chased, and it does not look
+like a fault in the check itself, because the same session produced the likely
+cause twice over:
 
-Public half into `tauri.conf.json`; private half and password into repository
-secrets as `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+- `releases/latest/download/latest.json` was served **stale from GitHub's CDN**
+  for minutes after 1.0.1 was published — measured here, not guessed. A launch
+  that lands in that window reads the old manifest and is correct to conclude
+  there is nothing new.
+- The quiet check runs **once a launch**, on purpose. So a launch that reads a
+  stale manifest never looks again, and the dot cannot appear until the app is
+  restarted or the button is pressed.
 
-### The wizard
+Those two together explain it exactly, and the fix is a design decision rather
+than a repair — check again after a while, or on waking, or not at all. Worth
+deciding deliberately rather than patching. Until then the button is the way,
+and it works.
 
-- [ ] With the two variables set in the environment, `npm run tauri build`.
-      Run the `.exe` it leaves in `src-tauri/target/release/bundle/nsis/`.
-- [ ] Which pages does it show, is the icon Groovium's, and does the language
-      selector come up? **Say what it looks like** — the polish decisions
-      (`headerImage`, `sidebarImage`) are waiting on that.
-- [ ] It should install to `%LOCALAPPDATA%Groovium` and **never ask for
-      administrator**. If a UAC prompt appears, something is wrong with
-      `installMode`.
+### Still unchecked
 
-### The updater, which needs two releases
-
-The first release cannot verify itself: there is nothing older to update from.
-The order is:
-
-- [ ] Tag `v1.0.0`, let the workflow draft the release, then **Publish** it on
-      GitHub. Check the release has `latest.json` attached alongside the
-      `.exe` — without it the updater has nothing to read.
-- [ ] Install 1.0.0 from that release and run it.
-- [ ] Bump the three manifests to `1.0.1`, tag, publish.
-- [ ] Open the installed 1.0.0. Within a moment of launch a **dot** should
-      appear on the settings button; Settings → About should offer 1.0.1 with
-      its notes.
-- [ ] Download it. The bar should move, then it should say it is installed and
-      offer a restart. Restart, and Settings → About should read 1.0.1.
 - [ ] **Pull the network and relaunch.** Nothing should happen at all: no dot,
-      no error, no banner. That is the whole point of the quiet check.
+      no error, no banner. That is the whole point of the quiet check, and it
+      is the one part of §6 the live run did not exercise.
+- [ ] The wizard, looked at rather than run past: which pages it shows, whether
+      the icon is Groovium's, whether the language selector comes up. The
+      polish decisions (`headerImage`, `sidebarImage`) are waiting on that.
+      It does install to `%LOCALAPPDATA%Groovium` without asking for
+      administrator — that much the live install settled.
 
 ---
 
