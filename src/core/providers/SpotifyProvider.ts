@@ -111,6 +111,7 @@ export class SpotifyProvider extends BaseProvider {
   private stalled = false;
 
   async initialize(): Promise<boolean> {
+    this.report('provider built');
     if (this.player) return true;
     if (!(await isAuthenticated())) {
       // Say why. Otherwise the store falls back to "Spotify is unavailable",
@@ -338,6 +339,7 @@ export class SpotifyProvider extends BaseProvider {
     this.watch = freshWatch;
     this.stalled = false;
     this.verifier = setInterval(() => void this.verify(), VERIFY_EVERY_MS);
+    this.report('watching');
   }
 
   private stopVerifier(): void {
@@ -365,10 +367,11 @@ export class SpotifyProvider extends BaseProvider {
    * ran, what the SDK answered, and whether that answer was moving. This is
    * how those become facts.
    */
-  private report(reported: number | null): void {
+  private report(note: string, reported: number | null = null): void {
     if (!import.meta.env.DEV) return;
     (window as unknown as Record<string, unknown>).__grooviumSpotify = {
       at: new Date().toISOString().slice(11, 19),
+      note,
       sdkPosition: reported,
       localClock: this.positionMs,
       watch: this.watch,
@@ -393,7 +396,7 @@ export class SpotifyProvider extends BaseProvider {
       reported = null;
     }
 
-    this.report(reported);
+    this.report('checked', reported);
 
     if (this.stalled && hasRecovered(this.watch, reported)) {
       this.watch = observe(this.watch, reported);
