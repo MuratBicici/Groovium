@@ -82,6 +82,22 @@ than a repair — check again after a while, or on waking, or not at all. Worth
 deciding deliberately rather than patching. Until then the button is the way,
 and it works.
 
+### The repository has to be public for any of this to work
+
+The updater fetches `releases/latest/download/latest.json` with no credentials
+and cannot be given any — a token shipped inside a distributed app is public the
+moment it ships, only less honestly. So the artifacts have to be readable by
+anyone, and a private repository's releases are not.
+
+The repository is normally kept **private** and opened when an update is being
+tested. While it is private an installed copy gets a 404: the startup check
+swallows that and says nothing, which is right, but *Check for updates* will
+show an error. Nothing is broken; the door is shut.
+
+If the source should stay private for good, the way out is a second, public
+repository holding only the built artifacts, with `release.yml` publishing
+there instead. That was considered on 2026-08-25 and left undecided.
+
 ### Still unchecked
 
 - [ ] **Pull the network and relaunch.** Nothing should happen at all: no dot,
