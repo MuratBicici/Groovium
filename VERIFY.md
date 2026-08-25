@@ -84,14 +84,18 @@ and cannot be given any — a token shipped inside a distributed app is public t
 moment it ships, only less honestly. So the artifacts have to be readable by
 anyone, and a private repository's releases are not.
 
-The repository is normally kept **private** and opened when an update is being
-tested. While it is private an installed copy gets a 404: the startup check
-swallows that and says nothing, which is right, but *Check for updates* will
-show an error. Nothing is broken; the door is shut.
+The repository was kept **private** through 1.0.1 and opened only while an
+update was being tested. As of 1.0.2 it stays public, which is what settles
+this: there is no window during which an installed copy gets a 404 from
+`latest/download`, so *Check for updates* answers honestly at any time.
 
-If the source should stay private for good, the way out is a second, public
-repository holding only the built artifacts, with `release.yml` publishing
-there instead. That was considered on 2026-08-25 and left undecided.
+The alternative — a second, public repository holding only the built artifacts,
+with `release.yml` publishing there instead — was considered on 2026-08-25 and
+is no longer needed.
+
+Closing the repository again would not break anything, but it would put that
+404 back: the startup check swallows it and says nothing, which is right, while
+*Check for updates* reports an error. Nothing broken; the door shut.
 
 ### The wizard: passed on 2026-08-25
 
