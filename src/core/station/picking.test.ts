@@ -167,6 +167,43 @@ describe('resolveViaSpotify', () => {
     expect(s.calls).toBe(8);
   });
 
+  it('does not hand back the same song after the same song every time', async () => {
+    // The reported fault, and the one assertion the old implementation fails.
+    // It sorted by similarity and walked down the list, so a listener whose
+    // library does not overlap Last.fm's answer heard one fixed sequence for
+    // the life of the app — the same five songs, in the same order, on every
+    // launch.
+    const firsts = new Set<string>();
+    for (let run = 0; run < 100; run++) {
+      const s = searcher((a, t) => [found(a, t)]);
+      const picked = await resolveViaSpotify(
+        cands,
+        { exclude: new Set(), excludeArtists: new Set(), searchSpotify: s.search },
+        5,
+      );
+      const first = picked[0];
+      if (first) firsts.add(`${first.artist}-${first.title}`);
+    }
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+
+  it('still lets a closer match lead more often than a distant one', async () => {
+    // The other half: a shuffle nobody can steer is a shuffle, not a station.
+    const counts = new Map<string, number>();
+    for (let run = 0; run < 300; run++) {
+      const s = searcher((a, t) => [found(a, t)]);
+      const picked = await resolveViaSpotify(
+        cands,
+        { exclude: new Set(), excludeArtists: new Set(), searchSpotify: s.search },
+        1,
+      );
+      const artist = picked[0]?.artist;
+      if (artist) counts.set(artist, (counts.get(artist) ?? 0) + 1);
+    }
+    // Kraftwerk holds the two closest candidates; Harmonia the furthest.
+    expect(counts.get('Kraftwerk') ?? 0).toBeGreaterThan(counts.get('Harmonia') ?? 0);
+  });
+
   it('rejects a result that is not the song it asked for', async () => {
     // Spotify's field search is fuzzy; taking whatever comes back would drift
     // the station into unrelated music.

@@ -36,7 +36,12 @@ pub const API_ACCOUNT_URL: &str = "https://www.last.fm/api/account/create";
 /// Deliberately generous: every extra candidate is another chance to find a
 /// match already in the user's library, which needs no second network call at
 /// all, and so another chance to skip a Spotify search entirely.
-const SIMILAR_LIMIT: u32 = 50;
+///
+/// Raised from fifty when the picking became a weighted shuffle rather than a
+/// sort. Under a sort the tail was unreachable and asking for it was waste;
+/// now every candidate can come up, so the width of the pool is the width of
+/// the station. It costs nothing — one request either way.
+const SIMILAR_LIMIT: u32 = 100;
 
 /// Give up rather than hang.
 ///

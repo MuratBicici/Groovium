@@ -2,6 +2,7 @@ import type { LibraryTrack } from '@/core/library';
 import { libraryTrackToMetadata } from '@/core/library';
 import type { TrackMetadata } from '@/core/types';
 import { similarTracks, type SimilarTrack } from './lastfm';
+import { drawWeighted, similarityWeight, weightedShuffle } from './sampling';
 
 export { hasApiKey, setApiKey, clearApiKey, openAccountPage } from './lastfm';
 export type { SimilarTrack } from './lastfm';
@@ -127,28 +128,6 @@ interface Match {
 }
 
 /**
- * Draw one entry, favouring a higher weight but never guaranteeing it.
- *
- * Roulette-wheel selection: the chance of being picked is the entry's share of
- * the total weight. That keeps close matches likely without making the order
- * fixed, which is what stops the same suggestion arriving every time.
- */
-function drawWeighted<T>(entries: T[], weightOf: (entry: T) => number): T | undefined {
-  if (entries.length === 0) return undefined;
-
-  // A floor, so a candidate Last.fm scored at zero can still come up.
-  const weights = entries.map((entry) => Math.max(weightOf(entry), 0.01));
-  const total = weights.reduce((sum, w) => sum + w, 0);
-
-  let ticket = Math.random() * total;
-  for (let i = 0; i < entries.length; i++) {
-    ticket -= weights[i] as number;
-    if (ticket <= 0) return entries[i];
-  }
-  return entries[entries.length - 1];
-}
-
-/**
  * Candidates that are already in the library, spread across artists.
  *
  * Taking the most similar few sounds right and plays wrong: the top of a
@@ -218,14 +197,14 @@ export function findInLibrary(
     while (picked.length < limit && round.length > 0) {
       // Rank an artist by its best remaining match, then let chance decide.
       const pool = drawWeighted(round, (p) =>
-        p.reduce((best, m) => Math.max(best, m.score), 0),
+        similarityWeight(p.reduce((best, m) => Math.max(best, m.score), 0)),
       );
       if (!pool) break;
       // Out of the round whether or not it yields — that is what makes this a
       // round rather than a free-for-all the loudest artist would dominate.
       round.splice(round.indexOf(pool), 1);
 
-      const chosen = drawWeighted(pool, (m) => m.score);
+      const chosen = drawWeighted(pool, (m) => similarityWeight(m.score));
       if (!chosen) continue;
       pool.splice(pool.indexOf(chosen), 1);
       picked.push(chosen.track);
@@ -249,7 +228,11 @@ export interface ResolveOptions {
 }
 
 /**
- * The next few tracks for the station, most similar first.
+ * The next few tracks for the station.
+ *
+ * Not in similarity order. Both paths below draw from the candidates at random
+ * with similarity as a weight, because ordering by it made the station play the
+ * same sequence after the same song every time — see `sampling.ts`.
  *
  * An empty list is an ordinary outcome, not a failure: Last.fm knows nothing
  * about a great deal of music, and the station should fall quiet rather than
@@ -283,14 +266,20 @@ export async function resolveViaSpotify(
   const takenArtists = new Set(excludeArtists);
   const picked: TrackMetadata[] = [];
 
-  const fresh = candidates
-    .filter((c) => !takenKeys.has(matchKey(c.artist, c.title)))
-    .sort((a, b) => {
-      const aRested = excludeArtists.has(artistKey(a.artist)) ? 1 : 0;
-      const bRested = excludeArtists.has(artistKey(b.artist)) ? 1 : 0;
-      // Similarity still orders within each half; only the split is imposed.
-      return aRested - bRested || b.matchScore - a.matchScore;
-    });
+  const usable = candidates.filter((c) => !takenKeys.has(matchKey(c.artist, c.title)));
+  // Artists heard a moment ago go to the back as a block. That is a rule and
+  // not a preference, so it stays a hard split rather than a heavy weight.
+  const heldBack = usable.filter((c) => excludeArtists.has(artistKey(c.artist)));
+  const available = usable.filter((c) => !excludeArtists.has(artistKey(c.artist)));
+
+  // Shuffled rather than sorted, which is the whole repair. This used to order
+  // by similarity and walk down the list, and for a listener whose library does
+  // not overlap Last.fm's answer every track resolves here — so one song led to
+  // the same five songs in the same order, every time, on every launch.
+  const fresh = [
+    ...weightedShuffle(available, (c) => similarityWeight(c.matchScore)),
+    ...weightedShuffle(heldBack, (c) => similarityWeight(c.matchScore)),
+  ];
 
   let spent = 0;
   for (const candidate of fresh) {
