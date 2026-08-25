@@ -357,6 +357,26 @@ export class SpotifyProvider extends BaseProvider {
    * nothing about whether audio is coming out. Without this, pulling the
    * network leaves both of them running over silence.
    */
+  /**
+   * What the watchdog last saw, for looking at from the console.
+   *
+   * Development only. The whole difficulty with a network outage is that
+   * everything about it happens where nobody is looking: whether the check
+   * ran, what the SDK answered, and whether that answer was moving. This is
+   * how those become facts.
+   */
+  private report(reported: number | null): void {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as Record<string, unknown>).__grooviumSpotify = {
+      at: new Date().toISOString().slice(11, 19),
+      sdkPosition: reported,
+      localClock: this.positionMs,
+      watch: this.watch,
+      stalled: this.stalled,
+      state: this.state,
+    };
+  }
+
   private async verify(): Promise<void> {
     const player = this.player;
     if (!player) return;
@@ -372,6 +392,8 @@ export class SpotifyProvider extends BaseProvider {
     } catch {
       reported = null;
     }
+
+    this.report(reported);
 
     if (this.stalled && hasRecovered(this.watch, reported)) {
       this.watch = observe(this.watch, reported);
