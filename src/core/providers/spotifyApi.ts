@@ -164,17 +164,23 @@ export async function searchTracks(query: string): Promise<TrackMetadata[]> {
  * after two attempts built on the opposite assumption — is the position the
  * Web Playback SDK reports. Both go on counting through a network outage.
  *
- * Null means Spotify did not answer, which is itself the answer worth having:
- * no route to Spotify is no music.
+ * `answered: false` is Spotify not answering at all, kept apart from its
+ * answering "nothing is playing". They are different facts and they deserve
+ * different patience: no route to Spotify means the music has already stopped
+ * or is about to, while a "not playing" can be a moment between tracks.
  */
-export async function currentPlayback(): Promise<{ isPlaying: boolean; progressMs: number } | null> {
+export type Playback =
+  | { answered: false }
+  | { answered: true; isPlaying: boolean; progressMs: number };
+
+export async function currentPlayback(): Promise<Playback> {
   try {
     const state = await request<{ is_playing: boolean; progress_ms: number | null }>('/me/player');
     // 204 means nothing is playing anywhere, and `request` returns null for it.
-    if (!state) return { isPlaying: false, progressMs: 0 };
-    return { isPlaying: state.is_playing, progressMs: state.progress_ms ?? 0 };
+    if (!state) return { answered: true, isPlaying: false, progressMs: 0 };
+    return { answered: true, isPlaying: state.is_playing, progressMs: state.progress_ms ?? 0 };
   } catch {
-    return null;
+    return { answered: false };
   }
 }
 

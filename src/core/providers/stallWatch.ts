@@ -25,21 +25,28 @@
 /**
  * How often Spotify is asked what is actually playing.
  *
- * A real request, so this is a rate as well as a delay. Three seconds is
- * twenty a minute while a Spotify track plays and nothing at all otherwise,
- * which is small against Spotify's rolling window — and with two checks to a
- * verdict it notices an outage inside about six seconds.
+ * A real request, so this is a rate as well as a delay. Two seconds is thirty
+ * a minute while a Spotify track plays and nothing at all otherwise, which is
+ * small against Spotify's rolling window.
+ *
+ * Three was tried first and was too slow: audio keeps coming out of the buffer
+ * for five or six seconds after the network goes, and a verdict that took six
+ * arrived *after* the silence started, which is exactly the thing this exists
+ * to prevent. Now an unanswered request stalls on its own, so the outage is
+ * caught inside two — while there is still sound, as a warning rather than an
+ * explanation.
  */
-export const VERIFY_EVERY_MS = 3000;
+export const VERIFY_EVERY_MS = 2000;
 
 /**
  * Consecutive checks finding nothing playing before it is called stalled.
  *
- * Two, not one. A single request can fail for reasons that pass on their own —
- * a momentary blip, a rate limit already waited out — and stopping the music
- * for one of those would be worse than the fault it was guarding against. Two
- * in a row is about six seconds of silence, which is past the point of
- * wondering whether the music stopped.
+ * This is the patient path, for Spotify answering that it is not playing —
+ * which can be an ordinary moment between tracks, and stopping the record for
+ * one of those would be worse than the fault it guards against.
+ *
+ * Spotify not answering at all does not come through here. That one is not
+ * ambiguous and the provider acts on it immediately.
  */
 export const STALL_AFTER = 2;
 

@@ -447,12 +447,19 @@ export class SpotifyProvider extends BaseProvider {
     // Spotify is asked, rather than anything local being read. The provider's
     // clock is extrapolated and so is the SDK's — both go on counting through
     // an outage, which is why two earlier versions of this never fired.
-    //
-    // Null is Spotify not answering, and that is the answer: no route to
-    // Spotify is no music. `isPlaying: false` is Spotify saying so outright.
     const playback = await currentPlayback();
-    const reported = playback?.isPlaying ? playback.progressMs : null;
 
+    // No answer is not ambiguous, and waiting for a second opinion is what
+    // made this arrive too late: audio runs on out of the buffer for five or
+    // six seconds after the network goes, so a verdict that needed two checks
+    // landed after the silence rather than before it.
+    if (!playback.answered) {
+      this.report('Spotify did not answer', null);
+      this.enterStall('no route to Spotify');
+      return;
+    }
+
+    const reported = playback.isPlaying ? playback.progressMs : null;
     this.report('asked Spotify', reported);
 
     if (this.stalled && hasRecovered(this.watch, reported)) {
