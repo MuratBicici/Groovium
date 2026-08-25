@@ -115,10 +115,9 @@ export class SpotifyProvider extends BaseProvider {
    *
    * The clock has no idea whether audio is still coming out. Pull the network
    * and the sound stops while it goes on counting, so the record keeps turning
-   * and the bar keeps filling over silence — until the connection returns and
-   * the position snaps back to where playback really was. This checks the
-   * clock against the SDK's own position and stops believing it when nothing
-   * moves.
+   * and the bar keeps filling over silence. This asks Spotify what is really
+   * happening and stops believing the clock when the answer is "nothing" — see
+   * `stallWatch.ts` for why nothing local can answer that.
    */
   private verifier: ReturnType<typeof setInterval> | null = null;
   private watch: Watch = freshWatch;
@@ -136,22 +135,11 @@ export class SpotifyProvider extends BaseProvider {
    * to the next song, and a stop.
    */
   private reachable = true;
+  /** What was playing, so an outage can be recovered from rather than waited out. */
+  private playing: string | null = null;
+  /** One restart attempt at a time. */
+  private restarting = false;
 
-  /**
-   * The connection going away, watched directly.
-   *
-   * The first attempt at this inferred silence from the SDK's reported
-   * position ceasing to move, and it never fired: that position is
-   * extrapolated locally too, so during an outage the SDK goes on counting
-   * exactly as confidently as this provider did. Measured, after guessing
-   * wrong about it twice.
-   *
-   * So the thing that actually changed gets watched instead. `offline` is
-   * immediate, costs no traffic, and is the same event Spotify's own failure
-   * is downstream of. It answers "is there a network", not "is audio coming
-   * out" — the position watchdog stays as a second line for a stall that
-   * happens with the network up.
-   */
   /**
    * A fast path, not the mechanism.
    *
@@ -239,6 +227,7 @@ export class SpotifyProvider extends BaseProvider {
     if (!this.player) throw new Error('Spotify player is not connected.');
 
     this.setState('LOADING');
+    this.playing = trackId;
     try {
       // `connect()` resolving does not mean Spotify has registered the device;
       // that arrives later on the `ready` event. Picking a track inside that
@@ -322,6 +311,12 @@ export class SpotifyProvider extends BaseProvider {
 
     player.addListener('not_ready', (() => {
       this.deviceId = null;
+      // Not while stalled: this is the connection dropping, and tearing the
+      // watchdog down here is what left nothing running to notice it return.
+      if (this.stalled) {
+        this.report('device went away while stalled');
+        return;
+      }
       this.stopVerifier();
       // The null-state branch below stops the ticker and this one did not, so
       // handing playback to another device left a 250ms interval reporting
@@ -364,6 +359,17 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   private onStateChanged(state: SpotifyPlayerState): void {
+    // While stalled, the SDK is describing a connection it has lost, not
+    // anything a listener did. It reports paused, at position zero, and taking
+    // that literally is what wrote PAUSED over the waiting state, rewound the
+    // bar to the start, and switched off the watchdog that was supposed to
+    // notice the music coming back. Only the duration is worth keeping.
+    if (this.stalled) {
+      if (state.duration > 0) this.durationMs = state.duration;
+      this.report('ignored an SDK state while stalled');
+      return;
+    }
+
     const wasPlaying = this.state === 'PLAYING';
     // Read before the incoming state overwrites it. Where the clock had got to
     // is the whole of the evidence for whether a track finished, and this line
@@ -511,6 +517,15 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
 
+    // Spotify is reachable again but says nothing is playing. It does not
+    // resume on its own after an outage — the device it was playing to is gone
+    // — so it has to be asked, at the position the clock was frozen at.
+    if (this.stalled && !playback.isPlaying) {
+      void this.restartWhereItStopped();
+      this.report('asking Spotify to start again', null);
+      return;
+    }
+
     const reported = playback.isPlaying ? playback.progressMs : null;
     this.report('asked Spotify', reported);
 
@@ -554,6 +569,29 @@ export class SpotifyProvider extends BaseProvider {
     this.startTicker();
     this.emitProgress();
     this.report(`resumed: ${why}`);
+  }
+
+  /**
+   * Put back on what the outage took off.
+   *
+   * Spotify does not pick up where it left off once the device has gone: the
+   * track has to be started again and seeked to where the clock stopped.
+   * Failure is not reported — the watchdog is still stalled, the next check
+   * comes in two seconds, and an outage that has not finished is not an error.
+   */
+  private async restartWhereItStopped(): Promise<void> {
+    if (this.restarting || !this.playing || !this.deviceId) return;
+    this.restarting = true;
+    const at = this.positionMs;
+    try {
+      await playOnDevice(this.deviceId, this.playing);
+      await this.player?.seek(at);
+      this.positionMs = at;
+    } catch {
+      // Still out. The next check will try again.
+    } finally {
+      this.restarting = false;
+    }
   }
 
   private enterStall(why: string): void {
