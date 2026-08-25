@@ -110,8 +110,17 @@ export class SpotifyProvider extends BaseProvider {
   /** True between noticing the silence and hearing something again. */
   private stalled = false;
 
+  constructor() {
+    super();
+    // Announced at construction rather than at `initialize()`, which does not
+    // run until Spotify is actually used. The handle exists to answer "is this
+    // code even loaded", and it cannot do that if it appears only once the
+    // thing under test has already started.
+    this.report('built');
+  }
+
   async initialize(): Promise<boolean> {
-    this.report('provider built');
+    this.report('connecting');
     if (this.player) return true;
     if (!(await isAuthenticated())) {
       // Say why. Otherwise the store falls back to "Spotify is unavailable",
