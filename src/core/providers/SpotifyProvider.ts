@@ -1,6 +1,14 @@
 import type { AuthResult, SourceType } from '@/core/types';
 import { beginAuth, accessToken, isAuthenticated } from '@/core/security/spotifyAuth';
 import { clamp } from '@/core/utils/time';
+import {
+  VERIFY_EVERY_MS,
+  freshWatch,
+  hasRecovered,
+  hasStalled,
+  observe,
+  type Watch,
+} from './stallWatch';
 import { BaseProvider } from './BaseProvider';
 import { playOnDevice } from './spotifyApi';
 
@@ -56,6 +64,7 @@ interface SpotifyPlayer {
   resume(): Promise<void>;
   seek(positionMs: number): Promise<void>;
   setVolume(volume: number): Promise<void>;
+  getCurrentState(): Promise<SpotifyPlayerState | null>;
   addListener(event: string, cb: (payload: never) => void): boolean;
 }
 
@@ -85,6 +94,21 @@ export class SpotifyProvider extends BaseProvider {
   private positionMs = 0;
   private durationMs = 0;
   private lastTickAt = 0;
+
+  /**
+   * Watchdog over that clock.
+   *
+   * The clock has no idea whether audio is still coming out. Pull the network
+   * and the sound stops while it goes on counting, so the record keeps turning
+   * and the bar keeps filling over silence — until the connection returns and
+   * the position snaps back to where playback really was. This checks the
+   * clock against the SDK's own position and stops believing it when nothing
+   * moves.
+   */
+  private verifier: ReturnType<typeof setInterval> | null = null;
+  private watch: Watch = freshWatch;
+  /** True between noticing the silence and hearing something again. */
+  private stalled = false;
 
   async initialize(): Promise<boolean> {
     if (this.player) return true;
@@ -180,6 +204,7 @@ export class SpotifyProvider extends BaseProvider {
 
   override dispose(): void {
     this.stopTicker();
+    this.stopVerifier();
     this.player?.disconnect();
     this.player = null;
     this.deviceId = null;
@@ -220,6 +245,7 @@ export class SpotifyProvider extends BaseProvider {
 
     player.addListener('not_ready', (() => {
       this.deviceId = null;
+      this.stopVerifier();
       // The null-state branch below stops the ticker and this one did not, so
       // handing playback to another device left a 250ms interval reporting
       // progress for a device we no longer drive.
@@ -243,6 +269,7 @@ export class SpotifyProvider extends BaseProvider {
       if (!state) {
         // Null state means playback moved to another device.
         this.stopTicker();
+        this.stopVerifier();
         this.setState('IDLE');
         return;
       }
@@ -264,6 +291,9 @@ export class SpotifyProvider extends BaseProvider {
 
     if (state.paused) {
       this.stopTicker();
+      // Whatever the watchdog was counting, this is an answer from the player
+      // itself and it outranks anything inferred from a position not moving.
+      this.stopVerifier();
       // Spotify has no "ended" event. A track that stops on its own lands at
       // paused with the position back at zero, which a user-initiated pause
       // never does — that difference is the only signal available.
@@ -286,6 +316,7 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   private startTicker(): void {
+    this.startVerifier();
     if (this.ticker) return;
     this.lastTickAt = Date.now();
     this.ticker = setInterval(() => {
@@ -300,6 +331,72 @@ export class SpotifyProvider extends BaseProvider {
     if (!this.ticker) return;
     clearInterval(this.ticker);
     this.ticker = null;
+  }
+
+  private startVerifier(): void {
+    if (this.verifier) return;
+    this.watch = freshWatch;
+    this.stalled = false;
+    this.verifier = setInterval(() => void this.verify(), VERIFY_EVERY_MS);
+  }
+
+  private stopVerifier(): void {
+    if (this.verifier) {
+      clearInterval(this.verifier);
+      this.verifier = null;
+    }
+    this.watch = freshWatch;
+    this.stalled = false;
+  }
+
+  /**
+   * Ask the SDK where it actually is, and stop believing the local clock when
+   * the answer stops changing.
+   *
+   * The clock is what makes the record turn and the bar fill, and it knows
+   * nothing about whether audio is coming out. Without this, pulling the
+   * network leaves both of them running over silence.
+   */
+  private async verify(): Promise<void> {
+    const player = this.player;
+    if (!player) return;
+
+    // Null means the SDK had nothing to say, which is a symptom rather than an
+    // absence of one — a player that cannot answer is not a player that is fine.
+    let reported: number | null;
+    try {
+      const state = await player.getCurrentState();
+      // A paused player is `player_state_changed`'s business, not this one's.
+      if (state?.paused) return;
+      reported = state?.position ?? null;
+    } catch {
+      reported = null;
+    }
+
+    if (this.stalled && hasRecovered(this.watch, reported)) {
+      this.watch = observe(this.watch, reported);
+      this.stalled = false;
+      // Reseeded from the SDK rather than resumed from the frozen count: the
+      // silence was real, and whatever it cost belongs to the position.
+      this.positionMs = reported ?? this.positionMs;
+      this.lastTickAt = Date.now();
+      this.setState('PLAYING');
+      this.startTicker();
+      this.emitProgress();
+      return;
+    }
+
+    this.watch = observe(this.watch, reported);
+
+    if (!this.stalled && hasStalled(this.watch)) {
+      this.stalled = true;
+      // The clock stops with it, so the position freezes where it was last
+      // known to be true rather than running on into a song nobody can hear.
+      this.stopTicker();
+      // LOADING, not IDLE: the track has not ended and nobody asked for this.
+      // It is waiting, which is what LOADING means everywhere else here.
+      this.setState('LOADING');
+    }
   }
 
   private emitProgress(): void {

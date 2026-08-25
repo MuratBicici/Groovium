@@ -1,7 +1,7 @@
 # Pending verification
 
-**One thing is left: the offline launch, in §6.** Everything else in this file
-has been used on a real machine and passed.
+**Two things are left: the offline launch in §6, and §7.** Everything else in
+this file has been used on a real machine and passed.
 
 There was a §5, about making the window translucent and frosted. The
 frosting could not be made to work on Windows and the whole thing was taken
@@ -108,6 +108,48 @@ Groovium's own look instead of NSIS's default. Two bitmaps, no code.
       no error, no banner. That is the whole point of the quiet check, and the
       one part of §6 the live run could not exercise, having been run over a
       working connection.
+
+## 7. Spotify going quiet when the network does
+
+Found in use on 2026-08-25, doing the §6 offline check: pull the network
+mid-song and the sound stops, but **the record keeps turning and the bar keeps
+filling** over silence. When the connection comes back the position snaps to
+where playback really was.
+
+The cause is that the Web Playback SDK does not stream progress, so the
+provider keeps a local clock and advances it on a 250ms timer. That clock knows
+nothing about whether audio is coming out. `not_ready` is already listened for
+and would have caught it, but it depends on Spotify noticing, which needs the
+network that just went away.
+
+So the clock is now checked against the SDK's own position every two seconds,
+and two checks in a row finding it in the same place mean nothing is playing.
+Then the clock stops — freezing the bar where it was last known to be true —
+the record stops with it, and the state goes to **LOADING**, which is what the
+rest of the app already means by waiting. Movement afterwards resumes, reseeded
+from the SDK rather than from the frozen count.
+
+What was checked from here: the rule itself, over sequences of readings, and
+that `LOADING` does the three things it has to — the record's animation pauses,
+the position stops advancing (0 ms over 1.5 s), and the label reads
+*Yükleniyor*. What could not be checked from here is the only thing that
+matters: whether a real drop is caught.
+
+- [ ] Play a **Spotify** track, pull the network, and wait about five seconds.
+      The record should stop, the bar should freeze, and the label should read
+      *Yükleniyor* — not keep running over silence.
+- [ ] Put the network back. It should carry on, and the position should not
+      jump backwards by the length of the outage.
+- [ ] **Pause and resume by hand a few times, on a good connection.** The
+      watchdog must not mistake an ordinary pause for a stall — that is the way
+      this kind of check usually goes wrong.
+- [ ] A **local** file is unaffected by any of this and should behave exactly
+      as before. Its position comes from the audio element itself, which cannot
+      stall on a network.
+
+Worth knowing: with the record stopped, the tonearm parks as well, because both
+follow "is it playing". A four-second blip therefore swings the arm out and
+back. It reads as honest rather than wrong, but say so if it looks bad in use.
 
 ---
 
