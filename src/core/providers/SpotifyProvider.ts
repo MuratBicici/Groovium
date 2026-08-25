@@ -39,6 +39,21 @@ const PLAYER_NAME = 'Groovium';
  */
 const PROGRESS_TICK_MS = 250;
 
+/**
+ * How near the end the clock must be for a reset to zero to mean the track
+ * finished.
+ *
+ * Spotify has no "ended" event, so a track stopping on its own is inferred
+ * from it landing paused at position zero. A dropped connection produces
+ * exactly the same thing from the middle of a song — and did, skipping to the
+ * next track, which could not play either.
+ *
+ * Where the clock had got to settles it without depending on when anything
+ * else is noticed. A track that ended was at its end; five seconds is slack
+ * for a clock that is extrapolated between updates.
+ */
+const ENDING_GRACE_MS = 5000;
+
 /** How long to wait for Spotify to register this app as a playback device. */
 const DEVICE_READY_TIMEOUT_MS = 10_000;
 
@@ -111,6 +126,16 @@ export class SpotifyProvider extends BaseProvider {
   private stalled = false;
   private lastNote = 'built';
   private lastReported: number | null = null;
+  /**
+   * Whether Spotify answered the last time it was asked.
+   *
+   * The difference between a fault and an outage. Everything the SDK reports
+   * while the connection is gone is a symptom of the connection being gone —
+   * an error, a reset position, a track that looks finished — and reading any
+   * of it literally is how a network blip turned into "playback error", a skip
+   * to the next song, and a stop.
+   */
+  private reachable = true;
 
   /**
    * The connection going away, watched directly.
@@ -307,6 +332,15 @@ export class SpotifyProvider extends BaseProvider {
 
     for (const event of ['initialization_error', 'authentication_error', 'account_error', 'playback_error']) {
       player.addListener(event, ((payload: { message: string }) => {
+        // `playback_error` says the audio broke, which is what waiting looks
+        // like from in here — the watchdog decides whether it comes back. The
+        // others are real problems with the account or the setup, unless there
+        // is no route to Spotify, in which case they are the outage wearing a
+        // different hat.
+        if (event === 'playback_error' || !this.reachable) {
+          this.enterStall(event);
+          return;
+        }
         // `account_error` is how a non-Premium account surfaces, well after
         // sign-in succeeded.
         this.fail(
@@ -331,6 +365,11 @@ export class SpotifyProvider extends BaseProvider {
 
   private onStateChanged(state: SpotifyPlayerState): void {
     const wasPlaying = this.state === 'PLAYING';
+    // Read before the incoming state overwrites it. Where the clock had got to
+    // is the whole of the evidence for whether a track finished, and this line
+    // is the difference between having it and reading back the zero that is
+    // being asked about.
+    const wasAt = this.positionMs;
     this.durationMs = state.duration;
     this.positionMs = state.position;
     this.lastTickAt = Date.now();
@@ -349,7 +388,18 @@ export class SpotifyProvider extends BaseProvider {
       // Spotify has no "ended" event. A track that stops on its own lands at
       // paused with the position back at zero, which a user-initiated pause
       // never does — that difference is the only signal available.
-      if (wasPlaying && state.position === 0) {
+      //
+      // It is also what a dropped connection looks like: the SDK resets to
+      // paused at zero, this read it as the song finishing, and the store
+      // dutifully moved to the next one, which could not play either. A track
+      // does not end because the network did.
+      //
+      // Two guards, because they fail differently. Whether Spotify is
+      // reachable is the honest question but it can be a second out of date,
+      // and the reset can arrive first. Where the clock had got to cannot be
+      // out of date: a track that ended was at its end.
+      const nearTheEnd = this.durationMs > 0 && wasAt >= this.durationMs - ENDING_GRACE_MS;
+      if (wasPlaying && state.position === 0 && nearTheEnd && !this.stalled && this.reachable) {
         this.setState('IDLE');
         // From the player's own state, not from `this.currentTrack` — which
         // this provider never assigns, so the payload was always null and the
@@ -430,6 +480,7 @@ export class SpotifyProvider extends BaseProvider {
       get: () => ({
         note: this.lastNote,
         state: this.state,
+        reachable: this.reachable,
         stalled: this.stalled,
         spotifySaid: this.lastReported,
         localClock: Math.round(this.positionMs),
@@ -453,6 +504,7 @@ export class SpotifyProvider extends BaseProvider {
     // made this arrive too late: audio runs on out of the buffer for five or
     // six seconds after the network goes, so a verdict that needed two checks
     // landed after the silence rather than before it.
+    this.reachable = playback.answered;
     if (!playback.answered) {
       this.report('Spotify did not answer', null);
       this.enterStall('no route to Spotify');
