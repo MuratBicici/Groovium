@@ -345,18 +345,26 @@ async function quietly<T>(tier: string, lookup: () => Promise<T[]>): Promise<T[]
 }
 
 /**
- * Ask each source of similarity in turn, stopping at the first that answers.
+ * How many seeds in one fill may go past the track lookup.
  *
- * **A tier is only reached when the one above it comes back empty**, so the
- * ordinary case is still the single request it always was.
+ * The deeper tiers cost about nine requests between them, and a pool of four
+ * seeds that were all dead ends would otherwise spend forty on a single fill —
+ * enough for Spotify's rolling window to start answering 429 and for Last.fm to
+ * take an interest. Two is enough for the case this is all for, which is one
+ * unknown track among several known ones.
  */
-async function candidatesFor(
+const DEEP_LOOKUPS_PER_FILL = 2;
+
+/**
+ * The sources below the track lookup, asked in turn.
+ *
+ * Reached only when `track.getSimilar` came back empty, which is what keeps the
+ * ordinary case at the single request it always was.
+ */
+async function deeperCandidatesFor(
   seed: TrackMetadata,
   options: ResolveOptions,
 ): Promise<Candidates> {
-  const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
-  if (bySong.length > 0) return { kind: 'names', names: bySong };
-
   // Last.fm knows far more artists than it knows tracks.
   const byArtist = await quietly('artist', () => artistCandidates(seed.artist));
   if (byArtist.length > 0) return { kind: 'names', names: byArtist };
@@ -446,8 +454,21 @@ export async function resolveNextTracks(
   // Seeds are tried in a weighted order rather than one being chosen, so a
   // dead end costs a request instead of the run. In the ordinary case the
   // first seed answers and the rest are never asked about.
+  let deepBudget = DEEP_LOOKUPS_PER_FILL;
+
   for (const seed of orderSeeds(options.seeds)) {
-    const picked = await pickFrom(await candidatesFor(seed, options), options, limit);
+    const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
+
+    let candidates: Candidates = { kind: 'names', names: bySong };
+    if (bySong.length === 0) {
+      // Every seed gets the cheap look. Only the first couple are worth the
+      // expensive one, or a pool of dead ends turns one fill into a burst.
+      if (deepBudget <= 0) continue;
+      deepBudget--;
+      candidates = await deeperCandidatesFor(seed, options);
+    }
+
+    const picked = await pickFrom(candidates, options, limit);
     if (picked.length > 0) return picked;
   }
   return [];
