@@ -139,6 +139,8 @@ export class SpotifyProvider extends BaseProvider {
   private playing: string | null = null;
   /** One restart attempt at a time. */
   private restarting = false;
+  /** Whether the silence was this provider's doing, and so is its to undo. */
+  private pausedByStall = false;
 
   /**
    * A fast path, not the mechanism.
@@ -563,6 +565,14 @@ export class SpotifyProvider extends BaseProvider {
     }
     this.stalled = false;
     this.watch = freshWatch;
+
+    // Undo the silence this provider caused. Harmless when the track was
+    // restarted instead — resuming something already playing changes nothing.
+    if (this.pausedByStall) {
+      this.pausedByStall = false;
+      void this.player?.resume().catch(() => {});
+    }
+
     if (reported !== null) this.positionMs = reported;
     this.lastTickAt = Date.now();
     this.setState('PLAYING');
@@ -584,6 +594,8 @@ export class SpotifyProvider extends BaseProvider {
     this.restarting = true;
     const at = this.positionMs;
     try {
+      // Starting the track again supersedes the pause that the stall applied.
+      this.pausedByStall = false;
       await playOnDevice(this.deviceId, this.playing);
       await this.player?.seek(at);
       this.positionMs = at;
@@ -598,6 +610,16 @@ export class SpotifyProvider extends BaseProvider {
     if (this.stalled || this.state !== 'PLAYING') return;
     this.stalled = true;
     this.stopTicker();
+
+    // Stop the sound, not just the picture. The outage is caught inside a
+    // second and there are still four or five in the buffer, so without this
+    // the window says it is waiting while music is quite audibly playing —
+    // and then the music dies anyway a moment later, which is the confusing
+    // half of what this was meant to fix. Local to the SDK, so it works with
+    // the network already gone.
+    this.pausedByStall = true;
+    void this.player?.pause().catch(() => {});
+
     this.setState('LOADING');
     this.report(`stalled: ${why}`);
   }
