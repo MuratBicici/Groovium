@@ -10,7 +10,7 @@ import {
   type Watch,
 } from './stallWatch';
 import { BaseProvider } from './BaseProvider';
-import { playOnDevice } from './spotifyApi';
+import { currentPlayback, playOnDevice } from './spotifyApi';
 
 /**
  * Spotify playback through the Web Playback SDK.
@@ -109,6 +109,8 @@ export class SpotifyProvider extends BaseProvider {
   private watch: Watch = freshWatch;
   /** True between noticing the silence and hearing something again. */
   private stalled = false;
+  private lastNote = 'built';
+  private lastReported: number | null = null;
 
   /**
    * The connection going away, watched directly.
@@ -124,6 +126,13 @@ export class SpotifyProvider extends BaseProvider {
    * is downstream of. It answers "is there a network", not "is audio coming
    * out" — the position watchdog stays as a second line for a stall that
    * happens with the network up.
+   */
+  /**
+   * A fast path, not the mechanism.
+   *
+   * When the browser does report the network going away this is instant, which
+   * beats waiting for the next check. WebView2 was measured not to report it at
+   * all, so nothing depends on it.
    */
   private onOffline = () => this.enterStall('offline');
   private onOnline = () => this.leaveStall('back online');
@@ -411,54 +420,50 @@ export class SpotifyProvider extends BaseProvider {
    */
   private report(note: string, reported: number | null = null): void {
     if (!import.meta.env.DEV) return;
-    (window as unknown as Record<string, unknown>).__grooviumSpotify = {
-      at: new Date().toISOString().slice(11, 19),
-      note,
-      online: navigator.onLine,
-      sdkPosition: reported,
-      localClock: this.positionMs,
-      watch: this.watch,
-      stalled: this.stalled,
-      state: this.state,
-    };
+    this.lastNote = `${new Date().toISOString().slice(11, 19)} ${note}`;
+    this.lastReported = reported;
+    // A getter, not a snapshot. The frozen object said PLAYING after a pause
+    // because nothing had rewritten it since, and reading a stale value as a
+    // live one sent a whole round of diagnosis the wrong way.
+    Object.defineProperty(window, '__grooviumSpotify', {
+      configurable: true,
+      get: () => ({
+        note: this.lastNote,
+        state: this.state,
+        stalled: this.stalled,
+        spotifySaid: this.lastReported,
+        localClock: Math.round(this.positionMs),
+        watch: { ...this.watch },
+        ticking: this.ticker !== null,
+        verifying: this.verifier !== null,
+        navigatorOnLine: navigator.onLine,
+      }),
+    });
   }
 
   private async verify(): Promise<void> {
-    const player = this.player;
-    if (!player) return;
+    if (!this.player) return;
 
-    // Nothing the SDK says while the network is down is worth reading. Its
-    // position goes on advancing regardless — that is what made the first
-    // version of this watchdog useless — so asking would only produce
-    // "movement" and undo the stall the outage just caused.
-    if (!navigator.onLine) {
-      this.report('waiting for the network');
-      return;
-    }
+    // Spotify is asked, rather than anything local being read. The provider's
+    // clock is extrapolated and so is the SDK's — both go on counting through
+    // an outage, which is why two earlier versions of this never fired.
+    //
+    // Null is Spotify not answering, and that is the answer: no route to
+    // Spotify is no music. `isPlaying: false` is Spotify saying so outright.
+    const playback = await currentPlayback();
+    const reported = playback?.isPlaying ? playback.progressMs : null;
 
-    // Null means the SDK had nothing to say, which is a symptom rather than an
-    // absence of one — a player that cannot answer is not a player that is fine.
-    let reported: number | null;
-    try {
-      const state = await player.getCurrentState();
-      // A paused player is `player_state_changed`'s business, not this one's.
-      if (state?.paused) return;
-      reported = state?.position ?? null;
-    } catch {
-      reported = null;
-    }
-
-    this.report('checked', reported);
+    this.report('asked Spotify', reported);
 
     if (this.stalled && hasRecovered(this.watch, reported)) {
       this.watch = observe(this.watch, reported);
-      this.leaveStall('position moving again', reported);
+      this.leaveStall('Spotify is playing again', reported);
       return;
     }
 
     this.watch = observe(this.watch, reported);
 
-    if (!this.stalled && hasStalled(this.watch)) this.enterStall('position frozen');
+    if (!this.stalled && hasStalled(this.watch)) this.enterStall('Spotify says nothing is playing');
   }
 
   /**

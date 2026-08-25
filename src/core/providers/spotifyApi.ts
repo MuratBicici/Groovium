@@ -156,6 +156,28 @@ export async function searchTracks(query: string): Promise<TrackMetadata[]> {
 }
 
 /** Start playback of a track URI on this app's own device. */
+/**
+ * What Spotify itself says is happening right now.
+ *
+ * The one source of truth about whether audio is coming out. Everything local
+ * is guesswork: the provider's own clock is extrapolated, and so — measured,
+ * after two attempts built on the opposite assumption — is the position the
+ * Web Playback SDK reports. Both go on counting through a network outage.
+ *
+ * Null means Spotify did not answer, which is itself the answer worth having:
+ * no route to Spotify is no music.
+ */
+export async function currentPlayback(): Promise<{ isPlaying: boolean; progressMs: number } | null> {
+  try {
+    const state = await request<{ is_playing: boolean; progress_ms: number | null }>('/me/player');
+    // 204 means nothing is playing anywhere, and `request` returns null for it.
+    if (!state) return { isPlaying: false, progressMs: 0 };
+    return { isPlaying: state.is_playing, progressMs: state.progress_ms ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
 export async function playOnDevice(deviceId: string, trackUri: string): Promise<void> {
   await request(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
     method: 'PUT',
