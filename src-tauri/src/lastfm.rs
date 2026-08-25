@@ -90,6 +90,64 @@ struct RawArtist {
     name: String,
 }
 
+// --- The artist fallback ----------------------------------------------------
+
+/// How many similar artists to ask for.
+const SIMILAR_ARTIST_LIMIT: u32 = 10;
+
+/// How many of those artists actually have their top tracks fetched.
+///
+/// Each one is a request. This whole path runs only when the track lookup came
+/// back empty, so four is a handful spent rarely rather than a burst spent
+/// every song.
+const ARTISTS_TO_MINE: usize = 4;
+
+/// Top tracks taken from each artist.
+const TOP_TRACKS_LIMIT: u32 = 10;
+
+/// How much a track's rank within its artist discounts that artist's score.
+///
+/// Small on purpose: which artist it is matters far more than whether this was
+/// their third or their eighth most played song.
+const RANK_PENALTY: f64 = 0.05;
+
+#[derive(Deserialize)]
+struct SimilarArtistsResponse {
+    #[serde(rename = "similarartists")]
+    similar_artists: Option<SimilarArtists>,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SimilarArtists {
+    #[serde(default)]
+    artist: Vec<RawSimilarArtist>,
+}
+
+#[derive(Deserialize)]
+struct RawSimilarArtist {
+    name: String,
+    #[serde(rename = "match")]
+    match_score: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct TopTracksResponse {
+    #[serde(rename = "toptracks")]
+    top_tracks: Option<TopTracks>,
+}
+
+#[derive(Deserialize)]
+struct TopTracks {
+    #[serde(default)]
+    track: Vec<RawTopTrack>,
+}
+
+#[derive(Deserialize)]
+struct RawTopTrack {
+    name: String,
+}
+
 fn score_of(value: &Option<serde_json::Value>) -> f64 {
     match value {
         Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
@@ -153,39 +211,23 @@ pub fn lastfm_open_account(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Could not open the browser: {e}"))
 }
 
-// --- The lookup -------------------------------------------------------------
+// --- Transport --------------------------------------------------------------
 
-/// Tracks similar to the given one, most similar first.
+/// Build a request URL, adding the two parameters every call needs.
+fn endpoint(key: &str, params: &[(&str, &str)]) -> Result<reqwest::Url, String> {
+    let mut all = params.to_vec();
+    all.push(("api_key", key));
+    all.push(("format", "json"));
+    reqwest::Url::parse_with_params(API_ROOT, &all)
+        .map_err(|e| format!("Could not build the Last.fm request: {e}"))
+}
+
+/// One GET, returning the raw body.
 ///
-/// Returns an empty list rather than an error when Last.fm simply knows nothing
-/// about the track — that is an ordinary outcome for obscure or local-only
-/// music, and the station should fall quiet rather than show a failure.
-#[tauri::command(async)]
-pub async fn lastfm_similar_tracks(
-    app: AppHandle,
-    artist: String,
-    title: String,
-) -> Result<Vec<SimilarTrack>, String> {
-    let key = api_key(&app).ok_or_else(|| "No Last.fm API key configured.".to_string())?;
-    if artist.trim().is_empty() || title.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let url = reqwest::Url::parse_with_params(
-        API_ROOT,
-        &[
-            ("method", "track.getsimilar"),
-            ("artist", artist.trim()),
-            ("track", title.trim()),
-            // Let Last.fm fix small spelling differences; local tags are messy.
-            ("autocorrect", "1"),
-            ("limit", &SIMILAR_LIMIT.to_string()),
-            ("api_key", &key),
-            ("format", "json"),
-        ],
-    )
-    .map_err(|e| format!("Could not build the Last.fm request: {e}"))?;
-
+/// Shared by the track lookup and the artist fallback, which is worth the
+/// indirection: the identifying `User-Agent` and the timeout are both things
+/// that would eventually be set on one call and forgotten on the other.
+async fn fetch(url: reqwest::Url) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
@@ -207,6 +249,39 @@ pub async fn lastfm_similar_tracks(
     if !status.is_success() {
         return Err(format!("Last.fm returned {status}."));
     }
+    Ok(body)
+}
+
+// --- The lookup -------------------------------------------------------------
+
+/// Tracks similar to the given one, most similar first.
+///
+/// Returns an empty list rather than an error when Last.fm simply knows nothing
+/// about the track — that is an ordinary outcome for obscure or local-only
+/// music, and the station should fall quiet rather than show a failure.
+#[tauri::command(async)]
+pub async fn lastfm_similar_tracks(
+    app: AppHandle,
+    artist: String,
+    title: String,
+) -> Result<Vec<SimilarTrack>, String> {
+    let key = api_key(&app).ok_or_else(|| "No Last.fm API key configured.".to_string())?;
+    if artist.trim().is_empty() || title.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let url = endpoint(
+        &key,
+        &[
+            ("method", "track.getsimilar"),
+            ("artist", artist.trim()),
+            ("track", title.trim()),
+            // Let Last.fm fix small spelling differences; local tags are messy.
+            ("autocorrect", "1"),
+            ("limit", &SIMILAR_LIMIT.to_string()),
+        ],
+    )?;
+    let body = fetch(url).await?;
 
     let parsed: SimilarResponse = serde_json::from_str(&body)
         .map_err(|e| format!("Unexpected response from Last.fm: {e}"))?;
@@ -227,6 +302,103 @@ pub async fn lastfm_similar_tracks(
             match_score: score_of(&t.match_score),
         })
         .collect())
+}
+
+// --- The artist fallback ----------------------------------------------------
+
+/// One artist's best-known songs, by name.
+async fn top_tracks(key: &str, artist: &str) -> Result<Vec<String>, String> {
+    let url = endpoint(
+        key,
+        &[
+            ("method", "artist.gettoptracks"),
+            ("artist", artist),
+            ("autocorrect", "1"),
+            ("limit", &TOP_TRACKS_LIMIT.to_string()),
+        ],
+    )?;
+    let body = fetch(url).await?;
+
+    let parsed: TopTracksResponse = serde_json::from_str(&body)
+        .map_err(|e| format!("Unexpected response from Last.fm: {e}"))?;
+
+    Ok(parsed
+        .top_tracks
+        .map(|t| t.track)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| t.name)
+        .collect())
+}
+
+/// Candidates drawn from artists similar to this one.
+///
+/// What `lastfm_similar_tracks` falls back to. Last.fm's track database is
+/// thinner than its artist database by a wide margin — plenty of album tracks
+/// by perfectly well-known bands return nothing at all — and a station that
+/// stops dead on one of those loses a run that was going fine. The artist is
+/// almost always known even when the song is not.
+///
+/// Answers in exactly the shape the track lookup does, so everything that
+/// consumes it is unchanged. The score is the similar artist's own `match`,
+/// discounted slightly by where the track sits among their top ten: which
+/// artist it is carries far more information than which of their songs.
+///
+/// Costs one request plus one per artist mined, and runs only on a dead end.
+#[tauri::command(async)]
+pub async fn lastfm_artist_candidates(
+    app: AppHandle,
+    artist: String,
+) -> Result<Vec<SimilarTrack>, String> {
+    let key = api_key(&app).ok_or_else(|| "No Last.fm API key configured.".to_string())?;
+    let seed = artist.trim();
+    if seed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let url = endpoint(
+        &key,
+        &[
+            ("method", "artist.getsimilar"),
+            ("artist", seed),
+            ("autocorrect", "1"),
+            ("limit", &SIMILAR_ARTIST_LIMIT.to_string()),
+        ],
+    )?;
+    let body = fetch(url).await?;
+
+    let parsed: SimilarArtistsResponse = serde_json::from_str(&body)
+        .map_err(|e| format!("Unexpected response from Last.fm: {e}"))?;
+
+    // Last.fm reports errors with HTTP 200 and a `message` field.
+    if let Some(message) = parsed.message {
+        return Err(format!("Last.fm: {message}"));
+    }
+
+    let artists = parsed.similar_artists.map(|s| s.artist).unwrap_or_default();
+
+    let mut candidates = Vec::new();
+    for entry in artists.into_iter().take(ARTISTS_TO_MINE) {
+        let score = score_of(&entry.match_score);
+        // One artist failing costs that artist's suggestions, not the answer.
+        // Giving up here would put back the dead end this exists to remove.
+        let Ok(tracks) = top_tracks(&key, &entry.name).await else {
+            continue;
+        };
+        for (rank, title) in tracks.into_iter().enumerate() {
+            candidates.push(SimilarTrack {
+                title,
+                artist: entry.name.clone(),
+                match_score: score * rank_factor(rank),
+            });
+        }
+    }
+    Ok(candidates)
+}
+
+/// How much of an artist's score a track keeps, given its rank among their top.
+fn rank_factor(rank: usize) -> f64 {
+    (1.0 - RANK_PENALTY * rank as f64).max(0.1)
 }
 
 #[cfg(test)]
@@ -289,6 +461,64 @@ mod tests {
             serde_json::from_str(r#"{"similartracks":{"track":[{"name":"X","artist":{"name":"Y"}}]}}"#)
                 .expect("parses");
         assert_eq!(score_of(&parsed.similar_tracks.unwrap().track[0].match_score), 0.0);
+    }
+
+    #[test]
+    fn parses_a_similar_artists_response() {
+        // The fallback's first hop. Note `match` arrives as a string here even
+        // though the track endpoint sends a number for the same idea.
+        let body = r#"{"similarartists":{"artist":[
+            {"name":"Neu!","match":"1"},
+            {"name":"Harmonia","match":"0.83"}
+        ]}}"#;
+        let parsed: SimilarArtistsResponse = serde_json::from_str(body).expect("parses");
+        let artists = parsed.similar_artists.unwrap().artist;
+
+        assert_eq!(artists.len(), 2);
+        assert_eq!(artists[0].name, "Neu!");
+        assert_eq!(score_of(&artists[0].match_score), 1.0);
+        assert_eq!(score_of(&artists[1].match_score), 0.83);
+    }
+
+    #[test]
+    fn parses_a_top_tracks_response() {
+        let body = r#"{"toptracks":{"track":[
+            {"name":"Hallogallo","artist":{"name":"Neu!"}},
+            {"name":"Für Immer","artist":{"name":"Neu!"}}
+        ]}}"#;
+        let parsed: TopTracksResponse = serde_json::from_str(body).expect("parses");
+        let tracks = parsed.top_tracks.unwrap().track;
+
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].name, "Hallogallo");
+    }
+
+    #[test]
+    fn an_artist_last_fm_knows_nothing_about_yields_an_empty_list() {
+        // Same contract the track lookup has: silence, not a failure.
+        let parsed: SimilarArtistsResponse =
+            serde_json::from_str(r#"{"similarartists":{"artist":[]}}"#).expect("parses");
+        assert!(parsed.similar_artists.unwrap().artist.is_empty());
+    }
+
+    #[test]
+    fn rank_discounts_gently_and_never_to_nothing() {
+        // Which artist it is matters more than which of their songs, so the
+        // spread across one artist's top ten stays narrow.
+        assert_eq!(rank_factor(0), 1.0);
+        assert!(rank_factor(9) > 0.5, "the tenth song is still a real candidate");
+        assert!(rank_factor(0) > rank_factor(9), "but the best-known one leads");
+        // A floor, so a longer list could never produce a zero or negative
+        // weight — which the picker reads as "never", not "unlikely".
+        assert!(rank_factor(1000) >= 0.1);
+    }
+
+    #[test]
+    fn the_artist_fallback_is_bounded() {
+        // The reason this is a fallback and not the main path: it spends one
+        // request per artist mined, on top of the one that finds them.
+        assert!(ARTISTS_TO_MINE <= 5, "a handful, not a burst");
+        assert!(ARTISTS_TO_MINE as u32 <= SIMILAR_ARTIST_LIMIT);
     }
 
     #[test]

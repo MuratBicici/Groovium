@@ -42,7 +42,7 @@ import {
   signOut as spotifySignOut,
 } from '@/core/security/spotifyAuth';
 import { artistKey, hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
-import { searchTracks } from '@/core/providers/spotifyApi';
+import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
@@ -84,6 +84,18 @@ const STATION_MEMORY = 60;
  * silent.
  */
 const STATION_ARTIST_MEMORY = 3;
+
+/**
+ * How many of a run's own tracks the next suggestion is drawn from.
+ *
+ * The station used to ask about exactly one track, so a single song Last.fm has
+ * never heard of ended a run that was going fine. Asking about the run instead
+ * of the song makes a dead end cost a lookup rather than the music.
+ *
+ * Four, weighted toward the newest. Further back and a run would take too long
+ * to turn; fewer and one unknown track still has too much say.
+ */
+const STATION_SEEDS = 4;
 
 /**
  * How far back a station run stays walkable with Previous.
@@ -142,6 +154,16 @@ export interface PlayerState {
    * presses a round trip.
    */
   stationQueue: TrackMetadata[];
+  /**
+   * The tracks of the current run, newest first, for the next lookup to ask
+   * about.
+   *
+   * Cleared wherever `stationQueue` is, and for the same reason: both belong to
+   * one run, and choosing a song by hand starts a different one. That boundary
+   * is what stops two K-pop songs answering for a Turkish song picked out of
+   * search — the pool resets to the new song rather than reaching back past it.
+   */
+  stationSeeds: TrackMetadata[];
   /** Name-based keys of what has played, so the station does not loop. */
   stationHistory: string[];
   /** Artists of the last few tracks, so runs do not settle on one band. */
@@ -244,6 +266,7 @@ const initialState: PlayerState = {
   station: false,
   stationSearching: false,
   stationQueue: [],
+  stationSeeds: [],
   stationHistory: [],
   stationArtists: [],
   stationAdded: [],
@@ -383,10 +406,16 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * the old track would come back and refill the queue it was just emptied
    * from, and the next lookup would be skipped because the queue looked stocked
    * — which is the same stale suggestion arriving by a slower route.
+   *
+   * The run's seeds go with them. This is the line between one run and the
+   * next: play two K-pop songs, pick a Turkish song out of search, and the pool
+   * the next lookup asks about must be the Turkish song alone. `startTrack`
+   * puts the newly chosen track back in immediately afterwards.
    */
   function discardStationQueue(): void {
     prefetchSeedKey = null;
     if (get().stationQueue.length > 0) set({ stationQueue: [] });
+    if (get().stationSeeds.length > 0) set({ stationSeeds: [] });
   }
 
   async function prefetchStationTrack(): Promise<void> {
@@ -415,9 +444,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     prefetchInFlight = inFlight;
 
     try {
-      const { library, stationHistory, stationArtists, stationQueue } = get();
+      const { library, stationHistory, stationArtists, stationQueue, stationSeeds } = get();
       const found = await resolveNextTracks({
-        seed: currentTrack,
+        // The run, newest first. Falling back to the playing track covers the
+        // opening moment before `rememberPlayed` has run for it.
+        seeds: stationSeeds.length > 0 ? stationSeeds : [currentTrack],
         library,
         // Anything already queued is excluded too, or a refill would hand back
         // what is still waiting to play.
@@ -427,6 +458,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         excludeArtists: new Set([...stationArtists, artistKey(currentTrack.artist)]),
         spotifyAvailable: await spotifyIsAuthenticated(),
         searchSpotify: searchTracks,
+        tracksLikeArtist,
       });
 
       // The user may have moved on mid-lookup.
@@ -502,6 +534,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   }
 
   function rememberPlayed(track: TrackMetadata): void {
+    // Newest first, which is the order the lookup weights them in. Kept here
+    // rather than derived from `playback.tracks`: that array is the collection,
+    // not the listening order, and skipping around inside one would make the
+    // last few entries something other than the last few tracks heard.
+    const seeds = get().stationSeeds.filter((entry) => entry.id !== track.id);
+    set({ stationSeeds: [track, ...seeds].slice(0, STATION_SEEDS) });
+
     const artist = artistKey(track.artist);
     const artists = get().stationArtists.filter((entry) => entry !== artist);
     artists.push(artist);

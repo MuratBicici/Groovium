@@ -1,8 +1,8 @@
 import type { LibraryTrack } from '@/core/library';
 import { libraryTrackToMetadata } from '@/core/library';
 import type { TrackMetadata } from '@/core/types';
-import { similarTracks, type SimilarTrack } from './lastfm';
-import { drawWeighted, similarityWeight, weightedShuffle } from './sampling';
+import { artistCandidates, similarTracks, type SimilarTrack } from './lastfm';
+import { drawWeighted, orderSeeds, similarityWeight, weightedShuffle } from './sampling';
 
 export { hasApiKey, setApiKey, clearApiKey, openAccountPage } from './lastfm';
 export type { SimilarTrack } from './lastfm';
@@ -214,8 +214,16 @@ export function findInLibrary(
 }
 
 export interface ResolveOptions {
-  /** The track the station is continuing from. */
-  seed: TrackMetadata;
+  /**
+   * The tracks this run is made of, newest first.
+   *
+   * A run rather than a track, so one song Last.fm has never heard of cannot
+   * end fifty that were going fine. The caller is responsible for the boundary:
+   * choosing a song by hand starts a new run, and the pool must not reach back
+   * across that — otherwise picking a Turkish song after two K-pop songs
+   * answers with K-pop.
+   */
+  seeds: TrackMetadata[];
   library: LibraryTrack[];
   /** Keys of tracks already played in this station run. */
   exclude: ReadonlySet<string>;
@@ -225,6 +233,8 @@ export interface ResolveOptions {
   spotifyAvailable: boolean;
   /** Injected so this module does not depend on the Spotify client. */
   searchSpotify: (query: string) => Promise<TrackMetadata[]>;
+  /** Injected for the same reason: the last tier's source of similarity. */
+  tracksLikeArtist: (artist: string) => Promise<TrackMetadata[]>;
 }
 
 /**
@@ -304,30 +314,141 @@ export async function resolveViaSpotify(
   return picked;
 }
 
-export async function resolveNextTracks(
+/**
+ * Candidates from whichever source can supply them.
+ *
+ * Either names to be resolved, or tracks that are already playable — the last
+ * tier searches Spotify to find them, so making it hand back names would only
+ * mean searching for them twice.
+ */
+type Candidates =
+  | { kind: 'names'; names: SimilarTrack[] }
+  | { kind: 'tracks'; tracks: TrackMetadata[] };
+
+const NOTHING: Candidates = { kind: 'names', names: [] };
+
+/**
+ * Run a lookup, treating a failure as an empty answer.
+ *
+ * Every tier here is one of several, so a tier that throws should cost its own
+ * suggestions and nothing else: a Last.fm outage must still be able to fall
+ * through to Spotify. The tier is named in the warning, because "the station
+ * found nothing" and "Last.fm rejected the key" look identical from outside.
+ */
+async function quietly<T>(tier: string, lookup: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await lookup();
+  } catch (err) {
+    console.warn(`[station] the ${tier} lookup failed`, err);
+    return [];
+  }
+}
+
+/**
+ * Ask each source of similarity in turn, stopping at the first that answers.
+ *
+ * **A tier is only reached when the one above it comes back empty**, so the
+ * ordinary case is still the single request it always was.
+ */
+async function candidatesFor(
+  seed: TrackMetadata,
   options: ResolveOptions,
-  limit = SUGGESTION_DEPTH,
+): Promise<Candidates> {
+  const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
+  if (bySong.length > 0) return { kind: 'names', names: bySong };
+
+  // Last.fm knows far more artists than it knows tracks.
+  const byArtist = await quietly('artist', () => artistCandidates(seed.artist));
+  if (byArtist.length > 0) return { kind: 'names', names: byArtist };
+
+  if (!options.spotifyAvailable) return NOTHING;
+
+  const byGenre = await quietly('genre', () => options.tracksLikeArtist(seed.artist));
+  return byGenre.length > 0 ? { kind: 'tracks', tracks: byGenre } : NOTHING;
+}
+
+/**
+ * Take tracks that are already playable, one per artist.
+ *
+ * The short version of what `findInLibrary` and `resolveViaSpotify` each do,
+ * for candidates that need no resolving. A second pass drops the one-per-artist
+ * rule if the first came up empty-handed: these arrive from two artists at
+ * most, and repeating one of them beats going silent — the same trade the
+ * library path makes.
+ */
+function takeSpread(
+  tracks: TrackMetadata[],
+  exclude: ReadonlySet<string>,
+  excludeArtists: ReadonlySet<string>,
+  limit: number,
+): TrackMetadata[] {
+  const takenKeys = new Set(exclude);
+  const takenArtists = new Set(excludeArtists);
+  const picked: TrackMetadata[] = [];
+
+  // Uniform: these carry no similarity score of their own, only Spotify's idea
+  // of how well known they are, which is not what the station is asking about.
+  const order = weightedShuffle(tracks, () => 1);
+
+  for (const spreading of [true, false]) {
+    for (const track of order) {
+      if (picked.length >= limit) return picked;
+      const key = trackKey(track);
+      if (takenKeys.has(key)) continue;
+      if (spreading && takenArtists.has(artistKey(track.artist))) continue;
+
+      picked.push(track);
+      takenKeys.add(key);
+      takenArtists.add(artistKey(track.artist));
+    }
+    if (picked.length > 0) return picked;
+  }
+  return picked;
+}
+
+/** Turn one source's answer into tracks that can be played. */
+async function pickFrom(
+  candidates: Candidates,
+  options: ResolveOptions,
+  limit: number,
 ): Promise<TrackMetadata[]> {
-  const { seed, library, exclude, excludeArtists, spotifyAvailable, searchSpotify } = options;
+  const { library, exclude, excludeArtists, spotifyAvailable, searchSpotify } = options;
 
-  const candidates = await similarTracks(seed.artist, seed.title);
-  if (candidates.length === 0) return [];
+  if (candidates.kind === 'tracks') {
+    return takeSpread(candidates.tracks, exclude, excludeArtists, limit);
+  }
 
-  const picked = findInLibrary(candidates, library, exclude, limit, excludeArtists);
+  const picked = findInLibrary(candidates.names, library, exclude, limit, excludeArtists);
   if (picked.length >= limit || !spotifyAvailable) return picked;
 
   // Top up whatever the library could not supply. This used to stop at a single
   // track, on the belief that each search came out of a hundred a day — a limit
   // Spotify does not actually impose. Stopping at one made the pool feel like a
   // choice between two songs, which is the real cost of the mistake.
-  const fromSpotify = await resolveViaSpotify(
-    candidates,
-    {
-      exclude: new Set([...exclude, ...picked.map(trackKey)]),
-      excludeArtists: new Set([...excludeArtists, ...picked.map((t) => artistKey(t.artist))]),
-      searchSpotify,
-    },
-    limit - picked.length,
+  const fromSpotify = await quietly('spotify search', () =>
+    resolveViaSpotify(
+      candidates.names,
+      {
+        exclude: new Set([...exclude, ...picked.map(trackKey)]),
+        excludeArtists: new Set([...excludeArtists, ...picked.map((t) => artistKey(t.artist))]),
+        searchSpotify,
+      },
+      limit - picked.length,
+    ),
   );
   return [...picked, ...fromSpotify];
+}
+
+export async function resolveNextTracks(
+  options: ResolveOptions,
+  limit = SUGGESTION_DEPTH,
+): Promise<TrackMetadata[]> {
+  // Seeds are tried in a weighted order rather than one being chosen, so a
+  // dead end costs a request instead of the run. In the ordinary case the
+  // first seed answers and the rest are never asked about.
+  for (const seed of orderSeeds(options.seeds)) {
+    const picked = await pickFrom(await candidatesFor(seed, options), options, limit);
+    if (picked.length > 0) return picked;
+  }
+  return [];
 }

@@ -46,3 +46,15 @@ export async function similarTracks(artist: string, title: string): Promise<Simi
   if (!isTauri()) return [];
   return invoke<SimilarTrack[]>('lastfm_similar_tracks', { artist, title });
 }
+
+/**
+ * Tracks by artists similar to this one.
+ *
+ * What `similarTracks` falls back to. Last.fm's track database is far thinner
+ * than its artist database — album tracks by well-known bands routinely return
+ * nothing — and the artist is almost always known even when the song is not.
+ */
+export async function artistCandidates(artist: string): Promise<SimilarTrack[]> {
+  if (!isTauri()) return [];
+  return invoke<SimilarTrack[]>('lastfm_artist_candidates', { artist });
+}

@@ -155,6 +155,84 @@ export async function searchTracks(query: string): Promise<TrackMetadata[]> {
     .map(toTrackMetadata);
 }
 
+// --- Finding music like other music -----------------------------------------
+
+/**
+ * How many artists from a genre get their top tracks fetched.
+ *
+ * Two, because each is a request and this runs only when Last.fm has come up
+ * empty twice. Two artists is twenty candidates, which is more than enough for
+ * the station to draw a handful from.
+ */
+const GENRE_ARTISTS = 2;
+
+interface ApiArtist {
+  id: string;
+  name: string;
+  /** Spotify's own labels. Plenty of artists carry none. */
+  genres?: string[];
+}
+
+interface ArtistSearchResponse {
+  artists?: { items: (ApiArtist | null)[] };
+}
+
+interface TopTracksResponse {
+  tracks?: (ApiTrack | null)[];
+}
+
+async function searchArtists(query: string, limit: number): Promise<ApiArtist[]> {
+  const params = new URLSearchParams({ q: query, type: 'artist', limit: String(limit) });
+  const data = await request<ArtistSearchResponse>(`/search?${params}`);
+  return (data?.artists?.items ?? []).filter((a): a is ApiArtist => a !== null && !!a.id);
+}
+
+async function artistTopTracks(id: string): Promise<TrackMetadata[]> {
+  // `market` is required here. `from_token` reads the country off the session,
+  // which needs no scope the app has not already been granted.
+  const data = await request<TopTracksResponse>(
+    `/artists/${encodeURIComponent(id)}/top-tracks?market=from_token`,
+  );
+  return (data?.tracks ?? [])
+    .filter((track): track is ApiTrack => track !== null && !!track.uri)
+    .map(toTrackMetadata);
+}
+
+/**
+ * Playable tracks by artists Spotify files under the same genre as this one.
+ *
+ * The station's last source of similarity, for a track Last.fm knows nothing
+ * about under an artist it knows nothing about either.
+ *
+ * Spotify withdrew `/recommendations` and `related-artists` from new apps in
+ * November 2024, which is why the station is built on Last.fm at all. Artist
+ * genres and `/artists/{id}/top-tracks` survived that cull, and between them
+ * they reconstruct enough of the idea: the seed artist's genre, then who else
+ * is in it, then what those artists are known for.
+ *
+ * Three or four requests. Returns tracks rather than names because it has
+ * already done the searching the caller would otherwise have to repeat.
+ * Deliberately not shuffled here — the station does its own picking, and a
+ * second opinion about ordering in this file would only fight it.
+ */
+export async function tracksLikeArtist(name: string): Promise<TrackMetadata[]> {
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+
+  const [seed] = await searchArtists(trimmed, 1);
+  if (!seed) return [];
+
+  const genre = seed.genres?.[0];
+  if (!genre) return [];
+
+  const peers = await searchArtists(`genre:"${genre}"`, SEARCH_LIMIT);
+  const found: TrackMetadata[] = [];
+  for (const peer of peers.filter((p) => p.id !== seed.id).slice(0, GENRE_ARTISTS)) {
+    found.push(...(await artistTopTracks(peer.id)));
+  }
+  return found;
+}
+
 /** Start playback of a track URI on this app's own device. */
 /**
  * What Spotify itself says is happening right now.

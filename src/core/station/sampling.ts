@@ -78,3 +78,33 @@ export function weightedShuffle<T>(entries: T[], weightOf: (entry: T) => number)
 export function drawWeighted<T>(entries: T[], weightOf: (entry: T) => number): T | undefined {
   return weightedShuffle(entries, weightOf)[0];
 }
+
+/**
+ * How fast a seed loses its claim as newer ones arrive.
+ *
+ * Halving per track: the song that just finished is asked about roughly half
+ * the time, the one before it a quarter, and so on. Heavy enough that a run
+ * still sounds like it is following the music being played, loose enough that
+ * a track Last.fm has never heard of does not decide the run's future by
+ * itself.
+ */
+export const RECENCY_DECAY = 0.5;
+
+/** A seed's weight from its age, newest first. */
+export function recencyWeight(age: number): number {
+  return RECENCY_DECAY ** age;
+}
+
+/**
+ * The run's seeds in the order they should be asked about, newest heaviest.
+ *
+ * An order rather than a single pick, because the caller needs somewhere to go
+ * when the first seed turns out to be a dead end. Asking one seed and giving up
+ * is the fault this exists to remove.
+ */
+export function orderSeeds<T>(seeds: readonly T[]): T[] {
+  return weightedShuffle(
+    seeds.map((seed, age) => ({ seed, age })),
+    ({ age }) => recencyWeight(age),
+  ).map(({ seed }) => seed);
+}

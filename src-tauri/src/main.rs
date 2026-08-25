@@ -92,6 +92,7 @@ fn main() {
             lastfm::lastfm_clear_api_key,
             lastfm::lastfm_open_account,
             lastfm::lastfm_similar_tracks,
+            lastfm::lastfm_artist_candidates,
             audio::audio_backend_available,
         ])
         .run(tauri::generate_context!())
