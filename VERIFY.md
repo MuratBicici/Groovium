@@ -1,19 +1,15 @@
 # Pending verification
 
-**§2 is open, and §6 is mostly done** — the updater shipped a real update on
-2026-08-25, with two loose ends noted there.
+**One thing is left: the offline launch, in §6.** Everything else in this file
+has been used on a real machine and passed.
 
 There was a §5, about making the window translucent and frosted. The
 frosting could not be made to work on Windows and the whole thing was taken
 back out on 2026-08-25; `README.md` keeps the finding so it is not
 rediscovered.
 
-The remote stretch ended on 2026-08-24. §2 is the last of it: a fix made in
-response to the run-through that closed it, extended on 2026-08-25 after a
-first pass found the half of it that was still wrong. §3 and §4 were built
-after the session came back under direct control and were tried in use as they
-were built; they are kept below as a record of what to look at if either turns
-out to be wrong, not as work still owed.
+Sections are kept after they pass rather than deleted: each one says what was
+intended, which is where a later problem should start from.
 
 There was a §1 — reopening the collection that was playing when the app last
 closed, and a bug where playing one search result erased it. **The app no
@@ -42,17 +38,16 @@ record sitting on the deck with the transport lit, which reads as something you
 can start again — and pressing play only produced the same message a second
 time. The record comes off now, the way a thrown one does.
 
-- [ ] **Spotify track playing → sign out.** The record lifts off the deck and
-      the deck is left bare. The transport greys out, the title goes back to
-      *Henüz bir şey çalmıyor*, and the message reads *Bağlantı kesildiği için
-      çalma durduruldu. Dinlemeye devam etmek için hesabınızı bağlayın.*
-- [ ] **Local track playing → sign out.** Nothing happens — the record stays on
-      the deck and keeps playing. This is the distinction that matters and the
-      one most annoying to get wrong.
-- [ ] **Afterwards**, with no account, open a playlist holding a Spotify track
-      and play it. Same message, not the provider's own *Spotify player is not
-      connected*. (The queue you were in is gone with the record, so this has
-      to be reached from a panel rather than by pressing Next.)
+**Passed on 2026-08-25.** All three: a Spotify track's record lifts off and the
+deck is left bare with the transport greyed out; a local track is untouched,
+which is the distinction that matters; and reaching a Spotify track afterwards
+with no account gives the app's own message rather than the provider's.
+
+Worth noting how the first of those was found. It was reported from use — *"it
+stops the song, but the user can start it again"* — after an earlier pass had
+already been called done. Stopping playback had been the whole of the fix, and
+leaving the record on the deck with the transport lit made it read as something
+you could resume. That is the half a checklist does not catch.
 
 ## 6. The updater works, and does not always announce itself
 
@@ -98,16 +93,21 @@ If the source should stay private for good, the way out is a second, public
 repository holding only the built artifacts, with `release.yml` publishing
 there instead. That was considered on 2026-08-25 and left undecided.
 
+### The wizard: passed on 2026-08-25
+
+Built, run and installed from. It lands in `%LOCALAPPDATA%Groovium` and never
+asks for administrator, which is what `installMode: currentUser` promises.
+
+Still open as a *decision* rather than a check: whether to draw a
+`headerImage` (150×57) and a `sidebarImage` (164×314) so the wizard carries
+Groovium's own look instead of NSIS's default. Two bitmaps, no code.
+
 ### Still unchecked
 
 - [ ] **Pull the network and relaunch.** Nothing should happen at all: no dot,
-      no error, no banner. That is the whole point of the quiet check, and it
-      is the one part of §6 the live run did not exercise.
-- [ ] The wizard, looked at rather than run past: which pages it shows, whether
-      the icon is Groovium's, whether the language selector comes up. The
-      polish decisions (`headerImage`, `sidebarImage`) are waiting on that.
-      It does install to `%LOCALAPPDATA%Groovium` without asking for
-      administrator — that much the live install settled.
+      no error, no banner. That is the whole point of the quiet check, and the
+      one part of §6 the live run could not exercise, having been run over a
+      working connection.
 
 ---
 
