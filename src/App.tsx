@@ -68,6 +68,7 @@ export default function App() {
 
   const compact = useSettingsStore((s) => s.compact);
   const settingsReady = useSettingsStore((s) => s.ready);
+  const windowBorder = useSettingsStore((s) => s.windowBorder);
   const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(compact, settingsReady);
 
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -134,7 +135,14 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-black/50"
+      // The ring is what separates a frameless transparent window from the
+      // desktop behind it, so there is always exactly one. The accent replaces
+      // the black rather than stacking on it: two rings is a 2px edge, and on a
+      // 340px widget that reads as a border somebody drew rather than as the
+      // edge of an object.
+      className={`relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ${
+        windowBorder ? 'ring-brass-500/70' : 'ring-black/50'
+      }`}
     >
       <PlaylistPickerProvider>
       <DiscFlightProvider>

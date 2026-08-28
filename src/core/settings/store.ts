@@ -12,6 +12,8 @@ import {
   DEFAULT_THEME,
   isThemeId,
 } from '@/core/settings/themes';
+import { parseHex, type Rgb } from '@/core/utils/colour';
+import { derivePalette, strengthenText } from '@/core/utils/contrast';
 
 /**
  * Preferences, in their own store.
@@ -37,6 +39,8 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
+  setBoostContrast: (boost: boolean) => void;
+  setWindowBorder: (on: boolean) => void;
 }
 
 /**
@@ -77,19 +81,60 @@ function applyToDocument(settings: Settings): void {
     delete root.dataset.theme;
   }
 
+  // Anything this function set last time. Cleared before the new palette is
+  // written so a switch away from a custom theme cannot leave one shade of the
+  // old one behind — the bug a growing list of property names invites.
+  for (const name of applied) root.style.removeProperty(name);
+  applied.clear();
+
+  const set = (name: string, value: string) => {
+    root.style.setProperty(name, value);
+    applied.add(name);
+  };
+
+  let lightGround = false;
+
   if (settings.theme === CUSTOM_THEME) {
     const primary = settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
     const secondary = settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
-    root.style.setProperty('--custom-primary', primary);
-    root.style.setProperty('--custom-secondary', secondary);
-    // The light in the room, which every palette tints to match its own. This
-    // one is the only value `color-mix` cannot supply, because `DiscLight`
-    // needs raw channels to mix its own alphas against.
-    root.style.setProperty('--sheen', sheenFrom(primary));
-  } else {
-    for (const name of ['--custom-primary', '--custom-secondary', '--sheen']) {
-      root.style.removeProperty(name);
+
+    // The whole ramp is derived here rather than by `color-mix()` in the
+    // stylesheet. Not a preference: CSS cannot measure what it produced, and
+    // what it produced for a light surface was light text on a light ground.
+    const derived = derivePalette(primary, secondary, settings.boostContrast);
+    if (derived) {
+      for (const [name, value] of Object.entries(derived.variables)) set(name, value);
+      lightGround = derived.lightGround;
     }
+    // The light in the room, which every palette tints to match its own.
+    // `DiscLight` needs raw channels to mix its own alphas against, so this is
+    // the one value that cannot be a colour.
+    set('--sheen', sheenFrom(primary, lightGround));
+  } else if (settings.boostContrast) {
+    // The five hand-written palettes are calibrated hex in the stylesheet, so
+    // there is nothing to rebuild — only the three text shades to walk further.
+    // Read back off the document rather than copied into TypeScript, so a
+    // palette added later gets this without being told about it.
+    const seen = readPalette(root);
+    if (seen) {
+      for (const [name, value] of Object.entries(
+        strengthenText(seen.surfaces, seen.text, true),
+      )) {
+        set(name, value);
+      }
+    }
+  }
+
+  if (lightGround) {
+    root.dataset.ground = 'light';
+  } else {
+    delete root.dataset.ground;
+  }
+
+  if (settings.windowBorder) {
+    root.dataset.border = 'on';
+  } else {
+    delete root.dataset.border;
   }
 
   if (settings.reduceMotion) {
@@ -100,19 +145,65 @@ function applyToDocument(settings: Settings): void {
 }
 
 /**
- * A near-white carrying a trace of the surface it will fall on.
+ * Property names this module has written onto the root element.
+ *
+ * Module-level rather than recomputed: the set of names changed when the custom
+ * ramp moved out of the stylesheet, and a hard-coded list of what to clean up
+ * is a list that goes stale silently — leaving one variable from the previous
+ * theme behind, which reads as a palette that half-applied.
+ */
+const applied = new Set<string>();
+
+/**
+ * The palette as the document currently resolves it.
+ *
+ * Returns null outside a browser, and whenever a value comes back empty —
+ * which is what happens if these variables are ever renamed. Better to leave
+ * the palette untouched than to strengthen text against a colour of `''`.
+ */
+function readPalette(root: HTMLElement): {
+  surfaces: Rgb[];
+  text: { strong: Rgb; body: Rgb; quiet: Rgb };
+} | null {
+  if (typeof getComputedStyle !== 'function') return null;
+  const styles = getComputedStyle(root);
+  const read = (name: string): Rgb | null => {
+    const value = styles.getPropertyValue(name).trim();
+    return value ? parseHex(value) : null;
+  };
+
+  const surfaces = ['--color-shell-700', '--color-shell-800', '--color-shell-900'].map(read);
+  const strong = read('--color-cream-50');
+  const body = read('--color-cream-200');
+  const quiet = read('--color-cream-400');
+
+  if (surfaces.some((s) => s === null) || !strong || !body || !quiet) return null;
+  return { surfaces: surfaces as Rgb[], text: { strong, body, quiet } };
+}
+
+/**
+ * The light in the room, carrying a trace of the surface it will fall on.
  *
  * Plain sRGB rather than anything perceptual on purpose: this is a highlight
  * drawn at a quarter opacity or less, where the difference between colour
- * spaces is far below what anyone can see, and the alternative is pulling in a
- * colour library to compute something invisible.
+ * spaces is far below what anyone can see, and the alternative is computing
+ * something invisible.
+ *
+ * On a light surface it inverts. The deck is lit from above by something
+ * brighter than the shell, and on a pale shell nothing is brighter — a
+ * near-white highlight over near-white is not a highlight. There the same
+ * gradients have to read as shadow instead, so this returns a near-black
+ * tinted the same way.
  */
-function sheenFrom(hex: string): string {
+function sheenFrom(hex: string, lightGround: boolean): string {
+  const fallback = lightGround ? '20 16 12' : '255 247 235';
   const value = hex.replace('#', '');
-  if (value.length !== 6) return '255 247 235';
+  if (value.length !== 6) return fallback;
   const channels = [0, 2, 4].map((at) => parseInt(value.slice(at, at + 2), 16));
-  if (channels.some(Number.isNaN)) return '255 247 235';
-  return channels.map((c) => Math.round(c * 0.08 + 255 * 0.92)).join(' ');
+  if (channels.some(Number.isNaN)) return fallback;
+
+  const towards = lightGround ? 0 : 255;
+  return channels.map((c) => Math.round(c * 0.08 + towards * 0.92)).join(' ');
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
@@ -120,7 +211,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   const commit = (patch: Partial<Settings>) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
-    const { customPrimary, customSecondary } = get();
+    const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const settings = {
       theme,
       language,
@@ -129,6 +220,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       compact,
       customPrimary,
       customSecondary,
+      boostContrast,
+      windowBorder,
     };
     applyToDocument(settings);
     void saveSettings(settings);
@@ -161,6 +254,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
           ? { customPrimary: colour, theme: CUSTOM_THEME }
           : { customSecondary: colour, theme: CUSTOM_THEME },
       ),
+    setBoostContrast: (boostContrast) => commit({ boostContrast }),
+    setWindowBorder: (windowBorder) => commit({ windowBorder }),
   };
 });
 

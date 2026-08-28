@@ -44,6 +44,22 @@ export interface Settings {
    */
   customPrimary: string | null;
   customSecondary: string | null;
+  /**
+   * Raise every contrast target by a grade.
+   *
+   * Applies to all palettes, not only the custom one. The five hand-written
+   * ones are calibrated for legibility already; this is for eyes they were not
+   * calibrated for, and it only ever strengthens text — no other colour moves.
+   */
+  boostContrast: boolean;
+  /**
+   * A hairline in the accent colour around the window.
+   *
+   * Off by default: the shell already carries a black ring, which is what
+   * separates a frameless transparent window from the desktop behind it. This
+   * replaces that ring rather than adding to it.
+   */
+  windowBorder: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -54,6 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
   compact: false,
   customPrimary: null,
   customSecondary: null,
+  boostContrast: false,
+  windowBorder: false,
 };
 
 export async function loadSettings(): Promise<Settings> {

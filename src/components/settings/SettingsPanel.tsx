@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/core/settings/store';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
+import { derivePalette } from '@/core/utils/contrast';
 import { isTauri } from '@/core/utils/env';
 import { useUpdateStore } from '@/core/updates/store';
 import { APP_VERSION } from '@/core/version';
@@ -44,12 +45,22 @@ export function SettingsPanel({
   const language = useSettingsStore((s) => s.language ?? 'en');
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
+  const boostContrast = useSettingsStore((s) => s.boostContrast);
+  const windowBorder = useSettingsStore((s) => s.windowBorder);
+  const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
+  const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
+
+  // Measured from the two chosen colours rather than assumed from either. The
+  // derivation makes everything else read against the surface; the accent is
+  // the one colour it will not move, so it is the one that can still fail.
+  const accentUnreadable =
+    derivePalette(customPrimary, customSecondary, boostContrast)?.accentUnreadable ?? false;
 
   const [spotifyReady, setSpotifyReady] = useState(false);
   const [stationReady, setStationReady] = useState(false);
@@ -176,9 +187,19 @@ export function SettingsPanel({
                     onClick={() => onPickColour('secondary')}
                   />
                 </div>
-                <p className="text-meta leading-snug text-cream-400">
-                  {t('settings.customWarning')}
-                </p>
+                {/* Only when it is true. The ramp is measured now, so the
+                    one thing left that cannot be fixed for somebody is an
+                    accent that does not read against their own surface —
+                    fixing that would mean overruling a colour they chose. */}
+                {accentUnreadable ? (
+                  <p className="text-meta leading-snug text-amber-300/90">
+                    {t('settings.accentWarning')}
+                  </p>
+                ) : (
+                  <p className="text-meta leading-snug text-cream-400">
+                    {t('settings.customHint')}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -199,6 +220,20 @@ export function SettingsPanel({
               onChange={setAlwaysOnTop}
             />
           )}
+
+          <Toggle
+            label={t('settings.boostContrast')}
+            hint={t('settings.boostContrastHint')}
+            on={boostContrast}
+            onChange={setBoostContrast}
+          />
+
+          <Toggle
+            label={t('settings.windowBorder')}
+            hint={t('settings.windowBorderHint')}
+            on={windowBorder}
+            onChange={setWindowBorder}
+          />
         </Section>
 
         <Section title={t('settings.language')}>

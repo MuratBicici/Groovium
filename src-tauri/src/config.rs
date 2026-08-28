@@ -67,6 +67,14 @@ pub struct Settings {
     pub custom_primary: Option<String>,
     #[serde(default)]
     pub custom_secondary: Option<String>,
+    /// Raise every contrast target by a grade, on any palette. Strengthens
+    /// text and nothing else.
+    #[serde(default)]
+    pub boost_contrast: bool,
+    /// A hairline in the accent colour around the window, replacing the black
+    /// ring that separates it from the desktop.
+    #[serde(default)]
+    pub window_border: bool,
 }
 
 #[tauri::command]
@@ -159,6 +167,8 @@ mod tests {
             compact: true,
             custom_primary: Some("#2e231b".into()),
             custom_secondary: None,
+            boost_contrast: true,
+            window_border: false,
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -182,6 +192,11 @@ mod tests {
         assert!(!config.settings.always_on_top);
         assert!(!config.settings.compact);
         assert!(config.settings.custom_primary.is_none());
+        // Added after 1.0.2 shipped; `default` rather than a version bump, so
+        // an existing file keeps its theme instead of being discarded over two
+        // new booleans.
+        assert!(!config.settings.boost_contrast);
+        assert!(!config.settings.window_border);
     }
 
     #[test]

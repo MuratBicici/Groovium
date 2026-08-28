@@ -182,8 +182,10 @@ export const en = {
   'settings.custom': 'Custom',
   'settings.customPrimary': 'Surface',
   'settings.customSecondary': 'Accent',
-  'settings.customWarning':
-    'Contrast ratios cannot be guaranteed for custom color combinations. All preset palettes are calibrated for optimal legibility.',
+  'settings.customHint':
+    'Text and surfaces are adjusted to stay legible against whatever you pick.',
+  'settings.accentWarning':
+    'This accent is too close to your surface colour to stand out. It is left exactly as you chose it — pick a lighter or darker one to fix it.',
   'settings.about': 'About',
   'settings.version': 'Version {version}',
 
@@ -206,6 +208,11 @@ export const en = {
   'settings.reduceMotionHint': 'Stops the record spinning and the disc flying in.',
   'settings.alwaysOnTop': 'Keep window on top',
   'settings.alwaysOnTopHint': 'Stays above other windows, and is remembered.',
+  'settings.boostContrast': 'Increase readability',
+  'settings.boostContrastHint':
+    'Strengthens text against its background, secondary text most of all. No other colour changes.',
+  'settings.windowBorder': 'Window border',
+  'settings.windowBorderHint': 'A hairline around the widget in the accent colour.',
   'settings.connections': 'Connections',
   'settings.configured': 'Set up',
   'settings.notConfigured': 'Not set up',

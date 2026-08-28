@@ -174,8 +174,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.custom': 'Özel',
   'settings.customPrimary': 'Yüzey',
   'settings.customSecondary': 'Vurgu',
-  'settings.customWarning':
-    'Özel renk kombinasyonlarında kontrast oranları garanti edilemez. Ön tanımlı paletlerin tamamı optimum okunabilirlik için kalibre edilmiştir.',
+  'settings.customHint':
+    'Yazılar ve yüzeyler, seçtiğiniz renge karşı okunabilir kalacak şekilde ayarlanır.',
+  'settings.accentWarning':
+    'Bu vurgu rengi yüzey renginize fazla yakın, ayırt edilmiyor. Seçtiğiniz gibi bırakıldı — daha açık ya da daha koyu bir ton seçerseniz düzelir.',
   'settings.about': 'Hakkında',
   'settings.version': 'Sürüm {version}',
 
@@ -198,6 +200,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.reduceMotionHint': 'Plağın dönmesini ve diskin uçuşunu durdurur.',
   'settings.alwaysOnTop': 'Pencereyi üstte tut',
   'settings.alwaysOnTopHint': 'Diğer pencerelerin üstünde kalır ve hatırlanır.',
+  'settings.boostContrast': 'Okunabilirliği artır',
+  'settings.boostContrastHint':
+    'Yazıyı zeminine karşı güçlendirir, en çok da ikincil yazıyı. Başka hiçbir renk değişmez.',
+  'settings.windowBorder': 'Pencere çerçevesi',
+  'settings.windowBorderHint': 'Vurgu renginde ince bir kenar çizgisi.',
   'settings.connections': 'Bağlantılar',
   'settings.configured': 'Kurulu',
   'settings.notConfigured': 'Kurulu değil',
