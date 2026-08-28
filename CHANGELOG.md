@@ -4,6 +4,47 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.0.3 — 2026-08-28
+
+This one is about custom palettes. Text and surfaces are now worked out by
+measuring the contrast rather than by mixing and hoping, so a palette built
+from your own two colours stays legible whatever you pick — including a pale
+surface, which used to produce light text on a light background and only a
+warning to say so. There is also a setting to push contrast further than the
+default, and an optional hairline around the window in your accent colour.
+
+HIGHLIGHTS
+· A custom palette is now readable at any colour, including light ones. The
+  text flips dark on a pale surface, and the deck's own shadows and highlights
+  are relit to match.
+· A new "increase readability" setting strengthens text on every palette,
+  secondary text most of all.
+· A new "window border" setting draws a hairline around the widget in the
+  accent colour. Off by default.
+
+ALL CHANGES
+· Custom palettes: every colour is derived by measuring contrast against the
+  surfaces it will actually sit on, instead of by a fixed blend that could not
+  check its own result.
+· Custom palettes: choosing a light surface now works. Text turns dark, and
+  the recesses, edge highlights and the light on the platter all invert with
+  it, rather than staying tuned for a dark shell.
+· Custom palettes: a recess stays darker than the surface around it on any
+  colour, so wells and inputs still read as cut into the shell.
+· Custom palettes: a palette built from the two Espresso colours now produces
+  Espresso exactly, so the custom option remains a sane place to start.
+· Custom palettes: the warning about contrast now appears only when something
+  is actually wrong — an accent too close to your surface to stand out. Your
+  two chosen colours are never altered; everything else is adjusted around
+  them.
+· Settings: "increase readability" raises the contrast target on every
+  palette, including the five built-in ones. It only ever strengthens text; no
+  other colour changes.
+· Settings: "window border" replaces the dark ring around the widget with a
+  hairline in the accent colour.
+· Documentation: the README was reorganised around what the app actually does,
+  and no longer describes YouTube Music or Apple Music as sources.
+
 ## 1.0.2 — 2026-08-26
 
 Two faults people actually ran into. When the network dropped, Spotify kept
