@@ -6,13 +6,24 @@ point of the release before the detail of it.
 
 ## 1.0.4 — 2026-08-29
 
-A repair to 1.0.3. That release made contrast measurable and then used the
-measurement to change the colours you had picked, which is the opposite of what
-a colour picker is for. Choosing a dark blue accent produced a pale blue play
-button; choosing a light yellow produced a dark olive one; and switching on
+Mostly a repair to 1.0.3, in two places.
+
+The colours are yours again. That release made contrast measurable and then
+used the measurement to change the colours you had picked, which is the
+opposite of what a colour picker is for: a dark blue accent produced a pale
+blue play button, a light yellow produced a dark olive one, and switching on
 "increase readability" repainted the accent. Your two colours are now used
 exactly as chosen, and the only thing that adapts to them is the text and icons
 drawn on top.
+
+And infinite play stays infinite. Closing the dead ends in 1.0.3 introduced a
+new way to run out — coming back to the same song a few times exhausted what it
+had to suggest — and made the search noticeably slow on tracks Last.fm does not
+know. Both are fixed, and there is a test now that plays five hundred tracks
+without stopping.
+
+Settings also had a tidy: About is at the bottom where it belongs, and checking
+for updates tells you when there is nothing new.
 
 HIGHLIGHTS
 · The accent you pick is the accent you see. Its lighter and darker shades are
@@ -28,6 +39,12 @@ HIGHLIGHTS
   the corners.
 · Infinite play breathes slowly while it is on, so you can see it is armed
   without going looking.
+· Infinite play keeps going. Returning to the same song a few times used to
+  leave it with nothing to suggest by about the third time.
+· Finding the next song is faster on tracks Last.fm does not know — it took
+  well over a second and now does not.
+· About moved to the bottom of Settings, and checking for updates now tells
+  you when there is nothing new.
 
 ALL CHANGES
 · Custom palettes: the accent's lighter and darker shades hold its hue and its
@@ -65,6 +82,28 @@ ALL CHANGES
   user interface boundary is meant to have.
 · The colour picker's own heading and focus ring stayed readable at every
   accent colour; they previously came apart as you dragged.
+· Infinite play: the pool of suggestions thins out instead of emptying.
+  Coming back to the same song repeatedly used to exhaust it after about
+  three rounds, because the artist tier offered only four different artists
+  while the last three played are held back to stop a run clustering. It now
+  draws on eight, and when the spread rule would leave nothing it relaxes
+  rather than falling silent — repeating an artist, and then a song heard
+  longest ago, before ever handing back nothing.
+· Infinite play: no single artist can spend the whole search budget, so a
+  fill can still reach the suggestions it was going to fall back on.
+· Infinite play: finding a successor for a song Last.fm does not know was
+  taking well over a second. Every request built its own connection, paying
+  for a fresh handshake each time — 514ms against 54ms on a warm one — and
+  the eight artist lookups ran one after another. The connection is now kept,
+  and those lookups run four at a time.
+· Settings: About is the last section rather than sitting above Connections.
+· Settings: pressing "check for updates" says "up to date" when there is
+  nothing new. It previously went quiet and showed the button again, which
+  looked like nothing had happened. The check that runs at startup still says
+  nothing, because nobody asked it.
+· Settings: the check button is an outlined pill with a turning arrow rather
+  than a bare underlined link.
+· Settings: the About section is signed.
 
 ## 1.0.3 — 2026-08-28
 
