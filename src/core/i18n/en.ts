@@ -187,6 +187,7 @@ export const en = {
   'settings.accentWarning':
     'This accent is too close to your surface colour to stand out. It is left exactly as you chose it — pick a lighter or darker one to fix it.',
   'settings.about': 'About',
+  'settings.credit': 'Designed and developed with precision by {author}.',
   'settings.version': 'Version {version}',
 
   'update.waiting': 'An update is waiting',

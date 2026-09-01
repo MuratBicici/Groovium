@@ -7,7 +7,7 @@ import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
 import { derivePalette } from '@/core/utils/contrast';
 import { isTauri } from '@/core/utils/env';
 import { useUpdateStore } from '@/core/updates/store';
-import { APP_VERSION } from '@/core/version';
+import { APP_VERSION, AUTHOR } from '@/core/version';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -285,6 +285,12 @@ export function SettingsPanel({
             something to change; this is something to look up. */}
         <Section title={t('settings.about')}>
           <Updates />
+          {/* Last line in the panel, and quiet on purpose: a name belongs in
+              the app, but not competing with anything somebody came here to
+              do. */}
+          <p className="pt-1 text-meta leading-snug text-cream-400">
+            {t('settings.credit', { author: AUTHOR })}
+          </p>
         </Section>
       </div>
     </div>

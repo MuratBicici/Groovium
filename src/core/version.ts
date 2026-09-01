@@ -8,3 +8,13 @@
  * already reachable from the frontend.
  */
 export const APP_VERSION: string = __APP_VERSION__;
+
+/**
+ * Who made it.
+ *
+ * Written here rather than read from a manifest. `Cargo.toml` carries the name
+ * too, but spelled in ASCII — `Bicici` — because that field feeds tooling that
+ * has no business with a cedilla, and nothing on this side can reach it anyway.
+ * A name shown to a person should be the person's actual name.
+ */
+export const AUTHOR = 'Murat Emre Biçici';

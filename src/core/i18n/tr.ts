@@ -179,6 +179,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.accentWarning':
     'Bu vurgu rengi yüzey renginize fazla yakın, ayırt edilmiyor. Seçtiğiniz gibi bırakıldı — daha açık ya da daha koyu bir ton seçerseniz düzelir.',
   'settings.about': 'Hakkında',
+  'settings.credit': '{author} tarafından özenle tasarlandı ve geliştirildi.',
   'settings.version': 'Sürüm {version}',
 
   'update.waiting': 'Bir güncelleme bekliyor',
