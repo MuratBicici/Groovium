@@ -72,7 +72,7 @@ function resolve(overrides: Partial<Parameters<typeof resolveNextTracks>[0]> = {
   return resolveNextTracks({
     seeds: SEEDS,
     library: LIBRARY,
-    exclude: new Set(),
+    played: [],
     excludeArtists: new Set(),
     spotifyAvailable: false,
     searchSpotify: searchSpotify as never,

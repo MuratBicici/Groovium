@@ -38,6 +38,21 @@ export type { SimilarTrack } from './lastfm';
 const SPOTIFY_SEARCH_BUDGET = 8;
 
 /**
+ * Searches any one artist may consume out of that budget.
+ *
+ * Without this, one artist can take the whole fill down with it. A narrow pool
+ * eventually has a single artist the recent-artist memory has not held back,
+ * and its ten tracks are tried first — so if Spotify cannot match the names,
+ * all eight searches are spent there and the fill ends with nothing, having
+ * never reached the candidates it was going to fall back on. Measured: that is
+ * exactly what happened on the fourth return to the same song.
+ *
+ * Three leaves room for at least three artists to be tried, which is what the
+ * spread rule wants anyway.
+ */
+const SEARCHES_PER_ARTIST = 3;
+
+/**
  * How many suggestions one lookup tries to bring back.
  *
  * A single Last.fm call returns fifty candidates and this used to keep one,
@@ -225,8 +240,15 @@ export interface ResolveOptions {
    */
   seeds: TrackMetadata[];
   library: LibraryTrack[];
-  /** Keys of tracks already played in this station run. */
-  exclude: ReadonlySet<string>;
+  /**
+   * Keys of tracks already played in this station run, **oldest first**.
+   *
+   * An order rather than a set. A set answers "has this been played", which is
+   * all that was needed while every pool was wide; a narrow pool eventually
+   * needs "how long ago", so the least stale thing can come round again rather
+   * than the station falling quiet with songs still on the list.
+   */
+  played: readonly string[];
   /** Artists heard in the last few tracks, held back so runs do not cluster. */
   excludeArtists: ReadonlySet<string>;
   /** Only true when Spotify is actually connected and able to play. */
@@ -255,61 +277,141 @@ export interface ResolveOptions {
  * across artists the same way.
  */
 /**
+ * How long ago each of these was played, oldest first.
+ *
+ * A set answers "has this been played"; a run that has heard everything needs
+ * "how long ago", so the least stale thing can come round again instead of the
+ * station going quiet. The caller already keeps its history in this order, so
+ * the answer costs one walk of an array of sixty strings.
+ */
+function playedAt(played: readonly string[]): Map<string, number> {
+  const at = new Map<string, number>();
+  played.forEach((key, index) => {
+    if (!at.has(key)) at.set(key, index);
+  });
+  return at;
+}
+
+/**
  * Resolve candidates the library could not supply through Spotify search.
  *
  * Exported for the same reason `matchKey` is: it decides how wide the pool
  * gets, it costs real requests, and calling it directly is the only way to
  * check either without a live Last.fm key.
+ *
+ * **It never goes quiet because of its own rules.** It used to. The
+ * one-track-per-artist spread was a hard `continue`, so once the recent-artist
+ * memory covered every artist a narrow pool had, this returned nothing at all.
+ * Its two siblings both relax instead — `findInLibrary` says so in as many
+ * words, and `takeSpread` has a second pass — and this was the only path that
+ * did not. Simulated, it stopped the station on about the third return to the
+ * same song, which is exactly what was reported.
+ *
+ * So the walk sorts what it finds into three buckets rather than dropping any
+ * of it: what passes outright, what a repeated artist turned away, and what has
+ * been heard before. The last two are drawn on only when the first comes up
+ * short, in that order, and within the third the least recently played leads.
+ *
+ * One walk and one budget. The order candidates are tried in — unheard with a
+ * free artist, then unheard with a busy one, then already heard — is what keeps
+ * the searches spent on the answers most likely to be wanted.
  */
 export async function resolveViaSpotify(
   candidates: SimilarTrack[],
   options: {
-    exclude: ReadonlySet<string>;
+    /** Keys of what has played, oldest first. */
+    played: readonly string[];
     excludeArtists: ReadonlySet<string>;
     searchSpotify: (query: string) => Promise<TrackMetadata[]>;
   },
   limit: number,
 ): Promise<TrackMetadata[]> {
-  const { exclude, excludeArtists, searchSpotify } = options;
+  const { played, excludeArtists, searchSpotify } = options;
 
-  const takenKeys = new Set(exclude);
+  const heardAt = playedAt(played);
+  const takenKeys = new Set<string>();
   const takenArtists = new Set(excludeArtists);
-  const picked: TrackMetadata[] = [];
 
-  const usable = candidates.filter((c) => !takenKeys.has(matchKey(c.artist, c.title)));
-  // Artists heard a moment ago go to the back as a block. That is a rule and
-  // not a preference, so it stays a hard split rather than a heavy weight.
-  const heldBack = usable.filter((c) => excludeArtists.has(artistKey(c.artist)));
-  const available = usable.filter((c) => !excludeArtists.has(artistKey(c.artist)));
+  const weight = (c: SimilarTrack) => similarityWeight(c.matchScore);
+  const unheard = (c: SimilarTrack) => !heardAt.has(matchKey(c.artist, c.title));
+  const artistFree = (c: SimilarTrack) => !excludeArtists.has(artistKey(c.artist));
 
-  // Shuffled rather than sorted, which is the whole repair. This used to order
-  // by similarity and walk down the list, and for a listener whose library does
-  // not overlap Last.fm's answer every track resolves here — so one song led to
-  // the same five songs in the same order, every time, on every launch.
-  const fresh = [
-    ...weightedShuffle(available, (c) => similarityWeight(c.matchScore)),
-    ...weightedShuffle(heldBack, (c) => similarityWeight(c.matchScore)),
+  // Shuffled rather than sorted, which was an earlier repair: ordering by
+  // similarity and walking down the list meant one song led to the same five
+  // songs in the same order, on every launch.
+  const fresh = candidates.filter(unheard);
+  const heard = candidates
+    .filter((c) => !unheard(c))
+    // Least recently played first, so a run that has heard everything comes
+    // back round in the order it heard them.
+    .sort(
+      (a, b) =>
+        (heardAt.get(matchKey(a.artist, a.title)) ?? 0) -
+        (heardAt.get(matchKey(b.artist, b.title)) ?? 0),
+    );
+
+  const attempts = [
+    ...weightedShuffle(fresh.filter(artistFree), weight),
+    ...weightedShuffle(fresh.filter((c) => !artistFree(c)), weight),
+    ...heard,
   ];
 
+  const picked: TrackMetadata[] = [];
+  /** Resolved, but its artist has already been used this fill. */
+  const repeatsAnArtist: TrackMetadata[] = [];
+  /** Resolved, but heard before. Already in least-recently-played order. */
+  const heardBefore: TrackMetadata[] = [];
+
   let spent = 0;
-  for (const candidate of fresh) {
+  /** Searches already spent on each artist, so none of them can take the lot. */
+  const spentOn = new Map<string, number>();
+
+  for (const candidate of attempts) {
     if (picked.length >= limit || spent >= SPOTIFY_SEARCH_BUDGET) break;
-    // One track per artist here too, or the spread the library path takes care
-    // to produce would be undone by whatever is appended after it.
-    if (takenArtists.has(artistKey(candidate.artist))) continue;
+
+    const wanted = matchKey(candidate.artist, candidate.title);
+    if (takenKeys.has(wanted)) continue;
+
+    const artist = artistKey(candidate.artist);
+    if ((spentOn.get(artist) ?? 0) >= SEARCHES_PER_ARTIST) continue;
+    spentOn.set(artist, (spentOn.get(artist) ?? 0) + 1);
 
     spent++;
     const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
-    const wanted = matchKey(candidate.artist, candidate.title);
 
     // Spotify's field search is fuzzy; take a result only if it really is the
     // song asked for, otherwise the station drifts somewhere unrelated.
     const exact = results.find((track) => trackKey(track) === wanted);
     if (!exact || takenKeys.has(trackKey(exact))) continue;
-
-    picked.push(exact);
     takenKeys.add(trackKey(exact));
-    takenArtists.add(artistKey(exact.artist));
+
+    if (heardAt.has(trackKey(exact))) {
+      heardBefore.push(exact);
+    } else if (takenArtists.has(artistKey(exact.artist))) {
+      repeatsAnArtist.push(exact);
+    } else {
+      picked.push(exact);
+      takenArtists.add(artistKey(exact.artist));
+    }
+  }
+
+  // Only when the strict pass found **nothing at all**, and in order of what
+  // it costs to accept: another song by an artist just heard, then a song heard
+  // before. Either beats handing back nothing.
+  //
+  // Not merely when it came up short of the limit. Three good suggestions and
+  // two repeats is worse than three good suggestions — the artist spread is
+  // there to stop a run clustering, and it should yield only to silence. This
+  // is the same line `takeSpread` draws between its passes, and `findInLibrary`
+  // between its pools.
+  if (picked.length > 0) return picked;
+
+  for (const spare of [repeatsAnArtist, heardBefore]) {
+    for (const track of spare) {
+      if (picked.length >= limit) return picked;
+      picked.push(track);
+    }
+    if (picked.length > 0) return picked;
   }
   return picked;
 }
@@ -386,20 +488,37 @@ async function deeperCandidatesFor(
  */
 function takeSpread(
   tracks: TrackMetadata[],
-  exclude: ReadonlySet<string>,
+  played: readonly string[],
   excludeArtists: ReadonlySet<string>,
   limit: number,
 ): TrackMetadata[] {
-  const takenKeys = new Set(exclude);
+  const heardAt = playedAt(played);
+  const takenKeys = new Set<string>();
   const takenArtists = new Set(excludeArtists);
   const picked: TrackMetadata[] = [];
 
   // Uniform: these carry no similarity score of their own, only Spotify's idea
   // of how well known they are, which is not what the station is asking about.
-  const order = weightedShuffle(tracks, () => 1);
+  const unheard = weightedShuffle(
+    tracks.filter((t) => !heardAt.has(trackKey(t))),
+    () => 1,
+  );
+  // Least recently played first, for the pass that has to reach for them.
+  const heard = tracks
+    .filter((t) => heardAt.has(trackKey(t)))
+    .sort((a, b) => (heardAt.get(trackKey(a)) ?? 0) - (heardAt.get(trackKey(b)) ?? 0));
 
-  for (const spreading of [true, false]) {
-    for (const track of order) {
+  // Three passes, each giving up one rule: spread the artists, then repeat an
+  // artist, then repeat a song. Every one of them beats handing back nothing,
+  // and the order is what keeps the cheapest concession the first one made.
+  const passes: [TrackMetadata[], boolean][] = [
+    [unheard, true],
+    [unheard, false],
+    [heard, false],
+  ];
+
+  for (const [source, spreading] of passes) {
+    for (const track of source) {
       if (picked.length >= limit) return picked;
       const key = trackKey(track);
       if (takenKeys.has(key)) continue;
@@ -420,13 +539,13 @@ async function pickFrom(
   options: ResolveOptions,
   limit: number,
 ): Promise<TrackMetadata[]> {
-  const { library, exclude, excludeArtists, spotifyAvailable, searchSpotify } = options;
+  const { library, played, excludeArtists, spotifyAvailable, searchSpotify } = options;
 
   if (candidates.kind === 'tracks') {
-    return takeSpread(candidates.tracks, exclude, excludeArtists, limit);
+    return takeSpread(candidates.tracks, played, excludeArtists, limit);
   }
 
-  const picked = findInLibrary(candidates.names, library, exclude, limit, excludeArtists);
+  const picked = findInLibrary(candidates.names, library, new Set(played), limit, excludeArtists);
   if (picked.length >= limit || !spotifyAvailable) return picked;
 
   // Top up whatever the library could not supply. This used to stop at a single
@@ -437,7 +556,9 @@ async function pickFrom(
     resolveViaSpotify(
       candidates.names,
       {
-        exclude: new Set([...exclude, ...picked.map(trackKey)]),
+        // What this fill has already taken counts as played for the rest of
+        // it, and counts as the most recent thing there is.
+        played: [...played, ...picked.map(trackKey)],
         excludeArtists: new Set([...excludeArtists, ...picked.map((t) => artistKey(t.artist))]),
         searchSpotify,
       },

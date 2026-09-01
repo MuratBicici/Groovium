@@ -450,9 +450,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         // opening moment before `rememberPlayed` has run for it.
         seeds: stationSeeds.length > 0 ? stationSeeds : [currentTrack],
         library,
-        // Anything already queued is excluded too, or a refill would hand back
-        // what is still waiting to play.
-        exclude: new Set([...stationHistory, seedKey, ...stationQueue.map(trackKey)]),
+        // Oldest first, which `stationHistory` already is — it is appended to.
+        // The order matters now: when a pool has genuinely been heard out, the
+        // resolver reaches for the least stale thing rather than falling quiet,
+        // and it needs to know which that is.
+        //
+        // The seed and anything already queued go on the end, as the most
+        // recent things there are: a refill must not hand back what is still
+        // waiting to play, and it must not answer a song with itself.
+        played: [...stationHistory, seedKey, ...stationQueue.map(trackKey)],
         // The seed's own artist is included: it is the one most likely to come
         // back, since its other tracks head the similarity list.
         excludeArtists: new Set([...stationArtists, artistKey(currentTrack.artist)]),

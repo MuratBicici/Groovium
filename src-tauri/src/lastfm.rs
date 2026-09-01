@@ -98,12 +98,26 @@ const SIMILAR_ARTIST_LIMIT: u32 = 10;
 /// How many of those artists actually have their top tracks fetched.
 ///
 /// Each one is a request. This whole path runs only when the track lookup came
-/// back empty, so four is a handful spent rarely rather than a burst spent
+/// back empty, so this is a handful spent rarely rather than a burst spent
 /// every song.
-const ARTISTS_TO_MINE: usize = 4;
+///
+/// Was four, and four was the reason infinite play kept running dry. The
+/// frontend holds the last three artists back so a run does not cluster, and
+/// the seed's own artist on top of that — so a pool of four distinct artists
+/// had nothing left to offer by the third time somebody came back to the same
+/// song. Simulated across hit rates it stopped at the second, third or fourth
+/// round; the report said "about the third".
+///
+/// Eight leaves five artists standing after the memory has taken its three,
+/// which is the difference between a pool that thins and a pool that empties.
+const ARTISTS_TO_MINE: usize = 8;
 
 /// Top tracks taken from each artist.
-const TOP_TRACKS_LIMIT: u32 = 10;
+///
+/// Halved as the artist count doubled: forty candidates either way, spread
+/// across twice as many artists. Which artist a suggestion is by matters far
+/// more here than which of their songs it is.
+const TOP_TRACKS_LIMIT: u32 = 5;
 
 /// How much a track's rank within its artist discounts that artist's score.
 ///
@@ -517,8 +531,26 @@ mod tests {
     fn the_artist_fallback_is_bounded() {
         // The reason this is a fallback and not the main path: it spends one
         // request per artist mined, on top of the one that finds them.
-        assert!(ARTISTS_TO_MINE <= 5, "a handful, not a burst");
-        assert!(ARTISTS_TO_MINE as u32 <= SIMILAR_ARTIST_LIMIT);
+        //
+        // The bound was five, and five was too tight to be right. The frontend
+        // holds the last three artists back so a run does not cluster, and adds
+        // the seed's own — so a pool this narrow had nothing left to offer by
+        // the third time somebody came back to the same song, which is what got
+        // reported. Widening it is the fix, so the ceiling has to move with it.
+        //
+        // What still has to be true is that this cannot become a burst: bounded
+        // above, never more artists than were asked for, and reached only when
+        // the track lookup came back empty.
+        assert!(ARTISTS_TO_MINE <= 10, "bounded, even after widening");
+        assert!(ARTISTS_TO_MINE as u32 <= SIMILAR_ARTIST_LIMIT, "cannot mine what was not asked for");
+
+        // Widening the artists narrowed the tracks: the candidate count is what
+        // it always was, spread across twice as many names.
+        assert_eq!(
+            ARTISTS_TO_MINE as u32 * TOP_TRACKS_LIMIT,
+            40,
+            "same pool, more artists in it"
+        );
     }
 
     #[test]
