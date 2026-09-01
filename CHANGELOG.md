@@ -22,6 +22,8 @@ HIGHLIGHTS
 · "Increase readability" no longer changes a single palette colour. It only
   strengthens text and icons.
 · Colours now ease from one palette to the next instead of jumping.
+· Search boxes and other inputs stay visible on a very dark palette, where
+  they used to disappear into the background entirely.
 
 ALL CHANGES
 · Custom palettes: the accent's lighter and darker shades hold its hue and its
@@ -41,6 +43,14 @@ ALL CHANGES
   is on.
 · Appearance: an accent too close to your surface to stand out is given a thin
   outline in the colour drawn over it. The fill stays exactly what you chose.
+· Inputs, sheets and swatches are outlined with a hairline measured against
+  what it separates. Everything that marked a box out was darker than its
+  surroundings — the fill, the inner shadow, the outline — and on a very dark
+  surface there is nothing darker, so the box vanished. The outline now goes
+  lighter when there is nowhere darker to go. The five built-in palettes keep
+  the edge they were drawn with.
+· "Increase readability" also strengthens those outlines, to the contrast a
+  user interface boundary is meant to have.
 · The colour picker's own heading and focus ring stayed readable at every
   accent colour; they previously came apart as you dragged.
 

@@ -13,7 +13,7 @@ import {
   isThemeId,
 } from '@/core/settings/themes';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
-import { derivePalette, onAccentFor, strengthenText } from '@/core/utils/contrast';
+import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
 
 /**
  * Preferences, in their own store.
@@ -125,6 +125,16 @@ function applyToDocument(settings: Settings): void {
       // than an answer.
       set('--color-on-accent', toHex(onAccentFor(seen.accents, settings.boostContrast)));
 
+      // The hairline around inputs, sheets and swatches. Handed straight back
+      // for these five — their rings already read — but computed rather than
+      // assumed, so a palette added later cannot lose its edges silently.
+      set(
+        '--color-edge',
+        // The recess fill and the panel behind it — the two surfaces a
+        // hairline actually separates. `shell-700` is deliberately not here.
+        toHex(edgeFor(seen.surfaces.slice(1), seen.edge, settings.boostContrast)),
+      );
+
       if (settings.boostContrast) {
         for (const [name, value] of Object.entries(
           strengthenText(seen.surfaces, seen.text, true),
@@ -180,6 +190,8 @@ const applied = new Set<string>();
 function readPalette(root: HTMLElement): {
   surfaces: Rgb[];
   accents: Rgb[];
+  /** The shade hairlines are drawn in today. */
+  edge: Rgb;
   text: { strong: Rgb; body: Rgb; quiet: Rgb };
 } | null {
   if (typeof getComputedStyle !== 'function') return null;
@@ -196,15 +208,17 @@ function readPalette(root: HTMLElement): {
   // 600 first: it is the darker of the two a button fills with, so it leads the
   // list `onAccentFor` tints from.
   const accents = ['--color-brass-600', '--color-brass-500'].map(read);
+  const edge = read('--color-shell-600');
   const strong = read('--color-cream-50');
   const body = read('--color-cream-200');
   const quiet = read('--color-cream-400');
 
   if (surfaces.some((s) => s === null) || accents.some((a) => a === null)) return null;
-  if (!strong || !body || !quiet) return null;
+  if (!edge || !strong || !body || !quiet) return null;
   return {
     surfaces: surfaces as Rgb[],
     accents: accents as Rgb[],
+    edge,
     text: { strong, body, quiet },
   };
 }

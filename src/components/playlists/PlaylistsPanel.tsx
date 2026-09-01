@@ -159,7 +159,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && name.trim()) void create();
               }}
-              className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+              className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
             />
             <button
               type="button"

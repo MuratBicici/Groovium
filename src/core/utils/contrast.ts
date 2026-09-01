@@ -274,6 +274,48 @@ export interface DerivedPalette {
 }
 
 /**
+ * How visible the hairline around a recess has to be.
+ *
+ * Measured off the five hand-written palettes rather than chosen: their
+ * `shell-600` rings sit between 1.34 and 1.73 against the surfaces they
+ * separate. This app draws a very soft edge and lets the inset shadow do the
+ * work, and 1.35 is the floor that keeps every one of them exactly as drawn.
+ *
+ * The boosted value is WCAG's 3:1 minimum for the boundary of a user interface
+ * component. An edge is drawn *over* a surface rather than being one of the
+ * palette's own colours, so raising it is the readability setting doing its
+ * job, not it reaching for the palette again.
+ */
+export const EDGE_VISIBLE = 1.35;
+export const EDGE_BOOSTED = 3;
+
+/**
+ * A hairline that can actually be seen against what it separates.
+ *
+ * Every cue that says "this is an input" is darker than its surroundings — the
+ * fill is `shell-900`, the inset shadow is black — and on a very dark surface
+ * there is no darker. A lightness step from a near-black colour barely moves,
+ * so the `shell-600` ring these used to take fell to 1.12:1 against its own
+ * fill and 1.01:1 at pure black. The box stopped existing.
+ *
+ * So the edge is measured instead of stepped, and goes lighter when there is
+ * nowhere darker to go. On a palette where the ring already reads it is handed
+ * straight back, which is why the five built-in ones are untouched.
+ *
+ * Measured against the recess fill and the panel behind it — **not** against
+ * `shell-700`. That one is the shade `shell-600` is derived from, one step
+ * away by design, and the five hand-written palettes sit at 1.19 to 1.34
+ * against it. Demanding a visible edge there is demanding the ramp not be a
+ * ramp: it moved every built-in palette, Espresso by twenty-six units a
+ * channel. Excluding it moves four of the five not at all.
+ */
+export function edgeFor(surfaces: Rgb[], from: Rgb, boost = false): Rgb {
+  if (surfaces.length === 0) return from;
+  const floor = boost ? EDGE_BOOSTED : EDGE_VISIBLE;
+  return towardReadable(surfaces, from, floor) ?? mostReadableOn(surfaces);
+}
+
+/**
  * The colour for text and icons drawn **on** an accent fill.
  *
  * Near-white or near-black, whichever reads across every accent shade a fill
@@ -385,6 +427,11 @@ export function derivePalette(
     '--color-cream-400': toHex(quiet ?? end),
 
     '--color-on-accent': toHex(onAccentFor([accent[600], accent[500]], boost)),
+
+    // The hairline around every recess and sheet. Derived from `shell-600`,
+    // which is what it used to be outright, and lifted only when that has
+    // stopped being visible against what it separates.
+    '--color-edge': toHex(edgeFor([shell[900], shell[800]], shell[600], boost)),
   };
 
   return { variables, accentUnreadable: !accentOk, lightGround };

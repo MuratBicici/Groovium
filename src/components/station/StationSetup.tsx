@@ -74,7 +74,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
       <div
         role="dialog"
         aria-label={t('station.dialog')}
-        className={`relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-shell-600 transition-all duration-[180ms] ease-out ${
+        className={`relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
           shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
         }`}
       >
@@ -127,7 +127,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && key.trim()) void save();
                 }}
-                className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+                className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
               />
               <button
                 type="button"

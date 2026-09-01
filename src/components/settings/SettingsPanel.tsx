@@ -141,7 +141,7 @@ export function SettingsPanel({
                   className={`h-7 flex-1 overflow-hidden rounded-md ring-1 transition-all ${
                     entry.id === theme
                       ? 'ring-2 ring-brass-400'
-                      : 'ring-shell-600 hover:ring-cream-400/50'
+                      : 'ring-[var(--color-edge)] hover:ring-cream-400/50'
                   }`}
                 >
                   <span className="flex h-full w-full">
@@ -163,7 +163,7 @@ export function SettingsPanel({
                 className={`h-7 flex-1 overflow-hidden rounded-md ring-1 transition-all ${
                   theme === CUSTOM_THEME
                     ? 'ring-2 ring-brass-400'
-                    : 'ring-shell-600 hover:ring-cream-400/50'
+                    : 'ring-[var(--color-edge)] hover:ring-cream-400/50'
                 }`}
               >
                 <span className="flex h-full w-full">
@@ -309,7 +309,7 @@ function Colour({
     >
       <span
         aria-hidden="true"
-        className="h-6 w-8 shrink-0 rounded ring-1 ring-shell-600"
+        className="h-6 w-8 shrink-0 rounded ring-1 ring-[var(--color-edge)]"
         style={{ background: value }}
       />
       <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>

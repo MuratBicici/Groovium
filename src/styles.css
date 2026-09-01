@@ -33,6 +33,20 @@
   --color-on-accent: #16110d;
 
   /*
+   * The hairline around a recess — an input, a sheet, a swatch.
+   *
+   * These were all `ring-shell-600`, which is the surface lifted a little. On a
+   * very dark palette a lift barely moves: the ring fell to 1.12:1 against the
+   * fill it outlines, and to 1.01 at pure black, so the box stopped being
+   * visible at all. The inset shadow could not help either — black on black.
+   *
+   * `applyToDocument` measures this against the surfaces it separates and only
+   * lifts it when it has stopped reading, so the five hand-written palettes
+   * keep the soft edge they were drawn with.
+   */
+  --color-edge: #3d2f24;
+
+  /*
    * The light falling on the record, as raw channels so the disc can mix its
    * own alphas. A theme changes the room the deck is sitting in, and a warm
    * cream reflection on a cold blue shell reads as a sticker rather than a
@@ -274,6 +288,7 @@ body {
 @property --color-cream-200 { syntax: '<color>'; inherits: true; initial-value: #ddd0bb; }
 @property --color-cream-400 { syntax: '<color>'; inherits: true; initial-value: #a9977e; }
 @property --color-on-accent { syntax: '<color>'; inherits: true; initial-value: #16110d; }
+@property --color-edge { syntax: '<color>'; inherits: true; initial-value: #3d2f24; }
 
 :root {
   transition:
@@ -287,7 +302,8 @@ body {
     --color-cream-50 var(--palette-ms) ease,
     --color-cream-200 var(--palette-ms) ease,
     --color-cream-400 var(--palette-ms) ease,
-    --color-on-accent var(--palette-ms) ease;
+    --color-on-accent var(--palette-ms) ease,
+    --color-edge var(--palette-ms) ease;
 }
 
 /*

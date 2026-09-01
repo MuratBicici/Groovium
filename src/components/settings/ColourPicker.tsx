@@ -197,7 +197,7 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
       <div
         role="dialog"
         aria-label={t('colour.dialog')}
-        className={`groove-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-shell-600 transition-all duration-[180ms] ease-out ${
+        className={`groove-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
           shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
         }`}
       >
@@ -250,7 +250,7 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
         <div className="flex shrink-0 items-center gap-2 px-3 pt-2 pb-3">
           <span
             aria-hidden="true"
-            className="h-8 w-8 shrink-0 rounded ring-1 ring-shell-600"
+            className="h-8 w-8 shrink-0 rounded ring-1 ring-[var(--color-edge)]"
             style={{ background: hex }}
           />
           <label className="flex min-w-0 flex-1 items-center gap-2">
@@ -265,7 +265,7 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
               // rules on an English-looking string are exactly the trap that
               // turned this app's own name into GROOVİUM once.
               lang="en"
-              className="groove-inset min-w-0 flex-1 rounded px-2 py-1 font-mono text-meta text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+              className="groove-inset min-w-0 flex-1 rounded px-2 py-1 font-mono text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
             />
           </label>
         </div>
@@ -436,7 +436,7 @@ function Field({
       onPointerCancel={() => {
         dragging.current = false;
       }}
-      className={`relative w-full touch-none ring-1 ring-shell-600 ${className}`}
+      className={`relative w-full touch-none ring-1 ring-[var(--color-edge)] ${className}`}
       style={style}
     >
       {children}
@@ -511,7 +511,7 @@ function Range({
         aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ background: track }}
-        className="groove-range mt-1 h-3 w-full cursor-pointer appearance-none rounded-full ring-1 ring-shell-600"
+        className="groove-range mt-1 h-3 w-full cursor-pointer appearance-none rounded-full ring-1 ring-[var(--color-edge)]"
       />
     </label>
   );

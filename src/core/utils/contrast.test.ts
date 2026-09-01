@@ -333,6 +333,63 @@ describe('derivePalette', () => {
   });
 });
 
+describe('the hairline around a recess', () => {
+  const edgeOf = (surface: string, boost = false) => {
+    const { variables } = derivePalette(surface, '#c8945a', boost)!;
+    const edge = rgb(variables['--color-edge'] as string);
+    // The recess fill and the panel behind it. `shell-700` is not measured
+    // against on purpose — see `edgeFor`.
+    const worst = ['900', '800']
+      .map((s) => contrastRatio(rgb(variables[`--color-shell-${s}`] as string), edge))
+      .reduce((low, r) => Math.min(low, r), Infinity);
+    return { hex: variables['--color-edge'] as string, worst };
+  };
+
+  it('stays visible on a surface with no room left to go darker', () => {
+    // The reported fault. Every cue that says "this is an input" is darker than
+    // its surroundings — the fill, the inset shadow — and on a near-black
+    // surface there is no darker. The old ring was `shell-600`, a small lift,
+    // which on those colours barely moves: it measured 1.12:1 against its own
+    // fill, and 1.01 at pure black. The box stopped existing.
+    for (const surface of ['#0a0a0c', '#050505', '#000000', '#100c14']) {
+      expect(edgeOf(surface).worst, surface).toBeGreaterThanOrEqual(1.34);
+    }
+  });
+
+  it('leaves a palette alone when its ring already reads', () => {
+    // The five hand-written ones sit between 1.34 and 1.73, which is the soft
+    // edge this app is drawn with. Lifting those would be repainting a design
+    // rather than repairing a fault.
+    const { variables } = derivePalette(ESPRESSO.primary, ESPRESSO.secondary)!;
+    const edge = rgb(variables['--color-edge'] as string);
+    const ring = rgb(variables['--color-shell-600'] as string);
+    const moved = Math.abs(edge.r - ring.r) + Math.abs(edge.g - ring.g) + Math.abs(edge.b - ring.b);
+    expect(moved).toBeLessThan(6);
+  });
+
+  it('goes lighter, since darker is the direction that ran out', () => {
+    const surface = '#050505';
+    const { hex } = edgeOf(surface);
+    expect(luminance(rgb(hex))).toBeGreaterThan(luminance(rgb(surface)));
+  });
+
+  it('reaches the accessible floor when readability is turned up', () => {
+    // 3:1 is WCAG's minimum for the boundary of a UI component. An edge is
+    // drawn over a surface rather than being one of the palette's colours, so
+    // raising it is that setting doing its job.
+    for (const surface of ['#2e231b', '#050505', '#f0e6d8']) {
+      expect(edgeOf(surface, true).worst, surface).toBeGreaterThanOrEqual(2.99);
+    }
+  });
+
+  it('is still not a palette colour, so boost may move it', () => {
+    const plain = derivePalette('#2e231b', '#c8945a', false)!.variables;
+    const boosted = derivePalette('#2e231b', '#c8945a', true)!.variables;
+    expect(boosted['--color-shell-600']).toBe(plain['--color-shell-600']);
+    expect(boosted['--color-edge']).not.toBe(plain['--color-edge']);
+  });
+});
+
 describe('increase readability', () => {
   it('does not move one palette colour', () => {
     // The complaint, asserted directly. 1.0.3 raised the accent targets along

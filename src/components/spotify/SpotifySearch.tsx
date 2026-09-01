@@ -73,7 +73,7 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
         spellCheck={false}
         placeholder={t('spotify.searchPlaceholder')}
         onChange={(e) => setQuery(e.target.value)}
-        className="shrink-0 groove-inset rounded px-2 py-1.5 text-body text-cream-50 outline-none ring-1 ring-shell-600 focus:ring-brass-500"
+        className="shrink-0 groove-inset rounded px-2 py-1.5 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
       />
 
       {problem && (
