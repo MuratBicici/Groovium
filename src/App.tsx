@@ -140,7 +140,14 @@ export default function App() {
       // the black rather than stacking on it: two rings is a 2px edge, and on a
       // 340px widget that reads as a border somebody drew rather than as the
       // edge of an object.
-      className={`relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ${
+      //
+      // `ring-inset` is load-bearing, not decoration. A ring is a box-shadow
+      // drawn *outside* the element, and this element fills the window — so on
+      // all four straight edges the line landed outside the window and was
+      // clipped away. Only at the rounded corners, where the shell's own
+      // background curves inward, was there room for it to show, which is
+      // exactly how it looked: a border made of four corners.
+      className={`relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-inset ${
         windowBorder ? 'ring-brass-500/70' : 'ring-black/50'
       }`}
     >

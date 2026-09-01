@@ -102,7 +102,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
         active={station}
         onClick={() => void onStationClick()}
       >
-        <InfinityIcon searching={stationSearching} />
+        <InfinityIcon searching={stationSearching} armed={station} />
       </ToggleButton>
     </div>
   );
@@ -218,11 +218,24 @@ function ShuffleIcon() {
  * same search with infinite play switched off, and that press must not look
  * ignored while a network round trip is in flight.
  */
-function InfinityIcon({ searching }: { searching: boolean }) {
+/**
+ * Two different kinds of movement, and only ever one at a time.
+ *
+ * `searching` is a thing happening now — a lookup is in flight — and keeps the
+ * quicker pulse it always had. `armed` is a standing state: infinite play is
+ * on, and a track ending will be followed by another. That one breathes slowly,
+ * because it has to be noticeable for as long as it is true without ever asking
+ * to be dealt with.
+ *
+ * Searching wins when both are true. It is the transient one, and a state that
+ * is about to change is worth more attention than one that is not.
+ */
+function InfinityIcon({ searching, armed }: { searching: boolean; armed: boolean }) {
+  const motion = searching ? 'animate-pulse' : armed ? 'groove-breathe' : '';
   return (
     <svg
       viewBox="0 0 24 24"
-      className={`h-4 w-4 ${searching ? 'animate-pulse' : ''}`}
+      className={`h-4 w-4 ${motion}`}
       fill="none"
       stroke="currentColor"
       strokeWidth="1.9"

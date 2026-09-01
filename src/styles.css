@@ -442,6 +442,47 @@ body {
     inset 0 -1px 1px rgb(0 0 0 / calc(0.3 * var(--shade)));
 }
 
+/*
+ * Infinite play, breathing.
+ *
+ * The toggle already goes brass when it is on, which says so once and then
+ * looks like every other lit control in the row. This is the state that keeps
+ * acting after you have stopped looking — a track ending will be followed by
+ * another one — so it is worth a signal you notice from the corner of your eye
+ * rather than by comparing two shades of the same colour.
+ *
+ * Slow on purpose, and shallow: four seconds, and only down to 45%. A pulse
+ * that reaches zero reads as something wrong, and a fast one reads as a
+ * warning. This is a machine idling, not an alarm.
+ *
+ * Opacity rather than colour, so it costs no repaint and cannot fight the
+ * palette — on any theme it is the same gesture in whatever colour the button
+ * already is.
+ */
+@keyframes groove-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.groove-breathe {
+  animation: groove-breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-breathe {
+    animation: none;
+  }
+}
+
+:root[data-motion='off'] .groove-breathe {
+  animation: none;
+}
+
 @keyframes groove-spin {
   from {
     transform: rotate(0deg);

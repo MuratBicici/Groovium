@@ -24,6 +24,10 @@ HIGHLIGHTS
 · Colours now ease from one palette to the next instead of jumping.
 · Search boxes and other inputs stay visible on a very dark palette, where
   they used to disappear into the background entirely.
+· The window outline is drawn on all four edges. It was only ever visible at
+  the corners.
+· Infinite play breathes slowly while it is on, so you can see it is armed
+  without going looking.
 
 ALL CHANGES
 · Custom palettes: the accent's lighter and darker shades hold its hue and its
@@ -43,6 +47,14 @@ ALL CHANGES
   is on.
 · Appearance: an accent too close to your surface to stand out is given a thin
   outline in the colour drawn over it. The fill stays exactly what you chose.
+· Appearance: the outline around the window is drawn inside its edge rather
+  than outside it. Being outside, it fell beyond the window on all four
+  straight sides and was clipped away — only the rounded corners left room for
+  it to show, which is why the border looked like four corners. This applies to
+  the default dark outline as well as to the accent one.
+· Transport: the infinite play button pulses slowly while infinite play is on.
+  The faster pulse still means a track is being looked up, and neither runs
+  when "reduce motion" is on.
 · Inputs, sheets and swatches are outlined with a hairline measured against
   what it separates. Everything that marked a box out was darker than its
   surroundings — the fill, the inner shadow, the outline — and on a very dark
