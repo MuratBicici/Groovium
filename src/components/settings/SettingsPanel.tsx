@@ -383,23 +383,29 @@ function Updates() {
         </p>
 
         {resting && (
-          <button
-            type="button"
-            onClick={() => void checkNow()}
-            disabled={looking}
-            // Outlined rather than filled, on purpose. Download and Restart are
-            // the filled brass pills because they are the actions that matter;
-            // this one is an errand. `--color-edge` rather than a shell shade
-            // so the outline survives a very dark palette.
-            className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500 disabled:opacity-60"
-          >
-            <RefreshIcon spinning={looking} />
-            {looking ? t('update.checking') : t('update.check')}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Beside the button rather than under the row. It is the answer to
+                pressing that button, and an answer belongs next to the thing it
+                answers — on its own line it read as a separate announcement. */}
+            {status === 'current' && (
+              <span className="text-meta text-cream-400">{t('update.upToDate')}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => void checkNow()}
+              disabled={looking}
+              // Outlined rather than filled, on purpose. Download and Restart are
+              // the filled brass pills because they are the actions that matter;
+              // this one is an errand. `--color-edge` rather than a shell shade
+              // so the outline survives a very dark palette.
+              className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500 disabled:opacity-60"
+            >
+              <RefreshIcon spinning={looking} />
+              {looking ? t('update.checking') : t('update.check')}
+            </button>
+          </div>
         )}
       </div>
-
-      {status === 'current' && <p className="text-meta text-cream-400">{t('update.upToDate')}</p>}
 
       {status === 'available' && version && (
         <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
