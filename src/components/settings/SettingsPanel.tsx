@@ -55,6 +55,7 @@ export function SettingsPanel({
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
+  const forgetResult = useUpdateStore((s) => s.forgetResult);
 
   // Measured from the two chosen colours rather than assumed from either. The
   // derivation makes everything else read against the surface; the accent is
@@ -80,6 +81,11 @@ export function SettingsPanel({
   // otherwise land last and overwrite the newer answer with the older one.
   useEffect(() => {
     if (!open) return;
+    // The answer to a check nobody is looking at any more. "Up to date"
+    // pressed an hour ago would otherwise still be sitting there, claiming a
+    // check that did not just happen.
+    forgetResult();
+
     let current = true;
     void Promise.all([hasClientId(), hasApiKey()]).then(([spotify, station]) => {
       if (!current) return;
@@ -89,7 +95,7 @@ export function SettingsPanel({
     return () => {
       current = false;
     };
-  }, [open]);
+  }, [open, forgetResult]);
 
   return (
     <div
@@ -250,10 +256,6 @@ export function SettingsPanel({
           </div>
         </Section>
 
-        <Section title={t('settings.about')}>
-          <Updates />
-        </Section>
-
         {isTauri() && (
           <Section title={t('settings.connections')}>
             <Connection
@@ -278,6 +280,12 @@ export function SettingsPanel({
             />
           </Section>
         )}
+
+        {/* Last, because it is the least often wanted. Everything above is
+            something to change; this is something to look up. */}
+        <Section title={t('settings.about')}>
+          <Updates />
+        </Section>
       </div>
     </div>
   );
@@ -318,6 +326,31 @@ function Colour({
 }
 
 /**
+ * A circling arrow, for the errand of looking.
+ *
+ * `animate-spin` while it runs, matching the spinner `TransportControls`
+ * already uses — a loading indicator is information rather than decoration, so
+ * it is not gated behind the reduce-motion switch the platter is.
+ */
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-3 w-3 shrink-0 ${spinning ? 'animate-spin' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 11a8 8 0 10-.7 4.3" />
+      <path d="M20 4v7h-6" />
+    </svg>
+  );
+}
+
+/**
  * The version, and whether there is a newer one.
  *
  * The check itself already ran, quietly, at startup — this is where its answer
@@ -335,21 +368,38 @@ function Updates() {
   const download = useUpdateStore((s) => s.download);
   const restartNow = useUpdateStore((s) => s.restartNow);
 
+  const looking = status === 'checking';
+  /** Nothing is on offer, so the row is just a version and a way to ask. */
+  const resting = status === 'idle' || status === 'checking' || status === 'current';
+
   return (
     <div className="space-y-1.5">
-      <p className="text-body text-cream-200">{t('settings.version', { version: APP_VERSION })}</p>
+      {/* One row rather than two stacked fragments: the version and the way to
+          check it are the same thought, and reading them as separate lines is
+          what made this corner look unfinished. */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-body text-cream-200">
+          {t('settings.version', { version: APP_VERSION })}
+        </p>
 
-      {status === 'idle' && (
-        <button
-          type="button"
-          onClick={() => void checkNow()}
-          className="text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
-        >
-          {t('update.check')}
-        </button>
-      )}
+        {resting && (
+          <button
+            type="button"
+            onClick={() => void checkNow()}
+            disabled={looking}
+            // Outlined rather than filled, on purpose. Download and Restart are
+            // the filled brass pills because they are the actions that matter;
+            // this one is an errand. `--color-edge` rather than a shell shade
+            // so the outline survives a very dark palette.
+            className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500 disabled:opacity-60"
+          >
+            <RefreshIcon spinning={looking} />
+            {looking ? t('update.checking') : t('update.check')}
+          </button>
+        )}
+      </div>
 
-      {status === 'checking' && <p className="text-meta text-cream-400">{t('update.checking')}</p>}
+      {status === 'current' && <p className="text-meta text-cream-400">{t('update.upToDate')}</p>}
 
       {status === 'available' && version && (
         <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
@@ -411,8 +461,9 @@ function Updates() {
           <button
             type="button"
             onClick={() => void checkNow()}
-            className="text-meta text-cream-400 underline-offset-2 transition-colors hover:text-brass-400 hover:underline"
+            className="flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
           >
+            <RefreshIcon spinning={false} />
             {t('update.tryAgain')}
           </button>
         </div>

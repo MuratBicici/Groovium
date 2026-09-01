@@ -51,12 +51,53 @@ describe('looking for an update', () => {
     expect(state.notes).toBe('Fixed the tonearm.');
   });
 
-  it('stays quiet when there is nothing newer', async () => {
+  it('answers a pressed check even when there is nothing newer', async () => {
+    // The fault this fixes. `idle` used to mean both "nobody asked" and
+    // "somebody asked and there is nothing", so the panel showed the same
+    // button before and after — the press produced no answer at all, and the
+    // `update.upToDate` string sat unused in both languages.
     asMock.mockResolvedValue(null);
     await useUpdateStore.getState().checkNow();
 
-    expect(useUpdateStore.getState().status).toBe('idle');
+    expect(useUpdateStore.getState().status).toBe('current');
     expect(useUpdateStore.getState().version).toBeNull();
+  });
+
+  it('says nothing when the look was its own idea', async () => {
+    // The other half, and the reason the two are not one function. Nobody
+    // asked at startup, so nothing may appear on screen because of it.
+    asMock.mockResolvedValue(null);
+    await useUpdateStore.getState().checkQuietly();
+
+    expect(useUpdateStore.getState().status).toBe('idle');
+  });
+
+  it('is not something waiting to be installed', async () => {
+    // The settings button wears a dot for an update in hand. Being up to date
+    // is the opposite of that.
+    asMock.mockResolvedValue(null);
+    await useUpdateStore.getState().checkNow();
+
+    const s = useUpdateStore.getState();
+    expect(s.status === 'available' || s.status === 'downloading' || s.status === 'ready').toBe(
+      false,
+    );
+  });
+
+  it('forgets an answer nobody is looking at any more', async () => {
+    // Reopening the panel must not show a check that did not just happen.
+    asMock.mockResolvedValue(null);
+    await useUpdateStore.getState().checkNow();
+    useUpdateStore.getState().forgetResult();
+
+    expect(useUpdateStore.getState().status).toBe('idle');
+  });
+
+  it('does not tidy away an update that is actually waiting', async () => {
+    useUpdateStore.setState({ status: 'ready' });
+    useUpdateStore.getState().forgetResult();
+
+    expect(useUpdateStore.getState().status).toBe('ready');
   });
 
   it('swallows a failure on the way in', async () => {
@@ -160,6 +201,6 @@ describe('downloading it', () => {
     await useUpdateStore.getState().checkNow();
     await useUpdateStore.getState().download();
 
-    expect(useUpdateStore.getState().status).toBe('idle');
+    expect(useUpdateStore.getState().status).toBe('current');
   });
 });
