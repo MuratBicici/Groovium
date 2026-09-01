@@ -288,7 +288,7 @@ export function SettingsPanel({
           {/* Last line in the panel, and quiet on purpose: a name belongs in
               the app, but not competing with anything somebody came here to
               do. */}
-          <p className="pt-1 text-meta leading-snug text-cream-400">
+          <p className="pt-1 text-center text-meta leading-snug text-cream-400">
             {t('settings.credit', { author: AUTHOR })}
           </p>
         </Section>
