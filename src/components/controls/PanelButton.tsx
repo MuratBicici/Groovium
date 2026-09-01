@@ -76,7 +76,7 @@ export function PanelButton({ panel, open, onToggle, controls, badge }: PanelBut
       onClick={onToggle}
       className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
         open
-          ? 'bg-brass-600 text-shell-900'
+          ? 'bg-brass-600 text-on-accent'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
       }`}
     >

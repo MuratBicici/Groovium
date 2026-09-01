@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hsvToHex, luminance, parseHex, type Rgb } from './colour';
+import { hsvToHex, luminance, parseHex, rgbToOklab, type Oklab, type Rgb } from './colour';
 import {
   BOOSTED_TARGETS,
   NORMAL_TARGETS,
@@ -18,6 +18,9 @@ import {
  */
 
 const rgb = (hex: string): Rgb => parseHex(hex) as Rgb;
+
+/** Hue in degrees, for asking whether a shade is still the same colour. */
+const hueAngle = ({ a, b }: Oklab): number => ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
 const WHITE = rgb('#ffffff');
 const BLACK = rgb('#000000');
 
@@ -227,6 +230,73 @@ describe('derivePalette', () => {
     ).toBeGreaterThan(11);
   });
 
+  it('keeps the accent shades in the accent, whatever was chosen', () => {
+    // The 1.0.3 fault, and the one nothing here was watching. brass-600 fills
+    // the play button, the record label, the tonearm and every panel button,
+    // and it was derived as "a colour with 4.5:1 against the accent" — a text
+    // colour definition applied to a fill. A dark blue gave a pale blue button;
+    // a light yellow gave a dark olive one.
+    for (const accent of ['#2f5fa8', '#d9c04a', '#c8945a', '#e29ab1', '#1d5c3a']) {
+      const { variables } = derivePalette('#2e231b', accent)!;
+      const chosen = rgbToOklab(rgb(accent));
+
+      for (const shade of ['400', '500', '600']) {
+        const got = rgbToOklab(rgb(variables[`--color-brass-${shade}`] as string));
+        // Same hue angle: it is a lighter or darker version of their colour,
+        // not a different colour that happens to contrast well.
+        const turned = Math.abs(hueAngle(got) - hueAngle(chosen));
+        expect(Math.min(turned, 360 - turned), `${accent} brass-${shade}`).toBeLessThan(6);
+      }
+
+      // And lighter, the same, darker — in that order.
+      const lightness = ['400', '500', '600'].map((s) =>
+        rgbToOklab(rgb(variables[`--color-brass-${s}`] as string)).L,
+      );
+      expect(lightness[0], accent).toBeGreaterThan(lightness[1] as number);
+      expect(lightness[1], accent).toBeGreaterThan(lightness[2] as number);
+    }
+  });
+
+  it('reproduces the hand-written accent shades it was modelled on', () => {
+    // Espresso's own brass ramp, to within a couple of units per channel.
+    const { variables } = derivePalette(ESPRESSO.primary, ESPRESSO.secondary)!;
+    const near = (got: string, want: string, tolerance: number) => {
+      const a = rgb(got);
+      const b = rgb(want);
+      expect(
+        Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b),
+        `${got} vs ${want}`,
+      ).toBeLessThan(tolerance);
+    };
+    near(variables['--color-brass-400'] as string, '#e0b071', 30);
+    near(variables['--color-brass-600'] as string, '#a2743f', 30);
+  });
+
+  it('draws icons on an accent fill in something that reads on it', () => {
+    for (const accent of ['#2f5fa8', '#d9c04a', '#c8945a', '#ffffff', '#000000']) {
+      const { variables } = derivePalette('#2e231b', accent)!;
+      const onAccent = rgb(variables['--color-on-accent'] as string);
+
+      // Both shades a button fills with, because it hovers between them.
+      for (const shade of ['500', '600']) {
+        const fill = rgb(variables[`--color-brass-${shade}`] as string);
+        expect(contrastRatio(fill, onAccent), `${accent} on brass-${shade}`).toBeGreaterThanOrEqual(
+          4.4,
+        );
+      }
+    }
+  });
+
+  it('goes dark on a light accent and light on a dark one', () => {
+    // The behaviour asked for in as many words: dark blue gets white glyphs,
+    // light yellow gets black ones.
+    const onDarkBlue = rgb(derivePalette('#2e231b', '#2f5fa8')!.variables['--color-on-accent'] as string);
+    const onLightYellow = rgb(derivePalette('#2e231b', '#d9c04a')!.variables['--color-on-accent'] as string);
+
+    expect(luminance(onDarkBlue)).toBeGreaterThan(0.5);
+    expect(luminance(onLightYellow)).toBeLessThan(0.1);
+  });
+
   it('never alters the two colours it was given', () => {
     // Somebody picked these. Everything else is derived; these come back whole.
     const derived = derivePalette(ESPRESSO.primary, ESPRESSO.secondary)!;
@@ -260,6 +330,40 @@ describe('derivePalette', () => {
   it('refuses a colour it cannot read', () => {
     expect(derivePalette('nonsense', '#c8945a')).toBeNull();
     expect(derivePalette('#2e231b', '')).toBeNull();
+  });
+});
+
+describe('increase readability', () => {
+  it('does not move one palette colour', () => {
+    // The complaint, asserted directly. 1.0.3 raised the accent targets along
+    // with the text ones, so switching this on repainted buttons somebody had
+    // chosen the colour of.
+    for (const [surface, accent] of [
+      ['#2e231b', '#c8945a'],
+      ['#f0e6d8', '#8a5a2b'],
+      ['#12203a', '#2f5fa8'],
+    ] as const) {
+      const plain = derivePalette(surface, accent, false)!.variables;
+      const boosted = derivePalette(surface, accent, true)!.variables;
+
+      for (const name of [
+        '--color-shell-900',
+        '--color-shell-800',
+        '--color-shell-700',
+        '--color-shell-600',
+        '--color-brass-400',
+        '--color-brass-500',
+        '--color-brass-600',
+      ]) {
+        expect(boosted[name], `${surface}/${accent} ${name}`).toBe(plain[name]);
+      }
+    }
+  });
+
+  it('does move the text, which is the whole of what it is for', () => {
+    const plain = derivePalette('#2e231b', '#c8945a', false)!.variables;
+    const boosted = derivePalette('#2e231b', '#c8945a', true)!.variables;
+    expect(boosted['--color-cream-400']).not.toBe(plain['--color-cream-400']);
   });
 });
 

@@ -1,5 +1,114 @@
 import { describe, expect, it } from 'vitest';
-import { hexToHsv, hsvToHex, hsvToRgb, luminance, parseHex, rgbToHsv, toHex } from './colour';
+import {
+  hexToHsv,
+  hsvToHex,
+  hsvToRgb,
+  luminance,
+  mixOklab,
+  parseCssColour,
+  parseHex,
+  rgbToHsv,
+  rgbToOklab,
+  shiftLightness,
+  toHex,
+  type Rgb,
+} from './colour';
+
+const rgb = (hex: string): Rgb => parseHex(hex) as Rgb;
+const hue = (colour: Rgb) => {
+  const { a, b } = rgbToOklab(colour);
+  return ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
+};
+const chroma = (colour: Rgb) => {
+  const { a, b } = rgbToOklab(colour);
+  return Math.sqrt(a * a + b * b);
+};
+
+describe('parseCssColour', () => {
+  it('reads back what a registered custom property serialises to', () => {
+    // The trap that cost a silent regression: registering the palette with
+    // `@property` so it could animate made `getComputedStyle` return
+    // `rgb(46, 35, 27)` where it used to return `#2e231b`, and every reader
+    // that assumed hex quietly stopped working.
+    expect(parseCssColour('rgb(46, 35, 27)')).toEqual({ r: 46, g: 35, b: 27 });
+    expect(parseCssColour('rgb(46 35 27)')).toEqual({ r: 46, g: 35, b: 27 });
+    expect(parseCssColour('rgba(46, 35, 27, 0.5)')).toEqual({ r: 46, g: 35, b: 27 });
+    expect(parseCssColour('rgb(46 35 27 / 50%)')).toEqual({ r: 46, g: 35, b: 27 });
+  });
+
+  it('still reads the hex it always did', () => {
+    expect(parseCssColour('#2e231b')).toEqual({ r: 46, g: 35, b: 27 });
+    expect(parseCssColour('  #f0c  ')).toEqual({ r: 0xff, g: 0x00, b: 0xcc });
+  });
+
+  it('refuses what it cannot read rather than guessing', () => {
+    for (const bad of ['', '  ', 'rebeccapurple', 'rgb()', 'rgb(1, 2)', 'hsl(0 0% 0%)']) {
+      expect(parseCssColour(bad), bad).toBeNull();
+    }
+  });
+});
+
+describe('shiftLightness', () => {
+  it('keeps the colour and changes only how light it is', () => {
+    // The two the palette actually uses: one shade up for `brass-400`, one
+    // down for `brass-600`.
+    for (const hex of ['#c8945a', '#2f5fa8', '#d9c04a', '#e29ab1', '#1d5c3a']) {
+      const base = rgb(hex);
+      for (const delta of [0.085, -0.115]) {
+        const moved = shiftLightness(base, delta);
+        const turned = Math.abs(hue(moved) - hue(base));
+        expect(Math.min(turned, 360 - turned), `${hex} ${delta}`).toBeLessThan(3);
+      }
+      expect(rgbToOklab(shiftLightness(base, 0.1)).L).toBeGreaterThan(rgbToOklab(base).L);
+      expect(rgbToOklab(shiftLightness(base, -0.1)).L).toBeLessThan(rgbToOklab(base).L);
+    }
+  });
+
+  it('loses its grip on hue only once there is no colour left to hold', () => {
+    // Worth writing down rather than discovering again. Pulling the chroma in
+    // scales both Oklab axes together, which preserves the angle exactly — but
+    // the result is rounded to bytes, and near the gamut edge a big lift leaves
+    // so little chroma that a byte is worth degrees. A yellow lifted by 0.2
+    // turns about seven of them.
+    //
+    // It does not matter at the two steps the palette takes, and it is the
+    // reason those steps are small.
+    const yellow = rgb('#d9c04a');
+    const far = shiftLightness(yellow, 0.2);
+
+    expect(chroma(far)).toBeLessThan(chroma(yellow) / 2);
+    const turned = Math.abs(hue(far) - hue(yellow));
+    expect(Math.min(turned, 360 - turned)).toBeLessThan(12);
+  });
+
+  it('holds the chroma that mixing toward white throws away', () => {
+    // The reason this exists rather than reusing `mixOklab`: a lighter shade of
+    // somebody's accent has to still look like their accent. Blending toward
+    // white washes it out.
+    const accent = rgb('#c8945a');
+    const lifted = shiftLightness(accent, 0.085);
+    const blended = mixOklab(accent, rgb('#ffffff'), 0.31);
+
+    expect(rgbToOklab(lifted).L).toBeCloseTo(rgbToOklab(blended).L, 1);
+    expect(chroma(lifted)).toBeGreaterThan(chroma(blended));
+  });
+
+  it('steps back toward grey rather than clipping a channel', () => {
+    // A saturated pink lightened walks off the edge of sRGB. Clamping the
+    // channels would skew the hue; pulling the chroma in keeps it.
+    const pink = rgb('#e29ab1');
+    const lifted = shiftLightness(pink, 0.18);
+
+    const turned = Math.abs(hue(lifted) - hue(pink));
+    expect(Math.min(turned, 360 - turned)).toBeLessThan(6);
+    expect(chroma(lifted)).toBeLessThan(chroma(pink));
+  });
+
+  it('has nowhere to go from the ends, and says so quietly', () => {
+    expect(shiftLightness(rgb('#ffffff'), 0.2)).toEqual({ r: 255, g: 255, b: 255 });
+    expect(shiftLightness(rgb('#000000'), -0.2)).toEqual({ r: 0, g: 0, b: 0 });
+  });
+});
 
 /**
  * The picker drags in HSV and stores hex, so every move crosses this boundary.

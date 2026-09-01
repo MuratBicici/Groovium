@@ -133,7 +133,7 @@ export function StationSetup({ open, onClose, onConfigured }: StationSetupProps)
                 type="button"
                 disabled={!key.trim() || saving}
                 onClick={() => void save()}
-                className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+                className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
               >
                 {saving ? t('common.saving') : t('common.save')}
               </button>

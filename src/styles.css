@@ -19,6 +19,20 @@
   --color-cream-400: #a9977e;
 
   /*
+   * What is drawn *on* an accent fill — the play button's glyph, a panel
+   * button's label, the icon on the record label.
+   *
+   * These used to say `text-shell-900`, which is the darkest surface shade and
+   * happens to read on all five hand-written accents because all five are
+   * light. On a custom palette it is a guess, and on a dark accent it is dark
+   * on dark. `applyToDocument` measures this against the accent shades a fill
+   * actually uses and writes it for every palette, this one included.
+   *
+   * The value here is only what the utility resolves to before that runs.
+   */
+  --color-on-accent: #16110d;
+
+  /*
    * The light falling on the record, as raw channels so the disc can mix its
    * own alphas. A theme changes the room the deck is sitting in, and a warm
    * cream reflection on a cold blue shell reads as a sticker rather than a
@@ -226,6 +240,69 @@ body {
 }
 [data-tauri-drag-region]:active {
   cursor: grabbing;
+}
+
+/*
+ * An accent too close to the surface to be seen.
+ *
+ * The fill stays exactly the colour somebody chose — changing it is what the
+ * previous release did and what this one exists to undo. What is added is a
+ * hairline in the colour already being drawn over that fill, so the button has
+ * an edge even when it has no contrast. Only when it is actually needed:
+ * `applyToDocument` measures the accent against the shell and sets this.
+ */
+:root[data-accent='faint'] [class*='bg-brass-'] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-on-accent) 45%, transparent);
+}
+
+/*
+ * Colours move rather than jump.
+ *
+ * A custom property is not animatable until it has been registered, so a theme
+ * change was instant no matter what `transition` anything declared. Registering
+ * them makes the variables interpolate, and every rule that reads one softens
+ * for free — one declaration instead of a hundred.
+ */
+@property --color-shell-900 { syntax: '<color>'; inherits: true; initial-value: #16110d; }
+@property --color-shell-800 { syntax: '<color>'; inherits: true; initial-value: #211913; }
+@property --color-shell-700 { syntax: '<color>'; inherits: true; initial-value: #2e231b; }
+@property --color-shell-600 { syntax: '<color>'; inherits: true; initial-value: #3d2f24; }
+@property --color-brass-400 { syntax: '<color>'; inherits: true; initial-value: #e0b071; }
+@property --color-brass-500 { syntax: '<color>'; inherits: true; initial-value: #c8945a; }
+@property --color-brass-600 { syntax: '<color>'; inherits: true; initial-value: #a2743f; }
+@property --color-cream-50 { syntax: '<color>'; inherits: true; initial-value: #f6efe4; }
+@property --color-cream-200 { syntax: '<color>'; inherits: true; initial-value: #ddd0bb; }
+@property --color-cream-400 { syntax: '<color>'; inherits: true; initial-value: #a9977e; }
+@property --color-on-accent { syntax: '<color>'; inherits: true; initial-value: #16110d; }
+
+:root {
+  transition:
+    --color-shell-900 var(--palette-ms) ease,
+    --color-shell-800 var(--palette-ms) ease,
+    --color-shell-700 var(--palette-ms) ease,
+    --color-shell-600 var(--palette-ms) ease,
+    --color-brass-400 var(--palette-ms) ease,
+    --color-brass-500 var(--palette-ms) ease,
+    --color-brass-600 var(--palette-ms) ease,
+    --color-cream-50 var(--palette-ms) ease,
+    --color-cream-200 var(--palette-ms) ease,
+    --color-cream-400 var(--palette-ms) ease,
+    --color-on-accent var(--palette-ms) ease;
+}
+
+/*
+ * Off while the colour picker is being dragged, and off for reduced motion.
+ *
+ * The picker applies every frame, so a quarter-second ease would leave the
+ * preview trailing the cursor — the one place where smoothing reads as lag
+ * rather than as polish.
+ */
+:root {
+  --palette-ms: 220ms;
+}
+:root[data-picking='live'],
+:root[data-motion='off'] {
+  --palette-ms: 0ms;
 }
 
 /*

@@ -52,6 +52,42 @@ export function parseHex(value: string): Rgb | null {
   return null;
 }
 
+/**
+ * Read a colour the way the document hands one back.
+ *
+ * `getComputedStyle` does not return what was written. A plain custom property
+ * comes back as the literal token — `#2e231b` — but one **registered** with
+ * `@property … syntax: '<color>'` is parsed and re-serialised, so the same
+ * variable reads as `rgb(46, 35, 27)`. Registering the palette so it could
+ * animate therefore broke every reader that assumed hex, silently: the accent
+ * text colour stopped being computed and the readability setting stopped
+ * working on the five built-in palettes, with nothing to show for it.
+ *
+ * Deliberately separate from `parseHex`, which stays strict because the
+ * picker's hex field needs it to — half a typed hex is not a request to repaint
+ * the window.
+ */
+export function parseCssColour(value: string): Rgb | null {
+  const text = value.trim();
+  if (!text) return null;
+  if (text.startsWith('#')) return parseHex(text);
+
+  // `rgb(46, 35, 27)` and the space-separated `rgb(46 35 27 / 50%)` alike. The
+  // alpha is dropped: everything read back here is an opaque palette colour.
+  const inside = /^rgba?\((.+)\)$/i.exec(text)?.[1];
+  if (!inside) return null;
+
+  const parts = inside
+    .split(/[,/\s]+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map(Number);
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return null;
+
+  const [r, g, b] = parts as [number, number, number];
+  return { r: clamp(r, 0, 255), g: clamp(g, 0, 255), b: clamp(b, 0, 255) };
+}
+
 const pad = (channel: number) =>
   clamp(Math.round(channel), 0, 255).toString(16).padStart(2, '0');
 
@@ -185,16 +221,63 @@ export function rgbToOklab({ r, g, b }: Rgb): Oklab {
   };
 }
 
-export function oklabToRgb({ L, a, b }: Oklab): Rgb {
+/** The linear-light RGB behind an Oklab colour, unclamped. */
+function oklabToLinear({ L, a, b }: Oklab): [number, number, number] {
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
 
-  return {
-    r: fromLinear(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-    g: fromLinear(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-    b: fromLinear(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
-  };
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+}
+
+export function oklabToRgb(lab: Oklab): Rgb {
+  const [r, g, b] = oklabToLinear(lab);
+  return { r: fromLinear(r), g: fromLinear(g), b: fromLinear(b) };
+}
+
+/** Whether this Oklab colour is one a screen can actually show. */
+function fitsInSrgb(lab: Oklab): boolean {
+  // A hair of slack: the round trip is floating point, and rejecting a colour
+  // that misses by a millionth would pull chroma back for no visible reason.
+  return oklabToLinear(lab).every((channel) => channel >= -1e-4 && channel <= 1 + 1e-4);
+}
+
+/**
+ * The same colour, lighter or darker.
+ *
+ * Hue and chroma are held; only `L` moves. This is the operation the palette
+ * ramps want and `mixOklab` is not: blending toward white washes the colour
+ * out, so a lighter shade of somebody's accent came back visibly paler than
+ * the accent itself. Swept against the five hand-written palettes, a lightness
+ * shift lands closer to what they do by hand — total error 70 against 104 —
+ * and it keeps the promise the palette makes, which is that these are shades of
+ * *your* colour rather than colours near it.
+ *
+ * Chroma is pulled in only when the shift walks off the edge of sRGB, which a
+ * saturated colour does near the top: a lightened Sakura pink asks for more red
+ * than a screen has. Clamping the channels instead would skew the hue, so the
+ * colour steps back toward grey by the smallest amount that fits.
+ */
+export function shiftLightness(rgb: Rgb, delta: number): Rgb {
+  const { L, a, b } = rgbToOklab(rgb);
+  const lifted: Oklab = { L: clamp(L + delta, 0, 1), a, b };
+  if (fitsInSrgb(lifted)) return oklabToRgb(lifted);
+
+  // Binary search the most chroma that still fits. Twenty halvings is finer
+  // than a byte per channel, and grey always fits, so this always terminates
+  // with an answer rather than a clamp.
+  let fits = 0;
+  let over = 1;
+  for (let step = 0; step < 20; step++) {
+    const mid = (fits + over) / 2;
+    if (fitsInSrgb({ L: lifted.L, a: a * mid, b: b * mid })) fits = mid;
+    else over = mid;
+  }
+  return oklabToRgb({ L: lifted.L, a: a * fits, b: b * fits });
 }
 
 /**

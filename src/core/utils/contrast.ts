@@ -1,4 +1,4 @@
-import { luminance, mixOklab, parseHex, toHex, type Rgb } from './colour';
+import { luminance, mixOklab, parseHex, shiftLightness, toHex, type Rgb } from './colour';
 
 /**
  * Making a palette readable instead of hoping it is.
@@ -143,19 +143,25 @@ export interface Targets {
   body: number;
   /** Secondary and meta text. */
   quiet: number;
-  /** The accent, against the surface it sits on. */
-  accent: number;
-  /** Dark text on an accent-filled button. */
-  onAccent: number;
 }
 
 export const NORMAL_TARGETS: Targets = {
   strong: 7,
   body: 4.5,
   quiet: 3,
-  accent: 3,
-  onAccent: 4.5,
 };
+
+/**
+ * Two floors that `boost` deliberately cannot reach.
+ *
+ * Kept out of `Targets` rather than left in it and not raised. They govern the
+ * accent — whether it stands out from the surface, and what reads on top of it
+ * — and the readability setting must not move the palette. Having no boosted
+ * value to reach for makes that structural instead of something to remember:
+ * the previous release *did* raise these, and raising them changed the accent.
+ */
+export const ACCENT_VISIBLE = 3;
+export const ON_ACCENT_TARGET = 4.5;
 
 /**
  * Above AAA, because AAA does not move anything here.
@@ -176,8 +182,6 @@ export const BOOSTED_TARGETS: Targets = {
   strong: 12,
   body: 9,
   quiet: 7,
-  accent: 4.5,
-  onAccent: 7,
 };
 
 export function targetsFor(boost: boolean): Targets {
@@ -187,24 +191,46 @@ export function targetsFor(boost: boolean): Targets {
 /**
  * How far each shade of the surface sits from the colour it was given.
  *
- * Positive is toward black, negative toward white — and **the direction never
- * flips**, on any ground. These shades encode depth, not theme: 900 paints the
- * well behind the platter and the inside of every input, and a recess that is
- * lighter than the surface around it reads as something raised. Only text
- * changes which way it goes.
+ * Two different operations, because they model two different things, and the
+ * five hand-written palettes agree: **a recess is mixed toward black** and a
+ * **raised surface is lifted in lightness**. Shadow on a coloured material
+ * absorbs its chroma along with its light; a highlight does not. Swept against
+ * those palettes, mixing reproduces their 800 and 900 within three units per
+ * channel while a lightness shift is four times further off — and for 600 it is
+ * the other way round.
  *
- * The dark steps are lifted from Espresso, the same proportions the stylesheet
- * used: its 900 sits about half way to black from its 700, its 600 a little way
- * toward white. A custom palette built from Espresso's own two colours
- * therefore lands back on something close to Espresso, which is what makes it a
- * sane place to start adjusting from.
+ * **The direction never flips**, on any ground. These shades encode depth, not
+ * theme: 900 paints the well behind the platter and the inside of every input,
+ * and a recess lighter than what surrounds it reads as something raised. Only
+ * text changes which way it goes.
  *
- * The light steps are far shorter. Half way to black from a near-white shell is
- * a mid grey, which is not a recess but a hole; light interfaces separate their
- * depths by a few percent and let the shadow do the rest.
+ * The light steps are far shorter. A third of the way to black from a near-white
+ * shell is a mid grey, which is not a recess but a hole; light interfaces
+ * separate their depths by a few percent and let the shadow do the rest.
  */
-const SHELL_STEPS = { 900: 0.48, 800: 0.26, 700: 0, 600: -0.1 } as const;
-const LIGHT_SHELL_STEPS = { 900: 0.1, 800: 0.05, 700: 0, 600: -0.045 } as const;
+const SHELL_SHADE = { 900: 0.33, 800: 0.175 } as const;
+const LIGHT_SHELL_SHADE = { 900: 0.09, 800: 0.045 } as const;
+
+/** How far the raised shade of the surface is lifted, in Oklab lightness. */
+const SHELL_LIFT = 0.07;
+const LIGHT_SHELL_LIFT = 0.03;
+
+/**
+ * The accent's two other shades, as lightness shifts.
+ *
+ * **Not contrast walks.** They used to be, and that is the fault this release
+ * exists for: `brass-600` is a *fill* — the play button, the record label, the
+ * tonearm, every panel button — and it was being derived as "a colour with
+ * 4.5:1 against the accent", which is the definition of a text colour. Somebody
+ * choosing a dark blue got a pale blue play button; a light yellow gave a dark
+ * olive one. The colour they picked was not the colour they saw.
+ *
+ * Swept against the five hand-written palettes, a lightness shift reproduces
+ * what they do by hand within a couple of units per channel, and holds the
+ * chroma that mixing toward white throws away.
+ */
+const ACCENT_LIFT = 0.085;
+const ACCENT_DROP = 0.115;
 
 /**
  * How far each text shade travels toward the readable end.
@@ -223,6 +249,16 @@ const LIGHT_SHELL_STEPS = { 900: 0.1, 800: 0.05, 700: 0, 600: -0.045 } as const;
 const TEXT_STEPS = { strong: 0.93, body: 0.76, quiet: 0.52 } as const;
 const LIGHT_TEXT_STEPS = { strong: 0.84, body: 0.7, quiet: 0.52 } as const;
 
+/**
+ * What *increase readability* does, and the whole of it.
+ *
+ * Text and icons go to the pure end instead of carrying a trace of the surface.
+ * No palette colour moves — not the surface, not the accent, not one of their
+ * shades. The previous release raised contrast targets across the board and so
+ * changed the accent too, which is exactly the complaint this fixes.
+ */
+const BOOST_TEXT_STEPS = { strong: 1, body: 1, quiet: 0.88 } as const;
+
 export interface DerivedPalette {
   /** CSS custom property name to colour, ready to set on the root element. */
   variables: Record<string, string>;
@@ -238,12 +274,44 @@ export interface DerivedPalette {
 }
 
 /**
+ * The colour for text and icons drawn **on** an accent fill.
+ *
+ * Near-white or near-black, whichever reads across every accent shade a fill
+ * can use — the buttons hover between 500 and 600, so one answer has to serve
+ * both. Tinted with the accent unless `boost` is on, in which case it goes to
+ * the pure end.
+ *
+ * Exported because the five hand-written palettes need it too, and their
+ * colours live in the stylesheet rather than here: `applyToDocument` reads
+ * theirs back off the document and calls this.
+ *
+ * This is the whole of what adapts to somebody's accent. The fill itself is
+ * their colour, untouched; only what is drawn over it moves.
+ */
+export function onAccentFor(accentShades: Rgb[], boost = false): Rgb {
+  if (accentShades.length === 0) return WHITE;
+
+  const end = mostReadableOn(accentShades);
+  if (boost) return end;
+
+  // A trace of the accent left in it, the same way text on the surface carries
+  // a trace of the surface. Floored afterwards, so the tint never costs the
+  // legibility it is decorating.
+  const tinted = mixOklab(accentShades[0] as Rgb, end, 0.9);
+  return towardReadable(accentShades, tinted, ON_ACCENT_TARGET) ?? end;
+}
+
+/**
  * Build the whole custom palette from two colours.
  *
- * The surface ramp is a straight perceptual blend — nothing to measure, it is
- * the ground everything else is measured against. The text ramp and the accent
- * are then walked until they read against the *worst* shade of that ramp, so a
- * panel sitting on `shell-800` is as legible as the shell itself.
+ * **Nothing here changes either colour somebody picked.** The surface and the
+ * accent come back exactly as given, and their other shades are the same colour
+ * at a different lightness — a recess mixed toward black, everything else
+ * shifted in lightness so the chroma survives.
+ *
+ * The only thing measured into a different colour is text, which was never one
+ * of the two: it goes toward whichever end reads on the surfaces it will sit
+ * on, and `--color-on-accent` does the same over the accent.
  */
 export function derivePalette(
   primaryHex: string,
@@ -257,62 +325,54 @@ export function derivePalette(
   const targets = targetsFor(boost);
   const lightGround = isLightGround(primary);
 
-  const shellSteps = lightGround ? LIGHT_SHELL_STEPS : SHELL_STEPS;
-  const shell = Object.fromEntries(
-    Object.entries(shellSteps).map(([shade, amount]) => [
-      shade,
-      amount >= 0 ? mixOklab(primary, BLACK, amount) : mixOklab(primary, WHITE, -amount),
-    ]),
-  ) as Record<'600' | '700' | '800' | '900', Rgb>;
+  const shade = lightGround ? LIGHT_SHELL_SHADE : SHELL_SHADE;
+  const lift = lightGround ? LIGHT_SHELL_LIFT : SHELL_LIFT;
+  const shell = {
+    900: mixOklab(primary, BLACK, shade[900]),
+    800: mixOklab(primary, BLACK, shade[800]),
+    700: primary,
+    600: shiftLightness(primary, lift),
+  };
 
   // Text has to clear every surface it will ever sit on, not the average one:
   // panels use 800 and the well behind the platter is 900. All three go in
   // rather than one being picked as "hardest", because which is hardest depends
   // on the direction the text ends up going, and that is decided by measuring.
-  const surfaces = [shell['700'], shell['800'], shell['900']];
+  const surfaces = [shell[700], shell[800], shell[900]];
 
   // Text is mixed to a fixed distance and *then* floored by measurement, which
-  // is two different jobs and needs both steps.
-  //
-  // Starting at the surface and walking only as far as the target needs was
-  // tried, and it is the accessible answer and the wrong one to look at: it
-  // stops the moment it passes, so a dark custom palette got a flat grey
-  // heading at exactly 7:1 where every hand-written palette here has a warm
-  // near-white at 13. Readable, and visibly duller than the thing it was
-  // copying.
-  //
-  // So the proportions come first — they are what makes a palette look like
-  // this app — and the measurement only ever pushes further, never back. The
-  // direction is `mostReadableOn`, so on a pale shell these mix toward black
-  // instead, which is the whole repair.
+  // is two different jobs and needs both steps. The proportions are what makes
+  // a palette look like this app; the measurement only ever pushes further,
+  // never back. With `boost` on they go to the pure end instead — that setting
+  // adjusts what is drawn over a colour, never the colour.
   const end = mostReadableOn(surfaces);
-  const textSteps = lightGround ? LIGHT_TEXT_STEPS : TEXT_STEPS;
+  const textSteps = boost ? BOOST_TEXT_STEPS : lightGround ? LIGHT_TEXT_STEPS : TEXT_STEPS;
   const tint = (amount: number) => mixOklab(primary, end, amount);
   const strong = towardReadable(surfaces, tint(textSteps.strong), targets.strong);
   const body = towardReadable(surfaces, tint(textSteps.body), targets.body);
   const quiet = towardReadable(surfaces, tint(textSteps.quiet), targets.quiet);
 
-  const accentOk = contrastRatio(shell['700'], secondary) >= targets.accent;
+  // The accent's own shades. No contrast anywhere in these three lines, which
+  // is the point: whatever was chosen is what gets painted.
+  const accent = {
+    400: shiftLightness(secondary, ACCENT_LIFT),
+    500: secondary,
+    600: shiftLightness(secondary, -ACCENT_DROP),
+  };
 
-  // brass-400 is the accent lifted for text use; brass-600 is the accent
-  // darkened for a button with dark text on it. The old stylesheet found 85%
-  // by sweeping — 80% landed at 4.3 against a 4.5 floor — and noted that
-  // darkening further moves it *towards* the shell and makes things worse,
-  // which is the opposite of what it looks like it should do. Measuring
-  // removes the need to remember that, but the trap is worth keeping written
-  // down.
-  const accentText = towardReadable(surfaces, secondary, targets.body) ?? secondary;
-  const onAccent = towardReadable(secondary, secondary, targets.onAccent) ?? secondary;
+  // Reported, never repaired. Repairing it would mean overruling the colour
+  // somebody picked, which is the thing this release exists to stop.
+  const accentOk = contrastRatio(shell[700], secondary) >= ACCENT_VISIBLE;
 
   const variables: Record<string, string> = {
-    '--color-shell-900': toHex(shell['900']),
-    '--color-shell-800': toHex(shell['800']),
-    '--color-shell-700': toHex(shell['700']),
-    '--color-shell-600': toHex(shell['600']),
+    '--color-shell-900': toHex(shell[900]),
+    '--color-shell-800': toHex(shell[800]),
+    '--color-shell-700': toHex(shell[700]),
+    '--color-shell-600': toHex(shell[600]),
 
-    '--color-brass-400': toHex(accentText),
-    '--color-brass-500': toHex(secondary),
-    '--color-brass-600': toHex(onAccent),
+    '--color-brass-400': toHex(accent[400]),
+    '--color-brass-500': toHex(accent[500]),
+    '--color-brass-600': toHex(accent[600]),
 
     // Falling back to the best end available is the honest answer to an
     // impossible target, not a shrug: a mid-tone maroon tops out near 6.9
@@ -320,9 +380,11 @@ export function derivePalette(
     // *is* the most readable text the surface can carry, and the shortfall is
     // not visible. What matters is that it was measured — the old mix could
     // land at 1.2 and had no way to know.
-    '--color-cream-50': toHex(strong ?? mostReadableOn(surfaces)),
-    '--color-cream-200': toHex(body ?? mostReadableOn(surfaces)),
-    '--color-cream-400': toHex(quiet ?? mostReadableOn(surfaces)),
+    '--color-cream-50': toHex(strong ?? end),
+    '--color-cream-200': toHex(body ?? end),
+    '--color-cream-400': toHex(quiet ?? end),
+
+    '--color-on-accent': toHex(onAccentFor([accent[600], accent[500]], boost)),
   };
 
   return { variables, accentUnreadable: !accentOk, lightGround };

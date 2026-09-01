@@ -76,7 +76,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
         aria-label={isPlaying ? t('transport.pause') : t('transport.play')}
         disabled={!hasQueue}
         onClick={() => void togglePlayPause()}
-        className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-brass-400 to-brass-600 text-shell-900 shadow-[0_3px_0_var(--color-brass-600),0_5px_10px_rgba(0,0,0,0.5)] transition-all active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-600),0_2px_5px_rgba(0,0,0,0.5)] disabled:opacity-40 disabled:shadow-none"
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-b from-brass-400 to-brass-600 text-on-accent shadow-[0_3px_0_var(--color-brass-600),0_5px_10px_rgba(0,0,0,0.5)] transition-all active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-brass-600),0_2px_5px_rgba(0,0,0,0.5)] disabled:opacity-40 disabled:shadow-none"
       >
         {isLoading ? <SpinnerIcon /> : isPlaying ? <PauseIcon /> : <PlayIcon />}
       </button>

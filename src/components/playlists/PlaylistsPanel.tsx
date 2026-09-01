@@ -165,7 +165,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
               type="button"
               disabled={!name.trim()}
               onClick={() => void create()}
-              className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+              className="shrink-0 rounded-full bg-brass-600 px-2.5 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
             >
               {t('common.create')}
             </button>

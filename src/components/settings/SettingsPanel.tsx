@@ -365,7 +365,7 @@ function Updates() {
           <button
             type="button"
             onClick={() => void download()}
-            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
           >
             {t('update.download')}
           </button>
@@ -396,7 +396,7 @@ function Updates() {
           <button
             type="button"
             onClick={() => void restartNow()}
-            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
           >
             {t('update.restart')}
           </button>
@@ -485,7 +485,7 @@ function Choice({
       onClick={onClick}
       className={`flex-1 rounded-full px-2 py-1 text-meta font-medium tracking-wide transition-colors ${
         active
-          ? 'bg-brass-600 text-shell-900'
+          ? 'bg-brass-600 text-on-accent'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
       }`}
     >

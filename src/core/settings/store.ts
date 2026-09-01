@@ -12,8 +12,8 @@ import {
   DEFAULT_THEME,
   isThemeId,
 } from '@/core/settings/themes';
-import { parseHex, type Rgb } from '@/core/utils/colour';
-import { derivePalette, strengthenText } from '@/core/utils/contrast';
+import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
+import { derivePalette, onAccentFor, strengthenText } from '@/core/utils/contrast';
 
 /**
  * Preferences, in their own store.
@@ -93,6 +93,7 @@ function applyToDocument(settings: Settings): void {
   };
 
   let lightGround = false;
+  let faintAccent = false;
 
   if (settings.theme === CUSTOM_THEME) {
     const primary = settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
@@ -105,24 +106,39 @@ function applyToDocument(settings: Settings): void {
     if (derived) {
       for (const [name, value] of Object.entries(derived.variables)) set(name, value);
       lightGround = derived.lightGround;
+      faintAccent = derived.accentUnreadable;
     }
     // The light in the room, which every palette tints to match its own.
     // `DiscLight` needs raw channels to mix its own alphas against, so this is
     // the one value that cannot be a colour.
     set('--sheen', sheenFrom(primary, lightGround));
-  } else if (settings.boostContrast) {
+  } else {
     // The five hand-written palettes are calibrated hex in the stylesheet, so
-    // there is nothing to rebuild — only the three text shades to walk further.
-    // Read back off the document rather than copied into TypeScript, so a
-    // palette added later gets this without being told about it.
+    // there is nothing to rebuild. Two things still have to be computed from
+    // them, and both are read back off the document rather than copied into
+    // TypeScript, so a palette added later gets them without being told.
     const seen = readPalette(root);
     if (seen) {
-      for (const [name, value] of Object.entries(
-        strengthenText(seen.surfaces, seen.text, true),
-      )) {
-        set(name, value);
+      // What reads on an accent-filled button. Every palette needs this, not
+      // just a custom one — the five built-in accents are all light, but a
+      // hard-coded dark text colour is a guess that happens to be right rather
+      // than an answer.
+      set('--color-on-accent', toHex(onAccentFor(seen.accents, settings.boostContrast)));
+
+      if (settings.boostContrast) {
+        for (const [name, value] of Object.entries(
+          strengthenText(seen.surfaces, seen.text, true),
+        )) {
+          set(name, value);
+        }
       }
     }
+  }
+
+  if (faintAccent) {
+    root.dataset.accent = 'faint';
+  } else {
+    delete root.dataset.accent;
   }
 
   if (lightGround) {
@@ -163,22 +179,34 @@ const applied = new Set<string>();
  */
 function readPalette(root: HTMLElement): {
   surfaces: Rgb[];
+  accents: Rgb[];
   text: { strong: Rgb; body: Rgb; quiet: Rgb };
 } | null {
   if (typeof getComputedStyle !== 'function') return null;
   const styles = getComputedStyle(root);
   const read = (name: string): Rgb | null => {
     const value = styles.getPropertyValue(name).trim();
-    return value ? parseHex(value) : null;
+    // `parseCssColour`, not `parseHex`: the palette variables are registered
+    // with `@property` so they can animate, and a registered colour comes back
+    // re-serialised as `rgb(...)` rather than as the hex that was written.
+    return value ? parseCssColour(value) : null;
   };
 
   const surfaces = ['--color-shell-700', '--color-shell-800', '--color-shell-900'].map(read);
+  // 600 first: it is the darker of the two a button fills with, so it leads the
+  // list `onAccentFor` tints from.
+  const accents = ['--color-brass-600', '--color-brass-500'].map(read);
   const strong = read('--color-cream-50');
   const body = read('--color-cream-200');
   const quiet = read('--color-cream-400');
 
-  if (surfaces.some((s) => s === null) || !strong || !body || !quiet) return null;
-  return { surfaces: surfaces as Rgb[], text: { strong, body, quiet } };
+  if (surfaces.some((s) => s === null) || accents.some((a) => a === null)) return null;
+  if (!strong || !body || !quiet) return null;
+  return {
+    surfaces: surfaces as Rgb[],
+    accents: accents as Rgb[],
+    text: { strong, body, quiet },
+  };
 }
 
 /**

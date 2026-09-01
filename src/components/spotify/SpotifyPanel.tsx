@@ -180,7 +180,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
             <button
               type="button"
               onClick={() => void connect()}
-              className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-shell-900 uppercase transition-colors hover:bg-brass-500"
+              className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
             >
               {t('spotify.connect')}
             </button>

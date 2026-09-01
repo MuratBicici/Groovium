@@ -187,7 +187,7 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
             {detailed && (
               <svg
                 viewBox="0 0 24 24"
-                className="h-[58%] w-[58%] text-shell-900"
+                className="h-[58%] w-[58%] text-on-accent"
                 aria-hidden="true"
               >
                 <path

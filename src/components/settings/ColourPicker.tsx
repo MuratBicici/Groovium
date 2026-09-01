@@ -32,6 +32,33 @@ import { useSheet } from '@/core/utils/useSheet';
 /** Hues across the grid, and the columns it is drawn in. */
 const GRID_HUES = 12;
 
+/** How long after the last change the palette starts easing again. */
+const SETTLE_MS = 140;
+
+let settling: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Tell the document a colour is being chosen right now.
+ *
+ * The palette eases between colours, which is right for switching a theme and
+ * wrong here: this applies on every frame of a drag, so a 220ms ease would
+ * leave the window trailing the cursor. `styles.css` reads this attribute and
+ * drops the duration to zero while it is set.
+ *
+ * Every control funnels through `apply` and `typeHex`, so marking it there
+ * covers the saturation square, the hue bar, the sliders and the hex field
+ * without any of them knowing about it. It clears itself a moment after the
+ * last change, so letting go of the mouse hands the easing back.
+ */
+function markPicking(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.picking = 'live';
+  clearTimeout(settling);
+  settling = setTimeout(() => {
+    delete document.documentElement.dataset.picking;
+  }, SETTLE_MS);
+}
+
 /** How long the body takes to grow or shrink between two tabs. */
 const RESIZE_MS = 220;
 
@@ -136,12 +163,14 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
   const hex = hsvToHex(hsv);
 
   function apply(next: Hsv) {
+    markPicking();
     setHsv(next);
     setTyped(null);
     setCustomColour(showing, hsvToHex(next));
   }
 
   function typeHex(text: string) {
+    markPicking();
     setTyped(text);
     const rgb = parseHex(text);
     // Only when it is a whole colour. Half a hex code is not a request to

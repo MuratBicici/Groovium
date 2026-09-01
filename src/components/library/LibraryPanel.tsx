@@ -219,7 +219,7 @@ function SmallButton({
       onClick={onClick}
       className={`rounded-full px-2 py-1 text-label font-medium tracking-wide uppercase transition-colors ${
         primary
-          ? 'bg-brass-600 text-shell-900 hover:bg-brass-500'
+          ? 'bg-brass-600 text-on-accent hover:bg-brass-500'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
       }`}
     >
