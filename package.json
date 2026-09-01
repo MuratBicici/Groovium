@@ -1,7 +1,7 @@
 {
   "name": "groovium",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "description": "A lightweight, modern desktop music player widget with a vintage disk player aesthetic.",
   "license": "MIT",

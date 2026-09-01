@@ -4,6 +4,46 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.0.4 — 2026-08-29
+
+A repair to 1.0.3. That release made contrast measurable and then used the
+measurement to change the colours you had picked, which is the opposite of what
+a colour picker is for. Choosing a dark blue accent produced a pale blue play
+button; choosing a light yellow produced a dark olive one; and switching on
+"increase readability" repainted the accent. Your two colours are now used
+exactly as chosen, and the only thing that adapts to them is the text and icons
+drawn on top.
+
+HIGHLIGHTS
+· The accent you pick is the accent you see. Its lighter and darker shades are
+  now shades of your colour rather than colours chosen for contrast.
+· Text and icons flip between light and dark to stay readable on whatever you
+  chose — white on a dark blue, black on a light yellow.
+· "Increase readability" no longer changes a single palette colour. It only
+  strengthens text and icons.
+· Colours now ease from one palette to the next instead of jumping.
+
+ALL CHANGES
+· Custom palettes: the accent's lighter and darker shades hold its hue and its
+  saturation, and only move in lightness. They were previously derived by
+  contrast, which turned a dark accent pale and a light one dark.
+· Custom palettes: text and icons drawn on an accent-filled button are measured
+  against that button rather than assumed to be dark. Twelve places used a
+  fixed dark colour that happened to suit the five built-in accents.
+· Custom palettes: the surface keeps its own colour in every shade, with
+  recesses mixed toward black the way the built-in palettes do.
+· Settings: "increase readability" leaves the surface, the accent and all their
+  shades untouched. It pushes text and icons toward pure white or black and
+  does nothing else.
+· Appearance: switching palettes, or editing a custom one, now eases between
+  colours. The easing is skipped while you drag in the colour picker, so the
+  preview keeps up with the cursor, and it is off entirely when "reduce motion"
+  is on.
+· Appearance: an accent too close to your surface to stand out is given a thin
+  outline in the colour drawn over it. The fill stays exactly what you chose.
+· The colour picker's own heading and focus ring stayed readable at every
+  accent colour; they previously came apart as you dragged.
+
 ## 1.0.3 — 2026-08-28
 
 This one is about custom palettes. Text and surfaces are now worked out by
