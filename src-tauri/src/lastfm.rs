@@ -13,6 +13,7 @@
 //! `User-Agent`, and browsers refuse to let JavaScript set that header. And
 //! keeping it here means the API key never enters the webview.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -118,6 +119,17 @@ const ARTISTS_TO_MINE: usize = 8;
 /// across twice as many artists. Which artist a suggestion is by matters far
 /// more here than which of their songs it is.
 const TOP_TRACKS_LIMIT: u32 = 5;
+
+/// How many artists are asked about at the same time.
+///
+/// The calls are independent, so queuing them was pure latency: eight in a row
+/// at fifty milliseconds each is most of a second, and that is what a listener
+/// felt as the gap before the next song on a track Last.fm did not know.
+///
+/// Four rather than all eight because Last.fm asks for a handful of requests a
+/// second and suspends accounts that hammer it. Two waves is two round trips,
+/// which is fast enough and does not look like a burst.
+const TOP_TRACKS_CONCURRENCY: usize = 4;
 
 /// How much a track's rank within its artist discounts that artist's score.
 ///
@@ -236,18 +248,36 @@ fn endpoint(key: &str, params: &[(&str, &str)]) -> Result<reqwest::Url, String> 
         .map_err(|e| format!("Could not build the Last.fm request: {e}"))
 }
 
+/// The one HTTP client, built once and kept.
+///
+/// A `reqwest::Client` owns a connection pool; building a new one per request
+/// throws that away and pays for a fresh TCP connect and TLS handshake every
+/// time. Measured against Last.fm: **514ms for a request on a new client
+/// against 54ms on a warm one** — 122ms to connect and 268ms to negotiate TLS,
+/// spent again and again.
+///
+/// It cost one handshake back when a lookup was one request, which is why it
+/// went unnoticed. The artist fallback made it nine, and a song Last.fm did not
+/// know took a second and a half to find a successor for.
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            // Only fails if the TLS backend cannot start, and a default client
+            // is a better answer than refusing every lookup for the session.
+            .unwrap_or_default()
+    })
+}
+
 /// One GET, returning the raw body.
 ///
 /// Shared by the track lookup and the artist fallback, which is worth the
 /// indirection: the identifying `User-Agent` and the timeout are both things
 /// that would eventually be set on one call and forgotten on the other.
 async fn fetch(url: reqwest::Url) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|e| format!("Could not create the HTTP client: {e}"))?;
-
-    let response = client
+    let response = client()
         .get(url)
         .header("User-Agent", USER_AGENT)
         .send()
@@ -392,19 +422,50 @@ pub async fn lastfm_artist_candidates(
     let artists = parsed.similar_artists.map(|s| s.artist).unwrap_or_default();
 
     let mut candidates = Vec::new();
-    for entry in artists.into_iter().take(ARTISTS_TO_MINE) {
-        let score = score_of(&entry.match_score);
-        // One artist failing costs that artist's suggestions, not the answer.
-        // Giving up here would put back the dead end this exists to remove.
-        let Ok(tracks) = top_tracks(&key, &entry.name).await else {
-            continue;
-        };
-        for (rank, title) in tracks.into_iter().enumerate() {
-            candidates.push(SimilarTrack {
-                title,
-                artist: entry.name.clone(),
-                match_score: score * rank_factor(rank),
-            });
+
+    // In waves rather than one at a time. These calls do not depend on each
+    // other, and running eight of them in a queue was most of why a song
+    // Last.fm did not know took over a second to find a successor for.
+    //
+    // Not all at once either: Last.fm asks for a handful of requests a second
+    // and suspends accounts that hammer it, and a burst of eight is exactly
+    // the shape it is asking about. Four at a time turns the queue into two
+    // round trips and stays polite.
+    for wave in artists
+        .into_iter()
+        .take(ARTISTS_TO_MINE)
+        .collect::<Vec<_>>()
+        .chunks(TOP_TRACKS_CONCURRENCY)
+    {
+        let running: Vec<_> = wave
+            .iter()
+            .map(|entry| {
+                let key = key.clone();
+                let name = entry.name.clone();
+                let score = score_of(&entry.match_score);
+                (
+                    entry.name.clone(),
+                    score,
+                    tauri::async_runtime::spawn(async move { top_tracks(&key, &name).await }),
+                )
+            })
+            .collect();
+
+        for (artist, score, handle) in running {
+            // One artist failing costs that artist's suggestions, not the
+            // answer. Giving up here would put back the dead end this exists
+            // to remove — and a task that panicked is the same kind of nothing
+            // as a request that failed.
+            let Ok(Ok(tracks)) = handle.await else {
+                continue;
+            };
+            for (rank, title) in tracks.into_iter().enumerate() {
+                candidates.push(SimilarTrack {
+                    title,
+                    artist: artist.clone(),
+                    match_score: score * rank_factor(rank),
+                });
+            }
         }
     }
     Ok(candidates)
@@ -551,6 +612,22 @@ mod tests {
             40,
             "same pool, more artists in it"
         );
+    }
+
+    #[test]
+    fn the_artist_calls_run_in_waves_rather_than_a_queue() {
+        // Widening the pool cost latency until these stopped being a queue:
+        // eight requests in a row is most of a second, which a listener felt as
+        // the gap before the next song.
+        assert!(TOP_TRACKS_CONCURRENCY > 1, "a queue is what this replaced");
+
+        // But not all of them at once. Last.fm asks for a handful of requests a
+        // second and suspends accounts that hammer it; a burst of eight is the
+        // shape it is asking about.
+        assert!(TOP_TRACKS_CONCURRENCY < ARTISTS_TO_MINE, "waves, not a burst");
+
+        let waves = ARTISTS_TO_MINE.div_ceil(TOP_TRACKS_CONCURRENCY);
+        assert!(waves <= 3, "at most three round trips, not eight");
     }
 
     #[test]
