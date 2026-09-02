@@ -37,22 +37,42 @@ export function summaryFor(changelog: string, version: string): string | null {
   const lines = changelog.split(/\r?\n/);
   const opens = `## ${version}`;
 
-  let at = lines.findIndex(
+  const at = lines.findIndex(
     (line) => line.startsWith(opens) && (line.length === opens.length || line[opens.length] === ' '),
   );
   if (at === -1) return null;
 
-  const summary: string[] = [];
-  for (at += 1; at < lines.length; at++) {
-    const line = lines[at] as string;
+  const text = proseFrom(lines.slice(at + 1));
+  return text ? text : null;
+}
+
+/**
+ * The opening prose of a release's notes, without the itemised part.
+ *
+ * The updater hands over a whole section — summary, highlights and every
+ * change — as one blob, and that is right for `latest.json` and for the release
+ * page. It is not right for a dialog offering the update, where the question is
+ * whether to install it rather than what each line of it was. The full text
+ * stays in Settings, which is where somebody goes to read it all.
+ *
+ * Notes in some other shape, with none of the markers this changelog uses, come
+ * back whole rather than empty: better to show too much than to decide a
+ * stranger's release notes were not worth showing.
+ */
+export function summaryOfNotes(notes: string): string {
+  return proseFrom(notes.split(/\r?\n/));
+}
+
+/** Lines up to the first heading or itemised marker, trimmed. */
+function proseFrom(lines: readonly string[]): string {
+  const prose: string[] = [];
+  for (const line of lines) {
     // The next release, or the point where this one stops being prose.
     if (line.startsWith('## ')) break;
     if (AFTER_THE_SUMMARY.includes(line.trim())) break;
-    summary.push(line);
+    prose.push(line);
   }
-
-  const text = summary.join('\n').trim();
-  return text ? text : null;
+  return prose.join('\n').trim();
 }
 
 /**

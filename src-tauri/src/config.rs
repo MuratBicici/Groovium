@@ -81,6 +81,10 @@ pub struct Settings {
     /// once, which is the honest answer to "you have not seen this yet".
     #[serde(default)]
     pub last_seen_version: Option<String>,
+    /// The version an offer to update was declined for. `None` means no offer
+    /// has been turned down, which is the state every install starts in.
+    #[serde(default)]
+    pub declined_version: Option<String>,
 }
 
 #[tauri::command]
@@ -176,6 +180,7 @@ mod tests {
             boost_contrast: true,
             window_border: false,
             last_seen_version: Some("1.0.4".into()),
+            declined_version: Some("1.0.5".into()),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -188,6 +193,7 @@ mod tests {
         // `r#"..."#` literal early.
         assert!(written.contains(r##""customPrimary":"#2e231b""##));
         assert!(written.contains(r#""lastSeenVersion":"1.0.4""#));
+        assert!(written.contains(r#""declinedVersion":"1.0.5""#));
     }
 
     #[test]
@@ -200,6 +206,7 @@ mod tests {
         )
         .expect("parses");
         assert!(config.settings.last_seen_version.is_none());
+        assert!(config.settings.declined_version.is_none());
         assert_eq!(config.settings.theme.as_deref(), Some("espresso"));
         assert!(config.settings.reduce_motion);
     }

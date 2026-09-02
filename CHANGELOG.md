@@ -23,9 +23,10 @@ know. Both are fixed, and there is a test now that plays five hundred tracks
 without stopping.
 
 Settings also had a tidy: About is at the bottom where it belongs, and checking
-for updates tells you when there is nothing new. And this text now has somewhere
-to be read — the first time you open a version you have not seen, it says what
-changed, once.
+for updates tells you when there is nothing new. Updates now speak for
+themselves at both ends. A version that is waiting is offered when you open the
+app, with the point of it and a choice, instead of being left as a dot to
+notice; and the first launch after installing one says what changed.
 
 HIGHLIGHTS
 · The accent you pick is the accent you see. Its lighter and darker shades are
@@ -47,6 +48,9 @@ HIGHLIGHTS
   well over a second and now does not.
 · About moved to the bottom of Settings, and checking for updates now tells
   you when there is nothing new.
+· A waiting update is offered on opening the app, with what it is for and a
+  Download or Later. It used to be a dot on the settings button and nothing
+  else, which most people never found.
 · The first launch after an update says what changed, in your own language,
   and only once. It is in Settings afterwards for anyone who closed it early.
 
@@ -117,6 +121,17 @@ ALL CHANGES
   on one that has never been online. A Turkish translation of each summary
   ships alongside it, and a release without one falls back to English.
 · What's new: Settings has a way back to it, next to the version.
+· Updates: a version that is waiting is offered on opening, showing the point
+  of the release and asking to install it or not. Saying "later" is kept
+  against that version and it is not asked again for it; the mark on the
+  settings button stays, and Settings still installs it whenever you like.
+· Updates: closing that window with the cross, the backdrop or Escape puts it
+  aside for now and records nothing, which is a different thing from "later"
+  and behaves like one.
+· Updates: the download runs in that window, with its own progress, so
+  accepting an update no longer means going to find it in Settings. A download
+  that fails says so where it was started, instead of vanishing and leaving
+  the reason filed away.
 
 ## 1.0.3 — 2026-08-28
 

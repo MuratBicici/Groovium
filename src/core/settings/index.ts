@@ -71,6 +71,15 @@ export interface Settings {
    * way, by showing the summary once.
    */
   lastSeenVersion: string | null;
+  /**
+   * The version somebody was offered and said "later" to.
+   *
+   * The whole of what keeps the offer from being a nag: it is made once per
+   * release, and answering it is answering it. The mark on the settings button
+   * stays either way, so saying no here loses nobody the update — it only stops
+   * the question being asked again about the same version.
+   */
+  declinedVersion: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -84,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   boostContrast: false,
   windowBorder: false,
   lastSeenVersion: null,
+  declinedVersion: null,
 };
 
 export async function loadSettings(): Promise<Settings> {

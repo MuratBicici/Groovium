@@ -44,6 +44,8 @@ interface SettingsStore extends Settings {
   setWindowBorder: (on: boolean) => void;
   /** Record that this version's summary has been shown, so it is not shown again. */
   markVersionSeen: () => void;
+  /** Record that an offer to install this version was turned down. */
+  declineVersion: (version: string) => void;
 }
 
 /**
@@ -257,7 +259,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
-    const { lastSeenVersion } = get();
+    const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
     // stops being saved.
@@ -272,6 +274,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       boostContrast,
       windowBorder,
       lastSeenVersion,
+      declinedVersion,
     };
     applyToDocument(settings);
     void saveSettings(settings);
@@ -316,6 +319,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       // otherwise be another whole-file write saying nothing new.
       if (get().lastSeenVersion === APP_VERSION) return;
       commit({ lastSeenVersion: APP_VERSION });
+    },
+    declineVersion: (version) => {
+      if (get().declinedVersion === version) return;
+      commit({ declinedVersion: version });
     },
   };
 });

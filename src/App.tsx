@@ -14,6 +14,7 @@ import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { StationSetup } from '@/components/station/StationSetup';
 import { ColourPicker } from '@/components/settings/ColourPicker';
 import { WhatsNew } from '@/components/release/WhatsNew';
+import { UpdateOffer } from '@/components/release/UpdateOffer';
 import { summaryForThisVersion } from '@/core/release';
 import { APP_VERSION } from '@/core/version';
 import { TransportControls } from '@/components/controls/TransportControls';
@@ -74,6 +75,9 @@ export default function App() {
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
+  const declinedVersion = useSettingsStore((s) => s.declinedVersion);
+  const declineVersion = useSettingsStore((s) => s.declineVersion);
+  const offeredVersion = useUpdateStore((s) => s.version);
   const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(compact, settingsReady);
 
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -107,6 +111,54 @@ export default function App() {
     setReopened(false);
     markVersionSeen();
   }, [markVersionSeen]);
+  const whatsNewOpen = !!summary && (owed || reopened);
+
+  /**
+   * The version put away for this launch without being answered.
+   *
+   * Keyed by version rather than a flag, for the same reason `declinedVersion`
+   * is: putting one offer aside is not asking to be left alone about every
+   * later one. Not persisted — the cross means "not now", and next launch is
+   * not now.
+   */
+  const [putAwayVersion, setPutAwayVersion] = useState<string | null>(null);
+  /**
+   * Whether to offer the update that is waiting.
+   *
+   * The same guards the summary has — read the stored answer first, and not
+   * over a collapsed window — plus two of its own. It queues behind the
+   * summary, because on the launch that shows both, what you have just been
+   * given comes before what you are being offered next. And it is asked once
+   * per release: `declinedVersion` is what somebody said last time, and asking
+   * again would be not listening.
+   *
+   * A version on offer is the whole of the first condition, rather than a list
+   * of the statuses that count. `version` is set when a check finds something
+   * and cleared when one does not, so it stays put through downloading, through
+   * being installed, and through a download that failed — which is the point:
+   * pressing Download and then watching the window vanish, with the reason for
+   * it filed in Settings, is not a way to be told that something went wrong.
+   */
+  const offerUpdate =
+    settingsReady &&
+    !compact &&
+    !whatsNewOpen &&
+    offeredVersion !== null &&
+    putAwayVersion !== offeredVersion &&
+    declinedVersion !== offeredVersion;
+  // Both read the version at the moment they are called rather than closing
+  // over the one this render saw. A press lands on the DOM of whichever render
+  // is committed, and if the offer had changed underneath it the closure would
+  // put away the version that is no longer being offered — leaving the sheet
+  // open on a question that had just been answered.
+  const putOfferAway = useCallback(() => {
+    setPutAwayVersion(useUpdateStore.getState().version);
+  }, []);
+  const declineUpdate = useCallback(() => {
+    const offered = useUpdateStore.getState().version;
+    setPutAwayVersion(offered);
+    if (offered) declineVersion(offered);
+  }, [declineVersion]);
   const toggle = (which: Exclude<Overlay, 'none'>) =>
     setOverlay((current) => (current === which ? 'none' : which));
 
@@ -310,8 +362,14 @@ export default function App() {
           dialog, and it is checked here rather than inside so the component can
           take a summary rather than a maybe-summary. */}
       {summary && (
-        <WhatsNew open={owed || reopened} summary={summary} onClose={closeWhatsNew} />
+        <WhatsNew open={whatsNewOpen} summary={summary} onClose={closeWhatsNew} />
       )}
+
+      <UpdateOffer
+        open={offerUpdate}
+        onDismiss={putOfferAway}
+        onLater={declineUpdate}
+      />
 
       <ImportProgress />
 

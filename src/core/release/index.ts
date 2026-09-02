@@ -27,5 +27,5 @@ export function summaryForThisVersion(language: Language): ReleaseSummary | null
   return pickSummary(CHANGELOGS, APP_VERSION, language);
 }
 
-export { paragraphsOf, pickSummary, summaryFor, versionsIn } from './notes';
+export { paragraphsOf, pickSummary, summaryFor, summaryOfNotes, versionsIn } from './notes';
 export type { ReleaseSummary } from './notes';

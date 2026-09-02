@@ -26,9 +26,12 @@ bırakmıyordu — ve Last.fm'in tanımadığı parçalarda aramayı gözle gör
 yavaşlatmıştı. İkisi de düzeldi, ve artık hiç durmadan beş yüz parça çalan bir
 test var.
 
-Ayarlar da toparlandı: Hakkında ait olduğu yere, en alta indi; güncelleme
-denetimi yeni bir şey olmadığında bunu söylüyor; ve bir sürüm kurulduktan
-sonraki ilk açılışta bu ekran, neyin değiştiğini anlatmak için karşına çıkıyor.
+Ayarlar da toparlandı: Hakkında ait olduğu yere, en alta indi ve güncelleme
+denetimi yeni bir şey olmadığında bunu söylüyor. Güncellemeler artık iki uçta da
+kendi adına konuşuyor: bekleyen bir sürüm, fark edilmesi gereken bir nokta
+olarak kalmak yerine uygulamayı açtığında ne olduğunu ve bir seçeneği önüne
+koyuyor; kurulduktan sonraki ilk açılışta da bu ekran neyin değiştiğini
+anlatıyor.
 
 ## 1.0.3 — 2026-08-28
 

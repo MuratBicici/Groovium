@@ -182,6 +182,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.credit': '{author} tarafından özenle tasarlandı ve geliştirildi.',
   'settings.version': 'Sürüm {version}',
 
+  'update.newVersion': 'Yeni sürüm',
+  'update.later': 'Daha sonra',
   'update.waiting': 'Bir güncelleme bekliyor',
   'update.check': 'Güncellemeleri denetle',
   'update.checking': 'Denetleniyor…',

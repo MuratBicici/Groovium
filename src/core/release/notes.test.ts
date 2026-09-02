@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { summaryForThisVersion } from './index';
-import { paragraphsOf, pickSummary, summaryFor, versionsIn } from './notes';
+import { paragraphsOf, pickSummary, summaryFor, summaryOfNotes, versionsIn } from './notes';
 import { APP_VERSION } from '@/core/version';
 import enChangelog from '../../../CHANGELOG.md?raw';
 import trChangelog from '../../../CHANGELOG.tr.md?raw';
@@ -93,6 +93,39 @@ describe('reflowing the summary', () => {
 
   it('drops blank paragraphs rather than rendering empty ones', () => {
     expect(paragraphsOf('First.\n\n\n\nSecond.')).toEqual(['First.', 'Second.']);
+  });
+});
+
+describe('cutting the prose out of a release note', () => {
+  // What the updater hands over is the whole section, heading already stripped
+  // by the release workflow. The offer to install wants the point of it.
+  it('takes the prose and leaves the itemised part', () => {
+    const notes = 'The point of it.\n\nHIGHLIGHTS\n· one\n\nALL CHANGES\n· two';
+    expect(summaryOfNotes(notes)).toBe('The point of it.');
+  });
+
+  it('stops at ALL CHANGES when there are no highlights', () => {
+    expect(summaryOfNotes('Short one.\n\nALL CHANGES\n· two')).toBe('Short one.');
+  });
+
+  it('keeps notes that use neither marker whole', () => {
+    // Somebody else's release notes, in some other shape. Showing too much
+    // beats deciding they were not worth showing.
+    const plain = 'Fixed a thing.\n- and another';
+    expect(summaryOfNotes(plain)).toBe(plain);
+  });
+
+  it('gives an empty string for notes that are only an itemised list', () => {
+    expect(summaryOfNotes('HIGHLIGHTS\n· one')).toBe('');
+  });
+
+  it('takes the same prose the changelog parser does', () => {
+    // The two read the same text, one with the heading and one without, and
+    // they must not disagree about where the summary ends.
+    const viaNotes = summaryOfNotes(
+      enChangelog.slice(enChangelog.indexOf(`## ${APP_VERSION} `)).split('\n').slice(1).join('\n'),
+    );
+    expect(viaNotes).toBe(summaryFor(enChangelog, APP_VERSION));
   });
 });
 

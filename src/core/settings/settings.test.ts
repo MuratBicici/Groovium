@@ -39,6 +39,7 @@ describe('remembering that a version has been shown', () => {
       customSecondary: '#654321',
       boostContrast: true,
       windowBorder: true,
+      declinedVersion: '2.0.0',
     });
 
     useSettingsStore.getState().markVersionSeen();
@@ -54,6 +55,7 @@ describe('remembering that a version has been shown', () => {
       boostContrast: true,
       windowBorder: true,
       lastSeenVersion: APP_VERSION,
+      declinedVersion: '2.0.0',
     });
   });
 
@@ -72,10 +74,43 @@ describe('remembering that a version has been shown', () => {
   });
 });
 
+describe('turning down an offered update', () => {
+  it('records the version that was declined', () => {
+    useSettingsStore.getState().declineVersion('1.0.5');
+    expect(useSettingsStore.getState().declinedVersion).toBe('1.0.5');
+  });
+
+  it('does not write again for the same version', () => {
+    // Every launch re-offers until it is answered, and answering it twice is
+    // the same answer.
+    useSettingsStore.getState().declineVersion('1.0.5');
+    useSettingsStore.getState().declineVersion('1.0.5');
+    expect(saved).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again about a later version', () => {
+    // The point of recording a version rather than a boolean: saying no once
+    // is not saying no for ever.
+    useSettingsStore.setState({ declinedVersion: '1.0.5' });
+    useSettingsStore.getState().declineVersion('1.0.6');
+    expect(lastWrite().declinedVersion).toBe('1.0.6');
+  });
+
+  it('leaves what has been seen alone', () => {
+    useSettingsStore.setState({ lastSeenVersion: '1.0.4' });
+    useSettingsStore.getState().declineVersion('1.0.5');
+    expect(lastWrite().lastSeenVersion).toBe('1.0.4');
+  });
+});
+
 describe('the settings that survive a restart', () => {
   it('starts with nothing seen, so a first run is told once', () => {
     // Equally true of an install that predates the field: a missing key reads
     // as the default on both sides of the boundary.
     expect(DEFAULT_SETTINGS.lastSeenVersion).toBeNull();
+  });
+
+  it('starts with nothing declined, so the first offer is made', () => {
+    expect(DEFAULT_SETTINGS.declinedVersion).toBeNull();
   });
 });

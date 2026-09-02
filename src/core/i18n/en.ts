@@ -190,6 +190,8 @@ export const en = {
   'settings.credit': 'Designed and developed with precision by {author}.',
   'settings.version': 'Version {version}',
 
+  'update.newVersion': 'New version',
+  'update.later': 'Later',
   'update.waiting': 'An update is waiting',
   'update.check': 'Check for updates',
   'update.checking': 'Checking…',
