@@ -60,6 +60,17 @@ export interface Settings {
    * replaces that ring rather than adding to it.
    */
   windowBorder: boolean;
+  /**
+   * The last version whose "what's new" was actually shown.
+   *
+   * Not a preference, and the odd one out here for that reason — but this is
+   * the only durable per-install store on this side, and the Rust path behind
+   * it is read-mutate-write, so writing it cannot drop a provider's key. `null`
+   * means nobody has been told anything yet, which is true of a first run and
+   * of every install that predates this field alike; both are answered the same
+   * way, by showing the summary once.
+   */
+  lastSeenVersion: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -72,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customSecondary: null,
   boostContrast: false,
   windowBorder: false,
+  lastSeenVersion: null,
 };
 
 export async function loadSettings(): Promise<Settings> {

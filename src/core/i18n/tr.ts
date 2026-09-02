@@ -195,6 +195,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'update.failed': 'Güncellenemedi: {message}',
   'update.tryAgain': 'Yeniden dene',
 
+  'whatsNew.title': 'Yenilikler',
+  'whatsNew.close': 'Kapat',
+  'whatsNew.dismiss': 'Anladım',
+
   'settings.language': 'Dil',
   'settings.behaviour': 'Davranış',
   'settings.reduceMotion': 'Hareketi azalt',

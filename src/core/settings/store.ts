@@ -12,6 +12,7 @@ import {
   DEFAULT_THEME,
   isThemeId,
 } from '@/core/settings/themes';
+import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
 
@@ -41,6 +42,8 @@ interface SettingsStore extends Settings {
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
   setBoostContrast: (boost: boolean) => void;
   setWindowBorder: (on: boolean) => void;
+  /** Record that this version's summary has been shown, so it is not shown again. */
+  markVersionSeen: () => void;
 }
 
 /**
@@ -254,7 +257,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     set(patch);
     const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
-    const settings = {
+    const { lastSeenVersion } = get();
+    // Named one by one rather than spread, so that adding a field to `Settings`
+    // and forgetting it here is a type error instead of a value that quietly
+    // stops being saved.
+    const settings: Settings = {
       theme,
       language,
       reduceMotion,
@@ -264,6 +271,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       customSecondary,
       boostContrast,
       windowBorder,
+      lastSeenVersion,
     };
     applyToDocument(settings);
     void saveSettings(settings);
@@ -298,6 +306,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       ),
     setBoostContrast: (boostContrast) => commit({ boostContrast }),
     setWindowBorder: (windowBorder) => commit({ windowBorder }),
+    // Through `commit` like everything else: it is the one place that knows the
+    // whole shape of what goes to disk, and going around it is how a write ends
+    // up dropping a field. Re-applying the palette on the way is wasted work
+    // once, and worth the single writer.
+    markVersionSeen: () => {
+      // Guarded rather than written every time. Settings can be re-opened and
+      // the summary re-read from there, and each of those closes would
+      // otherwise be another whole-file write saying nothing new.
+      if (get().lastSeenVersion === APP_VERSION) return;
+      commit({ lastSeenVersion: APP_VERSION });
+    },
   };
 });
 

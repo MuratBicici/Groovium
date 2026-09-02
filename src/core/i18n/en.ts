@@ -203,6 +203,12 @@ export const en = {
   'update.failed': 'Could not update: {message}',
   'update.tryAgain': 'Try again',
 
+  // The dialog's own words only. What it shows is the changelog, which is
+  // written once per release rather than translated key by key.
+  'whatsNew.title': "What's new",
+  'whatsNew.close': 'Close',
+  'whatsNew.dismiss': 'Got it',
+
   'settings.language': 'Language',
   'settings.behaviour': 'Behaviour',
   'settings.reduceMotion': 'Reduce motion',

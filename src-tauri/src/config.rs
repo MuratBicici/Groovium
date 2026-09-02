@@ -75,6 +75,12 @@ pub struct Settings {
     /// ring that separates it from the desktop.
     #[serde(default)]
     pub window_border: bool,
+    /// The last version whose summary was shown on the way in. `None` means
+    /// nobody has been shown anything, which is equally true of a first run and
+    /// of a config written before this field existed — both get the summary
+    /// once, which is the honest answer to "you have not seen this yet".
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
 }
 
 #[tauri::command]
@@ -169,6 +175,7 @@ mod tests {
             custom_secondary: None,
             boost_contrast: true,
             window_border: false,
+            last_seen_version: Some("1.0.4".into()),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
@@ -180,6 +187,21 @@ mod tests {
         // Two hashes: the value itself contains `"#`, which closes an
         // `r#"..."#` literal early.
         assert!(written.contains(r##""customPrimary":"#2e231b""##));
+        assert!(written.contains(r#""lastSeenVersion":"1.0.4""#));
+    }
+
+    #[test]
+    fn a_config_from_before_the_summary_existed_has_seen_nothing() {
+        // The upgrade path for this field: an install from 1.0.3 has no
+        // `lastSeenVersion`, which has to read as "nothing has been shown"
+        // rather than as a parse failure that resets every other preference.
+        let config: AppConfig = serde_json::from_str(
+            r#"{"settings":{"theme":"espresso","reduceMotion":true}}"#,
+        )
+        .expect("parses");
+        assert!(config.settings.last_seen_version.is_none());
+        assert_eq!(config.settings.theme.as_deref(), Some("espresso"));
+        assert!(config.settings.reduce_motion);
     }
 
     #[test]

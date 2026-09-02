@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DiskPlatter } from '@/components/player/DiskPlatter';
 import { TrackDisplay } from '@/components/player/TrackDisplay';
 import { ProgressBar } from '@/components/player/ProgressBar';
@@ -13,6 +13,9 @@ import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { StationSetup } from '@/components/station/StationSetup';
 import { ColourPicker } from '@/components/settings/ColourPicker';
+import { WhatsNew } from '@/components/release/WhatsNew';
+import { summaryForThisVersion } from '@/core/release';
+import { APP_VERSION } from '@/core/version';
 import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
@@ -69,6 +72,8 @@ export default function App() {
   const compact = useSettingsStore((s) => s.compact);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
+  const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
+  const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(compact, settingsReady);
 
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -82,6 +87,26 @@ export default function App() {
   const [stationSetup, setStationSetup] = useState(false);
   /** Which custom colour the picker is open on, if any. */
   const [pickingColour, setPickingColour] = useState<'primary' | 'secondary' | null>(null);
+  /** Null on a build whose version has no section written for it. */
+  const summary = useMemo(() => summaryForThisVersion(language), [language]);
+  /** Asked for from Settings, after this version had already been shown once. */
+  const [reopened, setReopened] = useState(false);
+  /**
+   * Whether this version's summary is still owed to whoever is sitting here.
+   *
+   * Each clause is a way of not lying. Nothing before the stored answer has
+   * been read. Nothing while the window is collapsed, where a dialog would not
+   * fit and would be marked read having been seen by nobody — it opens the
+   * moment the window is expanded instead. And nothing once the version is
+   * recorded, which is what makes the record itself the dismissal: closing
+   * writes it, so no second piece of state is needed to remember that this
+   * happened.
+   */
+  const owed = settingsReady && !compact && lastSeenVersion !== APP_VERSION;
+  const closeWhatsNew = useCallback(() => {
+    setReopened(false);
+    markVersionSeen();
+  }, [markVersionSeen]);
   const toggle = (which: Exclude<Overlay, 'none'>) =>
     setOverlay((current) => (current === which ? 'none' : which));
 
@@ -212,6 +237,7 @@ export default function App() {
             onSetUpSpotify={() => setOverlay('spotify')}
             onSetUpStation={() => setStationSetup(true)}
             onPickColour={setPickingColour}
+            onShowWhatsNew={summary ? () => setReopened(true) : undefined}
           />
         </div>
 
@@ -278,6 +304,14 @@ export default function App() {
           void toggleStation();
         }}
       />
+
+      {/* Only ever rendered with something to say — `summary` being null is
+          what keeps a version with no changelog section from opening an empty
+          dialog, and it is checked here rather than inside so the component can
+          take a summary rather than a maybe-summary. */}
+      {summary && (
+        <WhatsNew open={owed || reopened} summary={summary} onClose={closeWhatsNew} />
+      )}
 
       <ImportProgress />
 

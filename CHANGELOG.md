@@ -23,7 +23,9 @@ know. Both are fixed, and there is a test now that plays five hundred tracks
 without stopping.
 
 Settings also had a tidy: About is at the bottom where it belongs, and checking
-for updates tells you when there is nothing new.
+for updates tells you when there is nothing new. And this text now has somewhere
+to be read — the first time you open a version you have not seen, it says what
+changed, once.
 
 HIGHLIGHTS
 · The accent you pick is the accent you see. Its lighter and darker shades are
@@ -45,6 +47,8 @@ HIGHLIGHTS
   well over a second and now does not.
 · About moved to the bottom of Settings, and checking for updates now tells
   you when there is nothing new.
+· The first launch after an update says what changed, in your own language,
+  and only once. It is in Settings afterwards for anyone who closed it early.
 
 ALL CHANGES
 · Custom palettes: the accent's lighter and darker shades hold its hue and its
@@ -104,6 +108,15 @@ ALL CHANGES
 · Settings: the check button is an outlined pill with a turning arrow rather
   than a bare underlined link.
 · Settings: the About section is signed.
+· What's new: the summary of the version now running appears once, on the
+  first launch after it is installed, and a record of having seen it is kept
+  so it does not appear again. It waits while the window is collapsed rather
+  than being spent on a window it does not fit in.
+· What's new: the text is this changelog, built into the app rather than
+  fetched, so it is the same on a machine that installed the .exe by hand and
+  on one that has never been online. A Turkish translation of each summary
+  ships alongside it, and a release without one falls back to English.
+· What's new: Settings has a way back to it, next to the version.
 
 ## 1.0.3 — 2026-08-28
 

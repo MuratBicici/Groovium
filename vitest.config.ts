@@ -1,5 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+
+// The same define `vite.config.ts` makes, from the same file, so that a test
+// may import `src/core/version.ts`. Without it `__APP_VERSION__` is simply not
+// declared at runtime here, and the changelog guard — does the version being
+// built have a section written for it? — could not be a test at all.
+const { version } = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+) as { version: string };
 
 /**
  * Tests run in node, not jsdom, and that is a deliberate constraint.
@@ -12,6 +21,9 @@ import { fileURLToPath } from 'node:url';
  * possible at all.
  */
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

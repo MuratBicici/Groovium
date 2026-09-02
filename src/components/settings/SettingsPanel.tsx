@@ -21,6 +21,14 @@ interface SettingsPanelProps {
    * sheet over the whole window, and this panel only covers the stage.
    */
   onPickColour: (which: 'primary' | 'secondary') => void;
+  /**
+   * Open the summary of what changed in this version — the same sheet shown on
+   * the first launch after an update, for anyone who closed it too soon.
+   *
+   * Undefined on a build whose version has no changelog section, and the button
+   * is then not drawn at all rather than drawn and inert.
+   */
+  onShowWhatsNew?: (() => void) | undefined;
 }
 
 /**
@@ -39,6 +47,7 @@ export function SettingsPanel({
   onSetUpSpotify,
   onSetUpStation,
   onPickColour,
+  onShowWhatsNew,
 }: SettingsPanelProps) {
   const t = useT();
   const theme = useSettingsStore((s) => s.theme ?? DEFAULT_THEME);
@@ -285,6 +294,23 @@ export function SettingsPanel({
             something to change; this is something to look up. */}
         <Section title={t('settings.about')}>
           <Updates />
+          {/* Its own row rather than a third thing on the version line: two
+              pills and a version do not fit across 340px, and the one that
+              would have been squeezed is the one somebody is looking for. */}
+          {onShowWhatsNew && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onShowWhatsNew}
+                // The outlined pill, matching Check for updates. Both are
+                // errands beside the filled brass of Download and Restart.
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
+              >
+                <NotesIcon />
+                {t('whatsNew.title')}
+              </button>
+            </div>
+          )}
           {/* Last line in the panel, and quiet on purpose: a name belongs in
               the app, but not competing with anything somebody came here to
               do. */}
@@ -328,6 +354,31 @@ function Colour({
       />
       <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
     </button>
+  );
+}
+
+/**
+ * A page with a couple of lines written on it.
+ *
+ * Sized and drawn to the same rules as `RefreshIcon`, since the two sit in
+ * matching pills one row apart and any difference between them would read as a
+ * mistake rather than a distinction.
+ */
+function NotesIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3 w-3 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 3h12v18H6z" />
+      <path d="M9.5 8.5h5M9.5 12.5h5M9.5 16.5h3" />
+    </svg>
   );
 }
 
