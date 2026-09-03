@@ -69,10 +69,16 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
     if (response.status === 401) {
       throw new Error('Spotify rejected the session. Sign out and connect again.');
     }
-    // 403 covers both a non-Premium account and a missing scope. Claiming it is
-    // always Premium sent debugging in the wrong direction once already.
+    // 403 covers a missing scope, a playlist belonging to somebody else, and
+    // an account Spotify will not let this registration act for. Guessing which
+    // sent debugging the wrong way once already — and the guess it used to make
+    // named Premium, which this app stopped being able to detect at all.
+    //
+    // Spotify says which in the body. Passed through rather than replaced: a
+    // sentence from the people who refused beats a sentence from the people who
+    // asked.
     if (response.status === 403) {
-      throw new Error('Spotify refused this request — the account may not be Premium, or the app may lack permission for it.');
+      throw new Error(`Spotify refused this request. ${spotifyMessage(body) ?? ''}`.trim());
     }
     if (response.status === 404) {
       throw new Error('Spotify has no active device for this app yet.');
@@ -85,6 +91,23 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
   }
 
   return (await response.json()) as T;
+}
+
+/**
+ * The human-readable half of a Spotify error body, if there is one.
+ *
+ * Shaped `{ error: { status, message } }`, and occasionally not JSON at all —
+ * so this never throws, and answers null rather than handing back a slice of
+ * an HTML error page.
+ */
+function spotifyMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+    const message = parsed.error?.message;
+    return typeof message === 'string' && message.trim() ? message.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 // --- API shapes -------------------------------------------------------------
