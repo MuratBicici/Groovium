@@ -60,6 +60,10 @@ pub struct Settings {
     /// without this the window would come back full height on every launch.
     #[serde(default)]
     pub compact: bool,
+    /// The Spotify drawer beside the player. Saved for the same reason
+    /// `compact` is: the window plugin restores position but not size.
+    #[serde(default)]
+    pub drawer_open: bool,
     /// The two colours a hand-rolled palette is built from, as `#rrggbb`.
     /// Only meaningful while `theme` is `custom`, but kept either way so
     /// switching to a preset and back does not lose the choice.
@@ -175,6 +179,7 @@ mod tests {
             reduce_motion: true,
             always_on_top: false,
             compact: true,
+            drawer_open: true,
             custom_primary: Some("#2e231b".into()),
             custom_secondary: None,
             boost_contrast: true,
@@ -189,6 +194,7 @@ mod tests {
         assert!(written.contains(r#""theme":"prussian-blue""#));
         assert!(written.contains(r#""reduceMotion":true"#));
         assert!(written.contains(r#""compact":true"#));
+        assert!(written.contains(r#""drawerOpen":true"#));
         // Two hashes: the value itself contains `"#`, which closes an
         // `r#"..."#` literal early.
         assert!(written.contains(r##""customPrimary":"#2e231b""##));

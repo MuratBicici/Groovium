@@ -37,6 +37,14 @@ export interface Settings {
    */
   compact: boolean;
   /**
+   * The Spotify drawer, pulled out beside the player.
+   *
+   * Remembered for the reason `compact` is: the window plugin saves position
+   * only, so every launch starts at the width in `tauri.conf.json` and a drawer
+   * that was open would close itself overnight.
+   */
+  drawerOpen: boolean;
+  /**
    * The two colours a hand-rolled palette is built from.
    *
    * Kept even while a preset is selected, so switching away and back does not
@@ -88,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   alwaysOnTop: false,
   compact: false,
+  drawerOpen: false,
   customPrimary: null,
   customSecondary: null,
   boostContrast: false,

@@ -120,7 +120,7 @@ export const en = {
   // Spotify
   'spotify.heading': 'Spotify · {name}',
   'spotify.signOut': 'Sign out',
-  'spotify.close': 'Close Spotify panel',
+  'spotify.close': 'Close Spotify drawer',
   'spotify.checking': 'Checking your Spotify setup…',
   'spotify.waiting': 'Waiting for authorisation in your browser…',
   'spotify.waitingHint': 'Approve the request, then come back here.',

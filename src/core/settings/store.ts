@@ -39,6 +39,7 @@ interface SettingsStore extends Settings {
   setReduceMotion: (reduce: boolean) => void;
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
+  setDrawerOpen: (open: boolean) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
   setBoostContrast: (boost: boolean) => void;
   setWindowBorder: (on: boolean) => void;
@@ -257,7 +258,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   /** Apply, then persist. Never called before `ready`. */
   const commit = (patch: Partial<Settings>) => {
     set(patch);
-    const { theme, language, reduceMotion, alwaysOnTop, compact } = get();
+    const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -269,6 +270,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       reduceMotion,
       alwaysOnTop,
       compact,
+      drawerOpen,
       customPrimary,
       customSecondary,
       boostContrast,
@@ -300,7 +302,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setLanguage: (language) => commit({ language }),
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
-    setCompact: (compact) => commit({ compact }),
+    setCompact: (compact) =>
+      // Collapsing takes the drawer with it. A surface `compact` hides in
+      // silence is a surface nobody sees — the lesson the what's-new sheet
+      // taught. It is remembered, so opening back up brings it back.
+      commit(compact ? { compact, drawerOpen: false } : { compact }),
+    setDrawerOpen: (drawerOpen) => commit({ drawerOpen }),
     setCustomColour: (which, colour) =>
       commit(
         which === 'primary'

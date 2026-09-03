@@ -35,6 +35,7 @@ describe('remembering that a version has been shown', () => {
       reduceMotion: true,
       alwaysOnTop: true,
       compact: true,
+      drawerOpen: true,
       customPrimary: '#123456',
       customSecondary: '#654321',
       boostContrast: true,
@@ -50,6 +51,7 @@ describe('remembering that a version has been shown', () => {
       reduceMotion: true,
       alwaysOnTop: true,
       compact: true,
+      drawerOpen: true,
       customPrimary: '#123456',
       customSecondary: '#654321',
       boostContrast: true,
@@ -112,5 +114,28 @@ describe('the settings that survive a restart', () => {
 
   it('starts with nothing declined, so the first offer is made', () => {
     expect(DEFAULT_SETTINGS.declinedVersion).toBeNull();
+  });
+
+  it('starts with the drawer shut', () => {
+    expect(DEFAULT_SETTINGS.drawerOpen).toBe(false);
+  });
+});
+
+describe('collapsing the window', () => {
+  it('closes the drawer with it', () => {
+    // A `z-20` panel collapsing is only hidden; the drawer is width the window
+    // does not have while collapsed, so it has to actually shut. Recorded
+    // rather than derived, so the state on disk is the state on screen.
+    useSettingsStore.setState({ drawerOpen: true });
+    useSettingsStore.getState().setCompact(true);
+    expect(lastWrite()).toMatchObject({ compact: true, drawerOpen: false });
+  });
+
+  it('leaves the drawer alone when opening back up', () => {
+    // Expanding says nothing about the drawer: whatever it was before the
+    // collapse is what it still is.
+    useSettingsStore.setState({ compact: true, drawerOpen: false });
+    useSettingsStore.getState().setCompact(false);
+    expect(lastWrite()).toMatchObject({ compact: false, drawerOpen: false });
   });
 });

@@ -12,24 +12,31 @@ import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
 import { useT } from '@/core/i18n';
+import { DRAWER_WIDTH } from '@/platform/window';
 
 type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
 
-interface SpotifyPanelProps {
-  open: boolean;
+interface SpotifyDrawerProps {
   onClose: () => void;
   id: string;
 }
 
 /**
- * Spotify surface, sharing the queue panel's overlay pattern: it covers the
- * platter while open and leaves the transport controls reachable below.
+ * Spotify, pulled out beside the player rather than laid over it.
+ *
+ * This was a panel that covered the platter. It is a drawer now: the window
+ * gets wider and this stands next to the deck, so a record can be dragged from
+ * here onto it and both are visible while that happens. Nothing here is modal —
+ * the player keeps playing, and every control on it stays live.
+ *
+ * There is no `open` prop and no `inert`. A drawer that is not open is not
+ * rendered at all, because unlike the stage panels it has nowhere to hide: it
+ * occupies width the window would otherwise not have.
  *
  * Four states, because the setup has genuinely distinct stages and collapsing
- * them would leave the user guessing which part failed. Once connected, the
- * whole panel is given over to search — that is what it is for.
+ * them would leave the user guessing which part failed.
  */
-export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
+export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   const t = useT();
   const signOutOfSpotify = usePlayerStore((s) => s.signOutOfSpotify);
   const [stage, setStage] = useState<Stage>('loading');
@@ -47,7 +54,6 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
   }, [stageFor]);
 
   useEffect(() => {
-    if (!open) return;
     // Deferred rather than called straight from the effect body: `refresh`
     // reaches Tauri and then sets state, and doing that synchronously inside an
     // effect cascades a second render before the first has painted.
@@ -75,7 +81,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, stageFor]);
+  }, [stageFor]);
 
   async function connect() {
     setStage('connecting');
@@ -104,17 +110,14 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
   }
 
   return (
-    <div
+    <aside
       id={id}
-      // `inert` rather than `aria-hidden`: the pair used to be `aria-hidden`
-      // plus `pointer-events-none`, which stopped the mouse and not the
-      // keyboard. Tab walked into a closed panel and focus landed on buttons
-      // nobody could see — a WCAG 4.1.2 failure, and Chromium says so in the
-      // console. One attribute covers visibility, focus and pointers together.
-      inert={!open}
-      className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
-        open ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
-      }`}
+      style={{ width: `${DRAWER_WIDTH}px` }}
+      // A hairline is the whole separation. The shell's own gradient runs
+      // straight through both halves, which is what makes this read as the
+      // window having been pulled open rather than as a second window parked
+      // against the first.
+      className="flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         {/* A brand and, once connected, someone's name. Neither is a Turkish
@@ -199,11 +202,11 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
 
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
-            <SpotifySearch onTrackPlayed={onClose} />
+            <SpotifySearch />
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }
 

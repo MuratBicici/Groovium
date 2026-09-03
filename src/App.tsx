@@ -8,7 +8,7 @@ import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
-import { SpotifyPanel } from '@/components/spotify/SpotifyPanel';
+import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -29,13 +29,23 @@ import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
+import { EXPANDED_HEIGHT, PLAYER_WIDTH, setWindowSize, widthFor } from '@/platform/window';
 
 const PANEL_IDS = {
   library: 'groovium-library',
   playlists: 'groovium-playlists',
-  spotify: 'groovium-spotify',
   settings: 'groovium-settings',
 } as const;
+
+/**
+ * The drawer is not one of the stage overlays.
+ *
+ * `Overlay` is a union of things that cover the platter, one at a time. Spotify
+ * used to be one of them and is not any more: it stands beside the player
+ * instead, so it can be open while a panel is, and it has its own place to be
+ * remembered — on disk, next to `compact`.
+ */
+const DRAWER_ID = 'groovium-spotify';
 
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
 type Overlay = 'none' | keyof typeof PANEL_IDS;
@@ -72,6 +82,8 @@ export default function App() {
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const compact = useSettingsStore((s) => s.compact);
+  const drawerOpen = useSettingsStore((s) => s.drawerOpen);
+  const setDrawerOpen = useSettingsStore((s) => s.setDrawerOpen);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
@@ -79,7 +91,12 @@ export default function App() {
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
   const declineVersion = useSettingsStore((s) => s.declineVersion);
   const offeredVersion = useUpdateStore((s) => s.version);
-  const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(compact, settingsReady);
+  const windowWidth = widthFor(drawerOpen);
+  const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(
+    compact,
+    settingsReady,
+    windowWidth,
+  );
 
   const [overlay, setOverlay] = useState<Overlay>('none');
   // Collapsing takes the panel buttons away with it, so nothing may be showing
@@ -186,6 +203,18 @@ export default function App() {
   }, [checkForUpdates]);
 
   useEffect(() => {
+    // The window follows the drawer. Not animated: the shell is transparent
+    // outside itself, so a width that arrives a frame late shows nothing —
+    // whereas putting a native resize through the compositor sixty times a
+    // second is what `useCompactShell` exists to explain is a bad idea.
+    //
+    // Height is left where it is. The drawer cannot be open while collapsed —
+    // `setCompact` closes it — so the only height in play here is the full one.
+    if (!settingsReady || compact) return;
+    void setWindowSize(windowWidth, EXPANDED_HEIGHT);
+  }, [settingsReady, compact, windowWidth]);
+
+  useEffect(() => {
     // Tray menu and global media keys arrive as events from Rust.
     return startCommandBridge();
   }, []);
@@ -220,7 +249,22 @@ export default function App() {
       <DiscHoldProvider>
       <WindowChrome />
 
-      <main className="flex min-h-0 flex-1 flex-col gap-3 pb-3">
+      {/* The window's two halves. The titlebar above spans both, so the drawer
+          is part of the same window rather than a thing parked beside it.
+
+          A row inside the shell rather than turning the shell itself sideways:
+          `useCompactShell` reads the shell's height as chrome + stage + bottom,
+          and that arithmetic only holds while the shell is a column. */}
+      <div className="flex min-h-0 flex-1">
+      {/* The player keeps its designed width whatever else is open. Fixed
+          rather than flexible so that the frame between the drawer mounting
+          and the window widening squeezes nothing — the drawer is clipped by
+          the shell for that frame, which nobody can see, and the deck never
+          moves. */}
+      <main
+        style={{ width: `${PLAYER_WIDTH}px` }}
+        className="flex min-h-0 flex-1 shrink-0 flex-col gap-3 pb-3"
+      >
         {/* The stage. Overlays take it over rather than competing for a slice of
             the column — at this window size that slice was under one row tall. */}
         <div
@@ -264,16 +308,11 @@ export default function App() {
             open={shown === 'playlists'}
             onClose={() => setOverlay('none')}
           />
-          <SpotifyPanel
-            id={PANEL_IDS.spotify}
-            open={shown === 'spotify'}
-            onClose={() => setOverlay('none')}
-          />
           <SettingsPanel
             id={PANEL_IDS.settings}
             open={shown === 'settings'}
             onClose={() => setOverlay('none')}
-            onSetUpSpotify={() => setOverlay('spotify')}
+            onSetUpSpotify={() => setDrawerOpen(true)}
             onSetUpStation={() => setStationSetup(true)}
             onPickColour={setPickingColour}
             onShowWhatsNew={summary ? () => setReopened(true) : undefined}
@@ -310,9 +349,9 @@ export default function App() {
             {isTauri() && (
               <PanelButton
                 panel="spotify"
-                open={shown === 'spotify'}
-                onToggle={() => toggle('spotify')}
-                controls={PANEL_IDS.spotify}
+                open={drawerOpen}
+                onToggle={() => setDrawerOpen(!drawerOpen)}
+                controls={DRAWER_ID}
               />
             )}
             <PanelButton
@@ -325,6 +364,9 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {drawerOpen && <SpotifyDrawer id={DRAWER_ID} onClose={() => setDrawerOpen(false)} />}
+      </div>
 
       {/* Out here rather than inside the settings panel, for the reason the
           station's setup is: these cover the whole window, and the panel only

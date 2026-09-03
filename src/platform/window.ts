@@ -38,15 +38,30 @@ export async function setAlwaysOnTop(enabled: boolean): Promise<void> {
   await (await currentWindow()).setAlwaysOnTop(enabled);
 }
 
-/** The widget's designed size, mirroring `tauri.conf.json`. */
-const WIDTH = 340;
+/** The player's designed size, mirroring `tauri.conf.json`. */
+export const PLAYER_WIDTH = 340;
 export const EXPANDED_HEIGHT = 480;
 
 /**
- * Set the window's height, keeping the top edge where it is.
+ * How much wider the window gets when the drawer is out.
  *
- * Windows anchors a resize at the top left, which is exactly the behaviour
- * compact mode wants: the titlebar stays put and the bottom edge moves.
+ * The same width again, so the drawer is as much of the window as the player
+ * is. A record grid needs the room, and anything narrower turns the crates into
+ * a list of squares rather than a shelf.
+ */
+export const DRAWER_WIDTH = 340;
+
+/** The window's width for a given drawer state. One place decides this. */
+export function widthFor(drawerOpen: boolean): number {
+  return drawerOpen ? PLAYER_WIDTH + DRAWER_WIDTH : PLAYER_WIDTH;
+}
+
+/**
+ * Set the window's size, keeping the top left corner where it is.
+ *
+ * Windows anchors a resize at the top left, which is what both callers want:
+ * collapsing moves the bottom edge and leaves the titlebar, and the drawer
+ * moves the right edge and leaves everything else.
  *
  * The window is declared `resizable: false`, which governs whether someone can
  * drag its edges rather than whether it can be resized in code — but rather
@@ -59,26 +74,27 @@ export const EXPANDED_HEIGHT = 480;
  * `capabilities/default.json`, and a missing one is rejected rather than
  * ignored — an uncaught rejection here would surface as an unhandled promise
  * from a `void` call site with nothing to catch it, over a window that is
- * merely the wrong height.
+ * merely the wrong size.
  */
-export async function setWindowHeight(height: number): Promise<void> {
+export async function setWindowSize(width: number, height: number): Promise<void> {
   if (!isTauri()) return;
 
-  const rounded = Math.round(height);
+  const w = Math.round(width);
+  const h = Math.round(height);
 
   try {
     const { LogicalSize } = await import('@tauri-apps/api/dpi');
     const window = await currentWindow();
 
-    await window.setSize(new LogicalSize(WIDTH, rounded));
+    await window.setSize(new LogicalSize(w, h));
 
     const scale = await window.scaleFactor();
     const applied = (await window.innerSize()).toLogical(scale);
-    if (Math.abs(applied.height - rounded) <= 1) return;
+    if (Math.abs(applied.height - h) <= 1 && Math.abs(applied.width - w) <= 1) return;
 
     await window.setResizable(true);
     try {
-      await window.setSize(new LogicalSize(WIDTH, rounded));
+      await window.setSize(new LogicalSize(w, h));
     } finally {
       await window.setResizable(false);
     }

@@ -112,7 +112,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
 
   'spotify.heading': 'Spotify · {name}',
   'spotify.signOut': 'Çıkış yap',
-  'spotify.close': 'Spotify panelini kapat',
+  'spotify.close': 'Spotify çekmecesini kapat',
   'spotify.checking': 'Spotify kurulumunuz denetleniyor…',
   'spotify.waiting': 'Tarayıcınızda izin vermeniz bekleniyor…',
   'spotify.waitingHint': 'İsteği onaylayın, sonra buraya dönün.',

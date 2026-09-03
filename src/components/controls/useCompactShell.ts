@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { EXPANDED_HEIGHT, setWindowHeight } from '@/platform/window';
+import { EXPANDED_HEIGHT, setWindowSize } from '@/platform/window';
 
 /**
  * Collapsing the widget to its controls, and opening it back up.
@@ -52,7 +52,7 @@ import { EXPANDED_HEIGHT, setWindowHeight } from '@/platform/window';
 const DURATION_MS = 260;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
-export function useCompactShell(compact: boolean, ready: boolean) {
+export function useCompactShell(compact: boolean, ready: boolean, width: number) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -101,7 +101,7 @@ export function useCompactShell(compact: boolean, ready: boolean) {
       was.current = compact;
       if (compact) {
         shell.style.height = 'auto';
-        void setWindowHeight(shell.offsetHeight);
+        void setWindowSize(width, shell.offsetHeight);
       }
       record();
       return;
@@ -125,12 +125,12 @@ export function useCompactShell(compact: boolean, ready: boolean) {
     if (!compact) to.stage = EXPANDED_HEIGHT - chrome - to.bottom;
 
     // Grow first, or the shell would animate past the bottom of the window.
-    if (!compact) void setWindowHeight(EXPANDED_HEIGHT);
+    if (!compact) void setWindowSize(width, EXPANDED_HEIGHT);
 
     if (prefersReducedMotion()) {
       if (compact) {
         shell.style.height = 'auto';
-        void setWindowHeight(chrome + to.stage + to.bottom);
+        void setWindowSize(width, chrome + to.stage + to.bottom);
       }
       record();
       return;
@@ -186,7 +186,7 @@ export function useCompactShell(compact: boolean, ready: boolean) {
       shell.style.height = compact ? 'auto' : '';
       // Measured off the settled shell rather than predicted, so the window
       // ends up exactly as tall as what it is showing.
-      if (compact && shellRef.current) void setWindowHeight(shellRef.current.offsetHeight);
+      if (compact && shellRef.current) void setWindowSize(width, shellRef.current.offsetHeight);
       record();
     }, DURATION_MS + 40);
 
@@ -194,7 +194,12 @@ export function useCompactShell(compact: boolean, ready: boolean) {
       cancelAnimationFrame(start);
       clearTimeout(settle);
     };
-  }, [compact, ready]);
+    // `width` is read, so it is declared — but it never drives this effect. A
+    // drawer opening changes the width without changing `compact`, and the
+    // guard above returns before anything is animated. What it must not do is
+    // go stale: the next collapse has to resize to the width the window
+    // actually has, not the one it had when the panel was last toggled.
+  }, [compact, ready, width]);
 
   return { shellRef, stageRef, trackRef, bottomRef };
 }
