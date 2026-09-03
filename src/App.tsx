@@ -247,14 +247,20 @@ export default function App() {
           `useCompactShell` reads the shell's height as chrome + stage + bottom,
           and that arithmetic only holds while the shell is a column. */}
       <div className="flex min-h-0 flex-1">
-      {/* The player keeps its designed width whatever else is open. Fixed
-          rather than flexible so that the frame between the drawer mounting
-          and the window widening squeezes nothing — the drawer is clipped by
-          the shell for that frame, which nobody can see, and the deck never
-          moves. */}
+      {/* The player keeps its designed width whatever else is open, so that
+          the shell narrowing around it during the drawer's animation moves
+          nothing inside it.
+
+          No `flex-1` here, and that is the whole point. It used to mean "take
+          the rest of the height", because the shell was a column; in a row it
+          means take the rest of the *width*, and it sets `flex-basis: 0%`,
+          which overrides the width below. The player then measured whatever
+          was left over — 340 only by arithmetic coincidence at rest, and less
+          than that on every frame the shell was still opening. Height comes
+          from the row's own stretch, which needs nothing said about it. */}
       <main
         style={{ width: `${PLAYER_WIDTH}px` }}
-        className="flex min-h-0 flex-1 shrink-0 flex-col gap-3 pb-3"
+        className="flex min-h-0 shrink-0 flex-col gap-3 pb-3"
       >
         {/* The stage. Overlays take it over rather than competing for a slice of
             the column — at this window size that slice was under one row tall. */}
