@@ -39,16 +39,22 @@ const CALLBACK_TIMEOUT: Duration = Duration::from_secs(180);
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub display_name: String,
-    /// "premium" | "free" | "open". Playback needs premium, and knowing this
-    /// lets the UI say so plainly instead of failing later inside the SDK.
-    pub product: String,
 }
 
+/// The profile, minus the subscription level.
+///
+/// `product` used to be read here to warn a free account that playback would
+/// not work. Spotify removed the field from user profiles in February 2026, so
+/// it arrived empty and the warning fired at everyone, Premium included.
+///
+/// Nothing replaced it, and nothing needs to: Development Mode now requires the
+/// app owner to hold Premium, and in Groovium the owner is the person using it
+/// — every installation that works at all is a Premium one. If playback fails
+/// regardless, the SDK's own error says so.
 #[derive(Deserialize)]
 struct Profile {
     display_name: Option<String>,
     id: String,
-    product: Option<String>,
 }
 
 pub async fn begin(app: &AppHandle, cache: &AccessTokenCache) -> Result<Account, AuthError> {
@@ -230,7 +236,6 @@ async fn fetch_profile(access_token: &str) -> Result<Account, AuthError> {
 
     Ok(Account {
         display_name: profile.display_name.unwrap_or(profile.id),
-        product: profile.product.unwrap_or_else(|| "unknown".into()),
     })
 }
 

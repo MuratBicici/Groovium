@@ -8,7 +8,7 @@ import {
   type SpotifyAccount,
 } from '@/core/security/spotifyAuth';
 import { usePlayerStore } from '@/core/store';
-import { describeAuthError, describeProduct } from '@/core/security/authErrors';
+import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
 import { useT } from '@/core/i18n';
@@ -102,8 +102,6 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
     setAccount(null);
     setStage('setup');
   }
-
-  const premiumWarning = account ? describeProduct(account.product) : null;
 
   return (
     <div
@@ -201,11 +199,6 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
 
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
-            {premiumWarning && (
-              <p className="shrink-0 rounded bg-shell-900/70 px-2 py-1.5 text-meta leading-snug text-brass-400">
-                {premiumWarning}
-              </p>
-            )}
             <SpotifySearch onTrackPlayed={onClose} />
           </div>
         )}

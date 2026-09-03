@@ -61,14 +61,3 @@ export function describeAuthError(error: unknown): string {
   console.info(`[spotifyAuth] ${error.code}: ${error.detail}`);
   return message;
 }
-
-/**
- * Premium is a separate matter from authentication: signing in succeeds on a
- * free account, and only playback fails. Saying so at connect time beats an
- * opaque SDK error later.
- */
-export function describeProduct(product: string): string | null {
-  return product === 'premium'
-    ? null
-    : 'Signed in, but Spotify playback requires a Premium subscription.';
-}

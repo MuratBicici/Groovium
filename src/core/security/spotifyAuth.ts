@@ -14,8 +14,6 @@ import { isTauri } from '@/core/utils/env';
 
 export interface SpotifyAccount {
   displayName: string;
-  /** "premium" | "free" | "open" | "unknown". Playback needs premium. */
-  product: string;
 }
 
 /** Structured failure from Rust. `code` is stable; `detail` is for the console. */
