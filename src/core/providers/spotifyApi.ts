@@ -97,7 +97,8 @@ interface ApiTrack {
   uri: string;
   name: string;
   duration_ms: number;
-  artists: { name: string }[];
+  /** `id` is what tells two artists with the same name apart. */
+  artists: { id: string; name: string }[];
   album?: { name: string; images: ApiImage[] };
 }
 
@@ -177,24 +178,38 @@ interface ArtistSearchResponse {
   artists?: { items: (ApiArtist | null)[] };
 }
 
-interface TopTracksResponse {
-  tracks?: (ApiTrack | null)[];
-}
-
 async function searchArtists(query: string, limit: number): Promise<ApiArtist[]> {
   const params = new URLSearchParams({ q: query, type: 'artist', limit: String(limit) });
   const data = await request<ArtistSearchResponse>(`/search?${params}`);
   return (data?.artists?.items ?? []).filter((a): a is ApiArtist => a !== null && !!a.id);
 }
 
-async function artistTopTracks(id: string): Promise<TrackMetadata[]> {
-  // `market` is required here. `from_token` reads the country off the session,
-  // which needs no scope the app has not already been granted.
-  const data = await request<TopTracksResponse>(
-    `/artists/${encodeURIComponent(id)}/top-tracks?market=from_token`,
-  );
-  return (data?.tracks ?? [])
+/**
+ * One artist's tracks, found by searching rather than by asking for them.
+ *
+ * `/artists/{id}/top-tracks` did this until February 2026, when Spotify removed
+ * it with nothing in its place. Search survives, so the question changes from
+ * "what is this artist known for" to "what does Spotify return for this
+ * artist" — relevance order rather than popularity order. The station does not
+ * depend on the difference: it does its own picking and deliberately ignores
+ * any ordering this file might suggest.
+ *
+ * The `artist:` filter matches on the *name*, not the id, so a common name
+ * returns somebody else's music. Hence the check against the id we already
+ * hold: without it the tier would quietly recommend the wrong artist, which is
+ * worse than recommending nothing. The name is stripped of quotes because one
+ * inside the term would close the filter early.
+ */
+async function tracksByArtist(artist: ApiArtist): Promise<TrackMetadata[]> {
+  const params = new URLSearchParams({
+    q: `artist:"${artist.name.replace(/"/g, '')}"`,
+    type: 'track',
+    limit: String(SEARCH_LIMIT),
+  });
+  const data = await request<SearchResponse>(`/search?${params}`);
+  return (data?.tracks?.items ?? [])
     .filter((track): track is ApiTrack => track !== null && !!track.uri)
+    .filter((track) => track.artists.some((a) => a.id === artist.id))
     .map(toTrackMetadata);
 }
 
@@ -205,10 +220,13 @@ async function artistTopTracks(id: string): Promise<TrackMetadata[]> {
  * about under an artist it knows nothing about either.
  *
  * Spotify withdrew `/recommendations` and `related-artists` from new apps in
- * November 2024, which is why the station is built on Last.fm at all. Artist
- * genres and `/artists/{id}/top-tracks` survived that cull, and between them
- * they reconstruct enough of the idea: the seed artist's genre, then who else
- * is in it, then what those artists are known for.
+ * November 2024, which is why the station is built on Last.fm at all. This tier
+ * reconstructs enough of the idea out of what is left: the seed artist's genre,
+ * then who else is in it, then what those artists have.
+ *
+ * February 2026 took another piece — `/artists/{id}/top-tracks`, the last step
+ * — so that step is a search now (see `tracksByArtist`). Only the last step
+ * changed: everything above it was always `/search`, which is still here.
  *
  * Three or four requests. Returns tracks rather than names because it has
  * already done the searching the caller would otherwise have to repeat.
@@ -228,7 +246,7 @@ export async function tracksLikeArtist(name: string): Promise<TrackMetadata[]> {
   const peers = await searchArtists(`genre:"${genre}"`, SEARCH_LIMIT);
   const found: TrackMetadata[] = [];
   for (const peer of peers.filter((p) => p.id !== seed.id).slice(0, GENRE_ARTISTS)) {
-    found.push(...(await artistTopTracks(peer.id)));
+    found.push(...(await tracksByArtist(peer)));
   }
   return found;
 }
