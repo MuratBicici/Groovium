@@ -45,11 +45,11 @@ export const EXPANDED_HEIGHT = 480;
 /**
  * How much wider the window gets when the drawer is out.
  *
- * The same width again, so the drawer is as much of the window as the player
- * is. A record grid needs the room, and anything narrower turns the crates into
- * a list of squares rather than a shelf.
+ * Twice the player, so the window opens out to three times its own width. The
+ * drawer is the room the records live in — a grid of full-size sleeves rather
+ * than a column of them — and it is the player that is the narrow half.
  */
-export const DRAWER_WIDTH = 340;
+export const DRAWER_WIDTH = 680;
 
 /** The window's width for a given drawer state. One place decides this. */
 export function widthFor(drawerOpen: boolean): number {

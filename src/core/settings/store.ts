@@ -302,11 +302,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setLanguage: (language) => commit({ language }),
     setReduceMotion: (reduceMotion) => commit({ reduceMotion }),
     setAlwaysOnTop: (alwaysOnTop) => commit({ alwaysOnTop }),
-    setCompact: (compact) =>
-      // Collapsing takes the drawer with it. A surface `compact` hides in
-      // silence is a surface nobody sees — the lesson the what's-new sheet
-      // taught. It is remembered, so opening back up brings it back.
-      commit(compact ? { compact, drawerOpen: false } : { compact }),
+    // Collapsing hides the drawer but does not answer for it. `drawerOpen` is
+    // what somebody chose; whether it is on screen is a question about the
+    // window, and `App` derives that from the two together. Clearing it here
+    // would make expanding back up an amnesiac, and would leave no way to go
+    // from collapsed straight back to open-with-drawer.
+    setCompact: (compact) => commit({ compact }),
     setDrawerOpen: (drawerOpen) => commit({ drawerOpen }),
     setCustomColour: (which, colour) =>
       commit(

@@ -23,13 +23,13 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
-import { useCompactShell } from '@/components/controls/useCompactShell';
+import { useShellSize } from '@/components/controls/useShellSize';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
-import { EXPANDED_HEIGHT, PLAYER_WIDTH, setWindowSize, widthFor } from '@/platform/window';
+import { PLAYER_WIDTH } from '@/platform/window';
 
 const PANEL_IDS = {
   library: 'groovium-library',
@@ -91,11 +91,14 @@ export default function App() {
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
   const declineVersion = useSettingsStore((s) => s.declineVersion);
   const offeredVersion = useUpdateStore((s) => s.version);
-  const windowWidth = widthFor(drawerOpen);
-  const { shellRef, stageRef, trackRef, bottomRef } = useCompactShell(
+  // What was chosen, and what is on screen. Collapsing hides the drawer without
+  // answering for it, the same way `shown` hides a panel without forgetting
+  // which one was open — so expanding brings back whatever was out.
+  const wide = drawerOpen && !compact;
+  const { shellRef, stageRef, trackRef, bottomRef, drawerPresent } = useShellSize(
     compact,
+    wide,
     settingsReady,
-    windowWidth,
   );
 
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -201,18 +204,6 @@ export default function App() {
     // launch. The mark on the settings button is the whole of the report.
     void checkForUpdates();
   }, [checkForUpdates]);
-
-  useEffect(() => {
-    // The window follows the drawer. Not animated: the shell is transparent
-    // outside itself, so a width that arrives a frame late shows nothing —
-    // whereas putting a native resize through the compositor sixty times a
-    // second is what `useCompactShell` exists to explain is a bad idea.
-    //
-    // Height is left where it is. The drawer cannot be open while collapsed —
-    // `setCompact` closes it — so the only height in play here is the full one.
-    if (!settingsReady || compact) return;
-    void setWindowSize(windowWidth, EXPANDED_HEIGHT);
-  }, [settingsReady, compact, windowWidth]);
 
   useEffect(() => {
     // Tray menu and global media keys arrive as events from Rust.
@@ -365,7 +356,7 @@ export default function App() {
         </div>
       </main>
 
-      {drawerOpen && <SpotifyDrawer id={DRAWER_ID} onClose={() => setDrawerOpen(false)} />}
+      {drawerPresent && <SpotifyDrawer id={DRAWER_ID} onClose={() => setDrawerOpen(false)} />}
       </div>
 
       {/* Out here rather than inside the settings panel, for the reason the

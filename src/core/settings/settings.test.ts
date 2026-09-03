@@ -122,18 +122,16 @@ describe('the settings that survive a restart', () => {
 });
 
 describe('collapsing the window', () => {
-  it('closes the drawer with it', () => {
-    // A `z-20` panel collapsing is only hidden; the drawer is width the window
-    // does not have while collapsed, so it has to actually shut. Recorded
-    // rather than derived, so the state on disk is the state on screen.
+  it('remembers the drawer rather than shutting it', () => {
+    // Collapsing hides the drawer; it does not answer for it. Forgetting here
+    // is what would make expanding back up an amnesiac, and would leave no way
+    // to go from collapsed straight to open-with-drawer.
     useSettingsStore.setState({ drawerOpen: true });
     useSettingsStore.getState().setCompact(true);
-    expect(lastWrite()).toMatchObject({ compact: true, drawerOpen: false });
+    expect(lastWrite()).toMatchObject({ compact: true, drawerOpen: true });
   });
 
-  it('leaves the drawer alone when opening back up', () => {
-    // Expanding says nothing about the drawer: whatever it was before the
-    // collapse is what it still is.
+  it('leaves a shut drawer shut', () => {
     useSettingsStore.setState({ compact: true, drawerOpen: false });
     useSettingsStore.getState().setCompact(false);
     expect(lastWrite()).toMatchObject({ compact: false, drawerOpen: false });
