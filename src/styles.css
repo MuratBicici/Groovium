@@ -376,6 +376,35 @@ body {
 }
 
 /*
+ * A soft fade at the bottom of a list that scrolls, present only while there
+ * is more of it to see.
+ *
+ * Two background layers stand in for a scroll listener. The lower one is the
+ * fade itself, ten pixels of the panel's own colour thinning to nothing, and
+ * `background-attachment: scroll` pins it to the list's own visible bottom
+ * edge rather than to its content — it never moves. The upper one is an
+ * opaque block of that same colour, the same size, but `local`: it scrolls
+ * *with* the content, sitting at the true end of the list. Scrolled to the
+ * bottom, the block lands exactly over the fade and cancels it, so the last
+ * row is never dimmed for no reason; scrolled anywhere else, the block has
+ * moved on past the visible edge and the fade beneath is what shows.
+ *
+ * The colour is `.groove-surface`'s own formula, not a plain solid, so the
+ * fade reads as the same slightly-translucent material rather than a patch
+ * of something opaque laid over it.
+ */
+.groove-scroll-fade {
+  --fade-colour: color-mix(in srgb, var(--color-shell-800) 96%, transparent);
+  background-image:
+    linear-gradient(var(--fade-colour), var(--fade-colour)),
+    linear-gradient(to top, var(--fade-colour), transparent);
+  background-position: 0 100%, 0 100%;
+  background-size: 100% 10px, 100% 10px;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: local, scroll;
+}
+
+/*
  * The colour picker's sliders.
  *
  * A native range, unlike the progress bar: there is no drawn fill that has to

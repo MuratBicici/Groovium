@@ -86,7 +86,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
       </div>
 
       {current ? (
-        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 groove-scroll-fade">
           {current.items.length === 0 && (
             <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
               {t('playlists.emptyPlaylist')}
@@ -171,7 +171,7 @@ export function PlaylistsPanel({ open, onClose, id }: PlaylistsPanelProps) {
             </button>
           </div>
 
-          <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 groove-scroll-fade">
             {playlists.length === 0 && (
               <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
                 {t('playlists.none')}

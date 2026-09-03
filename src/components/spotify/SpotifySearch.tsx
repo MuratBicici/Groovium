@@ -82,7 +82,7 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
         </p>
       )}
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <ul className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
         {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
         {!loading && results.length === 0 && (
           <Hint>{query.trim() ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>

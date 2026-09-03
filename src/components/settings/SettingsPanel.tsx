@@ -131,7 +131,7 @@ export function SettingsPanel({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3 groove-scroll-fade">
         <Section title={t('settings.appearance')}>
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between gap-2">

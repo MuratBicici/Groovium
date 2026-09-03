@@ -158,7 +158,7 @@ export function SpotifyPanel({ open, onClose, id }: SpotifyPanelProps) {
         {stage === 'loading' && <Centered>{t('spotify.checking')}</Centered>}
 
         {stage === 'setup' && (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
             <SetupSteps onConfigured={() => void refresh()} />
           </div>
         )}

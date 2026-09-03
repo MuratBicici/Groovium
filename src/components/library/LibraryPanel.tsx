@@ -128,7 +128,7 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
           </div>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 groove-scroll-fade">
           {library.map((track, index) => {
             const playing =
               playback.id === 'library' && playback.index === index;
