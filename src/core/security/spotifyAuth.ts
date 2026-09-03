@@ -43,10 +43,13 @@ export async function missingScopes(): Promise<string[]> {
   if (!isTauri()) return [];
   try {
     return await invoke<string[]>('spotify_missing_scopes');
-  } catch {
-    // Never a reason to block the drawer. If this cannot be answered, treat the
-    // grant as sufficient and let the request that needs it fail with its own
-    // message.
+  } catch (err) {
+    // Never a reason to block the drawer: an unanswerable question is not a
+    // missing permission, and prompting on one would nag people whose grant is
+    // fine. But it is not nothing either — if the command is not there, the
+    // binary predates it, and the prompt that should be showing never will.
+    // Silence here cost an afternoon once; it says so now.
+    console.warn('[spotifyAuth] could not read the granted scopes', err);
     return [];
   }
 }

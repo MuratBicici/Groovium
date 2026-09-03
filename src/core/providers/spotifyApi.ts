@@ -4,14 +4,15 @@ import type { TrackMetadata } from '@/core/types';
 /**
  * The slice of Spotify's Web API this app touches.
  *
- * Deliberately tiny: Spotify is a way to find one song. Browsing albums and
- * playlists lives on Spotify's own client, and collecting music is what
- * Groovium's library and playlists are for.
+ * Searching, playing, and the request machinery the rest of this folder is
+ * built on. Playlists live next door in `spotifyPlaylists.ts`, which imports
+ * `request` and `toTrackMetadata` from here.
  *
- * An earlier version listed the user's Spotify playlists, which never worked:
- * `/me/playlists` needs the `playlist-read-private` scope, and the scope set
- * was deliberately narrowed to exclude it. Rather than widen the grant for a
- * feature the app no longer needs, the calls are gone.
+ * This file used to say that listing someone's playlists never worked, because
+ * `/me/playlists` needs `playlist-read-private` and the scope set deliberately
+ * excluded it. That was true and is not any more: the drawer asks for the
+ * playlist scopes now, and the note stays here as the reason the grant is
+ * wider than it was rather than as a warning.
  */
 
 const API_BASE = 'https://api.spotify.com/v1';
@@ -40,7 +41,7 @@ async function send(path: string, token: string, init?: RequestInit): Promise<Re
   });
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
   const token = await accessToken();
 
   let response = await send(path, token, init);
@@ -88,12 +89,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
 
 // --- API shapes -------------------------------------------------------------
 
-interface ApiImage {
+export interface ApiImage {
   url: string;
   width: number | null;
 }
 
-interface ApiTrack {
+export interface ApiTrack {
   uri: string;
   name: string;
   duration_ms: number;
@@ -106,14 +107,14 @@ interface ApiTrack {
  * Pick artwork big enough to stay sharp on the 56px platter label without
  * hauling a 640px image around for a list row.
  */
-function pickCover(images: ApiImage[] | null | undefined): string | undefined {
+export function pickCover(images: ApiImage[] | null | undefined): string | undefined {
   if (!images?.length) return undefined;
   const sorted = [...images].sort((a, b) => (a.width ?? 0) - (b.width ?? 0));
   return (sorted.find((i) => (i.width ?? 0) >= 300) ?? sorted[sorted.length - 1])?.url;
 }
 
 /** Map a Spotify track onto the shared metadata shape. */
-function toTrackMetadata(track: ApiTrack): TrackMetadata {
+export function toTrackMetadata(track: ApiTrack): TrackMetadata {
   const cover = pickCover(track.album?.images);
   const metadata: TrackMetadata = {
     // The URI is what `play()` needs, so it doubles as the id.
