@@ -65,6 +65,11 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
 
       <Step number={1} title={t('setup.step1')}>
         <p className="text-cream-400">{t('setup.step1Body')}</p>
+        {/* The one answer on that form that can be got wrong silently: miss the
+            Web Playback SDK and everything registers fine, then nothing ever
+            plays and the SDK's own error arrives far too late to connect to
+            this screen. */}
+        <p className="mt-1 text-cream-400">{t('setup.step1Apis')}</p>
         {/* `lang="en"` for the brand inside the label: uppercasing it under
             Turkish rules gives "SPOTİFY". Safe for the rest of the sentence
             only because it contains no Turkish i — see the note on the string
@@ -100,6 +105,7 @@ export function SetupSteps({ onConfigured }: SetupStepsProps) {
       </Step>
 
       <Step number={4} title={t('setup.step4')}>
+        <p className="text-cream-400">{t('setup.step4Body')}</p>
         <div className="mt-1 flex items-center gap-1.5">
           <input
             type="text"

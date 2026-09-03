@@ -129,9 +129,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'setup.optionalRest':
     'Kendi müziğiniz bunların hiçbiri olmadan çalar — yalnızca buradan Spotify’da arama yapmak istiyorsanız kurun.',
   'setup.oneTime':
-    'Spotify her kurulumun kendi uygulamasını kaydetmesini ister. Bu tek seferlik bir işlemdir.',
+    'Spotify tek bir uygulamanın çok kişiye hizmet etmesine ancak küçük uygulamalara vermediği bir erişim düzeyinde izin veriyor; bu yüzden her kurulum kendi uygulamasını kaydeder. Bu tek seferlik bir işlemdir.',
   'setup.step1': 'Bir uygulama oluşturun',
   'setup.step1Body': 'Herhangi bir ad ve açıklama olur.',
+  'setup.step1Apis':
+    'Form hangi API’leri kullanacağınızı sorar. Hem Web API’yi hem Web Playback SDK’yı işaretleyin — ikincisi olmadan hiçbir şey çalmaz.',
   // Rendered inside a `lang="en"` button, because uppercasing "Spotify" under
   // Turkish rules gives "SPOTİFY". That means no Turkish ı/i may appear here
   // either — it would capitalise by English rules and come out wrong.
@@ -142,8 +144,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'setup.step3Body':
     'Uygulamanın User Management sekmesini açıp kendi Spotify hesabınızı ekleyin. Bunu yapmazsanız Spotify girişi reddeder.',
   'setup.step4': 'Client ID’nizi yapıştırın',
+  'setup.step4Body':
+    'Az önce oluşturduğunuz uygulamanın sayfasında, Client Secret’ın yanında durur — Groovium onu hiç istemez ve hiç saklamaz.',
   'setup.idPlaceholder': '32 karakterlik Client ID',
-  'setup.premium': 'Çalmak için Spotify Premium gerekir.',
+  'setup.premium':
+    'Spotify Premium gerekir — yalnızca müzik çalmak için değil, kaydın kendisinin ayakta kalması için de: Spotify uygulamanın sahibi olan hesabın etkin bir aboneliği olmasını istiyor ve abonelik biterse uygulama çalışmayı bırakıyor.',
   'setup.clipboardFailed': 'Panoya erişilemedi. Adresi seçip elle kopyalayın.',
 
   'station.heading': 'Sonsuz çalma',

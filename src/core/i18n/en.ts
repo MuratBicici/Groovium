@@ -137,9 +137,11 @@ export const en = {
   'setup.optionalRest':
     'Your own music plays without any of this — set it up only if you want to search Spotify from here.',
   'setup.oneTime':
-    'Spotify requires every installation to register its own app. This is a one-time setup.',
+    'Spotify only lets one app serve many people under an access level it does not hand out to small apps, so every installation registers its own instead. This is a one-time setup.',
   'setup.step1': 'Create an app',
   'setup.step1Body': 'Any name and description will do.',
+  'setup.step1Apis':
+    'The form asks which APIs you plan to use. Tick both Web API and Web Playback SDK — without the second one, nothing will play.',
   'setup.openDashboard': 'Open Spotify Dashboard ↗',
   'setup.step2': 'Add this redirect URI',
   'setup.step2Body': 'It must match exactly, with no trailing slash.',
@@ -147,8 +149,11 @@ export const en = {
   'setup.step3Body':
     'Open the app’s User Management tab and add your own Spotify account. Without this, Spotify will refuse the sign-in.',
   'setup.step4': 'Paste your Client ID',
+  'setup.step4Body':
+    'It is on the page of the app you just created, beside the Client Secret — which Groovium never asks for and never stores.',
   'setup.idPlaceholder': '32-character Client ID',
-  'setup.premium': 'Spotify Premium is required for playback.',
+  'setup.premium':
+    'Spotify Premium is required — not only to play music, but to keep the registration itself alive: Spotify asks the account that owns the app to hold an active subscription, and the app stops working if it lapses.',
   'setup.clipboardFailed':
     'Could not reach the clipboard. Select the address and copy it manually.',
 
