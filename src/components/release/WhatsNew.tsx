@@ -63,7 +63,7 @@ export function WhatsNew({ open, summary, onClose }: WhatsNewProps) {
       <div
         role="dialog"
         aria-label={t('whatsNew.title')}
-        className={`relative flex max-h-full w-full flex-col groove-surface overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
+        className={`relative flex max-h-full w-full flex-col groove-surface groove-halo overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
           shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
         }`}
       >

@@ -348,6 +348,28 @@ body {
  */
 .groove-surface {
   background: color-mix(in srgb, var(--color-shell-800) 96%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / var(--lift));
+}
+
+/*
+ * The halo, for a surface that floats.
+ *
+ * A sheet is centred over a backdrop with room on every side, so the blur
+ * below it reads as depth — the thing you'd see under an object raised off a
+ * table. A panel has no such room: it is docked flush against the transport
+ * row underneath, and that same blur had nowhere to fall but into the gap
+ * between them, where it hung as a flat smudge with no edge to belong to. Kept
+ * as its own rule rather than folded back into `.groove-surface`, so a panel
+ * never has to remember to cancel a shadow it was never meant to have.
+ *
+ * The combined selector, not a rule of its own: `box-shadow` cannot be built
+ * up across two classes the way `background` or a transform can, since the
+ * second declaration replaces the first rather than adding to it. Naming both
+ * classes together is what keeps the lift and the halo both present on a
+ * sheet, at a specificity that wins over `.groove-surface` alone regardless of
+ * which rule the stylesheet happens to list first.
+ */
+.groove-surface.groove-halo {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / var(--lift)),
     0 -1px 12px rgb(0 0 0 / calc(0.35 * var(--shade)));

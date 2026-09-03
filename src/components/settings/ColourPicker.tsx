@@ -197,7 +197,7 @@ export function ColourPicker({ editing, onClose }: ColourPickerProps) {
       <div
         role="dialog"
         aria-label={t('colour.dialog')}
-        className={`groove-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
+        className={`groove-surface groove-halo relative flex max-h-full w-full flex-col overflow-hidden rounded-lg ring-1 ring-[var(--color-edge)] transition-all duration-[180ms] ease-out ${
           shown ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-2 scale-[0.97] opacity-0'
         }`}
       >
