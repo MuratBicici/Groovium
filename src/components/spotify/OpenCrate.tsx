@@ -207,7 +207,7 @@ function Record({
       type="button"
       data-record
       onClick={(e) => onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'))}
-      className="group/record flex flex-col items-center gap-1.5 rounded-md p-1 text-center transition-colors hover:bg-shell-700/50"
+      className="groove-record group/record flex flex-col items-center gap-1.5 rounded-md p-1 text-center transition-colors hover:bg-shell-700/50"
     >
       <span data-disc className="block transition-transform group-hover/record:scale-[1.03]">
         <VinylDisc size={112} coverArtUrl={track.coverArtUrl} />

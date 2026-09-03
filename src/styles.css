@@ -439,6 +439,27 @@ body {
 }
 
 /*
+ * A record in an opened crate, drawn only while it can be seen.
+ *
+ * Paging keeps the *arrival* cheap, and does nothing about the total: scroll
+ * far enough into a long playlist and three hundred records are mounted at
+ * once. Each is a full-size `VinylDisc`, which above 96px means grooves, a
+ * label and half a dozen gradients — so the cost that paging just removed
+ * comes back, slowly, as a reward for scrolling.
+ *
+ * `content-visibility` is the browser's own answer: skip layout and paint for
+ * anything off screen. `contain-intrinsic-size` is what it stands in with
+ * meanwhile — without it every skipped record measures zero, the scrollbar
+ * collapses, and scrolling fights itself. The size is the disc plus its two
+ * lines of text, which is a guess, but a guess that is only ever wrong about
+ * something nobody is looking at.
+ */
+.groove-record {
+  content-visibility: auto;
+  contain-intrinsic-size: 128px 152px;
+}
+
+/*
  * A soft fade at the bottom of a list that scrolls, present only while there
  * is more of it to see.
  *

@@ -12,9 +12,22 @@ import { pickCover, request, toTrackMetadata, type ApiImage, type ApiTrack } fro
  * and will need the `snapshotId` this already carries.
  */
 
-/** Spotify's own page size caps: 50 for playlists, 100 for their contents. */
+/** Spotify's own page size cap for playlists. */
 const PLAYLISTS_PER_PAGE = 50;
-const ITEMS_PER_PAGE = 100;
+
+/**
+ * How many records to take out of a crate at a time.
+ *
+ * Spotify allows a hundred and that is what this asked for, which was a
+ * mistake: a record is drawn at full size, and above 96px `VinylDisc` draws its
+ * grooves, its label and half a dozen gradients. A hundred of those mounting in
+ * one frame does not open a playlist slowly, it stops opening it.
+ *
+ * Two dozen is more than a drawer's height of them, so there is always
+ * something below to scroll to, and the rest come out of the crate as it is
+ * scrolled — which is what the shelf does one level up, for the same reason.
+ */
+const ITEMS_PER_PAGE = 24;
 
 export interface SpotifyPlaylist {
   id: string;
