@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { playlistPage, type SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
+import type { TrackMetadata } from '@/core/types';
+import {
+  playlistPage,
+  playlistTrackPage,
+  type SpotifyPlaylist,
+} from '@/core/providers/spotifyPlaylists';
 
 /**
  * Someone's Spotify playlists, as the drawer has them so far.
@@ -30,6 +35,25 @@ interface SpotifyPlaylistsState {
   more: () => Promise<void>;
   /** Throw it all away — signing out, or changing which account this is. */
   forget: () => void;
+
+  /**
+   * The crate that is open, if one is.
+   *
+   * One at a time, and its contents are not kept when it closes. Holding every
+   * playlist's tracks would be a cache, and a cache of something that changes
+   * on another device needs a story about going stale — which is a later piece
+   * of work with `snapshotId` at the middle of it. Until then, opening a crate
+   * asks.
+   */
+  openId: string | null;
+  tracks: TrackMetadata[];
+  tracksCursor: string | null;
+  tracksLoading: boolean;
+  tracksError: string | null;
+
+  openCrate: (id: string) => Promise<void>;
+  closeCrate: () => void;
+  moreTracks: () => Promise<void>;
 }
 
 export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get) => {
@@ -58,6 +82,33 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     }
   }
 
+  /**
+   * A page of one crate's records.
+   *
+   * Checks on the way back that the crate it was fetched for is still the one
+   * open. Open a crate, change your mind, open another: the first request is
+   * still in flight, and without this it lands in the second crate.
+   */
+  async function fetchTracks(id: string, cursor: string | null): Promise<void> {
+    if (get().tracksLoading) return;
+    set({ tracksLoading: true, tracksError: null });
+    try {
+      const page = await playlistTrackPage(id, cursor);
+      if (get().openId !== id) return;
+      set((state) => ({
+        tracks: [...state.tracks, ...page.items],
+        tracksCursor: page.cursor,
+        tracksLoading: false,
+      }));
+    } catch (err) {
+      if (get().openId !== id) return;
+      set({
+        tracksLoading: false,
+        tracksError: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return {
     playlists: [],
     cursor: null,
@@ -78,7 +129,41 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     },
 
     forget() {
-      set({ playlists: [], cursor: null, loading: false, started: false, error: null });
+      set({
+        playlists: [],
+        cursor: null,
+        loading: false,
+        started: false,
+        error: null,
+        openId: null,
+        tracks: [],
+        tracksCursor: null,
+        tracksLoading: false,
+        tracksError: null,
+      });
+    },
+
+    openId: null,
+    tracks: [],
+    tracksCursor: null,
+    tracksLoading: false,
+    tracksError: null,
+
+    async openCrate(id) {
+      // Cleared before the fetch, not after. Opening a second crate must not
+      // show the first one's records for the length of a request.
+      set({ openId: id, tracks: [], tracksCursor: null, tracksError: null });
+      await fetchTracks(id, null);
+    },
+
+    closeCrate() {
+      set({ openId: null, tracks: [], tracksCursor: null, tracksError: null });
+    },
+
+    async moreTracks() {
+      const { openId, tracksCursor, tracksLoading } = get();
+      if (!openId || !tracksCursor || tracksLoading) return;
+      await fetchTracks(openId, tracksCursor);
     },
   };
 });

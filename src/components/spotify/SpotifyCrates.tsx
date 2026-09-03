@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useT } from '@/core/i18n';
+import { OpenCrate } from './OpenCrate';
 
 /**
  * The shelf: someone's Spotify playlists, as record sleeves.
@@ -24,6 +25,19 @@ export function SpotifyCrates() {
   const error = useSpotifyPlaylistsStore((s) => s.error);
   const open = useSpotifyPlaylistsStore((s) => s.open);
   const more = useSpotifyPlaylistsStore((s) => s.more);
+  const openId = useSpotifyPlaylistsStore((s) => s.openId);
+  const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
+  const closeCrate = useSpotifyPlaylistsStore((s) => s.closeCrate);
+
+  /**
+   * Where the sleeve was when it was opened.
+   *
+   * Measured at the click rather than looked up afterwards: by the time the
+   * layer renders the records need somewhere to have come *from*, and that is
+   * a rectangle which existed at the moment of the press.
+   */
+  const [origin, setOrigin] = useState<DOMRect | null>(null);
+  const opened = playlists.find((p) => p.id === openId) ?? null;
 
   useEffect(() => {
     void open();
@@ -64,7 +78,13 @@ export function SpotifyCrates() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
+    // `relative` is load-bearing: the open crate is `absolute inset-0` and
+    // positions against the nearest positioned ancestor. Without it that is the
+    // shell, and the layer would cover the deck — the one thing it must not do,
+    // because a record is meant to be dragged from it onto the deck and there
+    // would be nowhere to drop one.
+    <div className="relative min-h-0 flex-1">
+      <div className="h-full overflow-y-auto groove-scroll-fade">
       <div
         className="grid gap-2 pb-2"
         // Sized rather than counted in columns, so the shelf keeps its
@@ -72,7 +92,14 @@ export function SpotifyCrates() {
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
       >
         {playlists.map((playlist) => (
-          <Crate key={playlist.id} playlist={playlist} />
+          <Crate
+            key={playlist.id}
+            playlist={playlist}
+            onOpen={(rect) => {
+              setOrigin(rect);
+              void openCrate(playlist.id);
+            }}
+          />
         ))}
       </div>
       <div ref={sentinel} aria-hidden="true" className="h-px" />
@@ -81,21 +108,28 @@ export function SpotifyCrates() {
           {t('spotify.loadingPlaylists')}
         </p>
       )}
+      </div>
+
+      {opened && origin && <OpenCrate playlist={opened} origin={origin} onClose={closeCrate} />}
     </div>
   );
 }
 
-/**
- * One sleeve.
- *
- * Not a button yet — opening one is the next piece of work, and a square that
- * depresses under the pointer and then does nothing is a worse promise than a
- * square that does not.
- */
-function Crate({ playlist }: { playlist: SpotifyPlaylist }) {
+/** One sleeve, which opens to show what is in it. */
+function Crate({
+  playlist,
+  onOpen,
+}: {
+  playlist: SpotifyPlaylist;
+  onOpen: (rect: DOMRect) => void;
+}) {
   const t = useT();
   return (
-    <div className="flex flex-col gap-1">
+    <button
+      type="button"
+      onClick={(e) => onOpen(e.currentTarget.getBoundingClientRect())}
+      className="flex flex-col gap-1 rounded-md text-left transition-transform hover:scale-[1.02]"
+    >
       <div className="relative aspect-square w-full overflow-hidden rounded-md groove-inset ring-1 ring-[var(--color-edge)]">
         {playlist.coverArtUrl ? (
           <img
@@ -122,6 +156,6 @@ function Crate({ playlist }: { playlist: SpotifyPlaylist }) {
       <span className="truncate text-label text-cream-400">
         {t('spotify.trackCount', { count: playlist.trackCount })}
       </span>
-    </div>
+    </button>
   );
 }
