@@ -15,7 +15,7 @@ import { SpotifySearch } from './SpotifySearch';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
 
-type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'reauthorise' | 'connected';
+type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
 
 interface SpotifyDrawerProps {
   onClose: () => void;
@@ -43,17 +43,20 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   const [stage, setStage] = useState<Stage>('loading');
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Permissions this build needs that the stored token does not carry.
+   *
+   * Kept apart from `stage` deliberately. Being short a scope is not a state
+   * the drawer is *in* — search and playback are what the old grant already
+   * covers, and `/search` asks for no scope at all. Only the parts that need
+   * more say so, where they would otherwise be.
+   */
+  const [missing, setMissing] = useState<string[]>([]);
 
   /** Which stage the drawer should show, asked without touching state. */
   const stageFor = useCallback(async (): Promise<Stage> => {
     if (!(await hasClientId())) return 'setup';
-    if (!(await isAuthenticated())) return 'disconnected';
-    // Signed in is not the same as allowed. A token issued before the drawer
-    // existed keeps its old grant through every refresh, so it can play music
-    // and not read a single playlist — and asked for one, Spotify answers 403
-    // with nothing that explains why. Better to say so here, once, at the
-    // moment somebody opens the drawer and needs it.
-    return (await missingScopes()).length > 0 ? 'reauthorise' : 'connected';
+    return (await isAuthenticated()) ? 'connected' : 'disconnected';
   }, []);
 
   const refresh = useCallback(async () => {
@@ -82,8 +85,11 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         const who = await fetchAccount();
         if (!cancelled && who) setAccount(who);
       } catch {
-        /* the panel works without a name */
+        /* the drawer works without a name */
       }
+
+      const short = await missingScopes();
+      if (!cancelled) setMissing(short);
     })();
     return () => {
       cancelled = true;
@@ -180,25 +186,6 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
           </Centered>
         )}
 
-        {stage === 'reauthorise' && (
-          <div className="space-y-3 px-4 py-3 text-center">
-            <p className="text-body text-cream-200">{t('spotify.reauthLead')}</p>
-            <p className="text-meta leading-snug text-cream-400">{t('spotify.reauthRest')}</p>
-            <button
-              type="button"
-              onClick={() => void connect()}
-              className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
-            >
-              {t('spotify.reauthorise')}
-            </button>
-            {error && (
-              <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-meta leading-snug text-red-200">
-                {error}
-              </p>
-            )}
-          </div>
-        )}
-
         {stage === 'disconnected' && (
           <div className="space-y-3 px-4 py-3 text-center">
             <p className="text-body text-cream-400">
@@ -229,6 +216,28 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
             <SpotifySearch />
+            {/* Where the playlists will be. Nothing that already worked is
+                taken away to show this: search needs no scope at all, and the
+                old grant still plays music. Only the part that cannot be
+                built without permission says that it needs some. */}
+            {missing.length > 0 && (
+              <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">
+                <p className="text-body text-cream-200">{t('spotify.reauthLead')}</p>
+                <p className="text-meta leading-snug text-cream-400">{t('spotify.reauthRest')}</p>
+                <button
+                  type="button"
+                  onClick={() => void connect()}
+                  className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
+                >
+                  {t('spotify.reauthorise')}
+                </button>
+                {error && (
+                  <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+                    {error}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
