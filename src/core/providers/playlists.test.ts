@@ -156,6 +156,20 @@ describe('reading what is in a playlist', () => {
     expect(page.items).toEqual([]);
   });
 
+  it('does not retry a refusal on the other route', async () => {
+    // A playlist somebody is not allowed to read answers 403 on both. Retrying
+    // bought a second doomed request and put *its* error on screen instead of
+    // the refusal that mattered — so only a missing route is worth a second
+    // try, and 403 is not a missing route.
+    vi.resetModules();
+    const fresh = await import('./spotifyPlaylists');
+
+    answer = () => ({ status: 403, body: { error: { status: 403, message: 'Forbidden' } } });
+    await expect(fresh.playlistTrackPage('theirs')).rejects.toThrow(/refused/i);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('/items');
+  });
+
   it('falls back to the older route when the new one is not there', async () => {
     // Spotify renamed `/tracks` to `/items` and postponed the removal for
     // registrations that already existed, so which one answers depends on when

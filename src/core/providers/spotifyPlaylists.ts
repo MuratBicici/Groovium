@@ -1,5 +1,12 @@
 import type { TrackMetadata } from '@/core/types';
-import { pickCover, request, toTrackMetadata, type ApiImage, type ApiTrack } from './spotifyApi';
+import {
+  pickCover,
+  request,
+  SpotifyError,
+  toTrackMetadata,
+  type ApiImage,
+  type ApiTrack,
+} from './spotifyApi';
 
 /**
  * Someone's own Spotify playlists, and what is in them.
@@ -182,9 +189,12 @@ export async function playlistTrackPage(
     try {
       data = await itemsPageOn('items', id, params);
       itemsRoute = 'items';
-    } catch {
-      // The older route, for a registration Spotify has not moved yet. Only
-      // tried once: if this fails too the error is the caller's to see.
+    } catch (err) {
+      // Only when the route is not there. This used to retry on any failure,
+      // which meant a playlist somebody was not allowed to read — a 403 —
+      // bought a second doomed request, and the error that reached the screen
+      // came from the fallback rather than from the refusal that mattered.
+      if (!(err instanceof SpotifyError) || err.status !== 404) throw err;
       data = await itemsPageOn('tracks', id, params);
       itemsRoute = 'tracks';
     }

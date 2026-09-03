@@ -30,6 +30,24 @@ export const SEARCH_LIMIT = 10;
  */
 const MAX_RETRY_AFTER_MS = 10_000;
 
+/**
+ * A refusal, with the number Spotify refused by.
+ *
+ * The status is the part callers act on. "Route not found" and "you may not
+ * read this" both arrive as an exception, and treating them the same is how a
+ * permission problem turns into a second doomed request whose error is the one
+ * that gets shown.
+ */
+export class SpotifyError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'SpotifyError';
+  }
+}
+
 async function send(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
     ...init,
@@ -67,7 +85,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
     const body = await response.text();
 
     if (response.status === 401) {
-      throw new Error('Spotify rejected the session. Sign out and connect again.');
+      throw new SpotifyError('Spotify rejected the session. Sign out and connect again.', 401);
     }
     // 403 covers a missing scope, a playlist belonging to somebody else, and
     // an account Spotify will not let this registration act for. Guessing which
@@ -78,16 +96,25 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
     // sentence from the people who refused beats a sentence from the people who
     // asked.
     if (response.status === 403) {
-      throw new Error(`Spotify refused this request. ${spotifyMessage(body) ?? ''}`.trim());
+      throw new SpotifyError(
+        `Spotify refused this request. ${spotifyMessage(body) ?? ''}`.trim(),
+        403,
+      );
     }
     if (response.status === 404) {
-      throw new Error('Spotify has no active device for this app yet.');
+      throw new SpotifyError('Spotify has no active device for this app yet.', 404);
     }
     if (response.status === 429) {
       // Already waited once for whatever `Retry-After` asked.
-      throw new Error('Spotify is rate limiting this app. Wait a moment and try again.');
+      throw new SpotifyError(
+        'Spotify is rate limiting this app. Wait a moment and try again.',
+        429,
+      );
     }
-    throw new Error(`Spotify API ${response.status}: ${body.slice(0, 160)}`);
+    throw new SpotifyError(
+      `Spotify API ${response.status}: ${body.slice(0, 160)}`,
+      response.status,
+    );
   }
 
   return (await response.json()) as T;
