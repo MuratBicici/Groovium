@@ -27,7 +27,9 @@ bağlıysa Groovium Premium varsayıyor ve sözü çalmanın kendisine bırakıy
 
 Spotify kurulum yönergeleri de insanların ihtiyaç duyduğu birkaç şeyi
 söylemiyordu; bunlardan biri Spotify'ın kendi formundaki, kaçırıldığında sessizce
-başarısız olan bir cevap. Bir de pencerenin çizimine dair dört düzeltme var.
+başarısız olan bir cevap. Bir de pencerenin çizimine dair beş düzeltme var;
+bunlardan biri, açık bir panelin alt kenarında pencereyi boydan boya kesen o
+çizgi — panelin yüzeyi artık durmak yerine kabuğun rengine varıyor.
 
 ## 1.0.4 — 2026-08-29
 

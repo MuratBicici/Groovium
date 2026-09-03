@@ -23,7 +23,7 @@ is connected, Groovium now assumes Premium and lets playback speak for itself.
 
 The Spotify setup instructions were also short of a few things people needed,
 including one answer on Spotify's own form that fails silently when it is
-missed. And there are four fixes to how the window is drawn.
+missed. And there are five fixes to how the window is drawn.
 
 HIGHLIGHTS
 · Infinite play's last resort works again for anyone who set Spotify up after
@@ -35,7 +35,9 @@ HIGHLIGHTS
 · Setup says where to find the Client ID, and why every installation has to
   register an app of its own.
 · The window's outline is no longer covered by whatever opens over it.
-· Panels no longer cast a shadow into the gap above the controls.
+· Panels no longer cast a shadow into the gap above the controls, and their
+  bottom edge no longer draws a line across the window — the surface now
+  arrives at the shell instead of stopping on it.
 · Lists fade out at the bottom edge while there is more to scroll, and stop
   fading once there is not.
 · Buttons show a pointer again when the mouse is over them.
@@ -65,6 +67,10 @@ ALL CHANGES
 · Panels: the shadow under a panel is gone. It fell into the gap above the
   transport row with no surface beneath it to explain it, and read as a smudge.
   Dialogs, which float over a backdrop, keep theirs.
+· Panels: a panel's surface fades into the shell over its last thirty-two
+  pixels rather than ending in one. The step there is about three parts in
+  255, which is not enough to see as a colour and more than enough to see as a
+  straight edge — so it is spread rather than corrected.
 · Panels: a list fades over its last ten pixels while there is more below, and
   the fade disappears once the end is reached, so the last row is never dimmed
   for no reason.
