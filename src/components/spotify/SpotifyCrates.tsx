@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useT } from '@/core/i18n';
-import { OpenCrate } from './OpenCrate';
 
 /**
  * The shelf: someone's Spotify playlists, as record sleeves.
@@ -25,19 +24,7 @@ export function SpotifyCrates() {
   const error = useSpotifyPlaylistsStore((s) => s.error);
   const open = useSpotifyPlaylistsStore((s) => s.open);
   const more = useSpotifyPlaylistsStore((s) => s.more);
-  const openId = useSpotifyPlaylistsStore((s) => s.openId);
   const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
-  const closeCrate = useSpotifyPlaylistsStore((s) => s.closeCrate);
-
-  /**
-   * Where the sleeve was when it was opened.
-   *
-   * Measured at the click rather than looked up afterwards: by the time the
-   * layer renders the records need somewhere to have come *from*, and that is
-   * a rectangle which existed at the moment of the press.
-   */
-  const [origin, setOrigin] = useState<DOMRect | null>(null);
-  const opened = playlists.find((p) => p.id === openId) ?? null;
 
   useEffect(() => {
     void open();
@@ -78,13 +65,7 @@ export function SpotifyCrates() {
   }
 
   return (
-    // `relative` is load-bearing: the open crate is `absolute inset-0` and
-    // positions against the nearest positioned ancestor. Without it that is the
-    // shell, and the layer would cover the deck — the one thing it must not do,
-    // because a record is meant to be dragged from it onto the deck and there
-    // would be nowhere to drop one.
-    <div className="relative min-h-0 flex-1">
-      <div className="h-full overflow-y-auto groove-scroll-fade">
+    <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
       <div
         className="grid gap-2 pb-2"
         // Sized rather than counted in columns, so the shelf keeps its
@@ -95,10 +76,10 @@ export function SpotifyCrates() {
           <Crate
             key={playlist.id}
             playlist={playlist}
-            onOpen={(rect) => {
-              setOrigin(rect);
-              void openCrate(playlist.id);
-            }}
+            // Measured at the press. By the time the layer renders, the
+            // records need somewhere to have come *from*, and that is a
+            // rectangle which existed at the moment it was pressed.
+            onOpen={(rect) => void openCrate(playlist.id, rect)}
           />
         ))}
       </div>
@@ -108,9 +89,6 @@ export function SpotifyCrates() {
           {t('spotify.loadingPlaylists')}
         </p>
       )}
-      </div>
-
-      {opened && origin && <OpenCrate playlist={opened} origin={origin} onClose={closeCrate} />}
     </div>
   );
 }
@@ -121,13 +99,16 @@ function Crate({
   onOpen,
 }: {
   playlist: SpotifyPlaylist;
-  onOpen: (rect: DOMRect) => void;
+  onOpen: (rect: { x: number; y: number; width: number; height: number }) => void;
 }) {
   const t = useT();
   return (
     <button
       type="button"
-      onClick={(e) => onOpen(e.currentTarget.getBoundingClientRect())}
+      onClick={(e) => {
+        const { x, y, width, height } = e.currentTarget.getBoundingClientRect();
+        onOpen({ x, y, width, height });
+      }}
       className="flex flex-col gap-1 rounded-md text-left transition-transform hover:scale-[1.02]"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-md groove-inset ring-1 ring-[var(--color-edge)]">

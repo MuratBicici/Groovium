@@ -13,6 +13,8 @@ import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
+import { OpenCrate } from './OpenCrate';
+import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
 
@@ -53,6 +55,12 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
    * more say so, where they would otherwise be.
    */
   const [missing, setMissing] = useState<string[]>([]);
+
+  const openId = useSpotifyPlaylistsStore((s) => s.openId);
+  const openOrigin = useSpotifyPlaylistsStore((s) => s.openOrigin);
+  const playlists = useSpotifyPlaylistsStore((s) => s.playlists);
+  const closeCrate = useSpotifyPlaylistsStore((s) => s.closeCrate);
+  const opened = playlists.find((p) => p.id === openId) ?? null;
 
   /** Which stage the drawer should show, asked without touching state. */
   const stageFor = useCallback(async (): Promise<Stage> => {
@@ -137,7 +145,10 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
       // straight through both halves, which is what makes this read as the
       // window having been pulled open rather than as a second window parked
       // against the first.
-      className="flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
+      // `relative` so an opened crate covers this and stops here. Without it
+      // the nearest positioned ancestor is the shell, and the layer would take
+      // the deck with it.
+      className="relative flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         {/* A brand and, once connected, someone's name. Neither is a Turkish
@@ -249,6 +260,10 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
           </div>
         )}
       </div>
+
+      {opened && openOrigin && (
+        <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
+      )}
     </aside>
   );
 }

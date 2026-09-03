@@ -36,6 +36,9 @@ const shelf = (...ids: string[]): SpotifyPlaylist[] =>
     ownerName: 'Me',
   }));
 
+/** Where a sleeve was when it was pressed. The numbers do not matter here. */
+const sleeve = { x: 0, y: 0, width: 140, height: 140 };
+
 /** A promise this test decides when to settle, for the in-flight cases. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -175,7 +178,7 @@ describe('when Spotify will not answer', () => {
 describe('opening a crate', () => {
   it('shows what is in it', async () => {
     fetchTracks.mockResolvedValueOnce({ items: records('1', '2'), cursor: null });
-    await useSpotifyPlaylistsStore.getState().openCrate('p1');
+    await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     const state = useSpotifyPlaylistsStore.getState();
     expect(state.openId).toBe('p1');
@@ -184,11 +187,11 @@ describe('opening a crate', () => {
 
   it('does not show the last crate’s records while the next one loads', async () => {
     fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
-    await useSpotifyPlaylistsStore.getState().openCrate('p1');
+    await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     const pending = deferred<{ items: TrackMetadata[]; cursor: string | null }>();
     fetchTracks.mockReturnValueOnce(pending.promise);
-    const second = useSpotifyPlaylistsStore.getState().openCrate('p2');
+    const second = useSpotifyPlaylistsStore.getState().openCrate('p2', sleeve);
 
     // The moment the second crate opens, the first one's records are gone.
     expect(useSpotifyPlaylistsStore.getState().tracks).toEqual([]);
@@ -203,7 +206,7 @@ describe('opening a crate', () => {
     // lands *in* the second.
     const slow = deferred<{ items: TrackMetadata[]; cursor: string | null }>();
     fetchTracks.mockReturnValueOnce(slow.promise);
-    const first = useSpotifyPlaylistsStore.getState().openCrate('p1');
+    const first = useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     useSpotifyPlaylistsStore.getState().closeCrate();
     slow.resolve({ items: records('stale'), cursor: null });
@@ -215,7 +218,7 @@ describe('opening a crate', () => {
 
   it('appends the next page of records', async () => {
     fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: '100' });
-    await useSpotifyPlaylistsStore.getState().openCrate('p1');
+    await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     fetchTracks.mockResolvedValueOnce({ items: records('2'), cursor: null });
     await useSpotifyPlaylistsStore.getState().moreTracks();
@@ -229,7 +232,7 @@ describe('opening a crate', () => {
 
   it('stops at the end of a crate', async () => {
     fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
-    await useSpotifyPlaylistsStore.getState().openCrate('p1');
+    await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
     await useSpotifyPlaylistsStore.getState().moreTracks();
     expect(fetchTracks).toHaveBeenCalledTimes(1);
   });

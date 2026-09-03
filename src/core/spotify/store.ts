@@ -46,12 +46,20 @@ interface SpotifyPlaylistsState {
    * asks.
    */
   openId: string | null;
+  /**
+   * Where the sleeve was on screen when it was pressed.
+   *
+   * Plain numbers rather than the `DOMRect` itself: this outlives the element
+   * it was measured from, and a live rect would be a handle on a node the
+   * layer covering it has no business holding.
+   */
+  openOrigin: { x: number; y: number; width: number; height: number } | null;
   tracks: TrackMetadata[];
   tracksCursor: string | null;
   tracksLoading: boolean;
   tracksError: string | null;
 
-  openCrate: (id: string) => Promise<void>;
+  openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
   closeCrate: () => void;
   moreTracks: () => Promise<void>;
 }
@@ -136,6 +144,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         started: false,
         error: null,
         openId: null,
+        openOrigin: null,
         tracks: [],
         tracksCursor: null,
         tracksLoading: false,
@@ -144,20 +153,21 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     },
 
     openId: null,
+    openOrigin: null,
     tracks: [],
     tracksCursor: null,
     tracksLoading: false,
     tracksError: null,
 
-    async openCrate(id) {
+    async openCrate(id, origin) {
       // Cleared before the fetch, not after. Opening a second crate must not
       // show the first one's records for the length of a request.
-      set({ openId: id, tracks: [], tracksCursor: null, tracksError: null });
+      set({ openId: id, openOrigin: origin, tracks: [], tracksCursor: null, tracksError: null });
       await fetchTracks(id, null);
     },
 
     closeCrate() {
-      set({ openId: null, tracks: [], tracksCursor: null, tracksError: null });
+      set({ openId: null, openOrigin: null, tracks: [], tracksCursor: null, tracksError: null });
     },
 
     async moreTracks() {

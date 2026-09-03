@@ -38,8 +38,8 @@ const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
-  /** Where the sleeve is on screen, so the records can come out of it. */
-  origin: DOMRect;
+  /** Where the sleeve was on screen, so the records can come out of it. */
+  origin: { x: number; y: number; width: number; height: number };
   onClose: () => void;
 }
 
@@ -91,8 +91,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // From the sleeve's middle to this record's, at the sleeve's size. The
       // crate is square and so is a record, so one ratio covers both axes.
       const scale = origin.width / to.width;
-      const dx = origin.left + origin.width / 2 - (to.left + to.width / 2);
-      const dy = origin.top + origin.height / 2 - (to.top + to.height / 2);
+      const dx = origin.x + origin.width / 2 - (to.left + to.width / 2);
+      const dy = origin.y + origin.height / 2 - (to.top + to.height / 2);
 
       el.animate(
         [
@@ -127,8 +127,11 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     <div
       role="dialog"
       aria-label={playlist.name}
-      // Over the drawer, not over the window. `inset-0` here is the drawer's
-      // box because this is rendered inside it.
+      // The whole drawer, and only the drawer. `inset-0` is the drawer's box
+      // because this is rendered as its child — which is the point: an opened
+      // crate *is* the Spotify side of the window for as long as it is open,
+      // and the deck beside it stays visible and reachable, because a record
+      // is meant to be dragged from here onto it.
       className="absolute inset-0 z-30 flex flex-col groove-surface backdrop-blur-sm"
     >
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
