@@ -51,6 +51,7 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * | z-20   | Panels: Library, Playlists, Spotify             |
  * | z-30   | Modal sheets: playlist picker, station setup    |
  * | z-40   | The picker's confirmation, over its own sheet   |
+ * | z-50   | The window's edge, which nothing may cover      |
  *
  * A record is part of the deck, so it belongs under whatever covers the deck.
  * The shell below is `relative` with no z-index, no transform and no opacity,
@@ -212,21 +213,7 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      // The ring is what separates a frameless transparent window from the
-      // desktop behind it, so there is always exactly one. The accent replaces
-      // the black rather than stacking on it: two rings is a 2px edge, and on a
-      // 340px widget that reads as a border somebody drew rather than as the
-      // edge of an object.
-      //
-      // `ring-inset` is load-bearing, not decoration. A ring is a box-shadow
-      // drawn *outside* the element, and this element fills the window — so on
-      // all four straight edges the line landed outside the window and was
-      // clipped away. Only at the rounded corners, where the shell's own
-      // background curves inward, was there room for it to show, which is
-      // exactly how it looked: a border made of four corners.
-      className={`relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ring-1 ring-inset ${
-        windowBorder ? 'ring-brass-500/70' : 'ring-black/50'
-      }`}
+      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900"
     >
       <PlaylistPickerProvider>
       <DiscFlightProvider>
@@ -383,6 +370,31 @@ export default function App() {
           {error}
         </button>
       )}
+      {/* The window's own edge, drawn last and over everything.
+
+          It is what separates a frameless transparent window from the desktop
+          behind it, so there is always exactly one. The accent replaces the
+          black rather than stacking on it: two rings is a 2px edge, and on a
+          340px widget that reads as a border somebody drew rather than as the
+          edge of an object.
+
+          `ring-inset` is load-bearing, not decoration. A ring is a box-shadow
+          drawn *outside* the element, and this fills the window — so on all
+          four straight edges the line would land outside the window and be
+          clipped away, leaving a border made of four corners.
+
+          Its own layer rather than a ring on the shell, because the shell
+          paints below its children: a panel is `inset-0` across the full width
+          and covered the line down both sides for as long as it was open, and
+          a sheet's backdrop did the same to all four. An edge that a menu can
+          switch off is not an edge. Nothing is above this, and
+          `pointer-events-none` means nothing has to be. */}
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 z-50 rounded-[var(--radius-widget)] ring-1 ring-inset ${
+          windowBorder ? 'ring-brass-500/70' : 'ring-black/50'
+        }`}
+      />
       </DiscHoldProvider>
       </DiscFlightProvider>
       </PlaylistPickerProvider>
