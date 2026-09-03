@@ -101,6 +101,12 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
     setError(null);
     try {
       setAccount(await beginAuth());
+      // Re-read rather than assume. Asking for a scope is not being given it —
+      // somebody can approve a narrower set than was requested — so the notice
+      // goes away because Spotify said the grant is complete, not because a
+      // button was pressed. Without this it would sit there until the drawer
+      // was closed and opened again, over a grant that had already arrived.
+      setMissing(await missingScopes());
       setStage('connected');
     } catch (err) {
       setError(describeAuthError(err));
