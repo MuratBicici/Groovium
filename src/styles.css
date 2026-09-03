@@ -215,6 +215,31 @@ body {
 }
 
 /*
+ * A pointer on the things that take a press.
+ *
+ * The arrow above is deliberate and stays: this is a control surface, not a
+ * page, and a hand cursor drifting over plain text is what makes a desktop app
+ * feel like a website. But Tailwind v4 dropped the v3 preflight rule that gave
+ * buttons a pointer, so every control here inherited that arrow instead and
+ * none of them read as pressable. This gives it back to the controls alone.
+ *
+ * `@layer base` is load-bearing rather than tidiness. An unlayered rule beats
+ * every utility no matter the specificity, and three deliberate exceptions are
+ * themselves buttons: the sheet backdrops carry `cursor-default`, because a
+ * hand over a whole dimmed window promises something that is not there, and
+ * the platter carries `cursor-grab`, because a record is lifted off a deck
+ * rather than clicked. Inside `base`, those utilities win. Disabled controls
+ * are held back by the selector itself — nothing that cannot be pressed should
+ * say otherwise.
+ */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/*
  * Scrollbars. The default Windows ones are wide, pale and sit outside the
  * palette entirely, which reads as a browser control bolted onto a physical
  * object. Both syntaxes are set: WebView2 honours the `-webkit-` pseudo
