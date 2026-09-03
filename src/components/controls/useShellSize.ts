@@ -145,6 +145,17 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
 
     if (was.current === compact && wasWide.current === wide) return;
     const fromWidth = widthFor(wasWide.current);
+    /**
+     * Whether the height is going anywhere.
+     *
+     * Everything below that touches the stage exists to collapse the player
+     * into its controls, and none of it applies to a drawer sliding out beside
+     * one. Running it anyway is not harmless: pinning the stage swaps its
+     * centring for `flex-start` and a computed padding, which lifts the record
+     * and the title by a pixel or two for the length of the animation and drops
+     * them back at the end. That was the twitch.
+     */
+    const heightMoves = was.current !== compact;
     was.current = compact;
     wasWide.current = wide;
 
@@ -186,57 +197,67 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
       bottom.style.height = `${height.bottom}px`;
     };
 
-    shell.style.height = 'auto';
+    // Only while the height is actually moving. Left to its own devices the
+    // shell is as tall as the window; `auto` hands that job to its contents,
+    // which is right mid-collapse and wrong for a drawer, where it briefly
+    // sizes the shell to something other than the window it sits in.
+    if (heightMoves) shell.style.height = 'auto';
     // Pinned for the duration. The shell is the only thing anyone can see —
     // the window around it is transparent — so widening the shell inside an
     // already-wide window *is* the drawer coming out, and the row inside is
     // simply clipped until there is room for it. Both halves are `shrink-0`,
     // so nothing squashes on the way.
     shell.style.width = `${fromWidth}px`;
-    stage.style.overflow = 'hidden';
-    bottom.style.overflow = 'hidden';
-    // `flex-1` would make flex-basis the stage's main size and ignore the
-    // height being animated, so the stage stops growing for the duration.
-    stage.style.flex = '0 0 auto';
+    if (heightMoves) {
+      stage.style.overflow = 'hidden';
+      bottom.style.overflow = 'hidden';
+      // `flex-1` would make flex-basis the stage's main size and ignore the
+      // height being animated, so the stage stops growing for the duration.
+      stage.style.flex = '0 0 auto';
 
-    // Hold the contents where they will finish, so what the record and the
-    // text are travelling towards does not move while they travel. The stage's
-    // top edge never moves, so its final centring is a padding away.
-    stage.style.justifyContent = 'flex-start';
-    stage.style.paddingTop = `${Math.max(0, (to.stage - naturalHeight(stage)) / 2)}px`;
-    pin(from);
+      // Hold the contents where they will finish, so what the record and the
+      // text are travelling towards does not move while they travel. The
+      // stage's top edge never moves, so its final centring is a padding away.
+      stage.style.justifyContent = 'flex-start';
+      stage.style.paddingTop = `${Math.max(0, (to.stage - naturalHeight(stage)) / 2)}px`;
+      pin(from);
+    }
 
-    const arriving = morphRects(shell);
+    const arriving = heightMoves ? morphRects(shell) : null;
 
     // Two frames: one to paint the starting heights, one to change them. Both
     // in a single frame land in the same style recalculation, and the browser
     // has nothing to interpolate from.
     const start = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        stage.style.transition = `height ${DURATION_MS}ms ${EASING}`;
-        bottom.style.transition = `height ${DURATION_MS}ms ${EASING}`;
         shell.style.transition = `width ${DURATION_MS}ms ${EASING}`;
         shell.style.width = `${width}px`;
-        pin(to);
-        morph(shell, before.rects, arriving);
+        if (heightMoves && arriving) {
+          stage.style.transition = `height ${DURATION_MS}ms ${EASING}`;
+          bottom.style.transition = `height ${DURATION_MS}ms ${EASING}`;
+          pin(to);
+          morph(shell, before.rects, arriving);
+        }
       });
     });
 
     const settle = setTimeout(() => {
-      for (const el of [stage, bottom]) {
-        el.style.height = '';
-        el.style.overflow = '';
-        el.style.transition = '';
+      if (heightMoves) {
+        for (const el of [stage, bottom]) {
+          el.style.height = '';
+          el.style.overflow = '';
+          el.style.transition = '';
+        }
+        stage.style.flex = '';
+        stage.style.justifyContent = '';
+        stage.style.paddingTop = '';
+        shell.style.height = compact ? 'auto' : '';
       }
-      stage.style.flex = '';
-      stage.style.justifyContent = '';
-      stage.style.paddingTop = '';
       // Collapsed, the shell keeps sizing to its content rather than to the
       // window. The two are the same number once the resize lands, but this
       // way round the bar still looks right if the resize does not — and it is
       // what makes the collapsed state visible in a plain browser, where there
       // is no window to resize at all.
-      shell.style.height = compact ? 'auto' : '';
       // Handed back to the window. Left pinned, the shell would stop following
       // a window that changed size for any other reason.
       shell.style.width = '';
