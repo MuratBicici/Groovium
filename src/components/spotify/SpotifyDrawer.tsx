@@ -12,6 +12,7 @@ import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
+import { SpotifyCrates } from './SpotifyCrates';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
 
@@ -222,10 +223,11 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
             <SpotifySearch />
-            {/* Where the playlists will be. Nothing that already worked is
-                taken away to show this: search needs no scope at all, and the
-                old grant still plays music. Only the part that cannot be
+            {/* The shelf, or the reason there is not one. Nothing that already
+                worked is taken away to ask: search needs no scope at all, and
+                the old grant still plays music. Only the part that cannot be
                 built without permission says that it needs some. */}
+            {missing.length === 0 && <SpotifyCrates />}
             {missing.length > 0 && (
               <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">
                 <p className="text-body text-cream-200">{t('spotify.reauthLead')}</p>

@@ -138,6 +138,10 @@ export const en = {
   'spotify.searching': 'Searching…',
   'spotify.nothingFound': 'Nothing found.',
   'spotify.typeToFind': 'Type to find a song.',
+  'spotify.loadingPlaylists': 'Fetching your playlists…',
+  'spotify.noPlaylists': 'No playlists here yet. Ones you make on Spotify show up here.',
+  'spotify.trackCount': '{count} song',
+  'spotify.trackCount_plural': '{count} songs',
 
   // Spotify setup
   'setup.optionalLead': 'Spotify is optional.',

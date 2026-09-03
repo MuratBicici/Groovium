@@ -128,6 +128,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.searching': 'Aranıyor…',
   'spotify.nothingFound': 'Bir şey bulunamadı.',
   'spotify.typeToFind': 'Şarkı bulmak için yazın.',
+  'spotify.loadingPlaylists': 'Çalma listeleriniz getiriliyor…',
+  'spotify.noPlaylists':
+    'Burada henüz çalma listesi yok. Spotify’da oluşturduklarınız burada görünür.',
+  'spotify.trackCount': '{count} şarkı',
 
   'setup.optionalLead': 'Spotify isteğe bağlı.',
   'setup.optionalRest':

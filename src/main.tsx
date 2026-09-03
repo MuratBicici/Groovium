@@ -18,6 +18,9 @@ if (import.meta.env.DEV) {
   void import('./core/updates/store').then(({ useUpdateStore }) => {
     (window as unknown as Record<string, unknown>).__grooviumUpdates = useUpdateStore;
   });
+  void import('./core/spotify/store').then(({ useSpotifyPlaylistsStore }) => {
+    (window as unknown as Record<string, unknown>).__grooviumPlaylists = useSpotifyPlaylistsStore;
+  });
 }
 
 createRoot(container).render(
