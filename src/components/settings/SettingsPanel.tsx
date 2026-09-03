@@ -110,7 +110,7 @@ export function SettingsPanel({
     <div
       id={id}
       inert={!open}
-      className={`absolute inset-0 z-20 groove-surface flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
+      className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
         open ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}
     >

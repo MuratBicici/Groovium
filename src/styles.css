@@ -401,6 +401,44 @@ body {
 }
 
 /*
+ * A docked panel does not stop, it arrives.
+ *
+ * A panel ends flush against the transport row, and its surface used to end
+ * there in a single pixel. The shadow that once sat under it hid that; taking
+ * the shadow away (see `.groove-halo`) left a hard horizontal line drawn across
+ * the window wherever a panel was open.
+ *
+ * The step is tiny — the surface is `shell-800` at 96% and the shell beneath it
+ * is about `rgb(30 23 18)`, some three parts in 255. That is the whole reason
+ * this is a gradient and not a colour correction: at that distance the eye is
+ * not reading a difference in tone, it is reading a perfectly straight edge,
+ * and it will find one at a fraction of a percent. Spread the same three parts
+ * over thirty-two pixels and there is nothing left to catch on.
+ *
+ * On the background rather than behind a mask, which was the first attempt.
+ * A mask fades the panel's rows along with its surface, and dims the last line
+ * of text for no reason — the thing `.groove-scroll-fade` below is built to
+ * avoid. It also opens a hole: where the surface goes transparent, the platter
+ * and the track title behind it show through as a ghost. A background stops at
+ * the background.
+ */
+.groove-surface.groove-dock {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-shell-800) 96%, transparent) calc(100% - 32px),
+    /* Where the shell itself has got to by the time a panel ends: the shell is
+       a `shell-700 → shell-900` gradient down the whole window, and a docked
+       panel's bottom falls about two thirds of the way along it. Following the
+       palette rather than naming a colour, so a custom theme moves with it.
+
+       The fraction is layout, and layout could shift — but the whole gradient
+       spans 24 units of red across 480px, so being twenty pixels out costs one
+       unit in 255. It does not need to be exact. It needs to not be a step. */
+    color-mix(in srgb, var(--color-shell-700), var(--color-shell-900) 66%) 100%
+  );
+}
+
+/*
  * A soft fade at the bottom of a list that scrolls, present only while there
  * is more of it to see.
  *
@@ -414,12 +452,14 @@ body {
  * row is never dimmed for no reason; scrolled anywhere else, the block has
  * moved on past the visible edge and the fade beneath is what shows.
  *
- * The colour is `.groove-surface`'s own formula, not a plain solid, so the
- * fade reads as the same slightly-translucent material rather than a patch
- * of something opaque laid over it.
+ * The colour is the one the panel's own surface has arrived at by its bottom
+ * edge — the same end `.groove-dock` fades to. These two sit in the same ten
+ * pixels, and if they disagreed the list would fade to one colour while the
+ * surface under it became another, putting back the very step the fade below
+ * exists to remove.
  */
 .groove-scroll-fade {
-  --fade-colour: color-mix(in srgb, var(--color-shell-800) 96%, transparent);
+  --fade-colour: color-mix(in srgb, var(--color-shell-700), var(--color-shell-900) 66%);
   background-image:
     linear-gradient(var(--fade-colour), var(--fade-colour)),
     linear-gradient(to top, var(--fade-colour), transparent);
