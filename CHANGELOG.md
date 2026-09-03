@@ -4,6 +4,73 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.0.5 — 2026-09-03
+
+A repair release, and most of it is about something that broke without anyone
+being able to see it.
+
+Spotify cleared out a large part of its Web API in February, and one of the
+endpoints it removed was the one infinite play leaned on as its last resort:
+what to suggest after a track Last.fm has never heard of. Spotify postponed the
+change for registrations that already existed, so it kept working here while
+quietly failing for anyone who set Groovium up after February. That gap is
+closed, and the same step now works by searching instead.
+
+The other half of that clean-up removed the field that said whether an account
+was Premium, so the warning built on it started firing at everyone — including
+the Premium accounts it was never meant for. It is gone. If a Spotify account
+is connected, Groovium now assumes Premium and lets playback speak for itself.
+
+The Spotify setup instructions were also short of a few things people needed,
+including one answer on Spotify's own form that fails silently when it is
+missed. And there are four fixes to how the window is drawn.
+
+HIGHLIGHTS
+· Infinite play's last resort works again for anyone who set Spotify up after
+  February. It had been failing silently, and only for new installations.
+· The "Premium required" warning no longer appears for people who have
+  Premium. Connecting an account is now taken as proof of it.
+· Setup now says which APIs to tick when creating the Spotify app. Missing the
+  Web Playback SDK registers fine and then never plays anything.
+· Setup says where to find the Client ID, and why every installation has to
+  register an app of its own.
+· The window's outline is no longer covered by whatever opens over it.
+· Panels no longer cast a shadow into the gap above the controls.
+· Lists fade out at the bottom edge while there is more to scroll, and stop
+  fading once there is not.
+· Buttons show a pointer again when the mouse is over them.
+
+ALL CHANGES
+· Infinite play: the genre tier's last step no longer calls
+  `/artists/{id}/top-tracks`, which Spotify removed in February 2026 with no
+  replacement. It searches for the artist's tracks instead, and checks the
+  results against the artist's id — the search filter matches on name, and
+  without the check a common name would return the wrong artist's music.
+· Infinite play: nothing else in the tier changed. Finding the seed artist's
+  genre and its other artists always went through search, which still works.
+· Spotify: the subscription level is no longer read from the account profile.
+  Spotify removed the field, so it arrived empty and the warning built on it
+  showed to everyone.
+· Spotify: setup explains that Premium is needed for the registration itself
+  and not only for playback, and that the app stops working if the
+  subscription lapses.
+· Spotify: setup says to tick both Web API and Web Playback SDK on the
+  creation form.
+· Spotify: setup says the Client ID is on the new app's own page, next to a
+  Client Secret that Groovium never asks for and never stores.
+· Spotify: setup explains why each installation registers its own app rather
+  than sharing one.
+· Window: the outline is drawn above everything else. Opening a panel used to
+  cover it down both sides, and a dialog covered all four.
+· Panels: the shadow under a panel is gone. It fell into the gap above the
+  transport row with no surface beneath it to explain it, and read as a smudge.
+  Dialogs, which float over a backdrop, keep theirs.
+· Panels: a list fades over its last ten pixels while there is more below, and
+  the fade disappears once the end is reached, so the last row is never dimmed
+  for no reason.
+· Controls: buttons show a pointer cursor. Tailwind v4 dropped the rule that
+  used to do this, and every control in the app had been showing an arrow.
+
 ## 1.0.4 — 2026-08-29
 
 Mostly a repair to 1.0.3, in two places.

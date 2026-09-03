@@ -8,6 +8,27 @@ her değişiklik tek tek yazılıdır ve burada yazılmaz.
 
 Başlıklar İngilizcesiyle birebir aynı olmalı; bir testi var.
 
+## 1.0.5 — 2026-09-03
+
+Bir onarım sürümü, ve büyük kısmı kimsenin göremediği bir şekilde bozulmuş bir
+şeyle ilgili.
+
+Spotify şubat ayında Web API'sinin büyük bir bölümünü temizledi ve kaldırdığı
+uç noktalardan biri, sonsuz çalmanın son çare olarak yaslandığı şeydi: Last.fm'in
+hiç duymadığı bir parçadan sonra ne önerileceği. Spotify bu değişikliği daha önce
+oluşturulmuş kayıtlar için erteledi, dolayısıyla burada çalışmaya devam etti ama
+Groovium'u şubattan sonra kuran herkeste sessizce başarısız oluyordu. O boşluk
+kapandı; aynı adım artık aramayla çalışıyor.
+
+Aynı temizliğin diğer yarısı, bir hesabın Premium olup olmadığını söyleyen alanı
+kaldırdı. Bunun üzerine kurulu uyarı da herkese çıkmaya başladı — hiç
+hedeflemediği Premium hesaplara dahil. O uyarı kalktı. Artık bir Spotify hesabı
+bağlıysa Groovium Premium varsayıyor ve sözü çalmanın kendisine bırakıyor.
+
+Spotify kurulum yönergeleri de insanların ihtiyaç duyduğu birkaç şeyi
+söylemiyordu; bunlardan biri Spotify'ın kendi formundaki, kaçırıldığında sessizce
+başarısız olan bir cevap. Bir de pencerenin çizimine dair dört düzeltme var.
+
 ## 1.0.4 — 2026-08-29
 
 Büyük ölçüde 1.0.3'ün iki noktadaki onarımı.
