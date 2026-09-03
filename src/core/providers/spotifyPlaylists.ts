@@ -1,4 +1,5 @@
 import type { TrackMetadata } from '@/core/types';
+import { account } from '@/core/security/spotifyAuth';
 import {
   pickCover,
   request,
@@ -88,16 +89,48 @@ interface ApiPage<T> {
 }
 
 /**
- * Playlists Spotify makes rather than people: Discover Weekly, the Daily Mixes,
- * every editorial list.
+ * Whether this app can actually read what is inside a playlist.
  *
- * They are closed to Development Mode applications — Spotify withdrew them in
- * November 2024 — so fetching one answers 404 no matter how many scopes have
- * been granted. They are dropped rather than shown greyed out, and the owner
- * says which is which without a request being made to find out.
+ * Only the ones this account made. Measured against the real API rather than
+ * assumed: a playlist a friend made answers 200 for its name and cover and 403
+ * for a single one of its tracks, on both route names, with every playlist
+ * scope granted. A Development Mode registration may read the content of its
+ * own authorised users and nobody else's, and there is no scope that changes
+ * that.
+ *
+ * Spotify's own — Discover Weekly, the Daily Mixes, the editorial lists — fall
+ * out of the same rule for a different reason: they were withdrawn from
+ * Development Mode applications in November 2024. Both would be crates that
+ * open onto a refusal, so neither reaches the shelf.
+ *
+ * The cost is real and worth naming: a playlist somebody can see on Spotify is
+ * not here. Better than a shelf of sleeves that do not open.
  */
-export function isSpotifyOwned(ownerId: string): boolean {
-  return ownerId === 'spotify';
+export function readableBy(ownerId: string, meId: string | null): boolean {
+  return meId !== null && ownerId === meId;
+}
+
+/**
+ * This account's Spotify id, asked for once.
+ *
+ * Cached for the session because it cannot change while one is running: it is
+ * fixed at the moment a token was issued, and signing out throws the module
+ * away along with everything else.
+ */
+let meId: string | null = null;
+
+async function currentUserId(): Promise<string | null> {
+  if (meId) return meId;
+  try {
+    const who = await account();
+    meId = who?.id ?? null;
+  } catch {
+    // Not a reason to show nothing. Without an id nothing is known to be
+    // readable, which is the honest answer, and the shelf says it is empty
+    // rather than filling with crates that will refuse to open.
+    meId = null;
+  }
+  return meId;
 }
 
 function toPlaylist(raw: ApiPlaylist): SpotifyPlaylist {
@@ -130,21 +163,25 @@ export function offsetFromNext(next: string | null | undefined): string | null {
 }
 
 /**
- * One page of the signed-in person's playlists, Spotify's own left out.
+ * One page of the playlists this account made.
  *
- * A page can come back shorter than it was asked for — the filtering happens
- * after Spotify has counted — and that is not the end of the list. Only a null
- * cursor is.
+ * A page can come back much shorter than it was asked for — the filtering
+ * happens after Spotify has counted, and somebody who follows a hundred lists
+ * and made four will see most of a page disappear — and that is not the end of
+ * the list. Only a null cursor is.
  */
 export async function playlistPage(cursor?: string | null): Promise<Page<SpotifyPlaylist>> {
   const params = new URLSearchParams({ limit: String(PLAYLISTS_PER_PAGE) });
   if (cursor) params.set('offset', cursor);
 
-  const data = await request<ApiPage<ApiPlaylist>>(`/me/playlists?${params}`);
+  const [data, me] = await Promise.all([
+    request<ApiPage<ApiPlaylist>>(`/me/playlists?${params}`),
+    currentUserId(),
+  ]);
   const items = (data?.items ?? [])
     .filter((raw): raw is ApiPlaylist => raw !== null && !!raw.id)
     .map(toPlaylist)
-    .filter((playlist) => !isSpotifyOwned(playlist.ownerId));
+    .filter((playlist) => readableBy(playlist.ownerId, me));
 
   return { items, cursor: offsetFromNext(data?.next) };
 }

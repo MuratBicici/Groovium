@@ -14,6 +14,8 @@ import { isTauri } from '@/core/utils/env';
 
 export interface SpotifyAccount {
   displayName: string;
+  /** Spotify's own id, which is what tells your playlists from everybody else's. */
+  id: string;
 }
 
 /** Structured failure from Rust. `code` is stable; `detail` is for the console. */

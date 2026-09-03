@@ -63,6 +63,12 @@ const CALLBACK_TIMEOUT: Duration = Duration::from_secs(180);
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub display_name: String,
+    /// Spotify's own id for this account.
+    ///
+    /// Not decoration: it is how a playlist somebody else made is told from one
+    /// this account made, which is the difference between a crate that opens
+    /// and a crate that answers 403.
+    pub id: String,
 }
 
 /// The profile, minus the subscription level.
@@ -264,7 +270,8 @@ async fn fetch_profile(access_token: &str) -> Result<Account, AuthError> {
         .map_err(|e| AuthError::new("network", e.to_string()))?;
 
     Ok(Account {
-        display_name: profile.display_name.unwrap_or(profile.id),
+        display_name: profile.display_name.unwrap_or_else(|| profile.id.clone()),
+        id: profile.id,
     })
 }
 

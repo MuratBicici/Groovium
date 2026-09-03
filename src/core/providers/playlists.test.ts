@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/core/security/spotifyAuth', () => ({
   accessToken: vi.fn(async () => 'token'),
+  account: vi.fn(async () => ({ displayName: 'Me', id: 'me' })),
 }));
 
-import { isSpotifyOwned, offsetFromNext, playlistPage, playlistTrackPage } from './spotifyPlaylists';
+import { offsetFromNext, playlistPage, playlistTrackPage, readableBy } from './spotifyPlaylists';
 
 /**
  * The playlist reader, against a fabricated Spotify.
@@ -61,12 +62,21 @@ describe('reading someone’s playlists', () => {
     expect(page.items[0]).toMatchObject({ name: 'Playlist a', snapshotId: 'snap-a', trackCount: 3 });
   });
 
-  it("drops the ones Spotify made", async () => {
-    // Discover Weekly and the Daily Mixes are closed to Development Mode apps,
-    // so a row for one is a row that cannot be opened. The owner says which
-    // without a request being spent to find out.
+  it('drops the ones this account cannot read', async () => {
+    // Measured against the real API: a playlist a friend made answers 200 for
+    // its name and 403 for a single track, on both route names, with every
+    // playlist scope granted. Spotify's own were withdrawn from Development
+    // Mode applications separately. Either way the crate would open onto a
+    // refusal, so neither reaches the shelf.
     answer = () => ({
-      body: { items: [playlist('mine'), playlist('discover', 'spotify')], next: null },
+      body: {
+        items: [
+          playlist('mine'),
+          playlist('a-friends', 'begum'),
+          playlist('discover', 'spotify'),
+        ],
+        next: null,
+      },
     });
     const page = await playlistPage();
     expect(page.items.map((p) => p.id)).toEqual(['mine']);
@@ -74,10 +84,11 @@ describe('reading someone’s playlists', () => {
 
   it('does not treat a short page as the end', async () => {
     // Spotify counts before this filter runs, so a page of fifty can arrive
-    // here as two. Only a missing `next` means there is no more.
+    // here as two — somebody who follows a hundred lists and made four sees
+    // most of a page disappear. Only a missing `next` means there is no more.
     answer = () => ({
       body: {
-        items: [playlist('a'), playlist('x', 'spotify'), playlist('y', 'spotify')],
+        items: [playlist('a'), playlist('x', 'spotify'), playlist('y', 'someone')],
         next: 'https://api.spotify.com/v1/me/playlists?offset=50&limit=50',
       },
     });
@@ -121,12 +132,17 @@ describe('where the next page starts', () => {
   });
 });
 
-describe('telling Spotify’s playlists apart', () => {
-  it('knows who made it', () => {
-    expect(isSpotifyOwned('spotify')).toBe(true);
-    expect(isSpotifyOwned('me')).toBe(false);
-    // Not a substring match: a person may well be called this.
-    expect(isSpotifyOwned('spotifyfan')).toBe(false);
+describe('telling which playlists can be read', () => {
+  it('keeps only the ones this account made', () => {
+    expect(readableBy('me', 'me')).toBe(true);
+    expect(readableBy('begum', 'me')).toBe(false);
+    expect(readableBy('spotify', 'me')).toBe(false);
+  });
+
+  it('keeps nothing when it does not know who this is', () => {
+    // An empty shelf is the honest answer to an unknown account. Keeping
+    // everything would fill it with crates that refuse to open.
+    expect(readableBy('me', null)).toBe(false);
   });
 });
 
