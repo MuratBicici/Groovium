@@ -57,6 +57,16 @@ pub fn spotify_is_authenticated() -> bool {
     tokens::is_authenticated()
 }
 
+/// Which of the scopes this app needs the stored token does not carry.
+///
+/// Empty means there is nothing to ask for. Anything else is a list somebody
+/// has to approve again, and the drawer says so rather than letting a playlist
+/// request come back 403 with no explanation attached.
+#[tauri::command]
+pub fn spotify_missing_scopes(app: AppHandle) -> Vec<String> {
+    auth::missing_scopes(&app)
+}
+
 #[tauri::command]
 pub fn spotify_sign_out(cache: State<'_, AccessTokenCache>) -> Result<(), AuthError> {
     cache.clear();

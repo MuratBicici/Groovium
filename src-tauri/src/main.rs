@@ -81,6 +81,7 @@ fn main() {
             spotify::spotify_access_token,
             spotify::spotify_account,
             spotify::spotify_is_authenticated,
+            spotify::spotify_missing_scopes,
             spotify::spotify_sign_out,
             spotify::spotify_has_client_id,
             spotify::spotify_set_client_id,

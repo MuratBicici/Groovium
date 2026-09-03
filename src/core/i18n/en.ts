@@ -125,6 +125,12 @@ export const en = {
   'spotify.waiting': 'Waiting for authorisation in your browser…',
   'spotify.waitingHint': 'Approve the request, then come back here.',
   'spotify.savedId': 'Your Client ID is saved. Connect your Spotify account to start playing.',
+  // Shown to somebody already signed in. The word "again" is doing the work:
+  // nothing has gone wrong, and nothing they did caused it.
+  'spotify.reauthLead': 'Groovium needs your permission again.',
+  'spotify.reauthRest':
+    'Showing your playlists here means asking Spotify for more than playback, and permission is given once per list of things. Your music keeps playing either way.',
+  'spotify.reauthorise': 'Grant Access',
   'spotify.connect': 'Connect Spotify Account',
   'spotify.changeId': 'Use a different Client ID',
   'spotify.searchPlaceholder': 'Search Spotify for a song',

@@ -5,6 +5,7 @@ import {
   clearClientId,
   hasClientId,
   isAuthenticated,
+  missingScopes,
   type SpotifyAccount,
 } from '@/core/security/spotifyAuth';
 import { usePlayerStore } from '@/core/store';
@@ -14,7 +15,7 @@ import { SpotifySearch } from './SpotifySearch';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
 
-type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
+type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'reauthorise' | 'connected';
 
 interface SpotifyDrawerProps {
   onClose: () => void;
@@ -43,10 +44,16 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /** Which stage the panel should show, asked without touching state. */
+  /** Which stage the drawer should show, asked without touching state. */
   const stageFor = useCallback(async (): Promise<Stage> => {
     if (!(await hasClientId())) return 'setup';
-    return (await isAuthenticated()) ? 'connected' : 'disconnected';
+    if (!(await isAuthenticated())) return 'disconnected';
+    // Signed in is not the same as allowed. A token issued before the drawer
+    // existed keeps its old grant through every refresh, so it can play music
+    // and not read a single playlist — and asked for one, Spotify answers 403
+    // with nothing that explains why. Better to say so here, once, at the
+    // moment somebody opens the drawer and needs it.
+    return (await missingScopes()).length > 0 ? 'reauthorise' : 'connected';
   }, []);
 
   const refresh = useCallback(async () => {
@@ -171,6 +178,25 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
               {t('spotify.waitingHint')}
             </span>
           </Centered>
+        )}
+
+        {stage === 'reauthorise' && (
+          <div className="space-y-3 px-4 py-3 text-center">
+            <p className="text-body text-cream-200">{t('spotify.reauthLead')}</p>
+            <p className="text-meta leading-snug text-cream-400">{t('spotify.reauthRest')}</p>
+            <button
+              type="button"
+              onClick={() => void connect()}
+              className="rounded-full bg-brass-600 px-4 py-1.5 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
+            >
+              {t('spotify.reauthorise')}
+            </button>
+            {error && (
+              <p className="rounded bg-red-950/70 px-2 py-1.5 text-left text-meta leading-snug text-red-200">
+                {error}
+              </p>
+            )}
+          </div>
         )}
 
         {stage === 'disconnected' && (

@@ -29,6 +29,13 @@ pub struct TokenResponse {
     pub expires_in: u64,
     /// Absent when refreshing — Spotify only re-issues it sometimes.
     pub refresh_token: Option<String>,
+    /// What was actually granted, space separated.
+    ///
+    /// Asking for a scope is not being given it, and a token issued before a
+    /// scope was ever asked for keeps its old grant through every refresh. This
+    /// is the only honest answer to "can this token read a playlist" short of
+    /// trying it and reading a 403.
+    pub scope: Option<String>,
 }
 
 struct CachedToken {

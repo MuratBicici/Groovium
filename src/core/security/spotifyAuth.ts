@@ -31,6 +31,26 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
   return tauriInvoke<T>(command, args);
 }
 
+/**
+ * Scopes this build needs that the stored token does not carry.
+ *
+ * Empty when there is nothing to ask for. A token issued before a scope existed
+ * keeps its old grant through every refresh, so being signed in is not the same
+ * as being allowed — and the difference has to be found before a request is
+ * made, not after it comes back 403.
+ */
+export async function missingScopes(): Promise<string[]> {
+  if (!isTauri()) return [];
+  try {
+    return await invoke<string[]>('spotify_missing_scopes');
+  } catch {
+    // Never a reason to block the drawer. If this cannot be answered, treat the
+    // grant as sufficient and let the request that needs it fail with its own
+    // message.
+    return [];
+  }
+}
+
 /** Whether a Client ID has been configured. The value itself is never returned. */
 export async function hasClientId(): Promise<boolean> {
   if (!isTauri()) return false;

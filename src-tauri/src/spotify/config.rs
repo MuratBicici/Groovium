@@ -46,7 +46,22 @@ pub fn set_client_id(app: &AppHandle, id: &str) -> Result<(), String> {
 }
 
 pub fn clear_client_id(app: &AppHandle) -> Result<(), String> {
-    config::update(app, |c| c.spotify_client_id = None)
+    config::update(app, |c| {
+        c.spotify_client_id = None;
+        // The grant belonged to that Client ID. Leaving it behind would have a
+        // fresh registration claiming permissions nobody has approved for it.
+        c.spotify_scopes = None;
+    })
+}
+
+/// What Spotify last said it granted this installation, space separated.
+pub fn granted_scopes(app: &AppHandle) -> Option<String> {
+    config::read(app).spotify_scopes.filter(|s| !s.is_empty())
+}
+
+pub fn set_granted_scopes(app: &AppHandle, scopes: &str) -> Result<(), String> {
+    let scopes = scopes.trim().to_owned();
+    config::update(app, |c| c.spotify_scopes = Some(scopes))
 }
 
 /// Catch an obviously wrong value before it turns into an opaque Spotify error.

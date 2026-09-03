@@ -26,6 +26,13 @@ pub struct AppConfig {
     pub spotify_client_id: Option<String>,
     #[serde(default)]
     pub lastfm_api_key: Option<String>,
+    /// The scopes Spotify last reported granting, space separated.
+    ///
+    /// Not a credential — it is a list of permissions, readable by anyone who
+    /// opens this file, and useless without the token in the keyring. It lives
+    /// beside the Client ID because it belongs to that registration.
+    #[serde(default)]
+    pub spotify_scopes: Option<String>,
     #[serde(default)]
     pub settings: Settings,
 }
@@ -221,6 +228,10 @@ mod tests {
     fn a_config_written_before_settings_existed_still_reads() {
         let config: AppConfig =
             serde_json::from_str(r#"{"spotifyClientId":"abc"}"#).expect("parses");
+        // Nobody has been granted anything on this installation as far as the
+        // file knows, which is how a token from before the drawer is told apart
+        // from one issued under the wider grant.
+        assert!(config.spotify_scopes.is_none());
         assert!(config.settings.theme.is_none());
         assert!(config.settings.language.is_none());
         assert!(!config.settings.reduce_motion);
@@ -241,6 +252,7 @@ mod tests {
         let json = serde_json::to_string(&AppConfig {
             spotify_client_id: Some("a".into()),
             lastfm_api_key: Some("b".into()),
+            spotify_scopes: Some("streaming".into()),
             settings: Settings {
                 reduce_motion: true,
                 always_on_top: true,
@@ -250,6 +262,7 @@ mod tests {
         .unwrap();
         assert!(json.contains("spotifyClientId"));
         assert!(json.contains("lastfmApiKey"));
+        assert!(json.contains("spotifyScopes"));
         assert!(json.contains("reduceMotion"));
         assert!(json.contains("alwaysOnTop"));
     }

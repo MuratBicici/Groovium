@@ -26,10 +26,34 @@ use crate::spotify::tokens::{self, AccessTokenCache};
 const AUTHORIZE_ENDPOINT: &str = "https://accounts.spotify.com/authorize";
 const PROFILE_ENDPOINT: &str = "https://api.spotify.com/v1/me";
 
-/// Least privilege. `streaming` is what the Web Playback SDK needs; the two
-/// `user-read-*` identity scopes are its prerequisites; the playback-state pair
-/// is for transport control. No playlist or library scopes are requested.
-const SCOPES: &str = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state";
+/// What this app asks Spotify for, and nothing else.
+///
+/// `streaming` is what the Web Playback SDK needs and the two `user-read-*`
+/// identity scopes are its prerequisites; the playback-state pair is for
+/// transport control. The rest arrived with the drawer: the playlist four to
+/// read and write someone's own playlists, the two personalisation scopes to
+/// fill the spotlight, and `ugc-image-upload` for a playlist's cover.
+///
+/// This list was deliberately short for a long time, and the test at the foot
+/// of this file said so. Widening it is a decision rather than a drift: every
+/// scope here is one somebody has to approve, and one more thing this app could
+/// do to an account if it were wrong.
+pub const SCOPES: &str = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-top-read user-read-recently-played ugc-image-upload";
+
+/// Scopes granted to the token on disk, as Spotify last reported them.
+///
+/// Empty when nobody has signed in since this was recorded — which is every
+/// installation that predates the drawer, and is why the answer for them is
+/// "re-authorise" rather than "you are fine".
+pub fn missing_scopes(app: &AppHandle) -> Vec<String> {
+    let granted = config::granted_scopes(app).unwrap_or_default();
+    let held: Vec<&str> = granted.split(' ').filter(|s| !s.is_empty()).collect();
+    SCOPES
+        .split(' ')
+        .filter(|wanted| !held.contains(wanted))
+        .map(str::to_owned)
+        .collect()
+}
 
 /// How long to leave the listener open. Long enough to log in and approve,
 /// short enough that an abandoned attempt does not hold the port forever.
@@ -102,6 +126,11 @@ pub async fn begin(app: &AppHandle, cache: &AccessTokenCache) -> Result<Account,
         )
     })?;
     tokens::store_refresh_token(refresh)?;
+    // Recorded from the response rather than from `SCOPES`: what was asked for
+    // and what was granted are different facts, and only one of them is true.
+    if let Some(scope) = response.scope.as_deref() {
+        let _ = config::set_granted_scopes(app, scope);
+    }
 
     let account = fetch_profile(&response.access_token).await?;
     // Keep the token we were just handed rather than refreshing on the next call.
@@ -406,11 +435,66 @@ mod tests {
     }
 
     #[test]
-    fn requests_only_the_scopes_playback_needs() {
+    fn asks_for_what_it_uses_and_nothing_more() {
+        // This test used to assert the opposite of half of itself: no playlist
+        // scopes at all. The drawer reads and writes someone's playlists now,
+        // so that has to change — but the shape of the guarantee does not. Every
+        // scope named here is one a person has to approve, so the list stays a
+        // list somebody wrote down on purpose rather than one that grew.
         let scopes: Vec<&str> = SCOPES.split(' ').collect();
-        assert!(scopes.contains(&"streaming"));
-        // Nothing here should be reaching for the user's library or playlists.
-        assert!(!scopes.iter().any(|s| s.contains("playlist")));
+
+        let expected = [
+            // The Web Playback SDK and its prerequisites.
+            "streaming",
+            "user-read-email",
+            "user-read-private",
+            // Transport control.
+            "user-read-playback-state",
+            "user-modify-playback-state",
+            // The drawer: reading playlists and writing to them.
+            "playlist-read-private",
+            "playlist-read-collaborative",
+            "playlist-modify-private",
+            "playlist-modify-public",
+            // The spotlight.
+            "user-top-read",
+            "user-read-recently-played",
+            // A playlist's cover image.
+            "ugc-image-upload",
+        ];
+        assert_eq!(scopes, expected, "the scope list changed without being decided");
+
+        // Still nothing that reaches the saved library, follows anybody, or
+        // touches an account beyond the playlists it was given.
         assert!(!scopes.iter().any(|s| s.contains("library")));
+        assert!(!scopes.iter().any(|s| s.contains("follow")));
+    }
+
+    #[test]
+    fn a_grant_that_predates_a_scope_reads_as_missing() {
+        // What an installation from before the drawer looks like: a token that
+        // works, granted under the old five. It has to come back as needing
+        // authorisation again rather than as fine, or the first playlist call
+        // is a 403 with nothing attached to explain it.
+        let old_grant = "streaming user-read-email user-read-private              user-read-playback-state user-modify-playback-state";
+        let held: Vec<&str> = old_grant.split_whitespace().collect();
+        let missing: Vec<&str> = SCOPES
+            .split(' ')
+            .filter(|wanted| !held.contains(wanted))
+            .collect();
+
+        assert!(missing.contains(&"playlist-read-private"));
+        assert!(missing.contains(&"user-top-read"));
+        assert!(!missing.contains(&"streaming"));
+    }
+
+    #[test]
+    fn nothing_is_missing_from_a_full_grant() {
+        let held: Vec<&str> = SCOPES.split_whitespace().collect();
+        let missing: Vec<&str> = SCOPES
+            .split(' ')
+            .filter(|wanted| !held.contains(wanted))
+            .collect();
+        assert!(missing.is_empty());
     }
 }

@@ -118,6 +118,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.waitingHint': 'İsteği onaylayın, sonra buraya dönün.',
   'spotify.savedId':
     'Client ID’niz kayıtlı. Çalmaya başlamak için Spotify hesabınızı bağlayın.',
+  'spotify.reauthLead': 'Groovium’un izninizi yeniden alması gerekiyor.',
+  'spotify.reauthRest':
+    'Çalma listelerinizi burada göstermek, Spotify’dan çalmanın ötesinde bir şey istemek demek; izin de her defasında bütün liste için birlikte veriliyor. Müziğiniz bu arada çalmaya devam eder.',
+  'spotify.reauthorise': 'İzin Ver',
   'spotify.connect': 'Spotify Hesabını Bağla',
   'spotify.changeId': 'Başka bir Client ID kullan',
   'spotify.searchPlaceholder': 'Spotify’da şarkı ara',
