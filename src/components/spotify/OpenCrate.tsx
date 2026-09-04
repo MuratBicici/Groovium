@@ -5,7 +5,7 @@ import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
-import { LIFT_SPEED } from '@/components/player/discPhysics';
+import { HAND_SPEED } from '@/components/player/discPhysics';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
@@ -85,8 +85,24 @@ const CLEAR_OF_SLEEVE = 152;
  */
 const HAND_BACK_VIA = { x: 250, y: -14 };
 
-/** A record sliding the last stretch into its sleeve. */
-const SLIDE_MS = 210;
+/**
+ * Where the lift bends on the way out, relative to the mouth it starts from.
+ *
+ * The mirror of the way back. A record that has just been drawn sideways out
+ * of a sleeve is travelling sideways; sending it straight at the pointer from
+ * there is a corner in the middle of one gesture. It carries on out and turns,
+ * which is the arc a hand actually makes picking something up.
+ */
+const LIFT_VIA = { x: 96, y: -34 };
+
+/**
+ * A record sliding the last stretch into its sleeve.
+ *
+ * Derived from the hand's own speed like the pull is, with a little over it:
+ * this leg is arriving rather than travelling, so it starts at the rate the
+ * hand let go at and settles.
+ */
+const SLIDE_MS = Math.round((CLEAR_OF_SLEEVE / HAND_SPEED) * 1.7);
 
 /**
  * Drawing one out of the mouth, before the hand or the flight takes it.
@@ -98,7 +114,7 @@ const SLIDE_MS = 210;
  * one away — taking a record out is a pull and putting one back is a
  * placement, and the pull is the part a hand is waiting through.
  */
-const PULL_MS = Math.round(CLEAR_OF_SLEEVE / LIFT_SPEED);
+const PULL_MS = Math.round(CLEAR_OF_SLEEVE / HAND_SPEED);
 
 /**
  * Both slides settle at the end, for opposite reasons.
@@ -262,8 +278,10 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           homeSize: DISC_SIZE,
           pointer: at,
           // It has just been pulled clear and is still travelling: the lift
-          // carries on from that rather than starting again from nothing.
+          // carries on from that rather than starting again from nothing, and
+          // bends the way it was already going before turning to the hand.
           alreadyMoving: true,
+          liftVia: LIFT_VIA,
           visiting: {
             deckEl: platterEl(),
             onDelivered: deliver,

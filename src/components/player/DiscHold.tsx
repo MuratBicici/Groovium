@@ -5,7 +5,7 @@ import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import {
   HELD_SCALE,
-  LIFT_SPEED,
+  HAND_SPEED,
   PICKUP_MS,
   SEAT_MS,
   seatPoint,
@@ -72,15 +72,6 @@ const DISSOLVE_SCALE = 1.5;
  * away, and going away has to be watchable or it is a flash.
  */
 const DISSOLVE_MS = 380;
-
-/**
- * How fast the hand moves a record back to where it lives, in px per ms.
- *
- * A speed rather than a duration, because this leg hands over to another one
- * and the two have to be going at roughly the same rate at the seam. A fixed
- * clock would make a short return crawl and a long one bolt.
- */
-const HAND_SPEED = 0.62;
 
 /**
  * How much of a curved seat is spent getting the record down to size.
@@ -215,6 +206,15 @@ interface Grab {
    * exactly what it feels like — two stages with a hitch between them.
    */
   alreadyMoving?: boolean;
+  /**
+   * Where the lift bends towards, relative to where it starts.
+   *
+   * A record drawn out of a sleeve is already travelling sideways when the
+   * hand takes it; going straight to the pointer from there is a corner. With
+   * this it carries on out and turns, which is one curve from the sleeve to
+   * the hand — and the same shape the way back already had.
+   */
+  liftVia?: Vector;
   visiting?: Visiting;
 }
 
@@ -308,6 +308,8 @@ interface Motion {
   dissolving: boolean;
   /** What the hand is drawn at. Only ever less than one while dissolving. */
   opacity: number;
+  /** The lift's control point in layer coordinates, when it curves. */
+  liftVia: Vector | null;
   /** Whether the lift continues something already in motion. */
   taking: boolean;
   /** How long that lift takes. Paced by distance when it is a continuation. */
@@ -376,7 +378,12 @@ function advance(m: Motion, now: number): Outcome {
       // nothing to ease into, because the carry that follows is the hand's own
       // speed rather than a stop.
       const e = m.taking ? t : easeInOutCubic(t);
-      m.pos = { x: lerp(m.from.x, m.pointer.x, e), y: lerp(m.from.y, m.pointer.y, e) };
+      // Curved when the thing it is lifting came out of somewhere: it carries
+      // on the way it was already going — out to the side — and turns to the
+      // hand from there, rather than setting off straight across the sleeve it
+      // has just been drawn out of. The endpoint is read fresh every frame
+      // because the pointer does not wait.
+      m.pos = seatPoint(m.from, m.pointer, m.liftVia, e);
       m.scale = lerp(m.fromScale, HELD_SCALE, e);
       if (t >= 1) {
         if (m.flingAfterPickup) beginThrow(m, m.flingAfterPickup, now);
@@ -622,6 +629,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         approach: null,
         dissolving: false,
         opacity: 1,
+        liftVia: grab.liftVia
+          ? { x: origin.x + grab.liftVia.x, y: origin.y + grab.liftVia.y }
+          : null,
         taking,
         // Paced by distance either way, and only the floor differs. A record
         // comes off the deck into a hand that is already on it, so that one is
@@ -630,9 +640,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         // clock made that a blur — the same distance a record covers in a
         // third of a second was being crossed in a fifth.
         liftMs: clamp(
-          Math.hypot(target.x - origin.x, target.y - origin.y) / LIFT_SPEED,
-          taking ? 110 : PICKUP_MS,
-          420,
+          Math.hypot(target.x - origin.x, target.y - origin.y) / HAND_SPEED,
+          taking ? 80 : PICKUP_MS,
+          300,
         ),
         handingOver: false,
         homeCentre: { ...origin },
@@ -710,8 +720,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       else if (m.handingOver) {
         m.seatMs = clamp(
           Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y) / HAND_SPEED,
-          150,
-          460,
+          100,
+          320,
         );
       } else m.seatMs = SEAT_MS;
       m.seatScale = scale;
