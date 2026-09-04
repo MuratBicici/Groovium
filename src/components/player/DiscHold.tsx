@@ -21,12 +21,21 @@ import { DiscLight } from './DiscLight';
 import { VinylDisc } from './VinylDisc';
 
 /**
- * Taking the record off the deck.
+ * Taking a record out of where it is.
  *
  * Press on it and drag, and the record comes off: it shrinks into the hand and
  * follows the pointer. Put it back over the deck and it drops onto the spindle
  * and carries on. Let go of it anywhere else and it falls out of the window,
  * which is how the deck gets emptied — there was no other way to do that.
+ *
+ * That is the deck's own gesture, and it is now also the crate's. A record
+ * lifted out of a sleeve is picked up, carried and set down by this same code:
+ * the same shrink, the same tempo, the same hand. It was briefly not — the
+ * crate grew a second, simpler drag of its own — and two ways of holding the
+ * same object is one too many. A visiting record differs from the deck's in
+ * two respects and no others: it is never thrown away, because a record in a
+ * crate is not the deck's to discard, and setting it down on the deck means
+ * playing it rather than resuming it.
  *
  * The record in the hand is a clone in a window-wide layer, for the reason the
  * flight's is: the deck sits inside a column that panels cover and the shell
@@ -54,12 +63,37 @@ const EJECT_VELOCITY: Vector = { x: 760, y: -420 };
 /** Where the record lifts to before a keyboard eject flings it. */
 const EJECT_LIFT: Vector = { x: 46, y: -34 };
 
+/**
+ * A record that lives somewhere other than the deck.
+ *
+ * Its presence is what makes this a loan rather than an ejection: the record
+ * goes back where it came from unless it is put down on the deck, and it is
+ * never thrown out of the window.
+ */
+interface Visiting {
+  /** The deck, if there is one to offer the record to. */
+  deckEl: HTMLElement | null;
+  /** Called once it has settled onto the deck. */
+  onDelivered: (track: TrackMetadata) => void;
+}
+
 interface Grab {
   track: TrackMetadata;
-  /** The platter's stable wrapper, so the way home can be re-measured. */
-  platterEl: HTMLElement;
+  /**
+   * Where the record is now, and where it goes back to. The platter's stable
+   * wrapper for the deck's own record; the sleeve's disc for a crate's.
+   * Re-measured on the way home, because the stage moves under a hold.
+   */
+  homeEl: HTMLElement;
+  /**
+   * How big the record is there, in px. The clone is always drawn at the
+   * platter's size, so this is what it starts scaled to — without it a record
+   * lifted from a sleeve would jump to platter size before it shrank.
+   */
+  homeSize?: number;
   /** Pointer position in client coordinates. Absent for a keyboard eject. */
   pointer?: Vector;
+  visiting?: Visiting;
 }
 
 interface DiscHoldActions {
@@ -98,6 +132,16 @@ const ActionsContext = createContext<DiscHoldActions>({
 /** The track whose record is off the deck, so the platter can look empty. */
 const HeldContext = createContext<string | null>(null);
 
+/**
+ * The track being carried, wherever it came from.
+ *
+ * Separate from `HeldContext` on purpose: the platter must look empty only
+ * when it is the deck's record in the hand, and a sleeve must look empty when
+ * it is its own. One context answering both questions would blank the deck
+ * every time somebody picked a record out of a crate.
+ */
+const CarriedContext = createContext<string | null>(null);
+
 export function useDiscHold(): DiscHoldActions {
   return useContext(ActionsContext);
 }
@@ -106,15 +150,26 @@ export function useHeldTrack(): string | null {
   return useContext(HeldContext);
 }
 
+export function useCarriedTrack(): string | null {
+  return useContext(CarriedContext);
+}
+
 type Phase = 'pickup' | 'carry' | 'seat' | 'throw';
 
 interface Motion {
   phase: Phase;
   /** Whose record this is, so a throw can be reported against it. */
-  trackId: string;
-  /** Deck centre in layer coordinates — where the record came from and returns to. */
+  track: TrackMetadata;
+  /** Where the record settles, in layer coordinates. Home, or the deck. */
   origin: Vector;
-  platterEl: HTMLElement;
+  homeEl: HTMLElement;
+  /** The scale it rests at where it lives — 1 on the deck, less in a sleeve. */
+  homeScale: number;
+  /** What it is easing towards while seating: home's scale, or the deck's 1. */
+  seatScale: number;
+  visiting: Visiting | null;
+  /** Whether the seat now running ends on the deck rather than back home. */
+  delivering: boolean;
   layer: DOMRect;
   /** Where the pointer is, in layer coordinates. */
   pointer: Vector;
@@ -186,7 +241,7 @@ function advance(m: Motion, now: number): Outcome {
         // instead of dragging it toward the slow end.
         y: lerp(m.from.y, m.origin.y, e) - SEAT_ARC * Math.sin(Math.PI * t),
       };
-      m.scale = lerp(m.fromScale, 1, e);
+      m.scale = lerp(m.fromScale, m.seatScale, e);
       // Whatever tumble it picked up on the way unwinds as it settles.
       m.spin = lerp(m.spin, 0, e);
       if (t >= 1) return 'seated';
@@ -237,7 +292,9 @@ function runLoop(
 }
 
 export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
-  const [held, setHeld] = useState<{ key: number; track: TrackMetadata } | null>(null);
+  const [held, setHeld] = useState<{ key: number; track: TrackMetadata; visiting: boolean } | null>(
+    null,
+  );
   const layerRef = useRef<HTMLDivElement | null>(null);
   const discRef = useRef<HTMLDivElement | null>(null);
   const spinRef = useRef<HTMLDivElement | null>(null);
@@ -266,12 +323,23 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const finishSeat = useCallback(() => {
+    // Read before `clear`, which is what takes the motion away.
+    const m = motion.current;
+    const visiting = m?.visiting ?? null;
+    const delivered = m?.delivering === true ? m.track : null;
     clear();
-    void usePlayerStore.getState().lowerRecord();
+    // The deck's own record went back onto the deck; the music resumes.
+    if (!visiting) {
+      void usePlayerStore.getState().lowerRecord();
+      return;
+    }
+    // A visiting record that reached the deck is not resumed, it is played:
+    // nothing was ever paused for it. One that went home says nothing at all.
+    if (delivered) visiting.onDelivered(delivered);
   }, [clear]);
 
   const finishThrow = useCallback(() => {
-    const trackId = motion.current?.trackId;
+    const trackId = motion.current?.track.id;
     if (trackId) {
       // Written before the deck is emptied, so the platter's effect can see it
       // in the very commit the track goes away.
@@ -300,21 +368,24 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
    * on. Without this the record visibly jumps to a different angle in the
    * instant it is picked up.
    */
-  const syncSpin = useCallback((platterEl: HTMLElement) => {
-    const source = platterEl.querySelector('.groove-platter')?.getAnimations()[0];
+  const syncSpin = useCallback((homeEl: HTMLElement) => {
+    // A sleeve has no turning platter in it, so this finds nothing and the
+    // clone starts where it is — which is right: a record in a crate is not
+    // already spinning.
+    const source = homeEl.querySelector('.groove-platter')?.getAnimations()[0];
     const clone = spinRef.current?.getAnimations()[0];
     if (source && clone && source.currentTime !== null) clone.currentTime = source.currentTime;
   }, []);
 
-  /** Deck centre and layer rect, measured together so they share a frame. */
-  const measure = useCallback((platterEl: HTMLElement) => {
+  /** An element's centre and the layer rect, measured together so they share a frame. */
+  const measure = useCallback((el: HTMLElement) => {
     const layer = layerRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, 0, 0);
-    const deck = platterEl.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
     return {
       layer,
       origin: {
-        x: deck.left + deck.width / 2 - layer.left,
-        y: deck.top + deck.height / 2 - layer.top,
+        x: box.left + box.width / 2 - layer.left,
+        y: box.top + box.height / 2 - layer.top,
       },
     };
   }, []);
@@ -322,7 +393,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const start = useCallback(
     (grab: Grab, flingAfterPickup: Vector | null) => {
       if (motion.current) return;
-      const { layer, origin } = measure(grab.platterEl);
+      const { layer, origin } = measure(grab.homeEl);
+      const homeScale = (grab.homeSize ?? DISC_SIZE) / DISC_SIZE;
 
       const target: Vector = grab.pointer
         ? { x: grab.pointer.x - layer.left, y: grab.pointer.y - layer.top }
@@ -331,26 +403,32 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       const now = performance.now();
       motion.current = {
         phase: 'pickup',
-        trackId: grab.track.id,
+        track: grab.track,
         origin,
-        platterEl: grab.platterEl,
+        homeEl: grab.homeEl,
+        homeScale,
+        seatScale: homeScale,
+        visiting: grab.visiting ?? null,
+        delivering: false,
         layer,
         pointer: target,
         samples: [{ x: target.x, y: target.y, t: now }],
         pos: { ...origin },
-        scale: 1,
+        scale: homeScale,
         spin: 0,
         phaseAt: now,
         lastAt: now,
         from: { ...origin },
-        fromScale: 1,
+        fromScale: homeScale,
         velocity: { x: 0, y: 0 },
         flingAfterPickup,
       };
 
-      // The music stops before the record is off the deck, not after.
-      void usePlayerStore.getState().liftRecord();
-      setHeld({ key: nextKey.current++, track: grab.track });
+      // The music stops before the record is off the deck, not after — but
+      // only when it is the deck's record. Taking one out of a crate must not
+      // interrupt what is already playing.
+      if (!grab.visiting) void usePlayerStore.getState().liftRecord();
+      setHeld({ key: nextKey.current++, track: grab.track, visiting: !!grab.visiting });
     },
     [measure],
   );
@@ -378,31 +456,56 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     if (m.samples.length > 12) m.samples.shift();
   }, []);
 
+  /** Begin setting the record down on `onto`, at `scale`. */
+  const beginSeat = useCallback(
+    (m: Motion, onto: HTMLElement, scale: number, now: number) => {
+      // Re-measured: the stage moves under a hold the same way it moves under
+      // a flight, and neither the deck nor a sleeve need still be where it was.
+      m.origin = measure(onto).origin;
+      m.seatScale = scale;
+      m.phase = 'seat';
+      m.phaseAt = now;
+      m.from = { ...m.pos };
+      m.fromScale = m.scale;
+      if (!prefersReducedMotion()) return;
+      m.pos = { ...m.origin };
+      m.scale = scale;
+      m.spin = 0;
+      paint();
+      finishSeat();
+    },
+    [finishSeat, measure, paint],
+  );
+
   const release = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
 
     const now = performance.now();
+
+    // A visiting record has two endings and neither is a throw: it is put down
+    // on the deck, or it goes back in its sleeve. Where the pointer is decides,
+    // and nothing else does — speed says something about a record you already
+    // own, and nothing about one you have borrowed.
+    if (m.visiting) {
+      const deck = m.visiting.deckEl;
+      const box = deck?.getBoundingClientRect();
+      const x = m.pointer.x + m.layer.left;
+      const y = m.pointer.y + m.layer.top;
+      const onDeck =
+        !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+      m.delivering = onDeck && !!deck;
+      beginSeat(m, onDeck && deck ? deck : m.homeEl, onDeck ? 1 : m.homeScale, now);
+      return;
+    }
+
     const pointerVelocity = velocityFrom(m.samples, now);
     const speed = Math.hypot(pointerVelocity.x, pointerVelocity.y);
     const distance = Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y);
     const verdict: Release = releaseVerdict(speed, distance);
 
     if (verdict === 'seat') {
-      // Re-measured: the stage moves under a hold the same way it moves under
-      // a flight, and the deck may not be where it was when the record left it.
-      m.origin = measure(m.platterEl).origin;
-      m.phase = 'seat';
-      m.phaseAt = now;
-      m.from = { ...m.pos };
-      m.fromScale = m.scale;
-      if (prefersReducedMotion()) {
-        m.pos = { ...m.origin };
-        m.scale = 1;
-        m.spin = 0;
-        paint();
-        finishSeat();
-      }
+      beginSeat(m, m.homeEl, m.homeScale, now);
       return;
     }
 
@@ -411,24 +514,14 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     beginThrow(m, launchVelocity(verdict, pointerVelocity), now);
-  }, [finishSeat, finishThrow, measure, paint]);
+  }, [beginSeat, finishThrow]);
 
   /** A cancelled gesture is not a decision: the record goes back. */
   const cancel = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
-    m.origin = measure(m.platterEl).origin;
-    m.phase = 'seat';
-    m.phaseAt = performance.now();
-    m.from = { ...m.pos };
-    m.fromScale = m.scale;
-    if (prefersReducedMotion()) {
-      m.pos = { ...m.origin };
-      m.scale = 1;
-      paint();
-      finishSeat();
-    }
-  }, [finishSeat, measure, paint]);
+    beginSeat(m, m.homeEl, m.homeScale, performance.now());
+  }, [beginSeat]);
 
   /**
    * The loop starts from the callback ref rather than an effect, so the first
@@ -441,7 +534,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       const m = motion.current;
       if (!el || !m) return;
 
-      syncSpin(m.platterEl);
+      syncSpin(m.homeEl);
       if (prefersReducedMotion() && m.phase === 'pickup' && !m.flingAfterPickup) {
         m.phase = 'carry';
         m.scale = HELD_SCALE;
@@ -460,8 +553,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ActionsContext.Provider value={actions}>
-      <HeldContext.Provider value={held?.track.id ?? null}>
-        {children}
+      <HeldContext.Provider value={held && !held.visiting ? held.track.id : null}>
+        <CarriedContext.Provider value={held?.track.id ?? null}>
+          {children}
 
         {/* z-10, the disc-motion layer — the same one the flight uses, for the
             same reason (see the layer table in App.tsx). A record in the hand
@@ -492,8 +586,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
               </div>
               <DiscLight size={DISC_SIZE} />
             </div>
-          )}
-        </div>
+            )}
+          </div>
+        </CarriedContext.Provider>
       </HeldContext.Provider>
     </ActionsContext.Provider>
   );

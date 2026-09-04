@@ -62,15 +62,14 @@ interface DiscFlightActions {
   /** Throw a clone of `sourceDisc` onto the platter. */
   flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata) => void;
   /**
-   * Where the platter is right now, for anything carrying a record by hand.
+   * The deck, for anything carrying a record towards it by hand.
    *
-   * A function rather than a value: the deck moves — the window changes width
-   * when the drawer opens and height when the shell folds — and a rect read at
-   * render time would be describing where the platter used to be. Null when
-   * there is no deck mounted, which is the answer a drag needs in order to
-   * refuse rather than guess.
+   * A function rather than a value: the platter is registered from a callback
+   * ref, and anything reading it during render would be asking before the
+   * answer exists. Null when no deck is mounted, which is the answer a carry
+   * needs in order to refuse rather than guess.
    */
-  platterBox: () => DOMRect | null;
+  platterEl: () => HTMLElement | null;
   /**
    * Whether this track's disc arrived by air a moment ago.
    *
@@ -94,7 +93,7 @@ const ActionsContext = createContext<DiscFlightActions>({
   flyToPlatter: () => {
     console.error('[disc-flight] used outside DiscFlightProvider — no disc will fly.');
   },
-  platterBox: () => null,
+  platterEl: () => null,
   didJustLand: () => false,
 });
 
@@ -152,7 +151,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     setFlights((current) => [...current, { key: nextKey.current++, track, from, source: sourceDisc }]);
   }, []);
 
-  const platterBox = useCallback(() => platterRef.current?.getBoundingClientRect() ?? null, []);
+  const platterEl = useCallback(() => platterRef.current, []);
 
   const didJustLand = useCallback((trackId: string) => {
     const at = landedAt.current.get(trackId);
@@ -193,8 +192,8 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   );
 
   const actions = useMemo(
-    () => ({ registerPlatter, flyToPlatter, platterBox, didJustLand }),
-    [registerPlatter, flyToPlatter, platterBox, didJustLand],
+    () => ({ registerPlatter, flyToPlatter, platterEl, didJustLand }),
+    [registerPlatter, flyToPlatter, platterEl, didJustLand],
   );
 
   return (

@@ -653,20 +653,6 @@ body {
 }
 
 /*
- * A record being carried by hand.
- *
- * Fixed to the pointer and outside every card, so no containment, no scroll
- * box and no sleeve can clip it on the way across the window. It grows to the
- * platter's own size over the deck — the record is not bigger there, it is
- * simply where it is going, and that is the only promise the drag has to make.
- */
-.groove-carried {
-  transform-origin: center;
-  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-  filter: drop-shadow(0 10px 14px rgb(0 0 0 / calc(0.6 * var(--shade))));
-}
-
-/*
  * The record that has been taken out, lying across its sleeve.
  *
  * Only a shadow and a nudge. The disc itself is a `VinylDisc`, the same

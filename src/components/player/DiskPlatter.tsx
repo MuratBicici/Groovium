@@ -95,7 +95,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
       // the station handing over — and there is then nothing to pick up.
       if (!track || !wrapperRef.current) return;
       current.lifted = true;
-      grab({ track, platterEl: wrapperRef.current, pointer: { x: e.clientX, y: e.clientY } });
+      grab({ track, homeEl: wrapperRef.current, pointer: { x: e.clientX, y: e.clientY } });
     }
     moveTo(e.clientX, e.clientY);
   }
@@ -120,7 +120,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     if (stowed || !track || !wrapperRef.current) return;
     e.preventDefault();
-    eject({ track, platterEl: wrapperRef.current });
+    eject({ track, homeEl: wrapperRef.current });
   }
 
   useEffect(() => {
