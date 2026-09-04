@@ -569,7 +569,35 @@ body {
  */
 .groove-record {
   content-visibility: auto;
-  contain-intrinsic-size: 128px 152px;
+  contain-intrinsic-size: 132px 176px;
+}
+
+/*
+ * The record that has been taken out, lying across its sleeve.
+ *
+ * Only a shadow and a nudge. The disc itself is a `VinylDisc`, the same
+ * drawing the platter shows, and nothing here may touch it — the flight to the
+ * deck scales this element's box onto the platter's, so a filter or a border
+ * would land the record at the wrong apparent size. What this adds is the one
+ * thing a flat drawing cannot say on its own: that it is on top of the card
+ * rather than printed on it.
+ */
+.groove-taken {
+  filter: drop-shadow(-3px 2px 4px rgb(0 0 0 / calc(0.55 * var(--shade))));
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.groove-sleeve:hover .groove-taken {
+  transform: translateX(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-taken {
+    transition: none;
+  }
+  .groove-sleeve:hover .groove-taken {
+    transform: none;
+  }
 }
 
 /*

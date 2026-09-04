@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
@@ -9,16 +9,16 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 
 /**
- * A crate, opened: its records out of the sleeve and laid on the shelf.
+ * A crate, opened: its records out of the sleeves and laid on the shelf.
  *
  * Covers the drawer and nothing else. That is a requirement rather than a
  * preference — a record is meant to be draggable from here onto the deck, and
  * the deck has to be visible for there to be anywhere to drag it to.
  *
- * The records come out of the crate. Each one starts at the sleeve's own
- * position and size and travels to its place in the grid, a little after the
- * one before it, so what you see is a crate emptying rather than a grid
- * appearing.
+ * The records come out of the crate and, when it is shut, go back into it.
+ * Each one starts at the sleeve's own position and size and travels to its
+ * place in the grid, a little after the one before it, so what you see is a
+ * crate emptying rather than a grid appearing.
  */
 
 /** How long one record takes to reach its place. */
@@ -34,13 +34,45 @@ const STAGGER_MS = 26;
  */
 const STAGGERED = 14;
 
+/**
+ * Going back in is quicker than coming out, and from fewer of them.
+ *
+ * Unpacking is the thing worth watching; packing is what happens on the way to
+ * somewhere else, and a close that takes as long as an open feels like the app
+ * arguing about it. Ten staggered is still plainly a sequence.
+ */
+const RETURN_MS = 260;
+const RETURN_STAGGER_MS = 18;
+const RETURN_STAGGERED = 10;
+/** The layer goes once the records are nearly home, not before. */
+const LAYER_FADE_MS = 180;
+
 const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+/** Into the crate: gathering speed rather than easing off, which is a drop. */
+const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
+
+/** Diameter of a record in the grid. The cells are wider than this on purpose. */
+const DISC_SIZE = 116;
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
   /** Where the sleeve was on screen, so the records can come out of it. */
   origin: { x: number; y: number; width: number; height: number };
   onClose: () => void;
+}
+
+/** The transform that takes this element's box onto the crate's. */
+function ontoCrate(
+  el: HTMLElement,
+  origin: { x: number; y: number; width: number; height: number },
+): string | null {
+  const box = el.getBoundingClientRect();
+  if (box.width === 0) return null;
+  // The crate is square and so is a record, so one ratio covers both axes.
+  const scale = origin.width / box.width;
+  const dx = origin.x + origin.width / 2 - (box.left + box.width / 2);
+  const dy = origin.y + origin.height / 2 - (box.top + box.height / 2);
+  return `translate(${dx}px, ${dy}px) scale(${scale})`;
 }
 
 export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
@@ -54,9 +86,73 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const playSingle = usePlayerStore((s) => s.playSingle);
   const { flyToPlatter } = useDiscFlight();
 
+  const layerRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   /** How many records have already been played in; the rest are new. */
   const unpacked = useRef(0);
+  /** Latched, so a second Escape or a double click cannot start a second close. */
+  const shutting = useRef(false);
+  const [closing, setClosing] = useState(false);
+
+  /**
+   * Put the records back in the crate, then let the drawer take the layer away.
+   *
+   * The state is only here to stop anything being pressed while it runs; the
+   * animation is driven straight off the elements, because the thing that has
+   * to be measured — where each record is *now* — is not something React
+   * knows. And it never blocks the close: if there is nothing to animate, or
+   * motion is turned down, the layer goes immediately.
+   */
+  const requestClose = useCallback(() => {
+    if (shutting.current) return;
+    shutting.current = true;
+
+    const grid = gridRef.current;
+    const layer = layerRef.current;
+    if (!grid || !layer || prefersReducedMotion()) {
+      onClose();
+      return;
+    }
+
+    // Only what can be seen. Below the fold a record may not have been laid out
+    // at all — `content-visibility` is allowed to skip it — and animating a
+    // hundred of them off screen is work nobody watches.
+    const view = grid.getBoundingClientRect();
+    const going = [...grid.querySelectorAll<HTMLElement>('[data-record]')].filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.bottom > view.top && box.top < view.bottom;
+    });
+
+    setClosing(true);
+    for (const [i, el] of going.entries()) {
+      const to = ontoCrate(el, origin);
+      if (!to) continue;
+      el.animate(
+        [
+          { transform: 'none', opacity: 1 },
+          { transform: to, opacity: 0 },
+        ],
+        {
+          duration: RETURN_MS,
+          delay: Math.min(i, RETURN_STAGGERED) * RETURN_STAGGER_MS,
+          easing: RETURN_EASING,
+          fill: 'forwards',
+        },
+      );
+    }
+
+    // The layer waits for the last record and then goes. Fading it any earlier
+    // would take the flight with it, and the flight is the whole point.
+    const last = Math.min(going.length, RETURN_STAGGERED) * RETURN_STAGGER_MS + RETURN_MS;
+    const fade = layer.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: LAYER_FADE_MS,
+      delay: Math.max(0, last - LAYER_FADE_MS),
+      easing: 'ease-in',
+      fill: 'forwards',
+    });
+    // Either way — finished or cancelled by an unmount — the crate closes.
+    fade.finished.then(onClose, onClose);
+  }, [onClose, origin]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -65,18 +161,18 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // does: the shell listens on `window` too, and only this stops the one
       // press closing two things.
       e.stopImmediatePropagation();
-      onClose();
+      requestClose();
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [onClose]);
+  }, [requestClose]);
 
   // The unpacking. A layout effect so the first frame is never the finished
   // grid — by the time anything is painted the records are already back at the
   // crate, waiting to leave it.
   useLayoutEffect(() => {
     const grid = gridRef.current;
-    if (!grid || prefersReducedMotion()) return;
+    if (!grid || prefersReducedMotion() || shutting.current) return;
 
     const discs = [...grid.querySelectorAll<HTMLElement>('[data-record]')];
     // Only the ones that have just arrived. A second page appended to the grid
@@ -85,19 +181,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     unpacked.current = discs.length;
 
     for (const [i, el] of arriving.entries()) {
-      const to = el.getBoundingClientRect();
-      if (to.width === 0) continue;
-
-      // From the sleeve's middle to this record's, at the sleeve's size. The
-      // crate is square and so is a record, so one ratio covers both axes.
-      const scale = origin.width / to.width;
-      const dx = origin.x + origin.width / 2 - (to.left + to.width / 2);
-      const dy = origin.y + origin.height / 2 - (to.top + to.height / 2);
-
+      const from = ontoCrate(el, origin);
+      if (!from) continue;
       el.animate(
         [
-          { transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 },
-          { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+          { transform: from, opacity: 0 },
+          { transform: 'none', opacity: 1 },
         ],
         {
           duration: FLIGHT_MS,
@@ -112,7 +201,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const sentinel = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const foot = sentinel.current;
-    if (!foot || !cursor) return;
+    // Nothing more is wanted from Spotify once this is on its way out.
+    if (!foot || !cursor || closing) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void moreTracks();
@@ -121,10 +211,11 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     );
     observer.observe(foot);
     return () => observer.disconnect();
-  }, [cursor, moreTracks]);
+  }, [cursor, moreTracks, closing]);
 
   return (
     <div
+      ref={layerRef}
       role="dialog"
       aria-label={playlist.name}
       // The whole drawer, and only the drawer. `inset-0` is the drawer's box
@@ -132,22 +223,55 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // crate *is* the Spotify side of the window for as long as it is open,
       // and the deck beside it stays visible and reachable, because a record
       // is meant to be dragged from here onto it.
-      className="absolute inset-0 z-30 flex flex-col groove-surface backdrop-blur-sm"
+      //
+      // Opaque, and the shell's own gradient rather than a flat panel or a
+      // blur. A blur leaves half-seen sleeves behind a grid of records, which
+      // is two shelves at once and the eye keeps trying to read the one it
+      // cannot; a flat fill makes this half of the window a different material
+      // from the deck beside it. Repeating the gradient keeps the drawer one
+      // piece of the window whether a crate is open in it or not — and it
+      // means the fade at the foot of the list, which the drawer sets to where
+      // this gradient ends, is still the right colour here.
+      className={`absolute inset-0 z-30 flex flex-col bg-gradient-to-b from-shell-700 to-shell-900 ${
+        closing ? 'pointer-events-none' : ''
+      }`}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-        <div className="min-w-0">
-          <p className="truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-            {playlist.name}
-          </p>
-          <p className="mt-0.5 truncate text-meta text-cream-400">
-            {t('spotify.trackCount', { count: playlist.trackCount })}
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={requestClose}
+          // The heading is the way back, not just the cross in the corner.
+          // This is a place you went into, so the way out is where you came in.
+          className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-cream-50"
+        >
+          <svg
+            viewBox="0 0 10 10"
+            className="h-2.5 w-2.5 shrink-0 text-cream-400"
+            aria-hidden="true"
+          >
+            <path
+              d="M6.5 1L2.5 5l4 4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="min-w-0">
+            <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+              {playlist.name}
+            </span>
+            <span className="block truncate text-meta text-cream-400">
+              {t('spotify.trackCount', { count: playlist.trackCount })}
+            </span>
+          </span>
+        </button>
         <button
           type="button"
           aria-label={t('common.close')}
           title={t('common.close')}
-          onClick={onClose}
+          onClick={requestClose}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
         >
           <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
@@ -169,8 +293,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
 
       <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 groove-scroll-fade">
         <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(128px, 1fr))' }}
+          className="grid gap-3 pt-0.5"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))' }}
         >
           {tracks.map((track, index) => (
             <Record
@@ -194,7 +318,20 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   );
 }
 
-/** One record, at full size, with what it is written underneath. */
+/**
+ * One record, half out of its sleeve, with what it is written underneath.
+ *
+ * The sleeve is here because a bare disc is not a picture of anything. Forty
+ * records drawn as forty black circles are forty copies of one drawing — the
+ * cover is the only thing that tells them apart, and on a record the cover is
+ * a label an inch across. So the cover is printed at full size as the sleeve,
+ * the record lies across it, and the two together fill a square cell instead
+ * of leaving its four corners empty, which is what a grid of circles does.
+ *
+ * It is also the shelf's own object one step further on: out there a sleeve
+ * keeps its record hidden until you reach for it, and in here the record has
+ * been taken out. Same card, same cardboard, same light.
+ */
 function Record({
   track,
   onPlay,
@@ -207,14 +344,39 @@ function Record({
       type="button"
       data-record
       onClick={(e) => onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'))}
-      className="groove-record group/record flex flex-col items-center gap-1.5 rounded-md p-1 text-center transition-colors hover:bg-shell-700/50"
+      className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
-      <span data-disc className="block transition-transform group-hover/record:scale-[1.03]">
-        <VinylDisc size={112} coverArtUrl={track.coverArtUrl} />
+      <span className="relative aspect-square w-full overflow-hidden rounded-t-md bg-shell-900">
+        {track.coverArtUrl && (
+          <img
+            src={track.coverArtUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        )}
+        <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+        {/* Pulled out to the right and cut off by the sleeve's own edge, which
+            is what a record halfway out of a sleeve looks like. `data-disc` is
+            what the flight to the platter picks up and scales, so it has to be
+            the disc alone with nothing around it. */}
+        <span
+          data-disc
+          className="groove-taken absolute left-[32%]"
+          // Centred by arithmetic rather than by `top-1/2 -translate-y-1/2`,
+          // because that utility writes the `translate` property and the nudge
+          // on hover writes `transform` — two offsets that would both apply,
+          // and the record would jump half its own height.
+          style={{ width: DISC_SIZE, height: DISC_SIZE, top: `calc(50% - ${DISC_SIZE / 2}px)` }}
+        >
+          <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
+        </span>
       </span>
-      <span className="w-full min-w-0">
-        <span className="block truncate text-meta text-cream-100">{track.title}</span>
-        <span className="block truncate text-label text-cream-400">{track.artist}</span>
+      <span className="relative flex min-w-0 flex-col px-1.5 py-1">
+        <span className="truncate text-meta text-cream-100" title={track.title}>
+          {track.title}
+        </span>
+        <span className="truncate text-label text-cream-400">{track.artist}</span>
       </span>
     </button>
   );
