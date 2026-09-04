@@ -84,8 +84,17 @@ const CLEAR_OF_SLEEVE = 152;
  */
 const HAND_BACK_VIA = { x: 250, y: -14 };
 
-/** A record sliding the last stretch into its sleeve, or the first out of it. */
+/** A record sliding the last stretch into its sleeve. */
 const SLIDE_MS = 210;
+
+/**
+ * Drawing one out of the mouth, before the hand or the flight takes it.
+ *
+ * Quicker than putting one away. Taking a record out is a pull and putting it
+ * back is a placement, and the pull is also the part a hand is waiting on —
+ * the pointer is already moving by then and the record is not following yet.
+ */
+const PULL_MS = 150;
 
 /**
  * Both slides settle at the end, for opposite reasons.
@@ -225,34 +234,29 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
    * the other half of the window, and the card is not involved in that.
    */
   const carry = useCallback(
-    (
-      track: TrackMetadata,
-      down: React.PointerEvent,
-      homeEl: HTMLElement | null,
-      onLifted: () => void,
-    ) => {
+    (track: TrackMetadata, down: React.PointerEvent, sleeve: Sleeve) => {
+      const homeEl = sleeve.disc;
       if (down.button !== 0 || !homeEl) return;
       const from = { x: down.clientX, y: down.clientY };
-      let lifted = false;
+      /** Where the hand is, which keeps moving while the record is coming out. */
+      let at = from;
+      let pulling = false;
+      let holding = false;
+      let letGo: 'up' | 'cancel' | null = null;
 
-      const move = (e: PointerEvent) => {
-        if (lifted) {
-          moveTo(e.clientX, e.clientY);
-          return;
-        }
-        if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
-        lifted = true;
-        // The card that was pressed is told, so the `click` still to come from
-        // this same press knows it was a drag and does not also play the track.
-        onLifted();
+      const take = () => {
+        holding = true;
         grab({
           track,
+          // Measured after the pull, so it is the record at the mouth rather
+          // than the record in the sleeve. The `forwards` fill is still holding
+          // it there at this point, which is what makes that true.
           homeEl,
           // A record is smaller in a sleeve than on the deck and the hand draws
           // it at the deck's size, so it starts scaled to the sleeve and shrinks
           // from there — rather than jumping to full size and then shrinking.
           homeSize: DISC_SIZE,
-          pointer: { x: e.clientX, y: e.clientY },
+          pointer: at,
           visiting: {
             deckEl: platterEl(),
             onDelivered: deliver,
@@ -260,18 +264,42 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             // curves round to that side rather than crossing straight in.
             homeApproach: HAND_BACK_VIA,
             handOverAt: CLEAR_OF_SLEEVE,
-            onReturned: (at) =>
-              setReturning({ id: track.id, x: at.x, y: at.y, key: ++returns.current }),
+            onReturned: (back) =>
+              setReturning({ id: track.id, x: back.x, y: back.y, key: ++returns.current }),
           },
         });
+        // Let go of before the record was even out: the press is over, so the
+        // hold is told immediately and puts it straight back.
+        if (letGo === 'up') release();
+        else if (letGo === 'cancel') cancel();
+      };
+
+      const move = (e: PointerEvent) => {
+        at = { x: e.clientX, y: e.clientY };
+        if (holding) {
+          moveTo(at.x, at.y);
+          return;
+        }
+        if (pulling) return;
+        if (Math.hypot(at.x - from.x, at.y - from.y) < DRAG_THRESHOLD) return;
+        pulling = true;
+        // The card that was pressed is told, so the `click` still to come from
+        // this same press knows it was a drag and does not also play the track.
+        sleeve.lifted();
+        // The record comes out of the mouth before the hand has it. Reaching
+        // into the sleeve for it looked like the record passing through its own
+        // cover, because that is what was being drawn.
+        sleeve.pullOut(take);
       };
 
       const drop = (e: PointerEvent) => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', drop);
         window.removeEventListener('pointercancel', drop);
-        if (!lifted) return;
-        if (e.type === 'pointerup') release();
+        if (!pulling) return;
+        letGo = e.type === 'pointerup' ? 'up' : 'cancel';
+        if (!holding) return;
+        if (letGo === 'up') release();
         else cancel();
       };
 
@@ -554,12 +582,7 @@ function Record({
   onDeck: boolean;
   /** The hand has just let go of it at the mouth, from this far out. */
   returning: Returning | null;
-  onCarry: (
-    track: TrackMetadata,
-    down: React.PointerEvent,
-    homeEl: HTMLElement | null,
-    onLifted: () => void,
-  ) => void;
+  onCarry: (track: TrackMetadata, down: React.PointerEvent, sleeve: Sleeve) => void;
   onPlay: (disc: HTMLElement) => void;
 }) {
   const t = useT();
@@ -642,42 +665,40 @@ function Record({
   }, [returning]);
 
   /**
-   * Out of the sleeve, then to the deck — the way in, backwards.
+   * Draw the record out of the mouth, then hand it to whatever asked for it.
    *
-   * A click used to launch the flight from where the record was sitting, which
-   * is behind the artwork: the record appeared to leap out through the front
-   * of its own sleeve. It comes out of the mouth first now, exactly as far as
-   * a record being put back is when the hand lets go of it, and the flight
-   * starts from there. Which is why it flies right before it flies left: that
-   * is the direction a record leaves a sleeve.
+   * Nothing may take a record straight from where it sits, because where it
+   * sits is behind the printed face. A click used to launch the flight from
+   * there and the record appeared to leap out through the front of its own
+   * sleeve; a drag used to lift it from there and it came through the artwork
+   * into the hand. Both draw it out of the mouth first now, exactly as far as
+   * a record being put back is when the hand lets go of it, and only then does
+   * anything else touch it. Which is why a click flies right before it flies
+   * left: that is the direction a record leaves a sleeve.
    *
-   * `fill: 'forwards'` so the flight can measure the record where it has got
-   * to rather than where it started, and cancelled straight after so the
-   * sleeve is not left holding a record that is offset by the width of a card.
+   * `fill: 'forwards'` so whatever takes it next measures the record where it
+   * has got to rather than where it started. Nothing is undone here — putting
+   * the card's containment back or cancelling the fill would move the record,
+   * or clip it away, in a frame the thing taking it has not been committed in
+   * yet. The tidying waits until the sleeve reads empty; see above.
    */
-  const leave = () => {
+  const pullOut = (then: () => void) => {
     const el = disc.current;
     const card = button.current;
     if (!el) return;
     if (!card || prefersReducedMotion()) {
-      onPlay(el);
+      then();
       return;
     }
     card.classList.add('groove-sliding');
     const out = el.animate(
       [{ transform: 'none' }, { transform: `translateX(${CLEAR_OF_SLEEVE}px)` }],
-      { duration: SLIDE_MS, easing: SLIDE_OUT_EASING, fill: 'forwards' },
+      { duration: PULL_MS, easing: SLIDE_OUT_EASING, fill: 'forwards' },
     );
+    // Not if the crate closed underneath it: an animation cancelled by an
+    // unmount lands here too, and there is nothing left to take.
     const go = () => {
-      // Not if the crate closed underneath it: an animation cancelled by an
-      // unmount lands here too, and there is nothing left to fly.
-      if (!el.isConnected) return;
-      // Nothing else here. Dropping the card's containment back or cancelling
-      // the fill would put this record back inside its sleeve — or clip it
-      // away — in a frame that React has not yet committed the flight in, and
-      // the record would blink out between leaving and being in the air. The
-      // tidying happens once the sleeve is properly empty, below.
-      onPlay(el);
+      if (el.isConnected) then();
     };
     out.finished.then(go, go);
   };
@@ -698,8 +719,12 @@ function Record({
           return;
         }
         lifted.current = false;
-        onCarry(track, e, disc.current, () => {
-          lifted.current = true;
+        onCarry(track, e, {
+          disc: disc.current,
+          pullOut,
+          lifted: () => {
+            lifted.current = true;
+          },
         });
       }}
       onDragStart={(e) => e.preventDefault()}
@@ -708,7 +733,8 @@ function Record({
         // became a lift has had its say too — the record went where it was
         // dropped, and the `click` that follows it must not send it again.
         if (absent || lifted.current) return;
-        leave();
+        const el = disc.current;
+        if (el) pullOut(() => onPlay(el));
       }}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
@@ -756,6 +782,22 @@ function Record({
       </span>
     </button>
   );
+}
+
+/**
+ * What a card lends out so its record can be taken from it.
+ *
+ * The crate drives the press — the listeners have to be on the window, because
+ * where a record is put down is nowhere near the card — but only the card can
+ * draw its own record out of its own sleeve, so it passes down the doing of it.
+ */
+interface Sleeve {
+  /** The record where it sits, for measuring and for the flight to clone. */
+  disc: HTMLElement | null;
+  /** Draw it out of the mouth and call back once it is clear. */
+  pullOut: (then: () => void) => void;
+  /** This press has become a lift; the click that follows is not a play. */
+  lifted: () => void;
 }
 
 /** A record the hand has let go of, and how far out of home it was. */
