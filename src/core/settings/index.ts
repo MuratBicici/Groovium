@@ -69,14 +69,6 @@ export interface Settings {
    */
   windowBorder: boolean;
   /**
-   * Bars behind the deck, moving to whatever the speakers are playing.
-   *
-   * Off unless asked for: it is fed by listening to the machine's output
-   * device, which is more than this app is, and nobody should find that
-   * switched on without having said so.
-   */
-  visualizer: boolean;
-  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -109,7 +101,6 @@ export const DEFAULT_SETTINGS: Settings = {
   customSecondary: null,
   boostContrast: false,
   windowBorder: false,
-  visualizer: false,
   lastSeenVersion: null,
   declinedVersion: null,
 };

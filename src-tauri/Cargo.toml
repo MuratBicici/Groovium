@@ -56,8 +56,6 @@ serde_json = "1"
 # the running binary needs the app started again for any of it to take effect.
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
-cpal = "0.17"
-rustfft = "6"
 
 [features]
 # Enabled by `tauri dev`; keeps devtools available in debug builds only.

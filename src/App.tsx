@@ -8,7 +8,6 @@ import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
-import { Visualizer } from '@/components/player/Visualizer';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
@@ -64,19 +63,11 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * | z-40   | The picker's confirmation, over its own sheet   |
  * | z-50   | The window's edge, which nothing may cover      |
  *
- * Below all of it, at `-z-10`, is the visualiser. A negative index is the one
- * way to be under an element's content and still over its background, which is
- * exactly where an ornament belongs. It is also the reason the shell isolates:
- * a negative index resolves against the nearest stacking context, and without
- * one it would have meant "under the shell" — which is under the shell's own
- * gradient, where nothing can be seen. Everything in this table lives inside
- * the shell, so isolating changes nothing else about their order.
- *
  * A record is part of the deck, so it belongs under whatever covers the deck.
- * The shell below has no transform and no opacity, so nothing but that
- * `isolate` puts a boundary anywhere, and every number here resolves against
- * it — which is what lets a panel inside `main` sit above a layer that comes
- * after `main` in the DOM.
+ * The shell below is `relative` with no z-index, no transform and no opacity,
+ * so it creates no stacking context and every number here resolves against the
+ * same root — which is what lets a panel inside `main` sit above a layer that
+ * comes after `main` in the DOM.
  *
  * The Spotify drawer is the one thing deliberately outside this table: it
  * isolates, and an opened crate stacks inside it. That layer covers the drawer
@@ -101,7 +92,6 @@ export default function App() {
   const setDrawerOpen = useSettingsStore((s) => s.setDrawerOpen);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
-  const visualizer = useSettingsStore((s) => s.visualizer);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
@@ -249,11 +239,9 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      className="relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900"
+      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900"
     >
       <PlaylistPickerProvider>
-      <Visualizer on={visualizer} />
-
       <DiscFlightProvider>
       <DiscHoldProvider>
       <WindowChrome />
