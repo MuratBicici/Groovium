@@ -64,16 +64,27 @@ const RESHELVE_MS = 380;
 const RESHELVE_FROM = 74;
 
 /**
- * Where a record being put back by hand is aimed, relative to the sleeve.
+ * Where the hand lets go of a record it is putting back, right of the sleeve.
  *
- * A control point, not a destination: the hand's path bends towards the mouth
- * on the right and turns in, arriving still moving inwards. Two earlier tries
- * both read as two moves — putting it in the middle and letting the sleeve
- * pull it out and back in, then stopping at the mouth for the sleeve to
- * finish. Anything that stops before the end is two moves however well the
- * halves are matched, so nothing stops now.
+ * Far enough that the record is completely clear of the card — half a card
+ * plus half a record — because that is the only place the hand's copy and the
+ * sleeve's own look identical. Anywhere nearer and the hand's copy is already
+ * lying over the artwork it is supposed to be going behind, and the swap shows
+ * as the record jumping from in front of the sleeve to inside it.
  */
-const HOME_APPROACH = { x: 118, y: -8 };
+const HAND_BACK_AT = 152;
+
+/**
+ * The curve's control point, out beyond that.
+ *
+ * Beyond rather than short of it, so the record comes back leftwards into the
+ * handover instead of arriving from the left across the sleeve's face. What it
+ * does last is what the slide does first, which is what makes the two one move.
+ */
+const HAND_BACK_VIA = { x: 250, y: -14 };
+
+/** The last stretch, from the hand's copy to home, behind the artwork. */
+const SLIDE_IN_MS = 210;
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
@@ -135,6 +146,21 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
    * is the one case where the record really should come back.
    */
   const [handedOver, setHandedOver] = useState<string | null>(null);
+  /**
+   * A record the hand has just let go of at the mouth of its sleeve.
+   *
+   * The hand carries records in a layer above the whole window, which is right
+   * until one starts going in: a record entering a sleeve passes behind the
+   * printed face, and nothing drawn on top of everything can. So the hand stops
+   * at the mouth, still moving, and the sleeve's own record — which is behind
+   * its artwork, where it belongs — covers the last stretch and is occluded
+   * properly on the way.
+   *
+   * `key` because the same record can be put back twice and the second time
+   * has to re-run: the offsets would compare equal and nothing would happen.
+   */
+  const [returning, setReturning] = useState<Returning | null>(null);
+  const returns = useRef(0);
   const deliver = useCallback(
     (taken: TrackMetadata) => {
       setHandedOver(taken.id);
@@ -190,7 +216,10 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             onDelivered: deliver,
             // Home is entered through the mouth on the right, so the way back
             // curves round to that side rather than crossing straight in.
-            homeApproach: HOME_APPROACH,
+            homeApproach: HAND_BACK_VIA,
+            handOverAt: HAND_BACK_AT,
+            onReturned: (at) =>
+              setReturning({ id: track.id, x: at.x, y: at.y, key: ++returns.current }),
           },
         });
       };
@@ -438,6 +467,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
               // already putting back itself.
               absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
               onDeck={track.id === onDeck || track.id === handedOver}
+              returning={returning?.id === track.id ? returning : null}
               onCarry={carry}
               onPlay={(disc) => {
                 if (dragged.current) return;
@@ -476,6 +506,7 @@ function Record({
   track,
   absent,
   onDeck,
+  returning,
   onCarry,
   onPlay,
 }: {
@@ -484,10 +515,13 @@ function Record({
   absent: boolean;
   /** It is on the deck, which is the only way out that ends in a way back. */
   onDeck: boolean;
+  /** The hand has just let go of it at the mouth, from this far out. */
+  returning: Returning | null;
   onCarry: (track: TrackMetadata, down: React.PointerEvent, homeEl: HTMLElement | null) => void;
   onPlay: (disc: HTMLElement | null) => void;
 }) {
   const disc = useRef<HTMLSpanElement | null>(null);
+  const button = useRef<HTMLButtonElement | null>(null);
   const was = useRef(onDeck);
 
   /**
@@ -513,8 +547,43 @@ function Record({
     );
   }, [onDeck]);
 
+  /**
+   * The last stretch, from wherever the hand let go to home.
+   *
+   * The card drops its containment for the length of it. `content-visibility`
+   * clips everything to the card's box, and the record starts this outside it
+   * — without this it would be invisible until it was already halfway in,
+   * which is the fault this whole handover exists to fix, moved along by a few
+   * pixels. It is raised for the same span so the next card along does not cut
+   * across the part still outside.
+   *
+   * The class goes on by hand rather than through state. It is the same
+   * statement as the animation beside it — this record is in transit — and a
+   * render for it would re-run the whole card twice for something no other
+   * part of the card is interested in.
+   */
+  useLayoutEffect(() => {
+    const el = disc.current;
+    const card = button.current;
+    if (!returning || !el || !card || prefersReducedMotion()) return;
+    card.classList.add('groove-sliding');
+    const run = el.animate(
+      [{ transform: `translate(${returning.x}px, ${returning.y}px)` }, { transform: 'none' }],
+      // Quicker than a record coming back off the deck, and picking up where
+      // the hand left off rather than starting from rest.
+      { duration: SLIDE_IN_MS, easing: 'cubic-bezier(0.15, 0.75, 0.35, 1)' },
+    );
+    const done = () => card.classList.remove('groove-sliding');
+    run.finished.then(done, done);
+    return () => {
+      run.cancel();
+      done();
+    };
+  }, [returning]);
+
   return (
     <button
+      ref={button}
       type="button"
       data-record
       onPointerDown={(e) => onCarry(track, e, disc.current)}
@@ -566,4 +635,13 @@ function Record({
       </span>
     </button>
   );
+}
+
+/** A record the hand has let go of, and how far out of home it was. */
+interface Returning {
+  id: string;
+  x: number;
+  y: number;
+  /** Distinguishes one putting-back from the next of the same record. */
+  key: number;
 }

@@ -18,11 +18,6 @@ export const PICKUP_MS = 180;
 /** Setting it back down — the careful half of the gesture, so a shade longer. */
 export const SEAT_MS = 260;
 
-/**
- * A way home that curves round to one side is a longer way, so a shade slower.
- */
-export const CURVED_SEAT_MS = 360;
-
 /** Cross-fade into the platter's own disc once it is home. */
 export const SEAT_SETTLE_MS = 120;
 

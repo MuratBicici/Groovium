@@ -4,7 +4,6 @@ import { usePlayerStore } from '@/core/store';
 import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import {
-  CURVED_SEAT_MS,
   HELD_SCALE,
   PICKUP_MS,
   SEAT_MS,
@@ -57,6 +56,24 @@ const DISC_SIZE = 152;
 /** How high the record hops on its way back down onto the spindle. */
 const SEAT_ARC = 22;
 
+/**
+ * How fast the hand moves a record back to where it lives, in px per ms.
+ *
+ * A speed rather than a duration, because this leg hands over to another one
+ * and the two have to be going at roughly the same rate at the seam. A fixed
+ * clock would make a short return crawl and a long one bolt.
+ */
+const HAND_SPEED = 0.62;
+
+/**
+ * How much of a curved seat is spent getting the record down to size.
+ *
+ * It has to be the size it will be *inside* before the hand can let go of it
+ * at the mouth, or it changes size at the seam. So the sizing finishes in the
+ * first half and the second half is only travel.
+ */
+const SIZED_BY = 0.5;
+
 /** How long after a throw the platter still treats the record as thrown. */
 const JUST_THREW_MS = 400;
 
@@ -99,6 +116,33 @@ interface Visiting {
    * when it disappears into the sleeve.
    */
   homeApproach?: Vector;
+  /**
+   * How far to the right of home the hand lets go, in px. The seat ends there
+   * rather than at home.
+   *
+   * The hand carries a record in a layer above the whole window, which is
+   * right while it is in the air and wrong the moment it starts going in: a
+   * record entering a sleeve passes *behind* the printed face, and a clone
+   * drawn over everything cannot. So the hand stops short and whatever lives
+   * there covers the last stretch, occluded properly on the way.
+   *
+   * Far enough out that the record is completely clear of what it is going
+   * into. Anywhere closer and the clone would already be overlapping the face
+   * it is meant to pass behind, and the handover would show as the record
+   * jumping from in front of the sleeve to inside it — which is the whole
+   * complaint. Clear of it, the two are the same picture and the swap cannot
+   * be seen.
+   *
+   * The record is still travelling when it happens: this leg is linear and
+   * the curve's control point is out beyond the handover, so it arrives
+   * moving inwards and the last stretch carries straight on.
+   */
+  handOverAt?: number;
+  /**
+   * Where the hand let go, relative to home's centre, so the last leg can
+   * start from exactly there.
+   */
+  onReturned?: (offset: Vector) => void;
 }
 
 interface Grab {
@@ -206,6 +250,16 @@ interface Motion {
   seatMs: number;
   /** The curve's control point in layer coordinates, when home wants one. */
   approach: Vector | null;
+  /** Whether this seat ends short of home, to be finished by something else. */
+  handingOver: boolean;
+  /**
+   * Home's own centre, which `origin` is not when the seat ends short of it.
+   *
+   * The last stretch is measured from here. Reporting the offset against
+   * `origin` instead would report zero every time — the seat always finishes
+   * exactly on its target — and the slide would have nothing to travel.
+   */
+  homeCentre: Vector;
   visiting: Visiting | null;
   /** Whether the seat now running ends on the deck rather than back home. */
   delivering: boolean;
@@ -272,14 +326,20 @@ function advance(m: Motion, now: number): Outcome {
 
     case 'seat': {
       const t = clamp((now - m.phaseAt) / m.seatMs, 0, 1);
-      const e = easeOutCubic(t);
+      // Linear when there is a last stretch to come, so the record is still
+      // moving at the seam. Every easing that settles on its target arrives at
+      // a standstill, and a standstill in the middle is what makes one move
+      // read as two.
+      const e = m.handingOver ? t : easeOutCubic(t);
       m.pos = seatPoint(m.from, m.origin, m.approach, e);
       // The hop is the platter's, and only the platter's: a record is dropped
       // onto a spindle and slid into a sleeve. It is on linear time while the
       // travel is eased — the same split `arcKeyframes` makes, which keeps the
       // apex in the middle of the move instead of dragging it to the slow end.
       if (!m.approach) m.pos.y -= SEAT_ARC * Math.sin(Math.PI * t);
-      m.scale = lerp(m.fromScale, m.seatScale, e);
+      // Sized before it is lined up, when a handover is coming: the record has
+      // to already be the size it will be inside before the hand can let go.
+      m.scale = lerp(m.fromScale, m.seatScale, m.handingOver ? Math.min(1, e / SIZED_BY) : e);
       // Whatever tumble it picked up on the way unwinds as it settles.
       m.spin = lerp(m.spin, 0, e);
       if (t >= 1) return 'seated';
@@ -367,6 +427,12 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     const m = motion.current;
     const visiting = m?.visiting ?? null;
     const delivered = m?.delivering === true ? m.track : null;
+    // Exactly where the hand let go, so the last leg starts from there rather
+    // than from a number that only usually matches.
+    const handedBackAt =
+      m && visiting && !delivered
+        ? { x: m.pos.x - m.homeCentre.x, y: m.pos.y - m.homeCentre.y }
+        : null;
     clear();
     // The deck's own record went back onto the deck; the music resumes.
     if (!visiting) {
@@ -374,8 +440,12 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     // A visiting record that reached the deck is not resumed, it is played:
-    // nothing was ever paused for it. One that went home says nothing at all.
-    if (!delivered) return;
+    // nothing was ever paused for it. One that went home is passed back to
+    // wherever it lives, which finishes putting it away.
+    if (!delivered) {
+      if (handedBackAt) visiting.onReturned?.(handedBackAt);
+      return;
+    }
     // Noted before the track is asked for, so the platter can already know
     // this record arrived by hand when it becomes the current one.
     const now = performance.now();
@@ -464,6 +534,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         seatScale: homeScale,
         seatMs: SEAT_MS,
         approach: null,
+        handingOver: false,
+        homeCentre: { ...origin },
         visiting: grab.visiting ?? null,
         delivering: false,
         layer,
@@ -514,13 +586,23 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
 
   /** Begin setting the record down on `onto`, at `scale`. */
   const beginSeat = useCallback(
-    (m: Motion, onto: HTMLElement, scale: number, now: number, approach?: Vector) => {
+    (m: Motion, onto: HTMLElement, scale: number, now: number, home?: Visiting) => {
       // Re-measured: the stage moves under a hold the same way it moves under
       // a flight, and neither the deck nor a sleeve need still be where it was.
       const centre = measure(onto).origin;
-      m.origin = centre;
+      const approach = home?.homeApproach;
+      const short = home?.handOverAt;
+      // Short of home when something else is finishing the job.
+      m.origin = short === undefined ? centre : { x: centre.x + short, y: centre.y };
+      m.handingOver = short !== undefined;
+      m.homeCentre = centre;
       m.approach = approach ? { x: centre.x + approach.x, y: centre.y + approach.y } : null;
-      m.seatMs = approach ? CURVED_SEAT_MS : SEAT_MS;
+      // Timed by how far it has to go rather than by a fixed clock, so the leg
+      // travels at one speed however near or far it was let go of — which is
+      // the speed the last stretch has to pick up at.
+      m.seatMs = m.handingOver
+        ? clamp(Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y) / HAND_SPEED, 150, 460)
+        : SEAT_MS;
       m.seatScale = scale;
       m.phase = 'seat';
       m.phaseAt = now;
@@ -555,7 +637,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
       m.delivering = onDeck && !!deck;
       if (m.delivering && deck) beginSeat(m, deck, 1, now);
-      else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting.homeApproach);
+      else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting);
       return;
     }
 
@@ -580,7 +662,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const cancel = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
-    beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting?.homeApproach);
+    beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting ?? undefined);
   }, [beginSeat]);
 
   /**

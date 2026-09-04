@@ -617,8 +617,21 @@ body {
  * the way in or out. Every other card on the shelf keeps the optimisation,
  * which is the whole reason it is here.
  */
-.groove-record:hover {
+.groove-record:hover,
+.groove-record.groove-sliding {
   content-visibility: visible;
+}
+
+/*
+ * A card whose record is on its way back in from outside it.
+ *
+ * Raised for exactly that span, for the reason a hovered one is: the part of
+ * the record still outside the card would otherwise be cut across by the next
+ * card along, and the card on the end of a row would behave differently from
+ * the rest.
+ */
+.groove-record.groove-sliding {
+  z-index: 1;
 }
 
 /*
