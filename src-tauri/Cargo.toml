@@ -69,5 +69,5 @@ panic = "abort"
 strip = true
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.61", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Foundation", "Win32_System_Variant"] }
+windows = { version = "0.61", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Foundation", "Win32_System_Variant", "Win32_System_Diagnostics_ToolHelp"] }
 windows-core = "0.61"

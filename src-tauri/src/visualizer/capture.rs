@@ -27,6 +27,10 @@ use windows::Win32::Media::Audio::{
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+    TH32CS_SNAPPROCESS,
+};
 use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::System::Variant::VT_BLOB;
 
@@ -79,7 +83,48 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
 /// it is the whole machine minus us, which is not something to ship — but it is
 /// the one measurement that can tell "our tree renders no audio" apart from
 /// "process loopback delivers no audio here", and those need different answers.
-pub fn listen(millis: u64, ours: bool) -> Result<Probe, String> {
+/// Every process on the machine, as id, parent and name.
+///
+/// Only here to answer where the sound is. The reading that mattered was that
+/// this app's own tree renders nothing while everything else renders the music,
+/// which means the WebView2 process playing it is not under us — and the only
+/// way to target it is to find it.
+pub fn processes() -> Result<Vec<(u32, u32, String)>, String> {
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            .map_err(|e| format!("could not list processes: {e}"))?;
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut found = Vec::new();
+        if Process32FirstW(snapshot, &mut entry).is_ok() {
+            loop {
+                let end = entry
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(entry.szExeFile.len());
+                found.push((
+                    entry.th32ProcessID,
+                    entry.th32ParentProcessID,
+                    String::from_utf16_lossy(&entry.szExeFile[..end]),
+                ));
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        Ok(found)
+    }
+}
+
+/// This process's own id, so a caller can find itself in the list above.
+pub fn me() -> u32 {
+    unsafe { GetCurrentProcessId() }
+}
+
+pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, String> {
     unsafe {
         // Ignored on purpose: a failure here is almost always "already
         // initialised on this thread with a different model", which is fine —
@@ -90,7 +135,7 @@ pub fn listen(millis: u64, ours: bool) -> Result<Probe, String> {
             ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
             Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
                 ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-                    TargetProcessId: GetCurrentProcessId(),
+                    TargetProcessId: target.unwrap_or_else(|| GetCurrentProcessId()),
                     // The tree, not the process. The audio being asked about is
                     // rendered by WebView2, which runs in children of this
                     // process; asking only about this one would capture the

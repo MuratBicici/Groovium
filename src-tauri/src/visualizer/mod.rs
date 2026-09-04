@@ -57,20 +57,58 @@ pub struct Probe {
 /// unknowns above decide whether a visualiser is possible at all, and the
 /// honest order is to find out first.
 #[tauri::command]
-pub fn visualizer_probe(millis: u64, ours: bool) -> Probe {
+pub fn visualizer_probe(millis: u64, ours: bool, target: Option<u32>) -> Probe {
     #[cfg(windows)]
     {
-        match capture::listen(millis.clamp(200, 5_000), ours) {
+        match capture::listen(millis.clamp(200, 5_000), ours, target) {
             Ok(probe) => probe,
             Err(error) => Probe { error: Some(error), ..Probe::default() },
         }
     }
     #[cfg(not(windows))]
     {
-        let _ = (millis, ours);
+        let _ = (millis, ours, target);
         Probe {
             error: Some("per-process capture is a Windows interface".into()),
             ..Probe::default()
         }
     }
+}
+
+/// This app's own process id and every WebView2 process on the machine.
+///
+/// Which of them is playing the music is the question the readings left open:
+/// this app's tree renders nothing while everything outside it renders the
+/// track, so the process doing it is a WebView2 one that is not under us. This
+/// says which ones exist and who their parents are, so the right one can be
+/// aimed at rather than guessed.
+#[tauri::command]
+pub fn visualizer_processes() -> ProcessList {
+    #[cfg(windows)]
+    {
+        let all = capture::processes().unwrap_or_default();
+        let mine = capture::me();
+        let parent = all.iter().find(|(pid, _, _)| *pid == mine).map(|&(_, p, _)| p);
+        ProcessList {
+            me: mine,
+            parent,
+            webviews: all
+                .iter()
+                .filter(|(_, _, name)| name.to_ascii_lowercase().contains("webview"))
+                .map(|&(pid, parent, ref name)| (pid, parent, name.clone()))
+                .collect(),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        ProcessList::default()
+    }
+}
+
+#[derive(serde::Serialize, Default)]
+pub struct ProcessList {
+    pub me: u32,
+    pub parent: Option<u32>,
+    /// Every process whose name mentions a webview, as id, parent and name.
+    pub webviews: Vec<(u32, u32, String)>,
 }

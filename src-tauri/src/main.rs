@@ -62,6 +62,7 @@ fn main() {
         // (`keyring.rs`), so a refresh token has no path out of this process.
         .invoke_handler(tauri::generate_handler![
             visualizer::visualizer_probe,
+            visualizer::visualizer_processes,
             library::library_load,
             library::library_pick_files,
             library::library_pick_folder,
