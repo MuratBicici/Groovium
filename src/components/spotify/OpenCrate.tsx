@@ -64,15 +64,16 @@ const RESHELVE_MS = 380;
 const RESHELVE_FROM = 74;
 
 /**
- * Where the hand lets go of a record it is putting back, right of the sleeve.
+ * How far out of a sleeve a record has to be to be clear of it, in px.
  *
- * Far enough that the record is completely clear of the card — half a card
- * plus half a record — because that is the only place the hand's copy and the
- * sleeve's own look identical. Anywhere nearer and the hand's copy is already
- * lying over the artwork it is supposed to be going behind, and the swap shows
- * as the record jumping from in front of the sleeve to inside it.
+ * Half a card plus half a record. It is where the hand lets go of one it is
+ * putting back and where one being taken out has got to before it flies —
+ * because it is the only place a record drawn over the card and the same
+ * record drawn behind it look identical. Anywhere nearer, one of them is lying
+ * across artwork the other is hidden by, and the swap shows as the record
+ * jumping between in front of the sleeve and inside it.
  */
-const HAND_BACK_AT = 152;
+const CLEAR_OF_SLEEVE = 152;
 
 /**
  * The curve's control point, out beyond that.
@@ -83,8 +84,18 @@ const HAND_BACK_AT = 152;
  */
 const HAND_BACK_VIA = { x: 250, y: -14 };
 
-/** The last stretch, from the hand's copy to home, behind the artwork. */
-const SLIDE_IN_MS = 210;
+/** A record sliding the last stretch into its sleeve, or the first out of it. */
+const SLIDE_MS = 210;
+
+/**
+ * Coming in it arrives, going out it is leaving: one easing and its mirror.
+ *
+ * In, it picks up where the hand let go and settles. Out, it starts from rest
+ * and is at speed by the time it clears the sleeve, which is where the flight
+ * to the deck takes over.
+ */
+const SLIDE_IN_EASING = 'cubic-bezier(0.15, 0.75, 0.35, 1)';
+const SLIDE_OUT_EASING = 'cubic-bezier(0.65, 0, 0.85, 0.25)';
 
 /** An empty sleeve saying so. */
 const SHAKE_MS = 360;
@@ -197,14 +208,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   );
 
   /**
-   * Whether the press that is finishing was a drag.
-   *
-   * A `click` still fires after a drag's `pointerup`, and without this every
-   * drop would also play whatever was underneath the finger at the start.
-   */
-  const dragged = useRef(false);
-
-  /**
    * Take a record out of its sleeve.
    *
    * Nothing happens until the pointer has actually travelled: a press that
@@ -216,7 +219,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
    * the other half of the window, and the card is not involved in that.
    */
   const carry = useCallback(
-    (track: TrackMetadata, down: React.PointerEvent, homeEl: HTMLElement | null) => {
+    (
+      track: TrackMetadata,
+      down: React.PointerEvent,
+      homeEl: HTMLElement | null,
+      onLifted: () => void,
+    ) => {
       if (down.button !== 0 || !homeEl) return;
       const from = { x: down.clientX, y: down.clientY };
       let lifted = false;
@@ -228,7 +236,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         }
         if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
         lifted = true;
-        dragged.current = true;
+        // The card that was pressed is told, so the `click` still to come from
+        // this same press knows it was a drag and does not also play the track.
+        onLifted();
         grab({
           track,
           homeEl,
@@ -243,7 +253,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             // Home is entered through the mouth on the right, so the way back
             // curves round to that side rather than crossing straight in.
             homeApproach: HAND_BACK_VIA,
-            handOverAt: HAND_BACK_AT,
+            handOverAt: CLEAR_OF_SLEEVE,
             onReturned: (at) =>
               setReturning({ id: track.id, x: at.x, y: at.y, key: ++returns.current }),
           },
@@ -257,10 +267,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         if (!lifted) return;
         if (e.type === 'pointerup') release();
         else cancel();
-        // After the click this press is still going to fire, not before it.
-        window.setTimeout(() => {
-          dragged.current = false;
-        }, 0);
       };
 
       window.addEventListener('pointermove', move);
@@ -496,8 +502,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
               returning={returning?.id === track.id ? returning : null}
               onCarry={carry}
               onPlay={(disc) => {
-                if (dragged.current) return;
-                if (disc) flyToPlatter(disc, track);
+                flyToPlatter(disc, track);
                 deliver(track);
               }}
             />
@@ -543,12 +548,19 @@ function Record({
   onDeck: boolean;
   /** The hand has just let go of it at the mouth, from this far out. */
   returning: Returning | null;
-  onCarry: (track: TrackMetadata, down: React.PointerEvent, homeEl: HTMLElement | null) => void;
-  onPlay: (disc: HTMLElement | null) => void;
+  onCarry: (
+    track: TrackMetadata,
+    down: React.PointerEvent,
+    homeEl: HTMLElement | null,
+    onLifted: () => void,
+  ) => void;
+  onPlay: (disc: HTMLElement) => void;
 }) {
   const t = useT();
   const disc = useRef<HTMLSpanElement | null>(null);
   const button = useRef<HTMLButtonElement | null>(null);
+  /** Whether the press being finished turned into a lift. */
+  const lifted = useRef(false);
   const was = useRef(onDeck);
 
   /**
@@ -598,7 +610,7 @@ function Record({
       [{ transform: `translate(${returning.x}px, ${returning.y}px)` }, { transform: 'none' }],
       // Quicker than a record coming back off the deck, and picking up where
       // the hand left off rather than starting from rest.
-      { duration: SLIDE_IN_MS, easing: 'cubic-bezier(0.15, 0.75, 0.35, 1)' },
+      { duration: SLIDE_MS, easing: SLIDE_IN_EASING },
     );
     const done = () => card.classList.remove('groove-sliding');
     run.finished.then(done, done);
@@ -607,6 +619,43 @@ function Record({
       done();
     };
   }, [returning]);
+
+  /**
+   * Out of the sleeve, then to the deck — the way in, backwards.
+   *
+   * A click used to launch the flight from where the record was sitting, which
+   * is behind the artwork: the record appeared to leap out through the front
+   * of its own sleeve. It comes out of the mouth first now, exactly as far as
+   * a record being put back is when the hand lets go of it, and the flight
+   * starts from there. Which is why it flies right before it flies left: that
+   * is the direction a record leaves a sleeve.
+   *
+   * `fill: 'forwards'` so the flight can measure the record where it has got
+   * to rather than where it started, and cancelled straight after so the
+   * sleeve is not left holding a record that is offset by the width of a card.
+   */
+  const leave = () => {
+    const el = disc.current;
+    const card = button.current;
+    if (!el) return;
+    if (!card || prefersReducedMotion()) {
+      onPlay(el);
+      return;
+    }
+    card.classList.add('groove-sliding');
+    const out = el.animate(
+      [{ transform: 'none' }, { transform: `translateX(${CLEAR_OF_SLEEVE}px)` }],
+      { duration: SLIDE_MS, easing: SLIDE_OUT_EASING, fill: 'forwards' },
+    );
+    const go = () => {
+      card.classList.remove('groove-sliding');
+      // Not if the crate closed underneath it: an animation cancelled by an
+      // unmount lands here too, and there is nothing left to fly.
+      if (el.isConnected) onPlay(el);
+      out.cancel();
+    };
+    out.finished.then(go, go);
+  };
 
   return (
     <button
@@ -623,13 +672,18 @@ function Record({
           refuse(e.currentTarget);
           return;
         }
-        onCarry(track, e, disc.current);
+        lifted.current = false;
+        onCarry(track, e, disc.current, () => {
+          lifted.current = true;
+        });
       }}
       onDragStart={(e) => e.preventDefault()}
-      onClick={(e) => {
-        // Answered on the press already, and once is enough.
-        if (absent) return;
-        onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'));
+      onClick={() => {
+        // Answered on the press already, and once is enough. A press that
+        // became a lift has had its say too — the record went where it was
+        // dropped, and the `click` that follows it must not send it again.
+        if (absent || lifted.current) return;
+        leave();
       }}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
