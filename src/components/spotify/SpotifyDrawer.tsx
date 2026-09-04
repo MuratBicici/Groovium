@@ -140,7 +140,6 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   return (
     <aside
       id={id}
-      style={{ width: `${DRAWER_WIDTH}px` }}
       // A hairline is the whole separation. The shell's own gradient runs
       // straight through both halves, which is what makes this read as the
       // window having been pulled open rather than as a second window parked
@@ -149,6 +148,10 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
       // the nearest positioned ancestor is the shell, and the layer would take
       // the deck with it.
       className="relative flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
+      // Every list in here ends at the bottom of the window, not two thirds of
+      // the way down it where a docked panel ends, so the fade at the foot of
+      // one has to be the colour the shell has actually reached by then.
+      style={{ width: `${DRAWER_WIDTH}px`, ['--fade-colour' as string]: 'var(--color-shell-900)' }}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
         {/* A brand and, once connected, someone's name. Neither is a Turkish

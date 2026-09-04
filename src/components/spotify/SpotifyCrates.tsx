@@ -67,10 +67,12 @@ export function SpotifyCrates() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
       <div
-        className="grid gap-2 pb-2"
+        className="grid gap-3 pt-0.5 pb-2"
         // Sized rather than counted in columns, so the shelf keeps its
-        // proportions if the drawer is ever a different width.
-        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
+        // proportions if the drawer is ever a different width. Smaller than it
+        // was: four sleeves across read as four pictures, and five read as a
+        // shelf — which is what this is meant to be.
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}
       >
         {playlists.map((playlist) => (
           <Crate
@@ -93,7 +95,20 @@ export function SpotifyCrates() {
   );
 }
 
-/** One sleeve, which opens to show what is in it. */
+/**
+ * One sleeve, which opens to show what is in it.
+ *
+ * A single piece of cardboard: the artwork is printed on its top half and the
+ * name on its bottom half. That is the whole of the change from what was here
+ * before, and it is the whole of the point — the art, the name and the count
+ * used to be three separate boxes stacked on the shelf, each a different
+ * colour from the shelf and from each other, so the gaps between rows read as
+ * bands rather than as space.
+ *
+ * The record behind it is hidden until the pointer arrives, then slides a
+ * little way out of the sleeve. It is what says this is a thing you take out
+ * rather than a picture you click, before anything has been clicked.
+ */
 function Crate({
   playlist,
   onOpen,
@@ -102,16 +117,32 @@ function Crate({
   onOpen: (rect: { x: number; y: number; width: number; height: number }) => void;
 }) {
   const t = useT();
+  const art = useRef<HTMLSpanElement | null>(null);
   return (
     <button
       type="button"
-      onClick={(e) => {
-        const { x, y, width, height } = e.currentTarget.getBoundingClientRect();
-        onOpen({ x, y, width, height });
+      onClick={() => {
+        // The artwork, not the card. What comes out of a crate is records, and
+        // they have to come out of the square that has a record printed on it
+        // — measuring the whole sleeve puts their origin a text-height too low
+        // and at the wrong aspect, and the flight shows it.
+        const box = art.current?.getBoundingClientRect();
+        if (box) onOpen({ x: box.x, y: box.y, width: box.width, height: box.height });
       }}
-      className="flex flex-col gap-1 rounded-md text-left transition-transform hover:scale-[1.02]"
+      className="groove-sleeve relative flex flex-col rounded-md text-left"
     >
-      <div className="relative aspect-square w-full overflow-hidden rounded-md groove-inset ring-1 ring-[var(--color-edge)]">
+      {/* Behind the sleeve, and only ever seen leaving it. `-z-10` would put it
+          behind the card's own background; a plain sibling drawn first, with
+          the sleeve's contents after it, keeps it under the art and over the
+          shelf without either of them needing a stacking context. */}
+      <span
+        aria-hidden="true"
+        className="groove-sleeve-disc pointer-events-none absolute top-[5%] right-[5%] aspect-square w-[90%] rounded-full"
+      />
+      <span
+        ref={art}
+        className="relative aspect-square w-full overflow-hidden rounded-t-md bg-shell-900"
+      >
         {playlist.coverArtUrl ? (
           <img
             src={playlist.coverArtUrl}
@@ -130,12 +161,15 @@ function Crate({
             {playlist.name.trim().charAt(0).toUpperCase() || '♪'}
           </span>
         )}
-      </div>
-      <span className="truncate text-meta text-cream-200" title={playlist.name}>
-        {playlist.name}
+        <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
       </span>
-      <span className="truncate text-label text-cream-400">
-        {t('spotify.trackCount', { count: playlist.trackCount })}
+      <span className="relative flex min-w-0 flex-col px-1.5 py-1">
+        <span className="truncate text-meta text-cream-100" title={playlist.name}>
+          {playlist.name}
+        </span>
+        <span className="truncate text-label text-cream-400">
+          {t('spotify.trackCount', { count: playlist.trackCount })}
+        </span>
       </span>
     </button>
   );

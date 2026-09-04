@@ -158,3 +158,6 @@ vite.config.ts.timestamp-*
 
 # Generated audio fixtures for manual testing
 /.test-audio/
+
+# Throwaway visual harnesses. Never committed.
+/.scratch/

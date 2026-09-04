@@ -439,6 +439,119 @@ body {
 }
 
 /*
+ * A record sleeve on the shelf.
+ *
+ * A playlist was a square of cover art with a ring around it and two lines of
+ * text loose underneath. Three things, all of them rectangles, none of them
+ * the same colour as the shell they sat on — so a shelf of twelve read as
+ * thirty-six stacked bands rather than twelve objects. The ring made it worse
+ * by being *lighter* than the shell: nothing in this room is outlined in a
+ * paler colour than the room, and the eye reads a pale outline as a hole.
+ *
+ * This is one object instead. The card is the sleeve, the art is printed on
+ * it, and the name is printed below the art on the same piece of cardboard —
+ * so what is above and below a sleeve is the shelf, and nothing else. It is
+ * lit like every other surface here: a hairline where the light catches the
+ * top edge, a dark hairline around the rest because a card's own edge is a
+ * shadow, and a shadow underneath because it is lying on something.
+ */
+.groove-sleeve {
+  /* Opaque, and lighter than the shell rather than a translucent tint of it.
+     The shell is a gradient down the whole window, so a card built from a
+     transparent wash of it is nearly invisible at the top of the shelf and
+     obvious at the bottom — the card would fade in as you scrolled. Two solid
+     shades a step above the darkest thing near them keeps a sleeve the same
+     object wherever on the shelf it happens to be. */
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-shell-600) 50%, var(--color-shell-700)),
+    var(--color-shell-700)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / var(--lift)),
+    0 0 0 1px rgb(0 0 0 / calc(0.35 * var(--shade))),
+    0 4px 10px -5px rgb(0 0 0 / calc(0.7 * var(--shade)));
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms ease;
+}
+
+.groove-sleeve:hover {
+  /* Above the sleeves that come after it, so the record sliding out is not cut
+     in half by the next card in the row — and so the one on the end of a row
+     does not behave differently from the rest. */
+  z-index: 1;
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / var(--lift)),
+    0 0 0 1px rgb(0 0 0 / calc(0.35 * var(--shade))),
+    0 10px 20px -8px rgb(0 0 0 / calc(0.8 * var(--shade)));
+}
+
+/*
+ * The printed face of the sleeve: a fold down the opening edge and a sheen
+ * where the light crosses it.
+ *
+ * Laid over the artwork rather than applied to it, so a cover keeps its own
+ * colours and only the light on it is ours. The fold is on the left because
+ * that is the edge an LP sleeve is glued along, and it is what stops a bright
+ * cover from reading as a flat swatch pasted onto the card.
+ */
+.groove-sleeve-face {
+  background:
+    linear-gradient(to right, rgb(0 0 0 / calc(0.5 * var(--shade))), rgb(0 0 0 / 0) 8px),
+    linear-gradient(to bottom right, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 45%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / calc(0.3 * var(--shade)));
+}
+
+/*
+ * The record itself, behind the sleeve, showing when you reach for it.
+ *
+ * Drawn here rather than with `VinylDisc`: there is one of these per playlist
+ * and the shelf is the place where a hundred of them can be on screen at once,
+ * so this is three gradients and no element tree. It is the same object the
+ * platter shows, at the fidelity a 12px sliver can carry — which is a dark
+ * edge, a hint of grooves, and the fact that it is round.
+ *
+ * At rest it is hidden exactly behind the sleeve. Nothing pokes out until the
+ * pointer is on the card, because a shelf of records half out of their sleeves
+ * is a shelf somebody has already been through.
+ */
+.groove-sleeve-disc {
+  background:
+    /* The rim, where the light actually catches a record. Only a crescent of
+       this disc is ever out of the sleeve, and without a lit edge that
+       crescent is a black shape rather than something round. */
+    radial-gradient(closest-side, rgb(0 0 0 / 0) 0 95%, rgb(255 255 255 / 0.16) 96% 100%),
+    radial-gradient(closest-side, var(--color-brass-600) 0 22%, rgb(0 0 0 / 0) 22.5%),
+    repeating-radial-gradient(
+      closest-side,
+      rgb(255 255 255 / 0.09) 0 1px,
+      rgb(0 0 0 / 0) 1px 4px
+    ),
+    radial-gradient(closest-side, #2a221c, #0a0807);
+  box-shadow: 0 2px 6px -1px rgb(0 0 0 / calc(0.8 * var(--shade)));
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.groove-sleeve:hover .groove-sleeve-disc {
+  transform: translateX(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-sleeve,
+  .groove-sleeve-disc {
+    transition: none;
+  }
+  .groove-sleeve:hover {
+    transform: none;
+  }
+  .groove-sleeve:hover .groove-sleeve-disc {
+    transform: none;
+  }
+}
+
+/*
  * A record in an opened crate, drawn only while it can be seen.
  *
  * Paging keeps the *arrival* cheap, and does nothing about the total: scroll
@@ -480,10 +593,19 @@ body {
  * exists to remove.
  */
 .groove-scroll-fade {
-  --fade-colour: color-mix(in srgb, var(--color-shell-700), var(--color-shell-900) 66%);
+  /*
+   * A default, not a constant. That colour is where the *shell* has got to at
+   * the bottom of a docked panel, two thirds of the way down the window — and
+   * the Spotify drawer's lists end at the very bottom of it, where the shell
+   * is nearly `shell-900`. Painting the panel's colour there put a pale band
+   * across the foot of the shelf: the exact step this exists to remove, moved
+   * ten pixels and made worse. So the surface underneath says what it is, and
+   * only the panels that do not say anything get the panel answer.
+   */
+  --fade: var(--fade-colour, color-mix(in srgb, var(--color-shell-700), var(--color-shell-900) 66%));
   background-image:
-    linear-gradient(var(--fade-colour), var(--fade-colour)),
-    linear-gradient(to top, var(--fade-colour), transparent);
+    linear-gradient(var(--fade), var(--fade)),
+    linear-gradient(to top, var(--fade), transparent);
   background-position: 0 100%, 0 100%;
   background-size: 100% 10px, 100% 10px;
   background-repeat: no-repeat, no-repeat;
