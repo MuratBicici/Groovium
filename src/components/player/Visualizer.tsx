@@ -107,21 +107,31 @@ export function Visualizer({ on }: { on: boolean }) {
     let width = 0;
     let height = 0;
 
-    /** The canvas follows the element's real size, at the screen's real pixels. */
+    /**
+     * Match the backing store to the element's real size, if it has changed.
+     *
+     * Checked at the top of every frame rather than watched for. A
+     * `ResizeObserver` is the obvious tool and was the first one used, but its
+     * callbacks are delivered as part of updating the rendering — so anywhere
+     * that is not painting, it never fires at all, not even the call it makes
+     * when you first observe something. The first measurement then happens
+     * before layout, at zero, and nothing ever corrects it. Reading the size
+     * each frame costs one layout read on one element and cannot get stuck.
+     */
     const measure = () => {
-      const box = el.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      width = Math.max(1, Math.round(box.width));
-      height = Math.max(1, Math.round(box.height));
-      el.width = Math.round(width * dpr);
-      el.height = Math.round(height * dpr);
+      const w = Math.max(1, el.clientWidth);
+      const h = Math.max(1, el.clientHeight);
+      if (w === width && h === height && el.width === Math.round(w * dpr)) return;
+      width = w;
+      height = h;
+      el.width = Math.round(w * dpr);
+      el.height = Math.round(h * dpr);
+      // Writing either of those resets the context, so the scale goes back on
+      // afterwards and not once at the start.
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       colours = palette(document.documentElement);
     };
-    measure();
-
-    const resize = new ResizeObserver(measure);
-    resize.observe(el);
     // A theme change rewrites the custom properties on the root and changes no
     // size at all, so the observer above would never hear about it.
     const themed = new MutationObserver(() => {
@@ -135,6 +145,7 @@ export function Visualizer({ on }: { on: boolean }) {
     let frame = 0;
     const draw = () => {
       frame = requestAnimationFrame(draw);
+      measure();
       const values = bars.current;
       context.clearRect(0, 0, width, height);
       if (values.length === 0) return;
@@ -166,12 +177,15 @@ export function Visualizer({ on }: { on: boolean }) {
     };
 
     // With motion turned down the bars are drawn once, unlit, and left alone.
-    if (prefersReducedMotion()) draw();
-    else frame = requestAnimationFrame(draw);
+    if (prefersReducedMotion()) {
+      measure();
+      context.clearRect(0, 0, width, height);
+    } else {
+      frame = requestAnimationFrame(draw);
+    }
 
     return () => {
       cancelAnimationFrame(frame);
-      resize.disconnect();
       themed.disconnect();
     };
   }, [on]);
@@ -187,7 +201,13 @@ export function Visualizer({ on }: { on: boolean }) {
       // the shell's own background and under everything in flow. The shell has
       // to be a stacking context for that to mean "under the shell's content"
       // rather than "under the shell".
-      className="pointer-events-none absolute inset-0 -z-10 opacity-25"
+      // `h-full w-full` as well as `inset-0`, which on its own does nothing
+      // here: a canvas is a replaced element, so with no CSS size it draws at
+      // its own intrinsic size — the `width`/`height` attributes — and the
+      // offsets are simply over-constrained and ignored. Measuring that and
+      // writing it back grew it every frame; it reached twenty-six thousand
+      // pixels across, covered the window and washed everything out.
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-25"
     />
   );
 }
