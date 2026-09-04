@@ -54,6 +54,15 @@ const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 /** Diameter of a record in the grid. The cells are wider than this on purpose. */
 const DISC_SIZE = 140;
 
+/** How far the pointer travels before a press becomes a drag rather than a click. */
+const DRAG_THRESHOLD = 5;
+/** The carried record: drawn at the platter's size and shrunk until it is over it. */
+const CARRY_SIZE = 152;
+const CARRY_SCALE = 0.62;
+
+/** How long a record takes to slide back into its sleeve when it leaves the deck. */
+const RESHELVE_MS = 380;
+
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
   /** Where the sleeve was on screen, so the records can come out of it. */
@@ -84,7 +93,107 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const moreTracks = useSpotifyPlaylistsStore((s) => s.moreTracks);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
-  const { flyToPlatter } = useDiscFlight();
+  /**
+   * What is on the deck, so its sleeve here can be empty.
+   *
+   * The id and not the track: this re-renders every record in the crate, and a
+   * new object identity for the same song would do it for nothing.
+   */
+  const onDeck = usePlayerStore((s) => s.currentTrack?.id ?? null);
+  const { flyToPlatter, platterBox } = useDiscFlight();
+
+  /** The record currently in somebody's hand. */
+  const [carried, setCarried] = useState<Carried | null>(null);
+  /**
+   * Where that hand is — a ref, and written straight to the element's style.
+   *
+   * Through React this was a `setState` per `pointermove`, which is a re-render
+   * of every record in the crate sixty times a second while one is being
+   * dragged: two dozen full vinyl drawings reconciled to move one of them.
+   * Only whether the deck is under the pointer goes through state, and that
+   * changes twice in a drag.
+   */
+  const at = useRef({ x: 0, y: 0 });
+  const ghost = useRef<HTMLDivElement | null>(null);
+
+  const placeGhost = useCallback(() => {
+    const el = ghost.current;
+    if (!el) return;
+    el.style.left = `${at.current.x}px`;
+    el.style.top = `${at.current.y}px`;
+  }, []);
+
+  // The first frame the ghost exists, it has not been moved yet: the pointer
+  // that summoned it moved before there was anything to place.
+  useLayoutEffect(placeGhost, [carried, placeGhost]);
+  /**
+   * Whether the press that is finishing was a drag.
+   *
+   * A `click` still fires after a drag's `pointerup`, and without this every
+   * drop would also play whatever was underneath the finger at the start.
+   */
+  const dragged = useRef(false);
+
+  /**
+   * Pick a record up.
+   *
+   * Nothing happens until the pointer has actually travelled: a press that
+   * does not move is a click, and taking the record out of its sleeve on
+   * `pointerdown` would make every click look like a fumble.
+   *
+   * The listeners go on the window rather than on the card. Pointer capture
+   * would do as well for the moving, but the drop has to be decided from where
+   * the pointer *is* — over the deck in the other half of the window — and the
+   * card is not involved in that at all.
+   */
+  const carry = useCallback(
+    (track: TrackMetadata, down: React.PointerEvent) => {
+      if (down.button !== 0) return;
+      const from = { x: down.clientX, y: down.clientY };
+      let lifted = false;
+
+      const over = (x: number, y: number) => {
+        const deck = platterBox();
+        return !!deck && x >= deck.left && x <= deck.right && y >= deck.top && y <= deck.bottom;
+      };
+
+      let wasOver = false;
+      const move = (e: PointerEvent) => {
+        at.current = { x: e.clientX, y: e.clientY };
+        if (!lifted) {
+          if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
+          lifted = true;
+          dragged.current = true;
+          wasOver = over(e.clientX, e.clientY);
+          setCarried({ track, overDeck: wasOver });
+          return;
+        }
+        placeGhost();
+        const now = over(e.clientX, e.clientY);
+        if (now === wasOver) return;
+        wasOver = now;
+        setCarried({ track, overDeck: now });
+      };
+
+      const drop = (e: PointerEvent) => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', drop);
+        window.removeEventListener('pointercancel', drop);
+        setCarried(null);
+        if (!lifted) return;
+        if (e.type === 'pointerup' && over(e.clientX, e.clientY)) void playSingle(track);
+        // After the click this press is still going to fire, not before it.
+        window.setTimeout(() => {
+          dragged.current = false;
+        }, 0);
+      };
+
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', drop);
+      window.addEventListener('pointercancel', drop);
+    },
+    [placeGhost, platterBox, playSingle],
+  );
 
   const layerRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -300,7 +409,10 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             <Record
               key={`${track.id}:${index}`}
               track={track}
+              onDeck={track.id === onDeck}
+              onCarry={carry}
               onPlay={(disc) => {
+                if (dragged.current) return;
                 if (disc) flyToPlatter(disc, track);
                 void playSingle(track);
               }}
@@ -314,8 +426,32 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           </p>
         )}
       </div>
+
+      {carried && (
+        // Fixed, and a child of the layer rather than of a card. Every card is
+        // a containment box and the grid is a scroll box; a record held in the
+        // hand has to cross both of them and the window's other half besides.
+        <div ref={ghost} aria-hidden="true" className="pointer-events-none fixed z-50">
+          <div
+            className="groove-carried"
+            style={{
+              width: CARRY_SIZE,
+              height: CARRY_SIZE,
+              transform: `translate(-50%, -50%) scale(${carried.overDeck ? 1 : CARRY_SCALE})`,
+            }}
+          >
+            <VinylDisc size={CARRY_SIZE} coverArtUrl={carried.track.coverArtUrl} eager />
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** A record in somebody's hand. Where the hand is lives in a ref, not here. */
+interface Carried {
+  track: TrackMetadata;
+  overDeck: boolean;
 }
 
 /**
@@ -334,15 +470,48 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
  */
 function Record({
   track,
+  onDeck,
+  onCarry,
   onPlay,
 }: {
   track: TrackMetadata;
+  /** This record is on the platter, so its sleeve here is empty. */
+  onDeck: boolean;
+  onCarry: (track: TrackMetadata, down: React.PointerEvent) => void;
   onPlay: (disc: HTMLElement | null) => void;
 }) {
+  const disc = useRef<HTMLSpanElement | null>(null);
+  const was = useRef(onDeck);
+
+  /**
+   * Coming back off the deck, the record slides into its sleeve.
+   *
+   * Only that direction is animated here. Going the other way it is either
+   * flying to the platter or being carried there by hand, and in both cases
+   * something else is already drawing the record in transit — an entrance for
+   * the sleeve's own copy on top of that would be two of the same record.
+   */
+  useLayoutEffect(() => {
+    const leaving = was.current;
+    if (leaving === onDeck) return;
+    was.current = onDeck;
+    const el = disc.current;
+    if (onDeck || !el || prefersReducedMotion()) return;
+    el.animate(
+      [
+        { transform: 'translateX(74px)', opacity: 0 },
+        { transform: 'none', opacity: 1 },
+      ],
+      { duration: RESHELVE_MS, easing: EASING },
+    );
+  }, [onDeck]);
+
   return (
     <button
       type="button"
       data-record
+      onPointerDown={(e) => onCarry(track, e)}
+      onDragStart={(e) => e.preventDefault()}
       onClick={(e) => onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'))}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
@@ -355,9 +524,11 @@ function Record({
             Centred by arithmetic rather than `top-1/2 -translate-y-1/2`: that
             utility writes the `translate` property and the nudge on hover
             writes `transform`, and both would apply. */}
+        <span aria-hidden="true" className="groove-sleeve-pocket absolute inset-0" />
         <span
+          ref={disc}
           data-disc
-          className="groove-taken absolute right-0"
+          className={`groove-taken absolute right-0 ${onDeck ? 'groove-sleeve-empty' : ''}`}
           style={{ width: DISC_SIZE, height: DISC_SIZE, top: `calc(50% - ${DISC_SIZE / 2}px)` }}
         >
           <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
@@ -373,6 +544,7 @@ function Record({
               src={track.coverArtUrl}
               alt=""
               loading="lazy"
+              draggable={false}
               className="h-full w-full object-cover"
             />
           )}

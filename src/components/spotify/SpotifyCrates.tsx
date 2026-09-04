@@ -136,6 +136,7 @@ function Crate({
             it, so the only part of it anyone sees is the part in the opening —
             and nothing clips it, so it has somewhere to go when it slides out.
             Flush with the sleeve's right edge, which is where a record sits. */}
+        <span aria-hidden="true" className="groove-sleeve-pocket absolute inset-0" />
         <span
           aria-hidden="true"
           className="groove-sleeve-disc pointer-events-none absolute top-[4%] right-0 aspect-square w-[92%] rounded-full"

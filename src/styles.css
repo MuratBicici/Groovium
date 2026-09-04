@@ -605,6 +605,68 @@ body {
 }
 
 /*
+ * `content-visibility: auto` is paint containment as well as the skipping, and
+ * paint containment clips every descendant to this box. That is invisible
+ * until something is meant to leave it: the record slid out of its sleeve and
+ * was cut off dead straight at the card's edge, with the part outside simply
+ * not drawn.
+ *
+ * So the containment is dropped from the one card being pointed at. Only one
+ * card can be, the browser has already drawn its contents by then, and
+ * `contain-intrinsic-size` is the size it really is — so nothing reflows on
+ * the way in or out. Every other card on the shelf keeps the optimisation,
+ * which is the whole reason it is here.
+ */
+.groove-record:hover {
+  content-visibility: visible;
+}
+
+/*
+ * The inside of the sleeve, seen through the cut.
+ *
+ * Behind the record and in front of the cardboard, so it is only ever visible
+ * in the opening. Without it a sleeve with its record on the deck shows plain
+ * cardboard through the cut, which reads as a printing fault rather than as an
+ * empty pocket.
+ */
+.groove-sleeve-pocket {
+  background: radial-gradient(
+    circle 46px at 100% 50%,
+    rgb(0 0 0 / calc(0.62 * var(--shade))),
+    rgb(0 0 0 / 0) 46px
+  );
+}
+
+/*
+ * A sleeve whose record is on the deck.
+ *
+ * `visibility` rather than removing the element: the record has to still be
+ * there to be animated back in when the track changes, and it has to keep its
+ * box so nothing shifts while it is away. It is also what the flight to the
+ * platter writes inline for the length of its arc, which is the same statement
+ * about the same record for an overlapping moment — the inline one wins while
+ * it is set and this takes over when it is cleared, which is the order that
+ * happens to be correct.
+ */
+.groove-sleeve-empty {
+  visibility: hidden;
+}
+
+/*
+ * A record being carried by hand.
+ *
+ * Fixed to the pointer and outside every card, so no containment, no scroll
+ * box and no sleeve can clip it on the way across the window. It grows to the
+ * platter's own size over the deck — the record is not bigger there, it is
+ * simply where it is going, and that is the only promise the drag has to make.
+ */
+.groove-carried {
+  transform-origin: center;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 10px 14px rgb(0 0 0 / calc(0.6 * var(--shade))));
+}
+
+/*
  * The record that has been taken out, lying across its sleeve.
  *
  * Only a shadow and a nudge. The disc itself is a `VinylDisc`, the same

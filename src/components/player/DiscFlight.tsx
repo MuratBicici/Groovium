@@ -62,6 +62,16 @@ interface DiscFlightActions {
   /** Throw a clone of `sourceDisc` onto the platter. */
   flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata) => void;
   /**
+   * Where the platter is right now, for anything carrying a record by hand.
+   *
+   * A function rather than a value: the deck moves — the window changes width
+   * when the drawer opens and height when the shell folds — and a rect read at
+   * render time would be describing where the platter used to be. Null when
+   * there is no deck mounted, which is the answer a drag needs in order to
+   * refuse rather than guess.
+   */
+  platterBox: () => DOMRect | null;
+  /**
    * Whether this track's disc arrived by air a moment ago.
    *
    * Deliberately a ref read, not state: on the slow paths the track becomes
@@ -84,6 +94,7 @@ const ActionsContext = createContext<DiscFlightActions>({
   flyToPlatter: () => {
     console.error('[disc-flight] used outside DiscFlightProvider — no disc will fly.');
   },
+  platterBox: () => null,
   didJustLand: () => false,
 });
 
@@ -141,6 +152,8 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     setFlights((current) => [...current, { key: nextKey.current++, track, from, source: sourceDisc }]);
   }, []);
 
+  const platterBox = useCallback(() => platterRef.current?.getBoundingClientRect() ?? null, []);
+
   const didJustLand = useCallback((trackId: string) => {
     const at = landedAt.current.get(trackId);
     return at !== undefined && performance.now() - at < JUST_LANDED_MS;
@@ -180,8 +193,8 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   );
 
   const actions = useMemo(
-    () => ({ registerPlatter, flyToPlatter, didJustLand }),
-    [registerPlatter, flyToPlatter, didJustLand],
+    () => ({ registerPlatter, flyToPlatter, platterBox, didJustLand }),
+    [registerPlatter, flyToPlatter, platterBox, didJustLand],
   );
 
   return (
