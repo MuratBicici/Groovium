@@ -3,9 +3,11 @@ import {
   CATCH_RADIUS,
   FLING_SPEED,
   GRAVITY,
+  HAND_REACH,
   isGone,
   launchVelocity,
   MAX_FLING_SPEED,
+  reachMs,
   releaseVerdict,
   seatPoint,
   stepProjectile,
@@ -229,5 +231,48 @@ describe('the way back to where a record lives', () => {
     for (const at of [0.25, 0.5, 0.75]) {
       expect(seatPoint(from, home, mouth, at)).toEqual(seatPoint(from, home, mouth, at, undefined));
     }
+  });
+});
+
+describe('how long the hand takes to reach', () => {
+  it('grows with the square root of the distance, not with the distance', () => {
+    // The whole reason this is not a speed. Under a constant speed, reaching
+    // four times as far costs four times as long — which is what made a drag
+    // across the drawer a wait, and what made raising the speed until that
+    // stopped turn a short drag into a blink.
+    const near = reachMs(100, 0, 10_000);
+    const far = reachMs(400, 0, 10_000);
+    expect(far / near).toBeCloseTo(2, 6);
+  });
+
+  it('keeps the whole gesture within about half again across the window', () => {
+    // What anybody feels is the whole of taking a record out: the tug that
+    // draws it clear, which is a fixed distance and so a fixed time, and then
+    // the reach. Ninety milliseconds is what the crate spends on the tug — the
+    // number lives with the sleeve, and is repeated here because this is the
+    // claim being made about the gesture rather than about the leg.
+    const tug = 90;
+    const shortest = tug + reachMs(100, 80, 360);
+    const longest = tug + reachMs(450, 80, 360);
+    expect(longest / shortest).toBeLessThan(1.7);
+    expect(longest / shortest).toBeGreaterThan(1.4);
+    // And under a constant speed the same two would be four and a half times
+    // apart before the tug, which is the spread this replaced.
+    expect(450 / 100).toBe(4.5);
+  });
+
+  it('holds a leg with nothing to travel at its floor', () => {
+    // A record lifted off the deck: the hand is already on it, so the floor is
+    // the whole of the duration and the arm's rule never comes into it.
+    expect(reachMs(0, 180, 360)).toBe(180);
+    expect(reachMs(20, 180, 360)).toBe(180);
+  });
+
+  it('never runs away with a very long one', () => {
+    expect(reachMs(5000, 80, 360)).toBe(360);
+  });
+
+  it('is the acceleration it says it is', () => {
+    expect(reachMs(121, 0, 10_000)).toBeCloseTo(HAND_REACH * 11, 6);
   });
 });

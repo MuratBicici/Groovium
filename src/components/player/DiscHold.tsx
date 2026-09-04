@@ -5,7 +5,7 @@ import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import {
   HELD_SCALE,
-  HAND_SPEED,
+  reachMs,
   PICKUP_MS,
   SEAT_MS,
   seatPoint,
@@ -639,10 +639,10 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         // lifted out of a shelf on the other side of the window, and a fixed
         // clock made that a blur — the same distance a record covers in a
         // third of a second was being crossed in a fifth.
-        liftMs: clamp(
-          Math.hypot(target.x - origin.x, target.y - origin.y) / HAND_SPEED,
+        liftMs: reachMs(
+          Math.hypot(target.x - origin.x, target.y - origin.y),
           taking ? 80 : PICKUP_MS,
-          300,
+          360,
         ),
         handingOver: false,
         homeCentre: { ...origin },
@@ -718,10 +718,10 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       // let go of, which is the speed the last stretch has to pick up at.
       if (m.dissolving) m.seatMs = DISSOLVE_MS;
       else if (m.handingOver) {
-        m.seatMs = clamp(
-          Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y) / HAND_SPEED,
-          100,
-          320,
+        m.seatMs = reachMs(
+          Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y),
+          110,
+          360,
         );
       } else m.seatMs = SEAT_MS;
       m.seatScale = scale;

@@ -13,21 +13,34 @@ export const PICKUP_SLOP = 6;
 export const HELD_SCALE = 0.42;
 
 /**
- * How fast the hand moves something, in px per ms.
+ * How long the hand takes to move something, as milliseconds per √pixel.
  *
- * A speed, not a duration, and one number for every leg of every carry:
- * drawing a record out of its sleeve, lifting it into the hand, carrying it
- * back and sliding it in are five pieces of code between them, and the only
- * way the seams cannot be felt is if all of them run at the same rate. A fixed
- * clock for any leg makes the thing speed up or slow down at a handover
- * depending on how far away the hand happens to be.
+ * The rule is that duration goes with the *square root* of the distance, not
+ * with the distance, which is what a constant acceleration gives you and what
+ * an arm actually does: it speeds up, then slows down, and reaching twice as
+ * far takes about half again as long rather than twice as long.
  *
- * It was 1px/ms, which is slower than a hand: a drag across the drawer meant
- * waiting a third of a second for the record to catch up with a pointer that
- * was already where it was going. This is roughly the pace of the gesture
- * itself rather than of an animation being watched.
+ * A constant speed was tried at both ends and was wrong at both. At 1px/ms a
+ * drag across the drawer meant waiting a third of a second for the record to
+ * catch up with a pointer that was already where it was going; at 2.2 the same
+ * gesture over a short distance was over before it had started. That is the
+ * signature of the wrong law rather than the wrong number — under a constant
+ * speed the longest reach costs 2.2 times the shortest, and under this one it
+ * costs 1.6.
  */
-export const HAND_SPEED = 2.2;
+export const HAND_REACH = 11;
+
+/**
+ * How long a leg of a carry takes, given how far it goes.
+ *
+ * The floor and the cap are per-leg, because they are about what the leg is
+ * for rather than about the arm: a record lifted off the deck has a hand
+ * already touching it and nothing to travel, so it keeps a floor that is the
+ * whole of its duration.
+ */
+export function reachMs(distance: number, floor: number, cap: number): number {
+  return Math.min(cap, Math.max(floor, HAND_REACH * Math.sqrt(Math.max(0, distance))));
+}
 
 /** Picking it up. Long enough to read as being drawn off the deck. */
 export const PICKUP_MS = 180;

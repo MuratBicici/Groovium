@@ -5,7 +5,6 @@ import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
-import { HAND_SPEED } from '@/components/player/discPhysics';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
@@ -98,23 +97,23 @@ const LIFT_VIA = { x: 96, y: -34 };
 /**
  * A record sliding the last stretch into its sleeve.
  *
- * Derived from the hand's own speed like the pull is, with a little over it:
- * this leg is arriving rather than travelling, so it starts at the rate the
- * hand let go at and settles.
+ * A fixed distance, so a fixed time; the arm's rule is about reaching, and
+ * this is not a reach. Longer than the pull because it is arriving rather than
+ * setting off, and it has to settle.
  */
-const SLIDE_MS = Math.round((CLEAR_OF_SLEEVE / HAND_SPEED) * 1.7);
+const SLIDE_MS = 150;
 
 /**
  * Drawing one out of the mouth, before the hand or the flight takes it.
  *
- * Derived from the shared speed rather than chosen: this is the first half of
- * a move whose second half is the hand lifting the record, and the two are
- * paced by the same number so the handover cannot be felt. It comes out at
- * about a hundred and fifty milliseconds, which is also quicker than putting
- * one away — taking a record out is a pull and putting one back is a
- * placement, and the pull is the part a hand is waiting through.
+ * Also a fixed distance and so a fixed time, and short: this is the part a
+ * hand is waiting through — the pointer is already moving and the record is
+ * not following yet — so it is a decisive tug rather than something to watch.
+ * The lift that follows is a reach and is paced by the arm's own rule, which
+ * at the distances a drag actually covers runs at about the same rate as this
+ * does, so the seam is a change of pace rather than a stop.
  */
-const PULL_MS = Math.round(CLEAR_OF_SLEEVE / HAND_SPEED);
+const PULL_MS = 90;
 
 /**
  * Both slides settle at the end, for opposite reasons.
