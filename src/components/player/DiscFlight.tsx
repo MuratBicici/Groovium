@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -143,8 +144,11 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     // Measured now, synchronously: the caller is about to close the panel, and
     // the rect must describe the row as the user saw it, not mid-dissolve.
     const from = sourceDisc.getBoundingClientRect();
-    // The record leaves the row rather than duplicating itself.
-    sourceDisc.style.visibility = 'hidden';
+    // The record leaves the row rather than duplicating itself — but not yet.
+    // Hiding it here hid it before React had committed anything, and the
+    // browser painted at least one frame with the record nowhere: gone from the
+    // row and not yet in the air. The clone hides it, in the commit that puts
+    // the clone on screen (see `FlyingDisc`), so the two swap within one frame.
 
     airborne.current.add(track.id);
     setPendingTrackId(track.id);
@@ -156,6 +160,18 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   const didJustLand = useCallback((trackId: string) => {
     const at = landedAt.current.get(trackId);
     return at !== undefined && performance.now() - at < JUST_LANDED_MS;
+  }, []);
+
+  /**
+   * The clone is on screen, so the row's record can go.
+   *
+   * Here rather than in the clone, which only knows the element as a prop, and
+   * in `flyToPlatter`, where it used to be, it ran before React had committed
+   * anything — so the browser painted a frame with the record gone from the row
+   * and not yet in the air.
+   */
+  const takeSource = useCallback((flight: Flight) => {
+    flight.source.style.visibility = 'hidden';
   }, []);
 
   /** Reveal the platter now; the clone crossfades into it. */
@@ -216,6 +232,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
               flight={flight}
               platterRef={platterRef}
               layerRef={layerRef}
+              onAirborne={takeSource}
               onHandOff={handOff}
               onDone={endFlight}
             />
@@ -235,6 +252,8 @@ interface FlyingDiscProps {
    */
   platterRef: React.RefObject<HTMLElement | null>;
   layerRef: React.RefObject<HTMLDivElement | null>;
+  /** The clone is up: take the row's own record away. */
+  onAirborne: (flight: Flight) => void;
   onHandOff: (flight: Flight) => void;
   onDone: (flight: Flight) => void;
 }
@@ -244,13 +263,34 @@ interface FlyingDiscProps {
  * animation carries it backwards from the row, so landing is the identity
  * transform and cannot miss.
  */
-function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingDiscProps) {
+function FlyingDisc({
+  flight,
+  platterRef,
+  layerRef,
+  onAirborne,
+  onHandOff,
+  onDone,
+}: FlyingDiscProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const spinRef = useRef<HTMLDivElement | null>(null);
-  const [style, setStyle] = useState<React.CSSProperties | null>(null);
   const isPlaying = usePlayerStore((s) => s.playbackState === 'PLAYING');
 
-  useEffect(() => {
+  /**
+   * A layout effect, and the placement written straight to the element.
+   *
+   * The row's own disc is hidden the instant the flight is launched, and this
+   * is what replaces it. Through `useEffect` and a piece of state, the replacing
+   * happened a frame later than the hiding: the clone was committed still
+   * `visibility: hidden`, the browser painted that frame with the record
+   * nowhere, and only then did the effect place it and start the arc. One blank
+   * frame in the middle of a record leaving a sleeve reads as the animation
+   * being cut, which is exactly what it is.
+   *
+   * Before paint, and imperatively, the clone appears in the same frame the
+   * original disappears — and they are the same pixels in the same place, so
+   * there is nothing to see.
+   */
+  useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     const platterEl = platterRef.current;
     const layerEl = layerRef.current;
@@ -274,7 +314,16 @@ function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingD
     const srcX = flight.from.left + flight.from.width / 2 - start.layer.left;
     const srcY = flight.from.top + flight.from.height / 2 - start.layer.top;
 
-    setStyle({ left: start.x - PLATTER_SIZE / 2, top: start.y - PLATTER_SIZE / 2 });
+    /** Where the clone sits before its transform carries it back to the source. */
+    const place = (centre: { x: number; y: number }) => {
+      wrapper.style.left = `${centre.x - PLATTER_SIZE / 2}px`;
+      wrapper.style.top = `${centre.y - PLATTER_SIZE / 2}px`;
+    };
+    place(start);
+    wrapper.style.visibility = 'visible';
+    // Now, and not a moment earlier: this element is what replaces the row's
+    // own record, and it is only here from this line on.
+    onAirborne(flight);
 
     // Lift scales with the throw. A fixed clamp made every row below the
     // platter arc identically — a hop straight up rather than a throw — because
@@ -345,9 +394,7 @@ function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingD
       // The stage can move under a flight — an error banner or the import strip
       // appearing shrinks it. The destination was measured 650ms ago.
       const now = platterCentre();
-      if (Math.abs(now.x - start.x) > 1 || Math.abs(now.y - start.y) > 1) {
-        setStyle({ left: now.x - PLATTER_SIZE / 2, top: now.y - PLATTER_SIZE / 2 });
-      }
+      if (Math.abs(now.x - start.x) > 1 || Math.abs(now.y - start.y) > 1) place(now);
       syncSpin();
 
       if (arrived) commit();
@@ -398,8 +445,12 @@ function FlyingDisc({ flight, platterRef, layerRef, onHandOff, onDone }: FlyingD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Hidden until the layout effect has put it where it belongs: one frame at
+  // the layer's top left corner would be a record appearing in the wrong place,
+  // which is worse than one frame of nothing. The effect runs before this is
+  // ever painted, so neither happens.
   return (
-    <div ref={wrapperRef} className="absolute" style={style ?? { visibility: 'hidden' }}>
+    <div ref={wrapperRef} className="absolute" style={{ visibility: 'hidden' }}>
       {/* The spin lives on its own element so it cannot fight the WAAPI
           transform on the wrapper — same separation the platter uses. */}
       <div ref={spinRef} className="groove-platter" data-spinning={isPlaying}>

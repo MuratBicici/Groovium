@@ -88,14 +88,20 @@ const HAND_BACK_VIA = { x: 250, y: -14 };
 const SLIDE_MS = 210;
 
 /**
- * Coming in it arrives, going out it is leaving: one easing and its mirror.
+ * Both slides settle at the end, for opposite reasons.
  *
- * In, it picks up where the hand let go and settles. Out, it starts from rest
- * and is at speed by the time it clears the sleeve, which is where the flight
- * to the deck takes over.
+ * In, the record picks up where the hand let go and comes to rest at home,
+ * which is where it is going.
+ *
+ * Out, it is drawn out of the mouth and stops there — because what happens
+ * next is a *reversal*. The flight to the deck is an `easeInOutCubic` arc, so
+ * it starts from a standstill and heads back the other way; a slide that
+ * arrived at the mouth still accelerating rightwards handed over to something
+ * moving leftwards at zero, which is a cut wherever the pixels happen to line
+ * up. Turning round is the one place a pause belongs.
  */
 const SLIDE_IN_EASING = 'cubic-bezier(0.15, 0.75, 0.35, 1)';
-const SLIDE_OUT_EASING = 'cubic-bezier(0.65, 0, 0.85, 0.25)';
+const SLIDE_OUT_EASING = 'cubic-bezier(0.32, 0.72, 0.35, 1)';
 
 /** An empty sleeve saying so. */
 const SHAKE_MS = 360;
@@ -564,6 +570,21 @@ function Record({
   const was = useRef(onDeck);
 
   /**
+   * Tidying up after the record has gone, once it is safe to be seen doing it.
+   *
+   * The slide out of the sleeve leaves two marks behind: a `forwards` fill
+   * holding the record a card's width to the right, and the class that let it
+   * be drawn out there at all. Undoing either while the record is still on
+   * screen would move it or clip it. By the time the sleeve reads as empty the
+   * record is in the air, drawn by something else, and neither shows.
+   */
+  useLayoutEffect(() => {
+    if (!absent) return;
+    button.current?.classList.remove('groove-sliding');
+    for (const a of disc.current?.getAnimations() ?? []) a.cancel();
+  }, [absent]);
+
+  /**
    * Coming back off the deck, the record slides into its sleeve.
    *
    * Only that direction is animated here. Going the other way it is either
@@ -648,11 +669,15 @@ function Record({
       { duration: SLIDE_MS, easing: SLIDE_OUT_EASING, fill: 'forwards' },
     );
     const go = () => {
-      card.classList.remove('groove-sliding');
       // Not if the crate closed underneath it: an animation cancelled by an
       // unmount lands here too, and there is nothing left to fly.
-      if (el.isConnected) onPlay(el);
-      out.cancel();
+      if (!el.isConnected) return;
+      // Nothing else here. Dropping the card's containment back or cancelling
+      // the fill would put this record back inside its sleeve — or clip it
+      // away — in a frame that React has not yet committed the flight in, and
+      // the record would blink out between leaving and being in the air. The
+      // tidying happens once the sleeve is properly empty, below.
+      onPlay(el);
     };
     out.finished.then(go, go);
   };
