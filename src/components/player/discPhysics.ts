@@ -12,6 +12,18 @@ export const PICKUP_SLOP = 6;
 /** Size in the hand, as a fraction of the platter's 152px. About 64px. */
 export const HELD_SCALE = 0.42;
 
+/**
+ * How fast a record travels while it is being taken out, in px per ms.
+ *
+ * A speed, not a duration, and shared: drawing the record out of its sleeve
+ * and lifting it into the hand are two halves of one move, done by two
+ * different pieces of code, and the only way the seam between them cannot be
+ * felt is if both run at the same rate. A fixed clock for either half makes
+ * the record speed up or slow down at the handover depending on how far away
+ * the hand happens to be.
+ */
+export const LIFT_SPEED = 1;
+
 /** Picking it up. Long enough to read as being drawn off the deck. */
 export const PICKUP_MS = 180;
 

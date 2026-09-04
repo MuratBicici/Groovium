@@ -5,6 +5,7 @@ import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { LIFT_SPEED } from '@/components/player/discPhysics';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
@@ -90,11 +91,14 @@ const SLIDE_MS = 210;
 /**
  * Drawing one out of the mouth, before the hand or the flight takes it.
  *
- * Quicker than putting one away. Taking a record out is a pull and putting it
- * back is a placement, and the pull is also the part a hand is waiting on —
- * the pointer is already moving by then and the record is not following yet.
+ * Derived from the shared speed rather than chosen: this is the first half of
+ * a move whose second half is the hand lifting the record, and the two are
+ * paced by the same number so the handover cannot be felt. It comes out at
+ * about a hundred and fifty milliseconds, which is also quicker than putting
+ * one away — taking a record out is a pull and putting one back is a
+ * placement, and the pull is the part a hand is waiting through.
  */
-const PULL_MS = 150;
+const PULL_MS = Math.round(CLEAR_OF_SLEEVE / LIFT_SPEED);
 
 /**
  * Both slides settle at the end, for opposite reasons.
@@ -257,6 +261,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           // from there — rather than jumping to full size and then shrinking.
           homeSize: DISC_SIZE,
           pointer: at,
+          // It has just been pulled clear and is still travelling: the lift
+          // carries on from that rather than starting again from nothing.
+          alreadyMoving: true,
           visiting: {
             deckEl: platterEl(),
             onDelivered: deliver,
@@ -289,7 +296,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         // The record comes out of the mouth before the hand has it. Reaching
         // into the sleeve for it looked like the record passing through its own
         // cover, because that is what was being drawn.
-        sleeve.pullOut(take);
+        sleeve.pullOut(take, true);
       };
 
       const drop = (e: PointerEvent) => {
@@ -682,7 +689,7 @@ function Record({
    * or clip it away, in a frame the thing taking it has not been committed in
    * yet. The tidying waits until the sleeve reads empty; see above.
    */
-  const pullOut = (then: () => void) => {
+  const pullOut = (then: () => void, handingOn: boolean) => {
     const el = disc.current;
     const card = button.current;
     if (!el) return;
@@ -693,7 +700,15 @@ function Record({
     card.classList.add('groove-sliding');
     const out = el.animate(
       [{ transform: 'none' }, { transform: `translateX(${CLEAR_OF_SLEEVE}px)` }],
-      { duration: PULL_MS, easing: SLIDE_OUT_EASING, fill: 'forwards' },
+      {
+        duration: PULL_MS,
+        // Into a hand that carries straight on: no easing at all, so the record
+        // is still moving at the same rate when it changes hands. Into a
+        // flight, which turns round and goes back the other way: settle, since
+        // that is the one place a pause belongs.
+        easing: handingOn ? 'linear' : SLIDE_OUT_EASING,
+        fill: 'forwards',
+      },
     );
     // Not if the crate closed underneath it: an animation cancelled by an
     // unmount lands here too, and there is nothing left to take.
@@ -734,7 +749,7 @@ function Record({
         // dropped, and the `click` that follows it must not send it again.
         if (absent || lifted.current) return;
         const el = disc.current;
-        if (el) pullOut(() => onPlay(el));
+        if (el) pullOut(() => onPlay(el), false);
       }}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
@@ -794,8 +809,15 @@ function Record({
 interface Sleeve {
   /** The record where it sits, for measuring and for the flight to clone. */
   disc: HTMLElement | null;
-  /** Draw it out of the mouth and call back once it is clear. */
-  pullOut: (then: () => void) => void;
+  /**
+   * Draw it out of the mouth and call back once it is clear.
+   *
+   * `handingOn` says whether something is going to carry straight on with the
+   * move. It decides whether the record comes to rest at the mouth or arrives
+   * there still travelling, which is the difference between one gesture and
+   * two.
+   */
+  pullOut: (then: () => void, handingOn: boolean) => void;
   /** This press has become a lift; the click that follows is not a play. */
   lifted: () => void;
 }

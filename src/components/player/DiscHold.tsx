@@ -5,6 +5,7 @@ import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import {
   HELD_SCALE,
+  LIFT_SPEED,
   PICKUP_MS,
   SEAT_MS,
   seatPoint,
@@ -161,6 +162,16 @@ interface Grab {
   homeSize?: number;
   /** Pointer position in client coordinates. Absent for a keyboard eject. */
   pointer?: Vector;
+  /**
+   * The record is already travelling when the hand takes it.
+   *
+   * A record on the deck is sitting still, so the lift eases in from nothing.
+   * One being drawn out of a sleeve is not: something else has already pulled
+   * it clear and is handing it over mid-move. Easing in from a standstill
+   * there puts a full stop in the middle of one continuous gesture, which is
+   * exactly what it feels like — two stages with a hitch between them.
+   */
+  alreadyMoving?: boolean;
   visiting?: Visiting;
 }
 
@@ -250,6 +261,10 @@ interface Motion {
   seatMs: number;
   /** The curve's control point in layer coordinates, when home wants one. */
   approach: Vector | null;
+  /** Whether the lift continues something already in motion. */
+  taking: boolean;
+  /** How long that lift takes. Paced by distance when it is a continuation. */
+  liftMs: number;
   /** Whether this seat ends short of home, to be finished by something else. */
   handingOver: boolean;
   /**
@@ -307,8 +322,13 @@ type Outcome = 'carrying' | 'seated' | 'gone';
 function advance(m: Motion, now: number): Outcome {
   switch (m.phase) {
     case 'pickup': {
-      const t = clamp((now - m.phaseAt) / PICKUP_MS, 0, 1);
-      const e = easeInOutCubic(t);
+      const t = clamp((now - m.phaseAt) / m.liftMs, 0, 1);
+      // Off the deck the record is sitting still, so the lift eases in and out
+      // of nothing. Out of a sleeve it arrives already travelling, at a rate
+      // this leg is timed to match, so it simply carries on — and there is
+      // nothing to ease into, because the carry that follows is the hand's own
+      // speed rather than a stop.
+      const e = m.taking ? t : easeInOutCubic(t);
       m.pos = { x: lerp(m.from.x, m.pointer.x, e), y: lerp(m.from.y, m.pointer.y, e) };
       m.scale = lerp(m.fromScale, HELD_SCALE, e);
       if (t >= 1) {
@@ -519,6 +539,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       if (motion.current) return;
       const { layer, origin } = measure(grab.homeEl);
       const homeScale = (grab.homeSize ?? DISC_SIZE) / DISC_SIZE;
+      const taking = grab.alreadyMoving === true;
 
       const target: Vector = grab.pointer
         ? { x: grab.pointer.x - layer.left, y: grab.pointer.y - layer.top }
@@ -534,6 +555,10 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         seatScale: homeScale,
         seatMs: SEAT_MS,
         approach: null,
+        taking,
+        liftMs: taking
+          ? clamp(Math.hypot(target.x - origin.x, target.y - origin.y) / LIFT_SPEED, 110, 420)
+          : PICKUP_MS,
         handingOver: false,
         homeCentre: { ...origin },
         visiting: grab.visiting ?? null,
