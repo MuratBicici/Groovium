@@ -120,6 +120,30 @@ describe('when Spotify says slow down', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('backs off further each time it is refused with no Retry-After', async () => {
+    // What "always one second, never opens" looked like. Without a number from
+    // Spotify a fixed guess is barely a back-off: the wait passes, the next
+    // request is refused exactly as before, and the wait resets — so the app
+    // keeps knocking at the same rate on a door that is not opening. Read off
+    // the message, which carries the seconds left.
+    const { request } = await freshApi();
+    stubFetch([answer(429)]);
+    const secondsIn = (err: unknown) => Number(/(\d+)\s*s/.exec(String(err))?.[1]);
+
+    // One request is two refusals: the first, and the retry it makes.
+    const first = request('/a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await first;
+    expect(secondsIn(await request('/b').catch((e: unknown) => e))).toBe(2);
+
+    // Let that pass, ask again, and the pair after it asks for longer still.
+    vi.setSystemTime(Date.now() + 2_000);
+    const third = request('/c').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(4_000);
+    await third;
+    expect(secondsIn(await request('/d').catch((e: unknown) => e))).toBe(8);
+  });
+
   it('treats a refusal with no Retry-After as a second, not as permission', async () => {
     // A missing header is not "carry straight on"; without a floor the gate
     // would open immediately and the hammering would carry on as before.

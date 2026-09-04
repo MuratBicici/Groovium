@@ -46,6 +46,23 @@ const MAX_RETRY_AFTER_MS = 10_000;
  */
 let openAgainAt = 0;
 
+/**
+ * How long to wait when Spotify refuses without saying how long.
+ *
+ * It usually names a number and then this is never used. When it does not, a
+ * fixed guess is barely a back-off at all: a second passes, the next request is
+ * refused exactly as before, and the wait resets to a second — which is what
+ * "always one second, never opens" looks like from the outside, and which keeps
+ * the app in the window it is trying to get out of.
+ *
+ * So each refusal in a row doubles it, and anything that gets through resets
+ * it. An app being told to stop rather than to slow down backs off to a minute
+ * and stays there quietly, instead of asking sixty times.
+ */
+const BLIND_WAIT_MS = 1_000;
+const BLIND_WAIT_CAP_MS = 60_000;
+let blindWait = BLIND_WAIT_MS;
+
 /** Seconds until Spotify will listen again, rounded up, at least one. */
 function waitLeft(): number {
   return Math.max(1, Math.ceil((openAgainAt - Date.now()) / 1000));
@@ -78,7 +95,13 @@ export class SpotifyError extends Error {
  */
 function retryAfterMs(response: Response): number {
   const after = Number(response.headers.get('Retry-After'));
-  return Number.isFinite(after) && after > 0 ? after * 1000 : 1000;
+  if (Number.isFinite(after) && after > 0) {
+    blindWait = BLIND_WAIT_MS;
+    return after * 1000;
+  }
+  const wait = blindWait;
+  blindWait = Math.min(blindWait * 2, BLIND_WAIT_CAP_MS);
+  return wait;
 }
 
 async function send(path: string, token: string, init?: RequestInit): Promise<Response> {
@@ -118,9 +141,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
       // The retry decides how long the gate stays shut: refused again and the
       // window is genuinely full, answered and there was never a queue.
       openAgainAt = response.status === 429 ? Date.now() + retryAfterMs(response) : 0;
+      if (response.ok) blindWait = BLIND_WAIT_MS;
     }
   } else if (response.ok) {
     openAgainAt = 0;
+    blindWait = BLIND_WAIT_MS;
   }
 
   // Transport commands answer 204 with no body.
