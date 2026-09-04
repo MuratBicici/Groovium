@@ -69,6 +69,13 @@ export interface Settings {
    */
   windowBorder: boolean;
   /**
+   * Bars behind the deck, moving to what this app is playing.
+   *
+   * Fed by listening to this app's own webview — where both Spotify and the
+   * local player make their sound — and to nothing else on the machine.
+   */
+  visualizer: boolean;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -101,6 +108,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customSecondary: null,
   boostContrast: false,
   windowBorder: false,
+  visualizer: true,
   lastSeenVersion: null,
   declinedVersion: null,
 };

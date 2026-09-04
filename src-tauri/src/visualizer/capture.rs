@@ -11,7 +11,7 @@
 //! obvious are commented; the parts that are simply Win32 ceremony are not.
 
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use windows::core::{implement, Interface, Result as WinResult, PCWSTR};
 use windows::Win32::Foundation::S_OK;
@@ -21,9 +21,8 @@ use windows::Win32::Media::Audio::{
     IAudioCaptureClient, IAudioClient, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_LOOPBACK, AUDIOCLIENT_ACTIVATION_PARAMS,
     AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
-    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
-    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, WAVEFORMATEX,
+    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+    WAVEFORMATEX,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
@@ -34,7 +33,6 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::System::Variant::VT_BLOB;
 
-use super::Probe;
 
 /// The virtual device that stands in for "a process rather than a sound card".
 const PROCESS_LOOPBACK_DEVICE: PCWSTR = windows::core::w!("VAD\\Process_Loopback");
@@ -48,7 +46,7 @@ const FLOAT_SAMPLES: u16 = 3;
 /// format of its own to inherit — there is no device behind it — so one has to
 /// be named, and Windows converts into it.
 const RATE: u32 = 48_000;
-const CHANNELS: u16 = 2;
+pub const CHANNELS: u16 = 2;
 
 /// Somewhere for the completion handler to leave its answer.
 ///
@@ -76,20 +74,8 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     }
 }
 
-/// Listen for `millis` and report the loudest thing heard.
-///
-/// `ours` picks which side of this app the listening is done on: its own
-/// process tree, or everything except it. The second is only ever a question —
-/// it is the whole machine minus us, which is not something to ship — but it is
-/// the one measurement that can tell "our tree renders no audio" apart from
-/// "process loopback delivers no audio here", and those need different answers.
 /// Every process on the machine, as id, parent and name.
-///
-/// Only here to answer where the sound is. The reading that mattered was that
-/// this app's own tree renders nothing while everything else renders the music,
-/// which means the WebView2 process playing it is not under us — and the only
-/// way to target it is to find it.
-pub fn processes() -> Result<Vec<(u32, u32, String)>, String> {
+fn processes() -> Result<Vec<(u32, u32, String)>, String> {
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
             .map_err(|e| format!("could not list processes: {e}"))?;
@@ -119,12 +105,40 @@ pub fn processes() -> Result<Vec<(u32, u32, String)>, String> {
     }
 }
 
-/// This process's own id, so a caller can find itself in the list above.
+/// This process's own id.
 pub fn me() -> u32 {
     unsafe { GetCurrentProcessId() }
 }
 
-pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, String> {
+/// The WebView2 process this app started, which is where its sound comes from.
+///
+/// Found by parentage rather than by name alone: there are usually several
+/// WebView2 trees on a machine, one per app that uses one, and the others are
+/// other people's audio. The one whose parent is this process is ours.
+///
+/// Measured rather than reasoned about. Aiming at this app's *own* id with the
+/// tree included captures silence even while it is playing, and aiming at this
+/// child — a direct child of that same id — captures the music. Whatever the
+/// audio engine means by a process tree, it is not the parent chain, so the
+/// browser process has to be named rather than reached through.
+pub fn webview_of(me: u32) -> Option<u32> {
+    processes()
+        .ok()?
+        .into_iter()
+        .find(|(_, parent, name)| *parent == me && name.eq_ignore_ascii_case("msedgewebview2.exe"))
+        .map(|(pid, _, _)| pid)
+}
+
+/// Listen to `target`'s process tree, handing every buffer to `on_samples`,
+/// until `keep_going` says otherwise.
+///
+/// Samples arrive interleaved at `RATE` and `CHANNELS`; making sense of them is
+/// `bands`' job.
+pub fn listen(
+    target: u32,
+    keep_going: &dyn Fn() -> bool,
+    on_samples: &mut dyn FnMut(&[f32]),
+) -> Result<(), String> {
     unsafe {
         // Ignored on purpose: a failure here is almost always "already
         // initialised on this thread with a different model", which is fine —
@@ -135,16 +149,11 @@ pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, Str
             ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
             Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
                 ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
-                    TargetProcessId: target.unwrap_or_else(|| GetCurrentProcessId()),
-                    // The tree, not the process. The audio being asked about is
-                    // rendered by WebView2, which runs in children of this
-                    // process; asking only about this one would capture the
-                    // local player and nothing else.
-                    ProcessLoopbackMode: if ours {
-                        PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
-                    } else {
-                        PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
-                    },
+                    TargetProcessId: target,
+                    // The tree, so the audio service under the browser process
+                    // is included: that is what actually renders, and it is a
+                    // child of the process named here.
+                    ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
                 },
             },
         };
@@ -231,14 +240,16 @@ pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, Str
             client.GetService().map_err(|e| format!("no capture service: {e}"))?;
         client.Start().map_err(|e| format!("could not start: {e}"))?;
 
-        let mut probe = Probe { sample_rate: RATE, channels: CHANNELS, ..Probe::default() };
-        let until = Instant::now() + Duration::from_millis(millis);
-        while Instant::now() < until {
+        while keep_going() {
             let Ok(available) = capture.GetNextPacketSize() else {
                 break;
             };
             if available == 0 {
-                std::thread::sleep(Duration::from_millis(5));
+                // Nothing rendered yet. A short wait rather than a spin: the
+                // engine fills these in device periods of about ten
+                // milliseconds and there is nothing to be gained by asking
+                // faster than it can answer.
+                std::thread::sleep(Duration::from_millis(4));
                 continue;
             }
 
@@ -251,28 +262,14 @@ pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, Str
             {
                 break;
             }
-            probe.captured = true;
-            probe.frames += u64::from(frames);
-            probe.packets += 1;
-            // `AUDCLNT_BUFFERFLAGS_SILENT`. Windows sets it when it knows there
-            // was nothing to put in the buffer, which is a different statement
-            // from a buffer that happens to hold zeros: the first says nobody
-            // is rendering into this stream, the second says they are and it is
-            // quiet. Those want different answers, so they are counted apart.
-            if flags & 0x2 != 0 {
-                probe.silent_packets += 1;
-            }
-            if !data.is_null() && frames > 0 {
-                let samples = std::slice::from_raw_parts(
+            // `AUDCLNT_BUFFERFLAGS_SILENT`: Windows saying it put nothing in
+            // there. The buffer may hold anything at all in that case, so it is
+            // passed on as silence rather than read.
+            if !data.is_null() && frames > 0 && flags & 0x2 == 0 {
+                on_samples(std::slice::from_raw_parts(
                     data.cast::<f32>(),
                     frames as usize * CHANNELS as usize,
-                );
-                for &sample in samples {
-                    let level = sample.abs();
-                    if level > probe.peak {
-                        probe.peak = level;
-                    }
-                }
+                ));
             }
             let _ = capture.ReleaseBuffer(frames);
         }
@@ -284,7 +281,7 @@ pub fn listen(millis: u64, ours: bool, target: Option<u32>) -> Result<Probe, Str
         // being passed to `CoTaskMemFree`.
         std::mem::forget(variant);
 
-        Ok(probe)
+        Ok(())
     }
 }
 

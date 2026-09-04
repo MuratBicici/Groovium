@@ -43,6 +43,7 @@ fn main() {
         .manage(library::ImportControl::default())
         .manage(library::PickedPaths::default())
         .manage(spotify::tokens::AccessTokenCache::default())
+        .manage(visualizer::Running::default())
         .setup(|app| {
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
@@ -61,8 +62,8 @@ fn main() {
         // by name used to be callable from the webview; it is now Rust-internal
         // (`keyring.rs`), so a refresh token has no path out of this process.
         .invoke_handler(tauri::generate_handler![
-            visualizer::visualizer_probe,
-            visualizer::visualizer_processes,
+            visualizer::visualizer_start,
+            visualizer::visualizer_stop,
             library::library_load,
             library::library_pick_files,
             library::library_pick_folder,

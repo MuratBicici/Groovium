@@ -241,6 +241,10 @@ export const en = {
     'Strengthens text against its background, secondary text most of all. No other colour changes.',
   'settings.windowBorder': 'Window border',
   'settings.windowBorderHint': 'A hairline around the widget in the accent colour.',
+  /** The bars behind the deck. The hint has to say what it listens to. */
+  'settings.visualizer': 'Visualiser',
+  'settings.visualizerHint':
+    'Bars behind the deck, moving to what Groovium is playing.',
   'settings.connections': 'Connections',
   'settings.configured': 'Set up',
   'settings.notConfigured': 'Not set up',

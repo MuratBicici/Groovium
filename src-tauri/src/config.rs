@@ -46,7 +46,7 @@ pub struct AppConfig {
 /// Every field is optional in the sense that a missing one takes the default:
 /// a config written before any of this existed still reads, and a settings file
 /// from a newer build still loads on an older one.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// Palette id, matching the `data-theme` values in `styles.css`. `None` is
@@ -86,6 +86,15 @@ pub struct Settings {
     /// ring that separates it from the desktop.
     #[serde(default)]
     pub window_border: bool,
+    /// Bars behind the deck, moving to what this app is playing.
+    ///
+    /// On unless turned off, including in a config written before the field
+    /// existed. It listens to this app's own webview and nothing else on the
+    /// machine, so there is nothing here anyone needs to opt into — and a
+    /// setting that had to be found before the feature existed at all would
+    /// mean most people never saw it.
+    #[serde(default = "on_unless_turned_off")]
+    pub visualizer: bool,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -97,6 +106,39 @@ pub struct Settings {
     #[serde(default)]
     pub declined_version: Option<String>,
 }
+
+/// What a fresh installation is, spelled out.
+///
+/// Written rather than derived, because a derived one says every switch is off
+/// and that is not what this app is: the visualiser is on unless somebody turns
+/// it off, and a `#[serde(default)]` on the field alone would not have covered
+/// a config file with no `settings` object in it at all — which is what an
+/// upgrade from before any of this looks like.
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            theme: None,
+            language: None,
+            reduce_motion: false,
+            always_on_top: false,
+            compact: false,
+            drawer_open: false,
+            custom_primary: None,
+            custom_secondary: None,
+            boost_contrast: false,
+            window_border: false,
+            visualizer: on_unless_turned_off(),
+            last_seen_version: None,
+            declined_version: None,
+        }
+    }
+}
+
+/// Serde needs a function rather than a literal for a non-`false` default.
+fn on_unless_turned_off() -> bool {
+    true
+}
+
 
 #[tauri::command]
 pub fn load_settings(app: AppHandle) -> Settings {
@@ -191,6 +233,7 @@ mod tests {
             custom_secondary: None,
             boost_contrast: true,
             window_border: false,
+            visualizer: true,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };
@@ -243,6 +286,10 @@ mod tests {
         // new booleans.
         assert!(!config.settings.boost_contrast);
         assert!(!config.settings.window_border);
+        // Absent from an older file means on. It listens to this app and
+        // nothing else, so an upgrade gets the feature rather than a switch
+        // nobody knew to look for.
+        assert!(config.settings.visualizer);
     }
 
     #[test]

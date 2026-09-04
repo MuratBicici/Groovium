@@ -228,6 +228,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Yazıyı zeminine karşı güçlendirir, en çok da ikincil yazıyı. Başka hiçbir renk değişmez.',
   'settings.windowBorder': 'Pencere çerçevesi',
   'settings.windowBorderHint': 'Vurgu renginde ince bir kenar çizgisi.',
+  /** The bars behind the deck. The hint has to say what it listens to. */
+  'settings.visualizer': 'Görselleştirici',
+  'settings.visualizerHint':
+    'Plakçaların arkasında çubuklar, Groovium ne çalıyorsa ona göre.',
   'settings.connections': 'Bağlantılar',
   'settings.configured': 'Kurulu',
   'settings.notConfigured': 'Kurulu değil',
