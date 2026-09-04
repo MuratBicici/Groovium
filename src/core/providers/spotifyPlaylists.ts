@@ -37,6 +37,25 @@ const PLAYLISTS_PER_PAGE = 50;
  */
 const ITEMS_PER_PAGE = 24;
 
+/**
+ * How many to ask for when the whole list is wanted rather than a screenful.
+ *
+ * The small page above is sized for drawing: two dozen records is what an
+ * opened crate can show before anyone scrolls. Playing a crate needs the list
+ * and not the pictures, so it asks for as much as Spotify will give at once —
+ * four requests for two hundred songs instead of nine.
+ */
+const PLAY_PER_PAGE = 50;
+
+/**
+ * The most a crate will hand over to be played at once.
+ *
+ * Somewhere between "enough that nobody meets it" and "not an unbounded number
+ * of requests because a button was pressed". Six of the larger pages. A list
+ * longer than this plays its first three hundred, which is several hours.
+ */
+const PLAY_CAP = 300;
+
 export interface SpotifyPlaylist {
   id: string;
   name: string;
@@ -215,8 +234,9 @@ async function itemsPageOn(
 export async function playlistTrackPage(
   id: string,
   cursor?: string | null,
+  perPage = ITEMS_PER_PAGE,
 ): Promise<Page<TrackMetadata>> {
-  const params = new URLSearchParams({ limit: String(ITEMS_PER_PAGE) });
+  const params = new URLSearchParams({ limit: String(perPage) });
   if (cursor) params.set('offset', cursor);
 
   let data: ApiPage<ApiItemEntry> | null;
@@ -245,4 +265,28 @@ export async function playlistTrackPage(
     .map(toTrackMetadata);
 
   return { items, cursor: offsetFromNext(data?.next) };
+}
+
+/**
+ * Everything in a crate, for playing rather than for showing.
+ *
+ * Paged through in one go, at the larger page size and up to the cap. The
+ * caller waits: a play button that starts on the first two dozen songs and
+ * quietly grows the queue afterwards would shuffle across whatever had
+ * arrived by then rather than across the playlist, which is a different
+ * playlist every time you press it.
+ *
+ * Records Spotify cannot play — a removed track, a local file it only knows
+ * the name of — are already dropped by the page below, so a crate of two
+ * hundred may well return fewer.
+ */
+export async function wholeCrate(id: string): Promise<TrackMetadata[]> {
+  const all: TrackMetadata[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: Page<TrackMetadata> = await playlistTrackPage(id, cursor, PLAY_PER_PAGE);
+    all.push(...page.items);
+    cursor = page.cursor;
+  } while (cursor && all.length < PLAY_CAP);
+  return all;
 }

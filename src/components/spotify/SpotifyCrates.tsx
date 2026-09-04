@@ -25,6 +25,9 @@ export function SpotifyCrates() {
   const open = useSpotifyPlaylistsStore((s) => s.open);
   const more = useSpotifyPlaylistsStore((s) => s.more);
   const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
+  const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
+  const starting = useSpotifyPlaylistsStore((s) => s.starting);
+  const playError = useSpotifyPlaylistsStore((s) => s.playError);
 
   useEffect(() => {
     void open();
@@ -66,6 +69,14 @@ export function SpotifyCrates() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
+      {/* Above the shelf rather than instead of it: failing to play one crate
+          says nothing about the others, and taking them off the screen to
+          report it would be a worse answer than the one being reported. */}
+      {playError && (
+        <p className="mb-2 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+          {playError}
+        </p>
+      )}
       <div
         className="grid gap-3 pt-0.5 pb-2"
         // Sized rather than counted in columns, so the shelf keeps its
@@ -78,10 +89,12 @@ export function SpotifyCrates() {
           <Crate
             key={playlist.id}
             playlist={playlist}
+            starting={starting === playlist.id}
             // Measured at the press. By the time the layer renders, the
             // records need somewhere to have come *from*, and that is a
             // rectangle which existed at the moment it was pressed.
             onOpen={(rect) => void openCrate(playlist.id, rect)}
+            onPlay={(shuffled) => void playCrate(playlist.id, shuffled)}
           />
         ))}
       </div>
@@ -111,10 +124,15 @@ export function SpotifyCrates() {
  */
 function Crate({
   playlist,
+  starting,
   onOpen,
+  onPlay,
 }: {
   playlist: SpotifyPlaylist;
+  /** This crate's records are being fetched so the whole thing can play. */
+  starting: boolean;
   onOpen: (rect: { x: number; y: number; width: number; height: number }) => void;
+  onPlay: (shuffled: boolean) => void;
 }) {
   const t = useT();
   const art = useRef<HTMLSpanElement | null>(null);
@@ -129,8 +147,36 @@ function Crate({
         const box = art.current?.getBoundingClientRect();
         if (box) onOpen({ x: box.x, y: box.y, width: box.width, height: box.height });
       }}
-      className="groove-sleeve relative flex flex-col rounded-md text-left"
+      className="groove-sleeve group/crate relative flex flex-col rounded-md text-left"
     >
+      {/* On the sleeve rather than beside it. A crate is already as wide as the
+          shelf allows, and hanging controls off the side would either push the
+          next crate along or hang over it. The two buttons sit on the artwork
+          in the corner furthest from the mouth, so they never cover the record
+          coming out of it. */}
+      <span
+        className={`absolute top-1.5 left-1.5 z-10 flex gap-1 transition-opacity duration-150 ${
+          starting ? 'opacity-100' : 'opacity-0 group-hover/crate:opacity-100 focus-within:opacity-100'
+        }`}
+      >
+        <CrateButton
+          label={t('spotify.playCrate')}
+          busy={starting}
+          onPress={() => onPlay(false)}
+        >
+          <path d="M2 1.5v7l6-3.5z" />
+        </CrateButton>
+        <CrateButton label={t('spotify.shuffleCrate')} busy={starting} onPress={() => onPlay(true)}>
+          <path
+            d="M1 2.5h1.8l4.4 5H9M1 7.5h1.8l4.4-5H9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+          />
+          <path d="M7.6 1l1.6 1.5-1.6 1.5zM7.6 6l1.6 1.5-1.6 1.5z" />
+        </CrateButton>
+      </span>
       <span ref={art} className="relative aspect-square w-full">
         {/* The record in the sleeve. Drawn before the print and therefore under
             it, so the only part of it anyone sees is the part in the opening —
@@ -172,5 +218,56 @@ function Crate({
         </span>
       </span>
     </button>
+  );
+}
+
+/**
+ * One of the two controls on a sleeve.
+ *
+ * A `span` with a button role rather than a nested `<button>`: the sleeve
+ * itself is a button, and a button inside a button is invalid — browsers
+ * recover from it by moving the inner one out, which puts these somewhere
+ * else entirely. The press is stopped from reaching the sleeve, so playing a
+ * crate does not also open it.
+ */
+function CrateButton({
+  label,
+  busy,
+  onPress,
+  children,
+}: {
+  label: string;
+  busy: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const act = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!busy) onPress();
+  };
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      title={label}
+      aria-busy={busy}
+      // The press, not just the click: the sleeve lifts its record on
+      // `pointerdown`, and a press that started on one of these is not a press
+      // on the sleeve.
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={act}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') act(e);
+      }}
+      className={`flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/80 text-cream-100 backdrop-blur-sm transition-colors hover:bg-brass-600 hover:text-on-accent ${
+        busy ? 'animate-pulse' : ''
+      }`}
+    >
+      <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" fill="currentColor" aria-hidden="true">
+        {children}
+      </svg>
+    </span>
   );
 }

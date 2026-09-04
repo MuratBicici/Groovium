@@ -56,7 +56,20 @@ export type RepeatMode = 'off' | 'one' | 'all';
  * played on its own, which is what a Spotify search result does — it plays and
  * stops. Continuing afterwards means putting it in a playlist first.
  */
-export type ContextId = 'library' | 'single' | `playlist:${string}`;
+export type ContextId = 'library' | 'single' | `playlist:${string}` | `spotify:${string}`;
+
+/**
+ * Whether this app can rebuild the collection from what it holds.
+ *
+ * The library and this app's own playlists live in the store, so a queue built
+ * from one can be refreshed when it changes. A single track and a Spotify
+ * crate cannot: they are lists handed over once, and there is nothing here to
+ * compare them against. Asking anyway returns nothing, and nothing used to be
+ * read as "the collection was deleted" — which emptied the queue.
+ */
+function isLocalContext(id: ContextId): boolean {
+  return id === 'library' || id.startsWith('playlist:');
+}
 
 /** Treat a `previous` press past this point as "restart the track" instead. */
 const RESTART_THRESHOLD_MS = 3000;
@@ -201,6 +214,16 @@ export interface PlayerActions {
   playFrom: (contextId: ContextId, index: number) => Promise<void>;
   /** Play one track on its own — no continuation. */
   playSingle: (track: TrackMetadata) => Promise<void>;
+  /**
+   * Play a list this app did not build, such as a Spotify crate.
+   *
+   * The tracks come with it rather than being looked up, because there is
+   * nowhere here to look them up. Shuffling is asked for at the door instead of
+   * being toggled afterwards: a crate played shuffled starts on a random one of
+   * its records, and turning the setting on after the first track had already
+   * been chosen would leave that one track always the same.
+   */
+  playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean) => Promise<void>;
 
   togglePlayPause: () => Promise<void>;
   next: () => Promise<void>;
@@ -377,8 +400,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    */
   function reconcilePlayback(): void {
     const { playback, currentTrack, shuffle } = get();
-    // A single track is not derived from a collection, so nothing can stale it.
-    if (playback.id === 'single' || playback.tracks.length === 0) return;
+    // Nothing here can stale a list this app did not build.
+    if (!isLocalContext(playback.id) || playback.tracks.length === 0) return;
 
     const tracks = resolveContext(playback.id);
     if (tracks.length === 0) {
@@ -863,6 +886,19 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         playback: { id: contextId, tracks, index },
         shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
         // A new collection; the old trail went with it.
+        stationAdded: [],
+      });
+      await startTrack(index);
+    },
+
+    async playList(id, tracks, shuffle) {
+      if (tracks.length === 0) return;
+      const shuffling = shuffle ?? get().shuffle;
+      const index = shuffling ? Math.floor(Math.random() * tracks.length) : 0;
+      set({
+        playback: { id, tracks, index },
+        shuffle: shuffling,
+        shuffleOrder: shuffling ? shuffledIndices(tracks.length, index) : [],
         stationAdded: [],
       });
       await startTrack(index);

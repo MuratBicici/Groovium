@@ -3,8 +3,28 @@ import type { TrackMetadata } from '@/core/types';
 import {
   playlistPage,
   playlistTrackPage,
+  wholeCrate,
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
+import { usePlayerStore } from '@/core/store';
+import { describeAuthError } from '@/core/security/authErrors';
+import { isSpotifyAuthError } from '@/core/security/spotifyAuth';
+import { say } from '@/core/i18n';
+
+/**
+ * What to put on screen when a request did not happen.
+ *
+ * Two kinds arrive here. Spotify's own refusals come back as `Error`s carrying
+ * the sentence Spotify wrote, which is usually the most useful thing anyone
+ * could say. Failures on the way *to* Spotify — no token, no desktop app, a
+ * port in use — cross the Tauri boundary as `{ code, detail }`, which is not an
+ * `Error` at all: stringifying one produced the literal text "[object Object]",
+ * which is what a crate that would not play used to say.
+ */
+function describe(err: unknown): string {
+  if (isSpotifyAuthError(err)) return describeAuthError(err);
+  return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * Someone's Spotify playlists, as the drawer has them so far.
@@ -59,6 +79,20 @@ interface SpotifyPlaylistsState {
   tracksLoading: boolean;
   tracksError: string | null;
 
+  /**
+   * The crate being fetched so it can be played, if any.
+   *
+   * Its own field rather than `loading`, which is about the shelf filling up.
+   * These happen at the same time — somebody can press play on the first crate
+   * while the second page of the shelf is still arriving — and one flag for
+   * both would put a spinner on the wrong thing.
+   */
+  starting: string | null;
+  /** Why the last attempt to play a crate did not. */
+  playError: string | null;
+  /** Play a whole crate, in order or not. */
+  playCrate: (id: string, shuffled: boolean) => Promise<void>;
+
   openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
   closeCrate: () => void;
   moreTracks: () => Promise<void>;
@@ -86,7 +120,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         loading: false,
       }));
     } catch (err) {
-      set({ loading: false, error: err instanceof Error ? err.message : String(err) });
+      set({ loading: false, error: describe(err) });
     }
   }
 
@@ -112,7 +146,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       if (get().openId !== id) return;
       set({
         tracksLoading: false,
-        tracksError: err instanceof Error ? err.message : String(err),
+        tracksError: describe(err),
       });
     }
   }
@@ -123,6 +157,26 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     loading: false,
     started: false,
     error: null,
+    starting: null,
+    playError: null,
+
+    async playCrate(id, shuffled) {
+      // One at a time. The whole crate is several requests, and a second press
+      // while the first is still arriving would race two queues into the deck.
+      if (get().starting) return;
+      set({ starting: id, playError: null });
+      try {
+        const tracks = await wholeCrate(id);
+        if (tracks.length === 0) {
+          set({ starting: null, playError: say('spotify.crateEmpty') });
+          return;
+        }
+        set({ starting: null });
+        await usePlayerStore.getState().playList(`spotify:${id}`, tracks, shuffled);
+      } catch (err) {
+        set({ starting: null, playError: describe(err) });
+      }
+    },
 
     async open() {
       if (get().started) return;
@@ -149,6 +203,10 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         tracksCursor: null,
         tracksLoading: false,
         tracksError: null,
+        // Including the attempt to play one. Signing out is the end of every
+        // question this store was in the middle of asking.
+        starting: null,
+        playError: null,
       });
     },
 

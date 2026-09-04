@@ -3,11 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/core/providers/spotifyPlaylists', () => ({
   playlistPage: vi.fn(),
   playlistTrackPage: vi.fn(),
+  wholeCrate: vi.fn(),
+}));
+
+// The deck, stubbed to the one thing this store asks of it.
+const played = vi.fn();
+vi.mock('@/core/store', () => ({
+  usePlayerStore: { getState: () => ({ playList: played }) },
 }));
 
 import {
   playlistPage,
   playlistTrackPage,
+  wholeCrate,
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
@@ -15,6 +23,7 @@ import { useSpotifyPlaylistsStore } from './store';
 
 const fetchPage = vi.mocked(playlistPage);
 const fetchTracks = vi.mocked(playlistTrackPage);
+const fetchWhole = vi.mocked(wholeCrate);
 
 const records = (...ids: string[]): TrackMetadata[] =>
   ids.map((id) => ({
@@ -51,7 +60,10 @@ function deferred<T>() {
 beforeEach(() => {
   fetchPage.mockReset();
   fetchTracks.mockReset();
+  fetchWhole.mockReset();
+  played.mockReset();
   useSpotifyPlaylistsStore.getState().forget();
+  useSpotifyPlaylistsStore.setState({ starting: null, playError: null });
 });
 
 describe('filling the shelf', () => {
@@ -235,5 +247,63 @@ describe('opening a crate', () => {
     await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
     await useSpotifyPlaylistsStore.getState().moreTracks();
     expect(fetchTracks).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('playing a whole crate', () => {
+  it('hands the deck everything in it, under its own name', async () => {
+    fetchWhole.mockResolvedValueOnce(records('1', '2', '3'));
+    await useSpotifyPlaylistsStore.getState().playCrate('p1', false);
+
+    expect(played).toHaveBeenCalledWith('spotify:p1', records('1', '2', '3'), false);
+    // Released, or the next crate could never be played.
+    expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+  });
+
+  it('asks for it shuffled when that is the button that was pressed', async () => {
+    fetchWhole.mockResolvedValueOnce(records('1', '2'));
+    await useSpotifyPlaylistsStore.getState().playCrate('p1', true);
+    expect(played).toHaveBeenLastCalledWith('spotify:p1', records('1', '2'), true);
+  });
+
+  it('does not start a second crate over the first', async () => {
+    // A crate is several requests. Two presses while the first is still
+    // arriving would race two queues into the deck, and the loser would win
+    // whenever it happened to finish last.
+    const pending = deferred<TrackMetadata[]>();
+    fetchWhole.mockReturnValueOnce(pending.promise);
+    const first = useSpotifyPlaylistsStore.getState().playCrate('p1', false);
+    await useSpotifyPlaylistsStore.getState().playCrate('p2', false);
+
+    pending.resolve(records('1'));
+    await first;
+
+    expect(fetchWhole).toHaveBeenCalledTimes(1);
+    expect(played).toHaveBeenCalledTimes(1);
+    expect(played).toHaveBeenCalledWith('spotify:p1', records('1'), false);
+  });
+
+  it('says so rather than playing silence', async () => {
+    // Every track in it was a local file, or removed. Spotify will play none
+    // of them, so there is nothing to start.
+    fetchWhole.mockResolvedValueOnce([]);
+    await useSpotifyPlaylistsStore.getState().playCrate('p1', false);
+
+    expect(played).not.toHaveBeenCalled();
+    expect(useSpotifyPlaylistsStore.getState().playError).toBeTruthy();
+    expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+  });
+
+  it('reports a refusal and lets go', async () => {
+    fetchWhole.mockRejectedValueOnce(new Error('Spotify is rate limiting this app.'));
+    await useSpotifyPlaylistsStore.getState().playCrate('p1', false);
+
+    expect(useSpotifyPlaylistsStore.getState().playError).toContain('rate limiting');
+    expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+
+    fetchWhole.mockResolvedValueOnce(records('1'));
+    await useSpotifyPlaylistsStore.getState().playCrate('p1', false);
+    expect(played).toHaveBeenCalledTimes(1);
+    expect(useSpotifyPlaylistsStore.getState().playError).toBeNull();
   });
 });
