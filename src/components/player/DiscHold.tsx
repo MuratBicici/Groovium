@@ -75,6 +75,16 @@ interface Visiting {
   deckEl: HTMLElement | null;
   /** Called once it has settled onto the deck. */
   onDelivered: (track: TrackMetadata) => void;
+  /**
+   * Where to set the record down when it goes back, relative to home's centre.
+   *
+   * Home may not take a record head-on. A sleeve is entered through the mouth
+   * on its right, and whatever lives there will want to finish the last leg
+   * itself — so the hand stops at the mouth and hands over, rather than
+   * putting the record all the way in and having it come back out to be put
+   * in again, which is what it did.
+   */
+  homeOffset?: Vector;
 }
 
 interface Grab {
@@ -458,10 +468,11 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
 
   /** Begin setting the record down on `onto`, at `scale`. */
   const beginSeat = useCallback(
-    (m: Motion, onto: HTMLElement, scale: number, now: number) => {
+    (m: Motion, onto: HTMLElement, scale: number, now: number, offset?: Vector) => {
       // Re-measured: the stage moves under a hold the same way it moves under
       // a flight, and neither the deck nor a sleeve need still be where it was.
-      m.origin = measure(onto).origin;
+      const centre = measure(onto).origin;
+      m.origin = offset ? { x: centre.x + offset.x, y: centre.y + offset.y } : centre;
       m.seatScale = scale;
       m.phase = 'seat';
       m.phaseAt = now;
@@ -495,7 +506,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       const onDeck =
         !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
       m.delivering = onDeck && !!deck;
-      beginSeat(m, onDeck && deck ? deck : m.homeEl, onDeck ? 1 : m.homeScale, now);
+      if (m.delivering && deck) beginSeat(m, deck, 1, now);
+      else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting.homeOffset);
       return;
     }
 
@@ -520,7 +532,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const cancel = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
-    beginSeat(m, m.homeEl, m.homeScale, performance.now());
+    beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting?.homeOffset);
   }, [beginSeat]);
 
   /**

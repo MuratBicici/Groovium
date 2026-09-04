@@ -60,6 +60,15 @@ const DRAG_THRESHOLD = 5;
 
 /** How long a record takes to slide back into its sleeve when it leaves the deck. */
 const RESHELVE_MS = 380;
+/**
+ * How far out of the mouth a record starts when it slides back in.
+ *
+ * Also where the hand lets go of one it is putting back, so that the carry
+ * ends exactly where this begins and the two read as a single move. They did
+ * not: the hand used to put the record all the way in, and then it came out
+ * and went in again.
+ */
+const RESHELVE_FROM = 74;
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
@@ -110,6 +119,25 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const { grab, moveTo, release, cancel } = useDiscHold();
   /** The record in the hand, so its sleeve here is empty while it is out. */
   const inHand = useCarriedTrack();
+  /**
+   * A record set down on the deck, until the deck admits to having it.
+   *
+   * The hand lets go the instant the record lands, and a Spotify track is not
+   * `currentTrack` until the provider has started it — routinely a second
+   * later. In that gap the sleeve believed its record was back, slid it in
+   * from the mouth, and hid it again the moment playback began. This holds the
+   * sleeve empty across the gap, and lets go if the track never starts, which
+   * is the one case where the record really should come back.
+   */
+  const [handedOver, setHandedOver] = useState<string | null>(null);
+  const deliver = useCallback(
+    (taken: TrackMetadata) => {
+      setHandedOver(taken.id);
+      const done = () => setHandedOver((id) => (id === taken.id ? null : id));
+      void playSingle(taken).then(done, done);
+    },
+    [playSingle],
+  );
 
   /**
    * Whether the press that is finishing was a drag.
@@ -152,7 +180,13 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           // from there — rather than jumping to full size and then shrinking.
           homeSize: DISC_SIZE,
           pointer: { x: e.clientX, y: e.clientY },
-          visiting: { deckEl: platterEl(), onDelivered: (taken) => void playSingle(taken) },
+          visiting: {
+            deckEl: platterEl(),
+            onDelivered: deliver,
+            // Put back at the mouth, not the middle: the sleeve's own record
+            // takes it from there.
+            homeOffset: { x: RESHELVE_FROM, y: 0 },
+          },
         });
       };
 
@@ -173,7 +207,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       window.addEventListener('pointerup', drop);
       window.addEventListener('pointercancel', drop);
     },
-    [cancel, grab, moveTo, platterEl, playSingle, release],
+    [cancel, deliver, grab, moveTo, platterEl, release],
   );
 
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -392,12 +426,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             <Record
               key={`${track.id}:${index}`}
               track={track}
-              onDeck={track.id === onDeck || track.id === inHand}
+              onDeck={track.id === onDeck || track.id === inHand || track.id === handedOver}
               onCarry={carry}
               onPlay={(disc) => {
                 if (dragged.current) return;
                 if (disc) flyToPlatter(disc, track);
-                void playSingle(track);
+                deliver(track);
               }}
             />
           ))}
@@ -458,7 +492,7 @@ function Record({
     if (onDeck || !el || prefersReducedMotion()) return;
     el.animate(
       [
-        { transform: 'translateX(74px)', opacity: 0 },
+        { transform: `translateX(${RESHELVE_FROM}px)`, opacity: 0 },
         { transform: 'none', opacity: 1 },
       ],
       { duration: RESHELVE_MS, easing: EASING },
