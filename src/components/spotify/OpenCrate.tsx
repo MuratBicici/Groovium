@@ -86,6 +86,32 @@ const HAND_BACK_VIA = { x: 250, y: -14 };
 /** The last stretch, from the hand's copy to home, behind the artwork. */
 const SLIDE_IN_MS = 210;
 
+/** An empty sleeve saying so. */
+const SHAKE_MS = 360;
+
+/**
+ * A sleeve refusing, because the record it would give you is on the deck.
+ *
+ * On `translate` rather than `transform`: the card's hover lift is a
+ * `transform`, and an animation on the same property would win over it for as
+ * long as it ran, so the card would drop two pixels the moment it shook.
+ * These are separate properties and compose, so the lift stays put.
+ */
+function refuse(card: HTMLElement | null): void {
+  if (!card || prefersReducedMotion()) return;
+  card.animate(
+    [
+      { translate: '0px' },
+      { translate: '-6px' },
+      { translate: '5px' },
+      { translate: '-3px' },
+      { translate: '2px' },
+      { translate: '0px' },
+    ],
+    { duration: SHAKE_MS, easing: 'ease-out' },
+  );
+}
+
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
   /** Where the sleeve was on screen, so the records can come out of it. */
@@ -520,6 +546,7 @@ function Record({
   onCarry: (track: TrackMetadata, down: React.PointerEvent, homeEl: HTMLElement | null) => void;
   onPlay: (disc: HTMLElement | null) => void;
 }) {
+  const t = useT();
   const disc = useRef<HTMLSpanElement | null>(null);
   const button = useRef<HTMLButtonElement | null>(null);
   const was = useRef(onDeck);
@@ -586,9 +613,24 @@ function Record({
       ref={button}
       type="button"
       data-record
-      onPointerDown={(e) => onCarry(track, e, disc.current)}
+      // Not `disabled`. An empty sleeve is still worth pressing — pressing it
+      // is how you find out it is empty — and a disabled button receives no
+      // pointer events at all, so it could not answer.
+      aria-disabled={absent}
+      title={absent ? t('spotify.onDeck') : undefined}
+      onPointerDown={(e) => {
+        if (absent) {
+          refuse(e.currentTarget);
+          return;
+        }
+        onCarry(track, e, disc.current);
+      }}
       onDragStart={(e) => e.preventDefault()}
-      onClick={(e) => onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'))}
+      onClick={(e) => {
+        // Answered on the press already, and once is enough.
+        if (absent) return;
+        onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'));
+      }}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
       <span className="relative aspect-square w-full">

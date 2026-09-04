@@ -140,6 +140,8 @@ export const en = {
   'spotify.typeToFind': 'Type to find a song.',
   'spotify.loadingPlaylists': 'Fetching your playlists…',
   'spotify.noPlaylists': 'No playlists here yet. Ones you make on Spotify show up here.',
+  /** The sleeve is empty because this record is on the deck. */
+  'spotify.onDeck': 'This record is on the deck.',
   'spotify.trackCount': '{count} song',
   'spotify.trackCount_plural': '{count} songs',
 

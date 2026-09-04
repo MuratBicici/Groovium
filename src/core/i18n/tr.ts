@@ -131,6 +131,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.loadingPlaylists': 'Çalma listeleriniz getiriliyor…',
   'spotify.noPlaylists':
     'Burada henüz çalma listesi yok. Spotify’da oluşturduklarınız burada görünür.',
+  /** The sleeve is empty because this record is on the deck. */
+  'spotify.onDeck': 'Bu plak plakçalarda.',
   'spotify.trackCount': '{count} şarkı',
 
   'setup.optionalLead': 'Spotify isteğe bağlı.',
