@@ -140,9 +140,6 @@ export const en = {
   'spotify.typeToFind': 'Type to find a song.',
   'spotify.loadingPlaylists': 'Fetching your playlists…',
   'spotify.noPlaylists': 'No playlists here yet. Ones you make on Spotify show up here.',
-  /** The hover buttons on a crate: the whole thing, in order or not. */
-  'spotify.playCrate': 'Play',
-  'spotify.shuffleCrate': 'Shuffle',
   'spotify.crateEmpty': 'Nothing in here can be played.',
   /** The sleeve is empty because this record is on the deck. */
   'spotify.onDeck': 'This record is on the deck.',

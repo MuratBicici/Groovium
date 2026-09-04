@@ -789,7 +789,7 @@ function Record({
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
       </span>
-      <span className="relative flex min-w-0 flex-col px-1.5 py-1">
+      <span className="relative flex min-w-0 flex-col px-1.5 py-1 text-center">
         <span className="truncate text-meta text-cream-100" title={track.title}>
           {track.title}
         </span>

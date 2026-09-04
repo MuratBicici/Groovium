@@ -147,7 +147,24 @@ interface Visiting {
 }
 
 interface Grab {
+  /**
+   * What is being carried.
+   *
+   * Usually a record, and then this is that record. For a crate it is a
+   * carrier: the crate's own id and cover, in the shape this needs, because
+   * what the hand does with a thing does not depend on what the thing is. The
+   * only place it goes is back out through `onDelivered`, and the crate's own
+   * code knows what to do with it there.
+   */
   track: TrackMetadata;
+  /**
+   * What to draw in the hand. A record by default.
+   *
+   * A crate is a sleeve, not a record — dragging the box that holds twenty
+   * songs and having one record follow the pointer would be a picture of the
+   * wrong thing.
+   */
+  look?: 'record' | 'sleeve';
   /**
    * Where the record is now, and where it goes back to. The platter's stable
    * wrapper for the deck's own record; the sleeve's disc for a crate's.
@@ -410,9 +427,12 @@ function runLoop(
 }
 
 export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
-  const [held, setHeld] = useState<{ key: number; track: TrackMetadata; visiting: boolean } | null>(
-    null,
-  );
+  const [held, setHeld] = useState<{
+    key: number;
+    track: TrackMetadata;
+    visiting: boolean;
+    look: 'record' | 'sleeve';
+  } | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
   const discRef = useRef<HTMLDivElement | null>(null);
   const spinRef = useRef<HTMLDivElement | null>(null);
@@ -581,7 +601,12 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       // only when it is the deck's record. Taking one out of a crate must not
       // interrupt what is already playing.
       if (!grab.visiting) void usePlayerStore.getState().liftRecord();
-      setHeld({ key: nextKey.current++, track: grab.track, visiting: !!grab.visiting });
+      setHeld({
+        key: nextKey.current++,
+        track: grab.track,
+        visiting: !!grab.visiting,
+        look: grab.look ?? 'record',
+      });
     },
     [measure],
   );
@@ -745,13 +770,36 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
               // scale these land as roughly a 6px offset and a 10px blur.
               style={{ filter: 'drop-shadow(0 14px 24px rgba(0,0,0,0.6))' }}
             >
-              {/* Paused, and set to the platter's angle: the record stopped
-                  turning the moment it came off the deck, because the music
-                  stopped with it. */}
-              <div ref={spinRef} className="groove-platter" data-spinning="false">
-                <VinylDisc size={DISC_SIZE} eager coverArtUrl={held.track.coverArtUrl} />
-              </div>
-              <DiscLight size={DISC_SIZE} />
+              {held.look === 'sleeve' ? (
+                /* A crate in the hand is the sleeve itself, drawn the way it is
+                   drawn on the shelf: the printed square with the light on it.
+                   No record showing through — what is being carried is the box,
+                   and its records are in it. */
+                <div
+                  className="groove-sleeve-art relative overflow-hidden rounded-md bg-shell-900"
+                  style={{ width: DISC_SIZE, height: DISC_SIZE, ['--notch' as string]: '0px' }}
+                >
+                  {held.track.coverArtUrl && (
+                    <img
+                      src={held.track.coverArtUrl}
+                      alt=""
+                      draggable={false}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+                </div>
+              ) : (
+                <>
+                  {/* Paused, and set to the platter's angle: the record stopped
+                      turning the moment it came off the deck, because the music
+                      stopped with it. */}
+                  <div ref={spinRef} className="groove-platter" data-spinning="false">
+                    <VinylDisc size={DISC_SIZE} eager coverArtUrl={held.track.coverArtUrl} />
+                  </div>
+                  <DiscLight size={DISC_SIZE} />
+                </>
+              )}
             </div>
             )}
           </div>

@@ -90,8 +90,16 @@ interface SpotifyPlaylistsState {
   starting: string | null;
   /** Why the last attempt to play a crate did not. */
   playError: string | null;
-  /** Play a whole crate, in order or not. */
-  playCrate: (id: string, shuffled: boolean) => Promise<void>;
+  /**
+   * Play a whole crate.
+   *
+   * `shuffled` is normally left out, and then the deck decides — which is the
+   * point: shuffling is not a property of a crate, it is the switch on the
+   * transport, and it applies to whatever is on the deck. Passing `false` here
+   * would turn that switch off every time somebody dropped a crate on the
+   * deck, quietly overruling a setting they had chosen.
+   */
+  playCrate: (id: string, shuffled?: boolean) => Promise<void>;
 
   openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
   closeCrate: () => void;

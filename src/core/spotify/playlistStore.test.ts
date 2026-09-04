@@ -260,7 +260,14 @@ describe('playing a whole crate', () => {
     expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
   });
 
-  it('asks for it shuffled when that is the button that was pressed', async () => {
+  it('leaves the shuffling to the deck unless told otherwise', async () => {
+    // Nothing on the shelf says how to play a crate — that is the transport's
+    // own switch, and it applies to whatever is on the deck. Saying `false`
+    // here would turn it off every time a crate was dropped on the deck.
+    fetchWhole.mockResolvedValueOnce(records('1', '2'));
+    await useSpotifyPlaylistsStore.getState().playCrate('p1');
+    expect(played).toHaveBeenLastCalledWith('spotify:p1', records('1', '2'), undefined);
+
     fetchWhole.mockResolvedValueOnce(records('1', '2'));
     await useSpotifyPlaylistsStore.getState().playCrate('p1', true);
     expect(played).toHaveBeenLastCalledWith('spotify:p1', records('1', '2'), true);

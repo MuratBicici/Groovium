@@ -1,7 +1,34 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
+import type { TrackMetadata } from '@/core/types';
+import { useDiscFlight } from '@/components/player/DiscFlight';
+import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
 import { useT } from '@/core/i18n';
+
+/** How far the pointer travels before a press becomes a lift rather than a click. */
+const DRAG_THRESHOLD = 5;
+
+/**
+ * A crate in the shape the hand carries things in.
+ *
+ * The hand takes records, and this is not one — it is the box. What it needs
+ * from the thing it is holding is an id to tell one carry from another and a
+ * picture to draw, and a crate has both. The id is namespaced so it can never
+ * collide with a track's, and nothing downstream tries to play it: the crate's
+ * own code hears about the drop and starts the crate.
+ */
+function asCargo(playlist: SpotifyPlaylist): TrackMetadata {
+  return {
+    id: `crate:${playlist.id}`,
+    title: playlist.name,
+    artist: playlist.ownerName,
+    album: '',
+    duration: 0,
+    source: 'spotify',
+    ...(playlist.coverArtUrl ? { coverArtUrl: playlist.coverArtUrl } : {}),
+  };
+}
 
 /**
  * The shelf: someone's Spotify playlists, as record sleeves.
@@ -28,6 +55,65 @@ export function SpotifyCrates() {
   const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
   const starting = useSpotifyPlaylistsStore((s) => s.starting);
   const playError = useSpotifyPlaylistsStore((s) => s.playError);
+
+  const { platterEl } = useDiscFlight();
+  /**
+   * The deck's own carry gesture again, this time holding a crate.
+   *
+   * There are no buttons on a sleeve. A record is played by taking it to the
+   * deck, so a crate is too — the gesture is the one the app already has, and
+   * the only difference is what ends up in the hand. Shuffling is not a
+   * property of a crate and never was: it is the transport's own switch, and
+   * it applies to whatever is on the deck.
+   */
+  const { grab, moveTo, release, cancel } = useDiscHold();
+  const inHand = useCarriedTrack();
+
+  const carry = useCallback(
+    (playlist: SpotifyPlaylist, down: React.PointerEvent, sleeve: HTMLElement | null, lift: () => void) => {
+      if (down.button !== 0 || !sleeve) return;
+      const from = { x: down.clientX, y: down.clientY };
+      let holding = false;
+
+      const move = (e: PointerEvent) => {
+        if (holding) {
+          moveTo(e.clientX, e.clientY);
+          return;
+        }
+        if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
+        holding = true;
+        lift();
+        grab({
+          track: asCargo(playlist),
+          look: 'sleeve',
+          homeEl: sleeve,
+          homeSize: sleeve.getBoundingClientRect().width,
+          pointer: { x: e.clientX, y: e.clientY },
+          // Straight back to its place on the shelf if it is put down anywhere
+          // else. No mouth to come out of and none to go back into: a crate is
+          // the sleeve, and there is nothing behind it to be hidden by.
+          visiting: {
+            deckEl: platterEl(),
+            onDelivered: () => void playCrate(playlist.id),
+          },
+        });
+      };
+
+      const drop = (e: PointerEvent) => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', drop);
+        window.removeEventListener('pointercancel', drop);
+        if (!holding) return;
+        if (e.type === 'pointerup') release();
+        else cancel();
+      };
+
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', drop);
+      window.addEventListener('pointercancel', drop);
+    },
+    [cancel, grab, moveTo, platterEl, playCrate, release],
+  );
 
   useEffect(() => {
     void open();
@@ -90,11 +176,12 @@ export function SpotifyCrates() {
             key={playlist.id}
             playlist={playlist}
             starting={starting === playlist.id}
+            away={inHand === `crate:${playlist.id}`}
+            onCarry={carry}
             // Measured at the press. By the time the layer renders, the
             // records need somewhere to have come *from*, and that is a
             // rectangle which existed at the moment it was pressed.
             onOpen={(rect) => void openCrate(playlist.id, rect)}
-            onPlay={(shuffled) => void playCrate(playlist.id, shuffled)}
           />
         ))}
       </div>
@@ -125,21 +212,42 @@ export function SpotifyCrates() {
 function Crate({
   playlist,
   starting,
+  away,
+  onCarry,
   onOpen,
-  onPlay,
 }: {
   playlist: SpotifyPlaylist;
   /** This crate's records are being fetched so the whole thing can play. */
   starting: boolean;
+  /** It is in somebody's hand, so its place on the shelf is empty. */
+  away: boolean;
+  onCarry: (
+    playlist: SpotifyPlaylist,
+    down: React.PointerEvent,
+    sleeve: HTMLElement | null,
+    lift: () => void,
+  ) => void;
   onOpen: (rect: { x: number; y: number; width: number; height: number }) => void;
-  onPlay: (shuffled: boolean) => void;
 }) {
   const t = useT();
   const art = useRef<HTMLSpanElement | null>(null);
+  /** Whether the press being finished turned into a lift. */
+  const lifted = useRef(false);
   return (
     <button
       type="button"
+      onPointerDown={(e) => {
+        lifted.current = false;
+        onCarry(playlist, e, art.current, () => {
+          lifted.current = true;
+        });
+      }}
+      onDragStart={(e) => e.preventDefault()}
       onClick={() => {
+        // A press that became a lift has already said what it wanted: the crate
+        // went where it was put down, and the click that follows it must not
+        // also open it.
+        if (lifted.current) return;
         // The artwork, not the card. What comes out of a crate is records, and
         // they have to come out of the square that has a record printed on it
         // — measuring the whole sleeve puts their origin a text-height too low
@@ -147,36 +255,10 @@ function Crate({
         const box = art.current?.getBoundingClientRect();
         if (box) onOpen({ x: box.x, y: box.y, width: box.width, height: box.height });
       }}
-      className="groove-sleeve group/crate relative flex flex-col rounded-md text-left"
+      className={`groove-sleeve relative flex flex-col rounded-md text-left ${
+        away ? 'invisible' : ''
+      } ${starting ? 'animate-pulse' : ''}`}
     >
-      {/* On the sleeve rather than beside it. A crate is already as wide as the
-          shelf allows, and hanging controls off the side would either push the
-          next crate along or hang over it. The two buttons sit on the artwork
-          in the corner furthest from the mouth, so they never cover the record
-          coming out of it. */}
-      <span
-        className={`absolute top-1.5 left-1.5 z-10 flex gap-1 transition-opacity duration-150 ${
-          starting ? 'opacity-100' : 'opacity-0 group-hover/crate:opacity-100 focus-within:opacity-100'
-        }`}
-      >
-        <CrateButton
-          label={t('spotify.playCrate')}
-          busy={starting}
-          onPress={() => onPlay(false)}
-        >
-          <path d="M2 1.5v7l6-3.5z" />
-        </CrateButton>
-        <CrateButton label={t('spotify.shuffleCrate')} busy={starting} onPress={() => onPlay(true)}>
-          <path
-            d="M1 2.5h1.8l4.4 5H9M1 7.5h1.8l4.4-5H9"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
-          <path d="M7.6 1l1.6 1.5-1.6 1.5zM7.6 6l1.6 1.5-1.6 1.5z" />
-        </CrateButton>
-      </span>
       <span ref={art} className="relative aspect-square w-full">
         {/* The record in the sleeve. Drawn before the print and therefore under
             it, so the only part of it anyone sees is the part in the opening —
@@ -209,7 +291,7 @@ function Crate({
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
       </span>
-      <span className="relative flex min-w-0 flex-col px-1.5 py-1">
+      <span className="relative flex min-w-0 flex-col px-1.5 py-1 text-center">
         <span className="truncate text-meta text-cream-100" title={playlist.name}>
           {playlist.name}
         </span>
@@ -218,56 +300,5 @@ function Crate({
         </span>
       </span>
     </button>
-  );
-}
-
-/**
- * One of the two controls on a sleeve.
- *
- * A `span` with a button role rather than a nested `<button>`: the sleeve
- * itself is a button, and a button inside a button is invalid — browsers
- * recover from it by moving the inner one out, which puts these somewhere
- * else entirely. The press is stopped from reaching the sleeve, so playing a
- * crate does not also open it.
- */
-function CrateButton({
-  label,
-  busy,
-  onPress,
-  children,
-}: {
-  label: string;
-  busy: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  const act = (e: React.SyntheticEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!busy) onPress();
-  };
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      title={label}
-      aria-busy={busy}
-      // The press, not just the click: the sleeve lifts its record on
-      // `pointerdown`, and a press that started on one of these is not a press
-      // on the sleeve.
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={act}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') act(e);
-      }}
-      className={`flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/80 text-cream-100 backdrop-blur-sm transition-colors hover:bg-brass-600 hover:text-on-accent ${
-        busy ? 'animate-pulse' : ''
-      }`}
-    >
-      <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" fill="currentColor" aria-hidden="true">
-        {children}
-      </svg>
-    </span>
   );
 }
