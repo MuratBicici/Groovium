@@ -474,7 +474,32 @@ body {
   box-shadow: 0 4px 10px -5px rgb(0 0 0 / calc(0.7 * var(--shade)));
   transition:
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    scale 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+
+/*
+ * A crate that has been taken off the shelf.
+ *
+ * It grows out of its slot and fades, rather than being swapped for the copy
+ * in the hand and disappearing in a frame. The copy leaves at the same moment
+ * from the same place, so what this leaves behind is the shelf letting go of
+ * it — and the same transition run backwards is the crate settling back into
+ * the slot when it is put down again, which costs nothing to have.
+ *
+ * On `scale` rather than inside `transform`, which this element already uses
+ * for its hover lift: they are separate properties and compose, so the crate
+ * does not drop two pixels the instant it is picked up.
+ *
+ * Growing from the centre is also what keeps the way home honest. The hand
+ * re-measures the slot to know where to put the crate back, and a box that has
+ * grown about its own centre still has the same centre.
+ */
+.groove-sleeve.groove-lifted {
+  scale: 1.14;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .groove-sleeve:hover {
