@@ -1627,6 +1627,8 @@ dependencies = [
  "tauri-plugin-window-state",
  "tiny_http",
  "walkdir",
+ "windows",
+ "windows-core 0.61.2",
 ]
 
 [[package]]

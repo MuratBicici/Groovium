@@ -14,6 +14,7 @@ mod session;
 mod shortcuts;
 mod spotify;
 mod tray;
+mod visualizer;
 
 use tauri::WindowEvent;
 use tauri_plugin_window_state::StateFlags;
@@ -60,6 +61,7 @@ fn main() {
         // by name used to be callable from the webview; it is now Rust-internal
         // (`keyring.rs`), so a refresh token has no path out of this process.
         .invoke_handler(tauri::generate_handler![
+            visualizer::visualizer_probe,
             library::library_load,
             library::library_pick_files,
             library::library_pick_folder,
