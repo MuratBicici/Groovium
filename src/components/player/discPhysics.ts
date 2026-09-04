@@ -127,21 +127,31 @@ export function velocityFrom(samples: readonly Sample[], now: number): Vector {
  *
  * `e` is eased progress, not time — the caller decides the tempo, and this
  * decides only the shape.
+ *
+ * `hop` lifts the path off that line and drops it back, and belongs to exactly
+ * one thing: a record going back onto the deck, which is dropped onto a
+ * spindle. Nothing else is dropped onto anything. A record slides into a
+ * sleeve and a crate goes back into the shelf, and a hop on either reads as it
+ * bouncing off the place it is supposed to be settling into. Its `at` is
+ * linear time rather than eased progress — the same split `arcKeyframes`
+ * makes, which keeps the apex in the middle of the move instead of dragging it
+ * towards the slow end.
  */
 export function seatPoint(
   from: Vector,
   to: Vector,
   control: Vector | null,
   e: number,
+  hop?: { height: number; at: number },
 ): Vector {
-  if (!control) {
-    return { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
-  }
-  const u = 1 - e;
-  return {
-    x: u * u * from.x + 2 * u * e * control.x + e * e * to.x,
-    y: u * u * from.y + 2 * u * e * control.y + e * e * to.y,
-  };
+  const point = control
+    ? {
+        x: (1 - e) * (1 - e) * from.x + 2 * (1 - e) * e * control.x + e * e * to.x,
+        y: (1 - e) * (1 - e) * from.y + 2 * (1 - e) * e * control.y + e * e * to.y,
+      }
+    : { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+  if (hop) point.y -= hop.height * Math.sin(Math.PI * hop.at);
+  return point;
 }
 
 export type Release = 'seat' | 'fling' | 'drop';

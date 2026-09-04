@@ -368,12 +368,16 @@ function advance(m: Motion, now: number): Outcome {
       // a standstill, and a standstill in the middle is what makes one move
       // read as two.
       const e = m.handingOver ? t : easeOutCubic(t);
-      m.pos = seatPoint(m.from, m.origin, m.approach, e);
-      // The hop is the platter's, and only the platter's: a record is dropped
-      // onto a spindle and slid into a sleeve. It is on linear time while the
-      // travel is eased — the same split `arcKeyframes` makes, which keeps the
-      // apex in the middle of the move instead of dragging it to the slow end.
-      if (!m.approach) m.pos.y -= SEAT_ARC * Math.sin(Math.PI * t);
+      // The hop is the deck's, and only the deck's — a record dropped onto a
+      // spindle. A crate was hopping on the way back to the shelf, which read
+      // as it bouncing off the place it was settling into.
+      m.pos = seatPoint(
+        m.from,
+        m.origin,
+        m.approach,
+        e,
+        m.visiting ? undefined : { height: SEAT_ARC, at: t },
+      );
       // Sized before it is lined up, when a handover is coming: the record has
       // to already be the size it will be inside before the hand can let go.
       m.scale = lerp(m.fromScale, m.seatScale, m.handingOver ? Math.min(1, e / SIZED_BY) : e);
@@ -576,9 +580,17 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         seatMs: SEAT_MS,
         approach: null,
         taking,
-        liftMs: taking
-          ? clamp(Math.hypot(target.x - origin.x, target.y - origin.y) / LIFT_SPEED, 110, 420)
-          : PICKUP_MS,
+        // Paced by distance either way, and only the floor differs. A record
+        // comes off the deck into a hand that is already on it, so that one is
+        // always at the floor and is the same 180ms it always was. A crate is
+        // lifted out of a shelf on the other side of the window, and a fixed
+        // clock made that a blur — the same distance a record covers in a
+        // third of a second was being crossed in a fifth.
+        liftMs: clamp(
+          Math.hypot(target.x - origin.x, target.y - origin.y) / LIFT_SPEED,
+          taking ? 110 : PICKUP_MS,
+          420,
+        ),
         handingOver: false,
         homeCentre: { ...origin },
         visiting: grab.visiting ?? null,

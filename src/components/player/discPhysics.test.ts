@@ -212,4 +212,22 @@ describe('the way back to where a record lives', () => {
     expect(half.x).toBeCloseTo((from.x + home.x) / 2, 6);
     expect(half.y).toBeCloseTo((from.y + home.y) / 2, 6);
   });
+
+  it('hops over the line when it is a record going onto a spindle', () => {
+    const flat = seatPoint(from, home, null, 0.5);
+    const dropped = seatPoint(from, home, null, 0.5, { height: 22, at: 0.5 });
+    // Up is negative, and the apex is the full height at the middle.
+    expect(flat.y - dropped.y).toBeCloseTo(22, 6);
+    // And it is back on the line at both ends, so it cannot miss.
+    expect(seatPoint(from, home, null, 1, { height: 22, at: 1 }).y).toBeCloseTo(home.y, 6);
+  });
+
+  it('does not hop when it is going back where it was borrowed from', () => {
+    // A sleeve and a shelf are places a thing is put back into, not places it
+    // is dropped onto. A crate bouncing on its way home read as it hitting the
+    // shelf rather than settling into it.
+    for (const at of [0.25, 0.5, 0.75]) {
+      expect(seatPoint(from, home, mouth, at)).toEqual(seatPoint(from, home, mouth, at, undefined));
+    }
+  });
 });
