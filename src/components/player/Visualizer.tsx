@@ -18,7 +18,20 @@ import { prefersReducedMotion } from '@/core/utils/motion';
  * else in the window sits on top of.
  */
 
-/** Drawn once and stretched, because the shell is the same size all evening. */
+/**
+ * One block, and the space around it, in px.
+ *
+ * A fixed size rather than a share of the width, which is what this used to be
+ * — twenty-four columns however wide the window was, so a block was the width
+ * divided by twenty-four. Opening the drawer takes the window from 340 to 1020
+ * and that turned a grid of 24 by 33 small squares into 24 by 11 great slabs:
+ * not the same thing wider, a different thing.
+ *
+ * With the size pinned, the *number* of columns follows the width instead. Two
+ * dozen across the player alone, three times that with the drawer out, and a
+ * block is the same block either way.
+ */
+const BLOCK = 12;
 const GAP = 2;
 
 /** Below this a bar is not worth a pixel, and clearing is cheaper than drawing. */
@@ -50,6 +63,24 @@ function palette(root: HTMLElement): Palette {
     high: pick('--color-brass-400', '#e0b071'),
     dark: pick('--color-shell-700', '#2e231b'),
   };
+}
+
+/**
+ * One column's height, read across however many bands there are.
+ *
+ * Rust sends a fixed two dozen; how many columns fit is up to the window. With
+ * the drawer out there are three columns per band, so each is read between its
+ * two nearest neighbours rather than repeated — repeating draws the same
+ * spectrum in steps three blocks wide, which reads as the bars having got fat
+ * rather than as there being more of them.
+ */
+function spread(values: number[], column: number, columns: number): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0] ?? 0;
+  const at = (column / Math.max(1, columns - 1)) * (values.length - 1);
+  const i = Math.min(values.length - 2, Math.floor(at));
+  const t = at - i;
+  return (values[i] ?? 0) * (1 - t) + (values[i + 1] ?? 0) * t;
 }
 
 export function Visualizer({ on }: { on: boolean }) {
@@ -150,19 +181,19 @@ export function Visualizer({ on }: { on: boolean }) {
       context.clearRect(0, 0, width, height);
       if (values.length === 0) return;
 
-      const columns = values.length;
-      const columnWidth = (width - GAP * (columns - 1)) / columns;
-      // Square blocks, so the column count decides the row count rather than a
-      // second number that could disagree with it.
-      const block = columnWidth;
-      const rows = Math.max(1, Math.floor((height + GAP) / (block + GAP)));
+      const step = BLOCK + GAP;
+      const columns = Math.max(1, Math.floor((width + GAP) / step));
+      const rows = Math.max(1, Math.floor((height + GAP) / step));
+      // Centred in whatever is left over, so the grid does not sit against one
+      // edge with a wider gap at the other.
+      const left = Math.round((width - (columns * step - GAP)) / 2);
 
       for (let c = 0; c < columns; c++) {
-        const x = c * (columnWidth + GAP);
-        const value = values[c] ?? 0;
+        const x = left + c * step;
+        const value = spread(values, c, columns);
         const lit = value <= FLOOR ? 0 : Math.max(1, Math.round(value * rows));
         for (let r = 0; r < rows; r++) {
-          const y = height - (r + 1) * block - r * GAP;
+          const y = height - (r + 1) * BLOCK - r * GAP;
           if (r < lit) {
             // Up the column rather than across it: a block's colour says how
             // high it is, which is what makes a tall bar read as loud from the
@@ -171,7 +202,7 @@ export function Visualizer({ on }: { on: boolean }) {
           } else {
             context.fillStyle = colours.dark;
           }
-          context.fillRect(x, y, columnWidth, block);
+          context.fillRect(x, y, BLOCK, BLOCK);
         }
       }
     };
