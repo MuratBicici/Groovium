@@ -60,15 +60,20 @@ const DRAG_THRESHOLD = 5;
 
 /** How long a record takes to slide back into its sleeve when it leaves the deck. */
 const RESHELVE_MS = 380;
-/**
- * How far out of the mouth a record starts when it slides back in.
- *
- * Also where the hand lets go of one it is putting back, so that the carry
- * ends exactly where this begins and the two read as a single move. They did
- * not: the hand used to put the record all the way in, and then it came out
- * and went in again.
- */
+/** How far out of the mouth a record starts when it slides back in. */
 const RESHELVE_FROM = 74;
+
+/**
+ * Where a record being put back by hand is aimed, relative to the sleeve.
+ *
+ * A control point, not a destination: the hand's path bends towards the mouth
+ * on the right and turns in, arriving still moving inwards. Two earlier tries
+ * both read as two moves — putting it in the middle and letting the sleeve
+ * pull it out and back in, then stopping at the mouth for the sleeve to
+ * finish. Anything that stops before the end is two moves however well the
+ * halves are matched, so nothing stops now.
+ */
+const HOME_APPROACH = { x: 118, y: -8 };
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
@@ -183,9 +188,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           visiting: {
             deckEl: platterEl(),
             onDelivered: deliver,
-            // Put back at the mouth, not the middle: the sleeve's own record
-            // takes it from there.
-            homeOffset: { x: RESHELVE_FROM, y: 0 },
+            // Home is entered through the mouth on the right, so the way back
+            // curves round to that side rather than crossing straight in.
+            homeApproach: HOME_APPROACH,
           },
         });
       };
@@ -426,7 +431,13 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             <Record
               key={`${track.id}:${index}`}
               track={track}
-              onDeck={track.id === onDeck || track.id === inHand || track.id === handedOver}
+              // Two questions, not one. Whether the sleeve is empty, and
+              // whether it is empty *because the record is on the deck* —
+              // only the second earns the slide back in, because the first is
+              // also true of a record in somebody's hand, which the hand is
+              // already putting back itself.
+              absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
+              onDeck={track.id === onDeck || track.id === handedOver}
               onCarry={carry}
               onPlay={(disc) => {
                 if (dragged.current) return;
@@ -463,12 +474,15 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
  */
 function Record({
   track,
+  absent,
   onDeck,
   onCarry,
   onPlay,
 }: {
   track: TrackMetadata;
-  /** This record is on the platter, so its sleeve here is empty. */
+  /** The record is not in the sleeve — on the deck, or in somebody's hand. */
+  absent: boolean;
+  /** It is on the deck, which is the only way out that ends in a way back. */
   onDeck: boolean;
   onCarry: (track: TrackMetadata, down: React.PointerEvent, homeEl: HTMLElement | null) => void;
   onPlay: (disc: HTMLElement | null) => void;
@@ -521,7 +535,7 @@ function Record({
         <span
           ref={disc}
           data-disc
-          className={`groove-taken absolute right-0 ${onDeck ? 'groove-sleeve-empty' : ''}`}
+          className={`groove-taken absolute right-0 ${absent ? 'groove-sleeve-empty' : ''}`}
           style={{ width: DISC_SIZE, height: DISC_SIZE, top: `calc(50% - ${DISC_SIZE / 2}px)` }}
         >
           <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />

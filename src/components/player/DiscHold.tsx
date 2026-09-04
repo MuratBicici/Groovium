@@ -4,9 +4,11 @@ import { usePlayerStore } from '@/core/store';
 import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import {
+  CURVED_SEAT_MS,
   HELD_SCALE,
   PICKUP_MS,
   SEAT_MS,
+  seatPoint,
   THROW_MAX_MS,
   isGone,
   launchVelocity,
@@ -58,6 +60,16 @@ const SEAT_ARC = 22;
 /** How long after a throw the platter still treats the record as thrown. */
 const JUST_THREW_MS = 400;
 
+/**
+ * How long a record set down by hand suppresses the platter's entrance.
+ *
+ * Far longer than a throw's window, because this one waits on a provider
+ * rather than on a render: a Spotify track does not become the current one
+ * until Spotify says it is playing, routinely a second after the record
+ * landed. Until then the deck is empty and the entrance is still pending.
+ */
+const JUST_SEATED_MS = 3000;
+
 /** A keyboard eject is thrown for the user, up and to the right. */
 const EJECT_VELOCITY: Vector = { x: 760, y: -420 };
 /** Where the record lifts to before a keyboard eject flings it. */
@@ -76,15 +88,17 @@ interface Visiting {
   /** Called once it has settled onto the deck. */
   onDelivered: (track: TrackMetadata) => void;
   /**
-   * Where to set the record down when it goes back, relative to home's centre.
+   * How home is approached, relative to its centre — a control point, not a
+   * destination.
    *
    * Home may not take a record head-on. A sleeve is entered through the mouth
-   * on its right, and whatever lives there will want to finish the last leg
-   * itself — so the hand stops at the mouth and hands over, rather than
-   * putting the record all the way in and having it come back out to be put
-   * in again, which is what it did.
+   * on its right, so the way back curves out to that side and turns in. The
+   * first attempt stopped at the mouth and let the sleeve finish the last leg,
+   * which was two moves with a full stop between them however exactly they
+   * met. One curve, one deceleration, and the record is still moving inwards
+   * when it disappears into the sleeve.
    */
-  homeOffset?: Vector;
+  homeApproach?: Vector;
 }
 
 interface Grab {
@@ -126,6 +140,16 @@ interface DiscHoldActions {
    * synchronously, so the effect sees it.
    */
   didJustThrow: (trackId: string) => boolean;
+  /**
+   * Whether this record was set down on the deck by hand a moment ago.
+   *
+   * The platter plays an entrance whenever a new track becomes current, and a
+   * record placed there by hand has already arrived, in front of the user —
+   * running the entrance on top of that dropped a second copy in from above.
+   * The window is generous because the gap it covers is: a Spotify track is
+   * not the current one until the provider has actually started it.
+   */
+  didJustSeat: (trackId: string) => boolean;
 }
 
 const ActionsContext = createContext<DiscHoldActions>({
@@ -137,6 +161,7 @@ const ActionsContext = createContext<DiscHoldActions>({
   cancel: () => {},
   eject: () => {},
   didJustThrow: () => false,
+  didJustSeat: () => false,
 });
 
 /** The track whose record is off the deck, so the platter can look empty. */
@@ -177,6 +202,10 @@ interface Motion {
   homeScale: number;
   /** What it is easing towards while seating: home's scale, or the deck's 1. */
   seatScale: number;
+  /** How long that takes. A curved way home is a longer way. */
+  seatMs: number;
+  /** The curve's control point in layer coordinates, when home wants one. */
+  approach: Vector | null;
   visiting: Visiting | null;
   /** Whether the seat now running ends on the deck rather than back home. */
   delivering: boolean;
@@ -242,15 +271,14 @@ function advance(m: Motion, now: number): Outcome {
       break;
 
     case 'seat': {
-      const t = clamp((now - m.phaseAt) / SEAT_MS, 0, 1);
+      const t = clamp((now - m.phaseAt) / m.seatMs, 0, 1);
       const e = easeOutCubic(t);
-      m.pos = {
-        x: lerp(m.from.x, m.origin.x, e),
-        // The hop is on linear time while the travel is eased — the same split
-        // `arcKeyframes` makes, which keeps the apex in the middle of the move
-        // instead of dragging it toward the slow end.
-        y: lerp(m.from.y, m.origin.y, e) - SEAT_ARC * Math.sin(Math.PI * t),
-      };
+      m.pos = seatPoint(m.from, m.origin, m.approach, e);
+      // The hop is the platter's, and only the platter's: a record is dropped
+      // onto a spindle and slid into a sleeve. It is on linear time while the
+      // travel is eased — the same split `arcKeyframes` makes, which keeps the
+      // apex in the middle of the move instead of dragging it to the slow end.
+      if (!m.approach) m.pos.y -= SEAT_ARC * Math.sin(Math.PI * t);
       m.scale = lerp(m.fromScale, m.seatScale, e);
       // Whatever tumble it picked up on the way unwinds as it settles.
       m.spin = lerp(m.spin, 0, e);
@@ -313,6 +341,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const nextKey = useRef(0);
   /** trackId → when it was thrown, for `didJustThrow`. */
   const thrownAt = useRef(new Map<string, number>());
+  /** trackId → when it was set down on the deck by hand, for `didJustSeat`. */
+  const seatedAt = useRef(new Map<string, number>());
 
   /** Put the record's current pose on the screen. */
   const paint = useCallback(() => {
@@ -345,7 +375,16 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     }
     // A visiting record that reached the deck is not resumed, it is played:
     // nothing was ever paused for it. One that went home says nothing at all.
-    if (delivered) visiting.onDelivered(delivered);
+    if (!delivered) return;
+    // Noted before the track is asked for, so the platter can already know
+    // this record arrived by hand when it becomes the current one.
+    const now = performance.now();
+    seatedAt.current.set(delivered.id, now);
+    // Kept from growing across a long session; nothing else prunes it.
+    for (const [id, at] of seatedAt.current) {
+      if (now - at >= JUST_SEATED_MS) seatedAt.current.delete(id);
+    }
+    visiting.onDelivered(delivered);
   }, [clear]);
 
   const finishThrow = useCallback(() => {
@@ -367,6 +406,11 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const didJustThrow = useCallback((trackId: string) => {
     const at = thrownAt.current.get(trackId);
     return at !== undefined && performance.now() - at < JUST_THREW_MS;
+  }, []);
+
+  const didJustSeat = useCallback((trackId: string) => {
+    const at = seatedAt.current.get(trackId);
+    return at !== undefined && performance.now() - at < JUST_SEATED_MS;
   }, []);
 
 
@@ -418,6 +462,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         homeEl: grab.homeEl,
         homeScale,
         seatScale: homeScale,
+        seatMs: SEAT_MS,
+        approach: null,
         visiting: grab.visiting ?? null,
         delivering: false,
         layer,
@@ -468,11 +514,13 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
 
   /** Begin setting the record down on `onto`, at `scale`. */
   const beginSeat = useCallback(
-    (m: Motion, onto: HTMLElement, scale: number, now: number, offset?: Vector) => {
+    (m: Motion, onto: HTMLElement, scale: number, now: number, approach?: Vector) => {
       // Re-measured: the stage moves under a hold the same way it moves under
       // a flight, and neither the deck nor a sleeve need still be where it was.
       const centre = measure(onto).origin;
-      m.origin = offset ? { x: centre.x + offset.x, y: centre.y + offset.y } : centre;
+      m.origin = centre;
+      m.approach = approach ? { x: centre.x + approach.x, y: centre.y + approach.y } : null;
+      m.seatMs = approach ? CURVED_SEAT_MS : SEAT_MS;
       m.seatScale = scale;
       m.phase = 'seat';
       m.phaseAt = now;
@@ -507,7 +555,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
       m.delivering = onDeck && !!deck;
       if (m.delivering && deck) beginSeat(m, deck, 1, now);
-      else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting.homeOffset);
+      else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting.homeApproach);
       return;
     }
 
@@ -532,7 +580,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const cancel = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
-    beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting?.homeOffset);
+    beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting?.homeApproach);
   }, [beginSeat]);
 
   /**
@@ -559,8 +607,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   );
 
   const actions = useMemo(
-    () => ({ grab, moveTo, release, cancel, eject, didJustThrow }),
-    [grab, moveTo, release, cancel, eject, didJustThrow],
+    () => ({ grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat }),
+    [grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat],
   );
 
   return (

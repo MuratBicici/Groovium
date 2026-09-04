@@ -18,6 +18,11 @@ export const PICKUP_MS = 180;
 /** Setting it back down — the careful half of the gesture, so a shade longer. */
 export const SEAT_MS = 260;
 
+/**
+ * A way home that curves round to one side is a longer way, so a shade slower.
+ */
+export const CURVED_SEAT_MS = 360;
+
 /** Cross-fade into the platter's own disc once it is home. */
 export const SEAT_SETTLE_MS = 120;
 
@@ -93,6 +98,43 @@ export function velocityFrom(samples: readonly Sample[], now: number): Vector {
   const dt = (now - first.t) / 1000;
   if (dt <= 0) return { x: 0, y: 0 };
   return { x: (last.x - first.x) / dt, y: (last.y - first.y) / dt };
+}
+
+/**
+ * Where a record is on its way back to where it lives.
+ *
+ * A straight line when there is no `control` point: the platter takes a record
+ * head-on, dropped onto the spindle from above.
+ *
+ * A sleeve does not. It is entered through the mouth cut into its right edge,
+ * so a record going back into one has to arrive from that side — and it has to
+ * still be moving when it gets there. Two earlier attempts both read as two
+ * separate moves: putting the record in the middle and letting the sleeve pull
+ * it out and slide it back in, then stopping at the mouth for the sleeve to
+ * finish the last leg. Anything that comes to rest before the end is two moves
+ * however exactly the halves are matched.
+ *
+ * So it is one quadratic through a control point out to the right. The record
+ * bends towards the mouth, turns, and is still travelling inwards at the
+ * moment it disappears into the sleeve. One curve, one deceleration.
+ *
+ * `e` is eased progress, not time — the caller decides the tempo, and this
+ * decides only the shape.
+ */
+export function seatPoint(
+  from: Vector,
+  to: Vector,
+  control: Vector | null,
+  e: number,
+): Vector {
+  if (!control) {
+    return { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+  }
+  const u = 1 - e;
+  return {
+    x: u * u * from.x + 2 * u * e * control.x + e * e * to.x,
+    y: u * u * from.y + 2 * u * e * control.y + e * e * to.y,
+  };
 }
 
 export type Release = 'seat' | 'fling' | 'drop';

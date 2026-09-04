@@ -3,13 +3,14 @@ import {
   CATCH_RADIUS,
   FLING_SPEED,
   GRAVITY,
-  MAX_FLING_SPEED,
   isGone,
   launchVelocity,
+  MAX_FLING_SPEED,
   releaseVerdict,
+  seatPoint,
   stepProjectile,
-  velocityFrom,
   type Sample,
+  velocityFrom,
 } from './discPhysics';
 
 /**
@@ -171,5 +172,44 @@ describe('the throw itself', () => {
     expect(isGone(at(500, 240), bounds)).toBe(true);
     // Flung upward hard enough to leave over the top.
     expect(isGone(at(170, -100), bounds)).toBe(true);
+  });
+});
+
+describe('the way back to where a record lives', () => {
+  const from = { x: 0, y: 200 };
+  const home = { x: 400, y: 100 };
+  /** Out past the sleeve's right edge, which is the side its mouth is on. */
+  const mouth = { x: home.x + 118, y: home.y - 8 };
+
+  it('starts where the hand let go and ends where the record lives', () => {
+    expect(seatPoint(from, home, mouth, 0)).toEqual(from);
+    const end = seatPoint(from, home, mouth, 1);
+    expect(end.x).toBeCloseTo(home.x, 6);
+    expect(end.y).toBeCloseTo(home.y, 6);
+  });
+
+  it('goes out past the mouth before it turns in', () => {
+    // The whole point of the control point: without it the record crosses the
+    // printed face of the sleeve and enters from the left, through cardboard.
+    const furthest = Math.max(
+      ...Array.from({ length: 101 }, (_, i) => seatPoint(from, home, mouth, i / 100).x),
+    );
+    expect(furthest).toBeGreaterThan(home.x);
+  });
+
+  it('is still travelling inwards when it arrives', () => {
+    // The fault this replaced: the record reached the mouth, stopped, and was
+    // slid in by a second animation — two moves with a full stop between them.
+    // One curve cannot stop in the middle, and this is the half that proves
+    // the last thing it does is move left, into the sleeve.
+    const late = seatPoint(from, home, mouth, 0.96);
+    const arrival = seatPoint(from, home, mouth, 1);
+    expect(arrival.x).toBeLessThan(late.x);
+  });
+
+  it('is a straight line for a platter, which is entered from above', () => {
+    const half = seatPoint(from, home, null, 0.5);
+    expect(half.x).toBeCloseTo((from.x + home.x) / 2, 6);
+    expect(half.y).toBeCloseTo((from.y + home.y) / 2, 6);
   });
 });

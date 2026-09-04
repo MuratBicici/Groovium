@@ -31,7 +31,7 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
   const track = useCurrentTrack();
   const { registerPlatter, didJustLand } = useDiscFlight();
   const pendingTrackId = usePendingLanding();
-  const { grab, moveTo, release, cancel, eject, didJustThrow } = useDiscHold();
+  const { grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat } = useDiscHold();
   const heldTrackId = useHeldTrack();
 
   /** Entrance transforms live here — the spin owns the disc's own transform. */
@@ -152,7 +152,11 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
     // `didJustLand` covers the slow paths, where the track becomes current in
     // the same commit that hands the disc over — by then `pendingTrackId` has
     // already cleared, and without this the record would drop in a second time.
-    if (pendingTrackId === track.id || didJustLand(track.id)) return;
+    //
+    // `didJustSeat` is the same statement about a record put here by hand.
+    // That one arrived in front of the user, at the pace they moved it, and
+    // the entrance dropped a second copy of it in from above afterwards.
+    if (pendingTrackId === track.id || didJustLand(track.id) || didJustSeat(track.id)) return;
 
     drop.animate(
       [
