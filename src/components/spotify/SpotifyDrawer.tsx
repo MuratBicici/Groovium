@@ -147,7 +147,14 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
       // `relative` so an opened crate covers this and stops here. Without it
       // the nearest positioned ancestor is the shell, and the layer would take
       // the deck with it.
-      className="relative flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
+      //
+      // `isolate` so it stops there in the stacking order too. An opened crate
+      // is a layer over the drawer and nothing else, but its z-index was being
+      // read against the whole window — it landed among the modal sheets, above
+      // the layer records fly and are carried in, and a record lifted out of a
+      // sleeve went behind the page it came from. Isolating the drawer makes
+      // the crate's number mean "over the drawer", which is all it ever meant.
+      className="relative isolate flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
       // Every list in here ends at the bottom of the window, not two thirds of
       // the way down it where a docked panel ends, so the fade at the foot of
       // one has to be the colour the shell has actually reached by then.

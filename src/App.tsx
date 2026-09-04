@@ -68,6 +68,12 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * so it creates no stacking context and every number here resolves against the
  * same root — which is what lets a panel inside `main` sit above a layer that
  * comes after `main` in the DOM.
+ *
+ * The Spotify drawer is the one thing deliberately outside this table: it
+ * isolates, and an opened crate stacks inside it. That layer covers the drawer
+ * and nothing else, so it has no business holding a number in a scale about
+ * what covers the deck — and while it did, it sat above the disc-motion layer
+ * and hid a record being carried out of it.
  */
 
 export default function App() {

@@ -322,7 +322,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // piece of the window whether a crate is open in it or not — and it
       // means the fade at the foot of the list, which the drawer sets to where
       // this gradient ends, is still the right colour here.
-      className={`absolute inset-0 z-30 flex flex-col bg-gradient-to-b from-shell-700 to-shell-900 ${
+      // `z-10` inside the drawer's own stacking context, not the window's: over
+      // everything else in the drawer, under a record in the air.
+      className={`absolute inset-0 z-10 flex flex-col bg-gradient-to-b from-shell-700 to-shell-900 ${
         closing ? 'pointer-events-none' : ''
       }`}
     >
