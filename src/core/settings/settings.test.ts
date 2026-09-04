@@ -40,6 +40,7 @@ describe('remembering that a version has been shown', () => {
       customSecondary: '#654321',
       boostContrast: true,
       windowBorder: true,
+      visualizer: false,
       declinedVersion: '2.0.0',
     });
 
@@ -56,6 +57,7 @@ describe('remembering that a version has been shown', () => {
       customSecondary: '#654321',
       boostContrast: true,
       windowBorder: true,
+      visualizer: false,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
     });

@@ -86,6 +86,13 @@ pub struct Settings {
     /// ring that separates it from the desktop.
     #[serde(default)]
     pub window_border: bool,
+    /// Bars behind the deck, moving to whatever the speakers are playing.
+    ///
+    /// Off unless asked for, and that is deliberate: it is fed by listening to
+    /// the machine's output device, which is more than this app is, and nobody
+    /// should find that switched on without having said so.
+    #[serde(default)]
+    pub visualizer: bool,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -191,6 +198,7 @@ mod tests {
             custom_secondary: None,
             boost_contrast: true,
             window_border: false,
+            visualizer: true,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };
@@ -243,6 +251,9 @@ mod tests {
         // new booleans.
         assert!(!config.settings.boost_contrast);
         assert!(!config.settings.window_border);
+        // Absent from an older file means off, which is what it has to mean:
+        // this one listens to the machine's output device.
+        assert!(!config.settings.visualizer);
     }
 
     #[test]

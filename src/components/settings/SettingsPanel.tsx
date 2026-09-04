@@ -56,8 +56,10 @@ export function SettingsPanel({
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
   const boostContrast = useSettingsStore((s) => s.boostContrast);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
+  const visualizer = useSettingsStore((s) => s.visualizer);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
+  const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
@@ -248,6 +250,13 @@ export function SettingsPanel({
             hint={t('settings.windowBorderHint')}
             on={windowBorder}
             onChange={setWindowBorder}
+          />
+
+          <Toggle
+            label={t('settings.visualizer')}
+            hint={t('settings.visualizerHint')}
+            on={visualizer}
+            onChange={setVisualizer}
           />
         </Section>
 
