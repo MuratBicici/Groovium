@@ -1,4 +1,5 @@
 import { accessToken } from '@/core/security/spotifyAuth';
+import { say } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
 
 /**
@@ -31,6 +32,26 @@ export const SEARCH_LIMIT = 10;
 const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
+ * When Spotify will take another request, if it has told this app to wait.
+ *
+ * Module-level rather than per-caller, because the limit is per registration:
+ * the search box, the shelf, the station's background lookups and everything
+ * else are one app as far as Spotify is concerned, and a gate that each of them
+ * kept separately would be no gate at all.
+ *
+ * This exists because being throttled used to make it worse. Every keystroke
+ * ran a search, every search was refused, and every refusal was politely
+ * retried once — so the app answered "you are sending too many requests" by
+ * sending twice as many, and stayed refused for as long as anyone kept typing.
+ */
+let openAgainAt = 0;
+
+/** Seconds until Spotify will listen again, rounded up, at least one. */
+function waitLeft(): number {
+  return Math.max(1, Math.ceil((openAgainAt - Date.now()) / 1000));
+}
+
+/**
  * A refusal, with the number Spotify refused by.
  *
  * The status is the part callers act on. "Route not found" and "you may not
@@ -48,6 +69,18 @@ export class SpotifyError extends Error {
   }
 }
 
+/**
+ * How long Spotify asked for, in milliseconds.
+ *
+ * A second when it did not say. Spotify limits on a rolling thirty-second
+ * window and usually names a number; a missing header is not permission to
+ * carry straight on.
+ */
+function retryAfterMs(response: Response): number {
+  const after = Number(response.headers.get('Retry-After'));
+  return Number.isFinite(after) && after > 0 ? after * 1000 : 1000;
+}
+
 async function send(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
     ...init,
@@ -60,6 +93,13 @@ async function send(path: string, token: string, init?: RequestInit): Promise<Re
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
+  // Refused here rather than on the network. Sending anyway would be asking a
+  // question this app has already been told the answer to, and every one of
+  // them counts against the window that has to empty before it can ask again.
+  if (Date.now() < openAgainAt) {
+    throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft() }), 429);
+  }
+
   const token = await accessToken();
 
   let response = await send(path, token, init);
@@ -70,12 +110,17 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
   // genuinely full, and stacking retries is how an app gets itself throttled
   // harder.
   if (response.status === 429) {
-    const after = Number(response.headers.get('Retry-After'));
-    const waitMs = Number.isFinite(after) ? after * 1000 : 1000;
+    const waitMs = retryAfterMs(response);
+    openAgainAt = Date.now() + waitMs;
     if (waitMs <= MAX_RETRY_AFTER_MS) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       response = await send(path, token, init);
+      // The retry decides how long the gate stays shut: refused again and the
+      // window is genuinely full, answered and there was never a queue.
+      openAgainAt = response.status === 429 ? Date.now() + retryAfterMs(response) : 0;
     }
+  } else if (response.ok) {
+    openAgainAt = 0;
   }
 
   // Transport commands answer 204 with no body.
@@ -105,11 +150,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
       throw new SpotifyError('Spotify has no active device for this app yet.', 404);
     }
     if (response.status === 429) {
-      // Already waited once for whatever `Retry-After` asked.
-      throw new SpotifyError(
-        'Spotify is rate limiting this app. Wait a moment and try again.',
-        429,
-      );
+      // Already waited once for whatever `Retry-After` asked, and the gate
+      // above is now shut for however long the second refusal named.
+      throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft() }), 429);
     }
     throw new SpotifyError(
       `Spotify API ${response.status}: ${body.slice(0, 160)}`,

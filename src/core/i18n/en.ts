@@ -142,6 +142,8 @@ export const en = {
   'spotify.noPlaylists': 'No playlists here yet. Ones you make on Spotify show up here.',
   'spotify.crateEmpty': 'Nothing in here can be played.',
   /** The sleeve is empty because this record is on the deck. */
+  /** Spotify's rate limit, with how long is left of it. */
+  'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',
   'spotify.onDeck': 'This record is on the deck.',
   'spotify.trackCount': '{count} song',
   'spotify.trackCount_plural': '{count} songs',

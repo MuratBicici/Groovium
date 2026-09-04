@@ -133,6 +133,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Burada henüz çalma listesi yok. Spotify’da oluşturduklarınız burada görünür.',
   'spotify.crateEmpty': 'Burada çalınabilecek bir şey yok.',
   /** The sleeve is empty because this record is on the deck. */
+  /** Spotify's rate limit, with how long is left of it. */
+  'spotify.throttled': 'Spotify bu uygulamadan yavaşlamasını istiyor. {seconds} sn kaldı.',
   'spotify.onDeck': 'Bu plak plakçalarda.',
   'spotify.trackCount': '{count} şarkı',
 
