@@ -37,6 +37,14 @@ pub struct Probe {
     pub peak: f32,
     /// How many audio frames arrived. Zero means nothing was rendering.
     pub frames: u64,
+    /// How many buffers those frames came in.
+    pub packets: u64,
+    /// How many of those Windows marked as holding nothing.
+    ///
+    /// All of them means the stream is running and no one is rendering into it,
+    /// which is not the same as audio arriving quiet — and only the first is
+    /// evidence about which process tree the sound is actually in.
+    pub silent_packets: u64,
     pub sample_rate: u32,
     pub channels: u16,
     /// Present only when something went wrong, and then it says what.
@@ -49,17 +57,17 @@ pub struct Probe {
 /// unknowns above decide whether a visualiser is possible at all, and the
 /// honest order is to find out first.
 #[tauri::command]
-pub fn visualizer_probe(millis: u64) -> Probe {
+pub fn visualizer_probe(millis: u64, ours: bool) -> Probe {
     #[cfg(windows)]
     {
-        match capture::listen(millis.clamp(200, 5_000)) {
+        match capture::listen(millis.clamp(200, 5_000), ours) {
             Ok(probe) => probe,
             Err(error) => Probe { error: Some(error), ..Probe::default() },
         }
     }
     #[cfg(not(windows))]
     {
-        let _ = millis;
+        let _ = (millis, ours);
         Probe {
             error: Some("per-process capture is a Windows interface".into()),
             ..Probe::default()

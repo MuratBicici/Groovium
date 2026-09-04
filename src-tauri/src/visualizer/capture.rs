@@ -21,8 +21,9 @@ use windows::Win32::Media::Audio::{
     IAudioCaptureClient, IAudioClient, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_LOOPBACK, AUDIOCLIENT_ACTIVATION_PARAMS,
     AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
-    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS, PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
-    WAVEFORMATEX,
+    AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+    PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE,
+    PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, WAVEFORMATEX,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
@@ -71,8 +72,14 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
     }
 }
 
-/// Listen to this process tree for `millis` and report the loudest thing heard.
-pub fn listen(millis: u64) -> Result<Probe, String> {
+/// Listen for `millis` and report the loudest thing heard.
+///
+/// `ours` picks which side of this app the listening is done on: its own
+/// process tree, or everything except it. The second is only ever a question —
+/// it is the whole machine minus us, which is not something to ship — but it is
+/// the one measurement that can tell "our tree renders no audio" apart from
+/// "process loopback delivers no audio here", and those need different answers.
+pub fn listen(millis: u64, ours: bool) -> Result<Probe, String> {
     unsafe {
         // Ignored on purpose: a failure here is almost always "already
         // initialised on this thread with a different model", which is fine —
@@ -88,7 +95,11 @@ pub fn listen(millis: u64) -> Result<Probe, String> {
                     // rendered by WebView2, which runs in children of this
                     // process; asking only about this one would capture the
                     // local player and nothing else.
-                    ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+                    ProcessLoopbackMode: if ours {
+                        PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
+                    } else {
+                        PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+                    },
                 },
             },
         };
@@ -197,6 +208,15 @@ pub fn listen(millis: u64) -> Result<Probe, String> {
             }
             probe.captured = true;
             probe.frames += u64::from(frames);
+            probe.packets += 1;
+            // `AUDCLNT_BUFFERFLAGS_SILENT`. Windows sets it when it knows there
+            // was nothing to put in the buffer, which is a different statement
+            // from a buffer that happens to hold zeros: the first says nobody
+            // is rendering into this stream, the second says they are and it is
+            // quiet. Those want different answers, so they are counted apart.
+            if flags & 0x2 != 0 {
+                probe.silent_packets += 1;
+            }
             if !data.is_null() && frames > 0 {
                 let samples = std::slice::from_raw_parts(
                     data.cast::<f32>(),
