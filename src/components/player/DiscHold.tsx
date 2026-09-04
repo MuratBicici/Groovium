@@ -58,6 +58,22 @@ const DISC_SIZE = 152;
 const SEAT_ARC = 22;
 
 /**
+ * How big a crate gets as it opens out over the deck.
+ *
+ * Enough to be plainly growing rather than merely fading, and not so much that
+ * it fills the window on the way out.
+ */
+const DISSOLVE_SCALE = 1.5;
+
+/**
+ * How long it takes to do it.
+ *
+ * Longer than a seat, because a seat is arriving somewhere and this is going
+ * away, and going away has to be watchable or it is a flash.
+ */
+const DISSOLVE_MS = 380;
+
+/**
  * How fast the hand moves a record back to where it lives, in px per ms.
  *
  * A speed rather than a duration, because this leg hands over to another one
@@ -105,6 +121,16 @@ interface Visiting {
   deckEl: HTMLElement | null;
   /** Called once it has settled onto the deck. */
   onDelivered: (track: TrackMetadata) => void;
+  /**
+   * Reaching the deck ends by growing out of sight rather than settling on it.
+   *
+   * For a record, landing is the whole point: it comes to rest at the
+   * platter's own size and the platter takes over the same pixels. A crate is
+   * not a thing that sits on a platter — what it does there is give up its
+   * records — so it opens out over the deck and is gone, and the music it was
+   * carrying starts.
+   */
+  dissolves?: boolean;
   /**
    * How home is approached, relative to its centre — a control point, not a
    * destination.
@@ -278,6 +304,10 @@ interface Motion {
   seatMs: number;
   /** The curve's control point in layer coordinates, when home wants one. */
   approach: Vector | null;
+  /** Whether this seat ends by growing out of sight instead of landing. */
+  dissolving: boolean;
+  /** What the hand is drawn at. Only ever less than one while dissolving. */
+  opacity: number;
   /** Whether the lift continues something already in motion. */
   taking: boolean;
   /** How long that lift takes. Paced by distance when it is a continuation. */
@@ -367,7 +397,12 @@ function advance(m: Motion, now: number): Outcome {
       // moving at the seam. Every easing that settles on its target arrives at
       // a standstill, and a standstill in the middle is what makes one move
       // read as two.
-      const e = m.handingOver ? t : easeOutCubic(t);
+      //
+      // Linear for a dissolve too, for the opposite reason: `easeOutCubic` is
+      // most of the way there in the first quarter, which on something growing
+      // and fading means it is gone before it has visibly grown. Nothing is
+      // settling here, so nothing needs to ease into it.
+      const e = m.handingOver || m.dissolving ? t : easeOutCubic(t);
       // The hop is the deck's, and only the deck's — a record dropped onto a
       // spindle. A crate was hopping on the way back to the shelf, which read
       // as it bouncing off the place it was settling into.
@@ -381,6 +416,11 @@ function advance(m: Motion, now: number): Outcome {
       // Sized before it is lined up, when a handover is coming: the record has
       // to already be the size it will be inside before the hand can let go.
       m.scale = lerp(m.fromScale, m.seatScale, m.handingOver ? Math.min(1, e / SIZED_BY) : e);
+      // Opening out over the deck: the fade is held back so that most of the
+      // growth happens while the crate can still be seen, and the last of it
+      // goes quickly. A fade that starts at full rate is a crate being rubbed
+      // out rather than one opening.
+      if (m.dissolving) m.opacity = 1 - e * e;
       // Whatever tumble it picked up on the way unwinds as it settles.
       m.spin = lerp(m.spin, 0, e);
       if (t >= 1) return 'seated';
@@ -454,6 +494,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     const m = motion.current;
     if (!el || !m) return;
     const half = DISC_SIZE / 2;
+    el.style.opacity = m.opacity === 1 ? '' : m.opacity.toFixed(3);
     el.style.transform =
       `translate(${m.pos.x - half}px, ${m.pos.y - half}px) ` +
       `rotate(${m.spin.toFixed(2)}deg) scale(${m.scale.toFixed(4)})`;
@@ -579,6 +620,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
         seatScale: homeScale,
         seatMs: SEAT_MS,
         approach: null,
+        dissolving: false,
+        opacity: 1,
         taking,
         // Paced by distance either way, and only the floor differs. A record
         // comes off the deck into a hand that is already on it, so that one is
@@ -659,12 +702,18 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       m.handingOver = short !== undefined;
       m.homeCentre = centre;
       m.approach = approach ? { x: centre.x + approach.x, y: centre.y + approach.y } : null;
-      // Timed by how far it has to go rather than by a fixed clock, so the leg
-      // travels at one speed however near or far it was let go of — which is
-      // the speed the last stretch has to pick up at.
-      m.seatMs = m.handingOver
-        ? clamp(Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y) / HAND_SPEED, 150, 460)
-        : SEAT_MS;
+      // A dissolve is timed by how long it takes to watch rather than by how
+      // far it goes; it is not arriving anywhere. A handover is timed by
+      // distance so the leg travels at one speed however near or far it was
+      // let go of, which is the speed the last stretch has to pick up at.
+      if (m.dissolving) m.seatMs = DISSOLVE_MS;
+      else if (m.handingOver) {
+        m.seatMs = clamp(
+          Math.hypot(m.pos.x - m.origin.x, m.pos.y - m.origin.y) / HAND_SPEED,
+          150,
+          460,
+        );
+      } else m.seatMs = SEAT_MS;
       m.seatScale = scale;
       m.phase = 'seat';
       m.phaseAt = now;
@@ -698,7 +747,12 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       const onDeck =
         !!box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
       m.delivering = onDeck && !!deck;
-      if (m.delivering && deck) beginSeat(m, deck, 1, now);
+      if (m.delivering && deck) {
+        // A crate opens out over the deck. A record lands on it at its size,
+        // because the platter is about to take over those same pixels.
+        m.dissolving = m.visiting.dissolves === true;
+        beginSeat(m, deck, m.dissolving ? DISSOLVE_SCALE : 1, now);
+      }
       else beginSeat(m, m.homeEl, m.homeScale, now, m.visiting);
       return;
     }

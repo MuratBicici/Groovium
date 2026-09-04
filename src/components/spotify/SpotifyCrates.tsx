@@ -95,6 +95,9 @@ export function SpotifyCrates() {
           visiting: {
             deckEl: platterEl(),
             onDelivered: () => void playCrate(playlist.id),
+            // A crate does not land on the deck. It opens out over it and is
+            // gone, and what it was carrying starts playing.
+            dissolves: true,
           },
         });
       };
@@ -255,14 +258,20 @@ function Crate({
         const box = art.current?.getBoundingClientRect();
         if (box) onOpen({ x: box.x, y: box.y, width: box.width, height: box.height });
       }}
-      // The whole card leaves together, growing out of its slot and fading.
-      // Hiding the printed square in one frame and fading the name after it
-      // was two things happening to one object; this is the object leaving.
+      // Not `invisible` on the card. What the hand carries is the printed
+      // square, so that is what goes at once — swapped for a copy of itself in
+      // the same place, which is a swap nobody can see. The name underneath is
+      // not carried, and taking it away in the same instant was the one thing
+      // that popped; it fades instead, over about as long as the crate takes
+      // to leave.
       className={`groove-sleeve relative flex flex-col rounded-md text-left ${
-        away ? 'groove-lifted' : ''
-      } ${starting ? 'animate-pulse' : ''}`}
+        starting ? 'animate-pulse' : ''
+      }`}
     >
-      <span ref={art} className="relative aspect-square w-full">
+      <span
+        ref={art}
+        className={`relative aspect-square w-full ${away ? 'invisible' : ''}`}
+      >
         {/* The record in the sleeve. Drawn before the print and therefore under
             it, so the only part of it anyone sees is the part in the opening —
             and nothing clips it, so it has somewhere to go when it slides out.
@@ -294,7 +303,11 @@ function Crate({
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
       </span>
-      <span className="relative flex min-w-0 flex-col px-1.5 py-1 text-center">
+      <span
+        className={`relative flex min-w-0 flex-col px-1.5 py-1 text-center transition-opacity duration-150 ${
+          away ? 'opacity-0' : ''
+        }`}
+      >
         <span className="truncate text-meta text-cream-100" title={playlist.name}>
           {playlist.name}
         </span>
