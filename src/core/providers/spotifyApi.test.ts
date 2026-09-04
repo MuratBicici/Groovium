@@ -131,17 +131,51 @@ describe('when Spotify says slow down', () => {
     const secondsIn = (err: unknown) => Number(/(\d+)\s*s/.exec(String(err))?.[1]);
 
     // One request is two refusals: the first, and the retry it makes.
-    const first = request('/a').catch((e: unknown) => e);
+    // All on `/search`, because the gate is per quota: four different paths
+    // would be four different gates and none of them would grow.
+    const first = request('/search?q=a').catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(1_000);
     await first;
-    expect(secondsIn(await request('/b').catch((e: unknown) => e))).toBe(2);
+    expect(secondsIn(await request('/search?q=b').catch((e: unknown) => e))).toBe(2);
 
     // Let that pass, ask again, and the pair after it asks for longer still.
     vi.setSystemTime(Date.now() + 2_000);
-    const third = request('/c').catch((e: unknown) => e);
+    const third = request('/search?q=c').catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(4_000);
     await third;
-    expect(secondsIn(await request('/d').catch((e: unknown) => e))).toBe(8);
+    expect(secondsIn(await request('/search?q=d').catch((e: unknown) => e))).toBe(8);
+  });
+
+  it('shuts only the quota that was refused', async () => {
+    // Measured on a real registration: `/search` answered 429 with
+    // QUOTA_EXCEEDED while `/me` and `/me/playlists` answered 200 in the same
+    // second. One gate for the whole app would have taken the shelf and the
+    // transport down with the search box.
+    const { request } = await freshApi();
+    let answers: Record<string, number> = { search: 429, me: 200 };
+    vi.stubGlobal('fetch', (url: string) => {
+      calls.push(String(url));
+      const which = String(url).includes('/search') ? 'search' : 'me';
+      return Promise.resolve(
+        new Response('{"ok":true}', {
+          status: answers[which] ?? 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    const search = request('/search?q=a').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await search;
+
+    // Shut for searching...
+    const asked = calls.length;
+    await request('/search?q=b').catch(() => undefined);
+    expect(calls).toHaveLength(asked);
+
+    // ...and open for everything else.
+    await expect(request('/me/playlists?limit=1')).resolves.toEqual({ ok: true });
+    answers = { search: 429, me: 200 };
   });
 
   it('treats a refusal with no Retry-After as a second, not as permission', async () => {

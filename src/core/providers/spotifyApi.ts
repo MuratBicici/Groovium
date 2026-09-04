@@ -32,19 +32,26 @@ export const SEARCH_LIMIT = 10;
 const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
- * When Spotify will take another request, if it has told this app to wait.
+ * When Spotify will take another request, per endpoint family.
  *
- * Module-level rather than per-caller, because the limit is per registration:
- * the search box, the shelf, the station's background lookups and everything
- * else are one app as far as Spotify is concerned, and a gate that each of them
- * kept separately would be no gate at all.
+ * Kept per family rather than for the app as a whole, because that is how the
+ * quota is spent. Measured on a real registration that had been searching too
+ * much: `/search` answered 429 with `QUOTA_EXCEEDED` while `/me` and
+ * `/me/playlists` both answered 200 in the same second. One gate for
+ * everything would have taken the shelf and the transport down with the search
+ * box, which is a worse app than the one Spotify was refusing.
+ *
+ * Still shared between callers within a family, because within one the limit
+ * really is per registration: the search box and the station's background
+ * lookups are the same `/search` quota, and a gate each of them kept
+ * separately would be no gate at all.
  *
  * This exists because being throttled used to make it worse. Every keystroke
  * ran a search, every search was refused, and every refusal was politely
  * retried once — so the app answered "you are sending too many requests" by
  * sending twice as many, and stayed refused for as long as anyone kept typing.
  */
-let openAgainAt = 0;
+const gates = new Map<string, { until: number; blindWait: number }>();
 
 /**
  * How long to wait when Spotify refuses without saying how long.
@@ -61,11 +68,29 @@ let openAgainAt = 0;
  */
 const BLIND_WAIT_MS = 1_000;
 const BLIND_WAIT_CAP_MS = 60_000;
-let blindWait = BLIND_WAIT_MS;
+
+/**
+ * Which quota a path spends, as its first segment.
+ *
+ * `/search` is its own; everything under `/me` or `/playlists` is that one.
+ * Coarse on purpose — Spotify does not publish the shape of this, and the only
+ * thing the measurement established is that search is metered apart from the
+ * rest.
+ */
+function family(path: string): string {
+  return path.replace(/^\//, '').split(/[/?]/)[0] ?? '';
+}
+
+function gateFor(path: string): { until: number; blindWait: number } {
+  const key = family(path);
+  const gate = gates.get(key) ?? { until: 0, blindWait: BLIND_WAIT_MS };
+  gates.set(key, gate);
+  return gate;
+}
 
 /** Seconds until Spotify will listen again, rounded up, at least one. */
-function waitLeft(): number {
-  return Math.max(1, Math.ceil((openAgainAt - Date.now()) / 1000));
+function waitLeft(until: number): number {
+  return Math.max(1, Math.ceil((until - Date.now()) / 1000));
 }
 
 /**
@@ -93,14 +118,14 @@ export class SpotifyError extends Error {
  * window and usually names a number; a missing header is not permission to
  * carry straight on.
  */
-function retryAfterMs(response: Response): number {
+function retryAfterMs(response: Response, gate: { blindWait: number }): number {
   const after = Number(response.headers.get('Retry-After'));
   if (Number.isFinite(after) && after > 0) {
-    blindWait = BLIND_WAIT_MS;
+    gate.blindWait = BLIND_WAIT_MS;
     return after * 1000;
   }
-  const wait = blindWait;
-  blindWait = Math.min(blindWait * 2, BLIND_WAIT_CAP_MS);
+  const wait = gate.blindWait;
+  gate.blindWait = Math.min(gate.blindWait * 2, BLIND_WAIT_CAP_MS);
   return wait;
 }
 
@@ -119,8 +144,9 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
   // Refused here rather than on the network. Sending anyway would be asking a
   // question this app has already been told the answer to, and every one of
   // them counts against the window that has to empty before it can ask again.
-  if (Date.now() < openAgainAt) {
-    throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft() }), 429);
+  const gate = gateFor(path);
+  if (Date.now() < gate.until) {
+    throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft(gate.until) }), 429);
   }
 
   const token = await accessToken();
@@ -133,19 +159,19 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
   // genuinely full, and stacking retries is how an app gets itself throttled
   // harder.
   if (response.status === 429) {
-    const waitMs = retryAfterMs(response);
-    openAgainAt = Date.now() + waitMs;
+    const waitMs = retryAfterMs(response, gate);
+    gate.until = Date.now() + waitMs;
     if (waitMs <= MAX_RETRY_AFTER_MS) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       response = await send(path, token, init);
       // The retry decides how long the gate stays shut: refused again and the
       // window is genuinely full, answered and there was never a queue.
-      openAgainAt = response.status === 429 ? Date.now() + retryAfterMs(response) : 0;
-      if (response.ok) blindWait = BLIND_WAIT_MS;
+      gate.until = response.status === 429 ? Date.now() + retryAfterMs(response, gate) : 0;
+      if (response.ok) gate.blindWait = BLIND_WAIT_MS;
     }
   } else if (response.ok) {
-    openAgainAt = 0;
-    blindWait = BLIND_WAIT_MS;
+    gate.until = 0;
+    gate.blindWait = BLIND_WAIT_MS;
   }
 
   // Transport commands answer 204 with no body.
@@ -177,7 +203,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T | 
     if (response.status === 429) {
       // Already waited once for whatever `Retry-After` asked, and the gate
       // above is now shut for however long the second refusal named.
-      throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft() }), 429);
+      throw new SpotifyError(say('spotify.throttled', { seconds: waitLeft(gate.until) }), 429);
     }
     throw new SpotifyError(
       `Spotify API ${response.status}: ${body.slice(0, 160)}`,
