@@ -52,7 +52,7 @@ const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 
 /** Diameter of a record in the grid. The cells are wider than this on purpose. */
-const DISC_SIZE = 116;
+const DISC_SIZE = 140;
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
@@ -346,30 +346,37 @@ function Record({
       onClick={(e) => onPlay(e.currentTarget.querySelector<HTMLElement>('[data-disc]'))}
       className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
     >
-      <span className="relative aspect-square w-full overflow-hidden rounded-t-md bg-shell-900">
-        {track.coverArtUrl && (
-          <img
-            src={track.coverArtUrl}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        )}
-        <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
-        {/* Pulled out to the right and cut off by the sleeve's own edge, which
-            is what a record halfway out of a sleeve looks like. `data-disc` is
-            what the flight to the platter picks up and scales, so it has to be
-            the disc alone with nothing around it. */}
+      <span className="relative aspect-square w-full">
+        {/* In the sleeve, not on it. Drawn before the print and therefore under
+            it, so the only part of it anyone sees is the crescent in the
+            opening; nothing clips it, so it has somewhere to go when it slides
+            out. `data-disc` is what the flight to the platter picks up and
+            scales, so it is the disc alone with nothing around it.
+            Centred by arithmetic rather than `top-1/2 -translate-y-1/2`: that
+            utility writes the `translate` property and the nudge on hover
+            writes `transform`, and both would apply. */}
         <span
           data-disc
-          className="groove-taken absolute left-[32%]"
-          // Centred by arithmetic rather than by `top-1/2 -translate-y-1/2`,
-          // because that utility writes the `translate` property and the nudge
-          // on hover writes `transform` — two offsets that would both apply,
-          // and the record would jump half its own height.
+          className="groove-taken absolute right-0"
           style={{ width: DISC_SIZE, height: DISC_SIZE, top: `calc(50% - ${DISC_SIZE / 2}px)` }}
         >
           <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
+        </span>
+        <span
+          className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900"
+          // A wider cell than the shelf's wants a wider cut, or the opening
+          // reads as a chip in the corner rather than somewhere a hand goes.
+          style={{ ['--notch' as string]: '42px' }}
+        >
+          {track.coverArtUrl && (
+            <img
+              src={track.coverArtUrl}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          )}
+          <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
       </span>
       <span className="relative flex min-w-0 flex-col px-1.5 py-1">

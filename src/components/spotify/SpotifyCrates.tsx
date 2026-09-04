@@ -131,37 +131,36 @@ function Crate({
       }}
       className="groove-sleeve relative flex flex-col rounded-md text-left"
     >
-      {/* Behind the sleeve, and only ever seen leaving it. `-z-10` would put it
-          behind the card's own background; a plain sibling drawn first, with
-          the sleeve's contents after it, keeps it under the art and over the
-          shelf without either of them needing a stacking context. */}
-      <span
-        aria-hidden="true"
-        className="groove-sleeve-disc pointer-events-none absolute top-[5%] right-[5%] aspect-square w-[90%] rounded-full"
-      />
-      <span
-        ref={art}
-        className="relative aspect-square w-full overflow-hidden rounded-t-md bg-shell-900"
-      >
-        {playlist.coverArtUrl ? (
-          <img
-            src={playlist.coverArtUrl}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          // A sleeve with nothing printed on it. The initial rather than a
-          // generic icon: on a shelf of them, the letter is what tells two
-          // blank sleeves apart at a glance.
-          <span
-            aria-hidden="true"
-            className="flex h-full w-full items-center justify-center text-title font-medium text-brass-400/50"
-          >
-            {playlist.name.trim().charAt(0).toUpperCase() || '♪'}
-          </span>
-        )}
-        <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+      <span ref={art} className="relative aspect-square w-full">
+        {/* The record in the sleeve. Drawn before the print and therefore under
+            it, so the only part of it anyone sees is the part in the opening —
+            and nothing clips it, so it has somewhere to go when it slides out.
+            Flush with the sleeve's right edge, which is where a record sits. */}
+        <span
+          aria-hidden="true"
+          className="groove-sleeve-disc pointer-events-none absolute top-[4%] right-0 aspect-square w-[92%] rounded-full"
+        />
+        <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900">
+          {playlist.coverArtUrl ? (
+            <img
+              src={playlist.coverArtUrl}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            // A sleeve with nothing printed on it. The initial rather than a
+            // generic icon: on a shelf of them, the letter is what tells two
+            // blank sleeves apart at a glance.
+            <span
+              aria-hidden="true"
+              className="flex h-full w-full items-center justify-center text-title font-medium text-brass-400/50"
+            >
+              {playlist.name.trim().charAt(0).toUpperCase() || '♪'}
+            </span>
+          )}
+          <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+        </span>
       </span>
       <span className="relative flex min-w-0 flex-col px-1.5 py-1">
         <span className="truncate text-meta text-cream-100" title={playlist.name}>

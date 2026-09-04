@@ -467,10 +467,11 @@ body {
     color-mix(in srgb, var(--color-shell-600) 50%, var(--color-shell-700)),
     var(--color-shell-700)
   );
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / var(--lift)),
-    0 0 0 1px rgb(0 0 0 / calc(0.35 * var(--shade))),
-    0 4px 10px -5px rgb(0 0 0 / calc(0.7 * var(--shade)));
+  /* No hairline ring around the box. A ring follows the card's border box and
+     the notch below is cut out of the artwork inside it, so the ring drew a
+     one-pixel wire straight across the opening. The card's edge is the shadow
+     and the printed face's own inset line instead. */
+  box-shadow: 0 4px 10px -5px rgb(0 0 0 / calc(0.7 * var(--shade)));
   transition:
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 180ms ease;
@@ -482,10 +483,35 @@ body {
      does not behave differently from the rest. */
   z-index: 1;
   transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / var(--lift)),
-    0 0 0 1px rgb(0 0 0 / calc(0.35 * var(--shade))),
-    0 10px 20px -8px rgb(0 0 0 / calc(0.8 * var(--shade)));
+  box-shadow: 0 10px 20px -8px rgb(0 0 0 / calc(0.8 * var(--shade)));
+}
+
+/*
+ * The sleeve's opening: a half-moon cut out of its right edge.
+ *
+ * This is the thumb-cut a record sleeve has so you can get hold of what is
+ * inside, and it is the whole reason the record is legible without lying on
+ * top of the artwork — which is what it was doing, and which is not something
+ * a record does. The disc sits *behind* this, so the only part of it anyone
+ * sees is the part in the opening, and the cover art is never cut into.
+ *
+ * A mask rather than a shape: everything this element paints, its own inset
+ * lines included, is clipped by the same curve, so nothing can draw across the
+ * mouth of the cut. The one thing that could — the card's outer ring — was
+ * taken off above.
+ */
+.groove-sleeve-art {
+  --notch: 36px;
+  -webkit-mask-image: radial-gradient(
+    circle var(--notch) at 100% 50%,
+    transparent 0 calc(var(--notch) - 1px),
+    #000 var(--notch)
+  );
+  mask-image: radial-gradient(
+    circle var(--notch) at 100% 50%,
+    transparent 0 calc(var(--notch) - 1px),
+    #000 var(--notch)
+  );
 }
 
 /*
@@ -501,7 +527,12 @@ body {
   background:
     linear-gradient(to right, rgb(0 0 0 / calc(0.5 * var(--shade))), rgb(0 0 0 / 0) 8px),
     linear-gradient(to bottom right, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 45%);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / calc(0.3 * var(--shade)));
+  /* The lit top edge lives here rather than on the card. On the card it was
+     painted underneath the artwork and never seen; here it is over the print,
+     and the notch's mask takes it away where the sleeve is open. */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / var(--lift)),
+    inset 0 0 0 1px rgb(0 0 0 / calc(0.3 * var(--shade)));
 }
 
 /*
@@ -513,9 +544,10 @@ body {
  * platter shows, at the fidelity a 12px sliver can carry — which is a dark
  * edge, a hint of grooves, and the fact that it is round.
  *
- * At rest it is hidden exactly behind the sleeve. Nothing pokes out until the
- * pointer is on the card, because a shelf of records half out of their sleeves
- * is a shelf somebody has already been through.
+ * At rest the sleeve covers all of it but the crescent in the opening, which
+ * is a record sitting in its sleeve. Nothing is outside the card until the
+ * pointer arrives — a shelf of records already half out is a shelf somebody
+ * has been through.
  */
 .groove-sleeve-disc {
   background:
@@ -535,7 +567,7 @@ body {
 }
 
 .groove-sleeve:hover .groove-sleeve-disc {
-  transform: translateX(20px);
+  transform: translateX(12px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -588,7 +620,7 @@ body {
 }
 
 .groove-sleeve:hover .groove-taken {
-  transform: translateX(6px);
+  transform: translateX(11px);
 }
 
 @media (prefers-reduced-motion: reduce) {
