@@ -157,7 +157,7 @@ export function SpotifyCrates() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       {/* Above the shelf rather than instead of it: failing to play one crate
           says nothing about the others, and taking them off the screen to
           report it would be a worse answer than the one being reported. */}

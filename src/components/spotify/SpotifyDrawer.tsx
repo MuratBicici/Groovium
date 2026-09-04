@@ -155,9 +155,14 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
       // sleeve went behind the page it came from. Isolating the drawer makes
       // the crate's number mean "over the drawer", which is all it ever meant.
       className="relative isolate flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
-      // Every list in here ends at the bottom of the window, not two thirds of
-      // the way down it where a docked panel ends, so the fade at the foot of
-      // one has to be the colour the shell has actually reached by then.
+      // The fade colour an opened crate's list uses. It is the only thing in
+      // here that still fades: a crate lays its own opaque surface over the
+      // drawer, so painting that surface's colour at the foot of its list is
+      // invisible the way it is meant to be. The drawer's own lists have no
+      // surface — the visualiser is behind them — so they do not fade at all.
+      // Two thirds of the way down the window is where a docked panel ends;
+      // this one ends at the bottom, so it is the colour the shell has
+      // actually reached by then.
       style={{ width: `${DRAWER_WIDTH}px`, ['--fade-colour' as string]: 'var(--color-shell-900)' }}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
@@ -200,7 +205,7 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         {stage === 'loading' && <Centered>{t('spotify.checking')}</Centered>}
 
         {stage === 'setup' && (
-          <div className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <SetupSteps onConfigured={() => void refresh()} />
           </div>
         )}

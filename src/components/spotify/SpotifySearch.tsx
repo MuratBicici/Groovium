@@ -82,7 +82,12 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
         </p>
       )}
 
-      <ul className="min-h-0 flex-1 overflow-y-auto groove-scroll-fade">
+      {/* No `groove-scroll-fade` here, or anywhere else in the drawer. That
+          fade works by painting the surface's own colour over the end of a
+          list, which is invisible on a panel with an opaque surface and is a
+          dark stripe here: the drawer has no surface, the visualiser is behind
+          it, and the one opaque thing in the whole column was the fade. */}
+      <ul className="min-h-0 flex-1 overflow-y-auto">
         {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
         {!loading && results.length === 0 && (
           <Hint>{query.trim() ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>
