@@ -41,7 +41,13 @@ import {
   isAuthenticated as spotifyIsAuthenticated,
   signOut as spotifySignOut,
 } from '@/core/security/spotifyAuth';
-import { artistKey, hasApiKey as hasLastfmKey, resolveNextTracks, trackKey } from '@/core/station';
+import {
+  artistKey,
+  forgetStationRest,
+  hasApiKey as hasLastfmKey,
+  resolveNextTracks,
+  trackKey,
+} from '@/core/station';
 import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
@@ -1102,6 +1108,10 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // open the setup sheet instead of showing an error.
       if (!(await hasLastfmKey())) return false;
 
+      // A run of fills that searched and found nothing leaves Spotify alone
+      // for a while. Pressing this is somebody saying they want the station
+      // now, which is a better reason to ask than the timer's is not to.
+      forgetStationRest();
       set({ station: true });
       void prefetchStationTrack();
       return true;

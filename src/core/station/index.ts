@@ -606,6 +606,37 @@ async function pickFrom(
   return [...picked, ...fromSpotify];
 }
 
+/**
+ * How long the station leaves Spotify alone after spending searches for nothing.
+ *
+ * The budget bounds one fill. It does not bound the next one, and a station
+ * that cannot find anything is not a rare case — a library Last.fm does not
+ * know, a taste Spotify's search does not match. Every song was a fresh seed,
+ * a fresh twelve searches, and the same nothing: about two hundred and forty an
+ * hour, all of them spent to say "still nothing".
+ *
+ * So a fill that spends searches and comes back empty buys a quiet spell, and
+ * consecutive ones buy longer spells. The library tier still runs throughout —
+ * it costs no requests, and it is the tier most likely to have an answer anyway.
+ */
+const BARREN_REST_MS = 5 * 60_000;
+const BARREN_REST_CAP_MS = 30 * 60_000;
+
+let restUntil = 0;
+let restLength = BARREN_REST_MS;
+
+/**
+ * Ask Spotify again from now on.
+ *
+ * For the tests, and for the moments when the situation has genuinely changed
+ * rather than merely moved on: a station being switched on is somebody saying
+ * they want it now.
+ */
+export function forgetStationRest(): void {
+  restUntil = 0;
+  restLength = BARREN_REST_MS;
+}
+
 export async function resolveNextTracks(
   options: ResolveOptions,
   limit = SUGGESTION_DEPTH,
@@ -617,6 +648,12 @@ export async function resolveNextTracks(
   // One purse for the whole fill. It used to be one per seed, which is how a
   // fill that reads as "eight searches" cost forty.
   const purse: SearchPurse = { left: SPOTIFY_SEARCH_BUDGET };
+
+  // Resting rather than unavailable. The difference matters to nothing below
+  // — both mean "do not search" — but it does mean this cannot be read as the
+  // account having gone away.
+  const resting = Date.now() < restUntil;
+  if (resting) options = { ...options, spotifyAvailable: false };
 
   for (const seed of orderSeeds(options.seeds)) {
     const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
@@ -631,7 +668,19 @@ export async function resolveNextTracks(
     }
 
     const picked = await pickFrom(candidates, options, limit, purse);
-    if (picked.length > 0) return picked;
+    if (picked.length > 0) {
+      // Anything at all clears the rest: whatever was wrong is not wrong now.
+      forgetStationRest();
+      return picked;
+    }
+  }
+
+  // Only when searching is what came up empty. A fill that never reached
+  // Spotify — no key, no budget spent, or already resting — has established
+  // nothing about Spotify and must not put it out of reach.
+  if (!resting && purse.left < SPOTIFY_SEARCH_BUDGET) {
+    restUntil = Date.now() + restLength;
+    restLength = Math.min(restLength * 2, BARREN_REST_CAP_MS);
   }
   return [];
 }

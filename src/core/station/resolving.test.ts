@@ -22,7 +22,7 @@ vi.mock('./lastfm', () => ({
 }));
 
 import { artistCandidates, similarTracks, type SimilarTrack } from './lastfm';
-import { resolveNextTracks } from './index';
+import { forgetStationRest, resolveNextTracks } from './index';
 
 const askedAboutTrack = vi.mocked(similarTracks);
 const askedAboutArtist = vi.mocked(artistCandidates);
@@ -83,6 +83,11 @@ function resolve(overrides: Partial<Parameters<typeof resolveNextTracks>[0]> = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // A fill that searches and finds nothing puts Spotify out of reach for a
+  // while, and that outlives the test that caused it — the rest is module
+  // state, because the quota it protects is one account's rather than one
+  // caller's.
+  forgetStationRest();
   askedAboutTrack.mockResolvedValue([]);
   askedAboutArtist.mockResolvedValue([]);
   tracksLikeArtist = vi.fn().mockResolvedValue([]);
@@ -202,5 +207,102 @@ describe('what one fill is allowed to spend', () => {
 
     expect(picked).toEqual([]);
     expect(searchSpotify.mock.calls.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('a station that keeps finding nothing', () => {
+  /**
+   * The budget bounds one fill. Nothing bounded the next one.
+   *
+   * A library Last.fm does not know is not a rare case, and every song was a
+   * fresh seed, a fresh twelve searches and the same nothing — about two
+   * hundred and forty searches an hour, spent entirely on establishing that
+   * there was still nothing. Which is the shape of how this app walked into a
+   * daily quota wall.
+   */
+  const barren = () =>
+    resolve({
+      library: [],
+      spotifyAvailable: true,
+      // Something to search about, so the searches actually happen.
+      seeds: [playing('Kraftwerk', 'Autobahn')],
+    });
+
+  beforeEach(() => {
+    askedAboutTrack.mockResolvedValue([candidate('Nobody', 'Nothing')]);
+    searchSpotify = vi.fn().mockResolvedValue([]);
+  });
+
+  it('leaves Spotify alone for a while after searching for nothing', async () => {
+    expect(await barren()).toEqual([]);
+    expect(searchSpotify).toHaveBeenCalled();
+
+    searchSpotify.mockClear();
+    expect(await barren()).toEqual([]);
+    expect(searchSpotify).not.toHaveBeenCalled();
+  });
+
+  it('asks again once the rest is over', async () => {
+    vi.useFakeTimers();
+    try {
+      await barren();
+      searchSpotify.mockClear();
+
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      await barren();
+      expect(searchSpotify).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rests longer each time the answer is still nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      await barren();
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      await barren();
+
+      // The second rest is ten minutes, so six is not enough any more.
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      searchSpotify.mockClear();
+      await barren();
+      expect(searchSpotify).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps answering from the library while it rests', async () => {
+    // The tier that costs nothing goes on running. It is also the one most
+    // likely to have an answer, which is the point.
+    await barren();
+
+    askedAboutTrack.mockResolvedValue([candidate('Neu', 'Hallogallo')]);
+    const picked = await resolve({ spotifyAvailable: true });
+    expect(picked.map((t) => t.title)).toEqual(['Hallogallo']);
+  });
+
+  it('starts asking again the moment something is found', async () => {
+    await barren();
+
+    askedAboutTrack.mockResolvedValue([candidate('Neu', 'Hallogallo')]);
+    await resolve({ spotifyAvailable: true });
+
+    // Whatever was wrong is not wrong now.
+    askedAboutTrack.mockResolvedValue([candidate('Nobody', 'Nothing')]);
+    searchSpotify.mockClear();
+    await barren();
+    expect(searchSpotify).toHaveBeenCalled();
+  });
+
+  it('does not put Spotify out of reach over a fill that never searched', async () => {
+    // No key, or nothing worth searching about: neither says anything about
+    // whether searching would have worked.
+    expect(await resolve({ library: [], spotifyAvailable: false })).toEqual([]);
+
+    searchSpotify.mockClear();
+    await barren();
+    expect(searchSpotify).toHaveBeenCalled();
   });
 });
