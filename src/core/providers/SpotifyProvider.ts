@@ -451,6 +451,21 @@ export class SpotifyProvider extends BaseProvider {
     // notice the music coming back. Only the duration is worth keeping.
     if (this.stalled) {
       if (state.duration > 0) this.durationMs = state.duration;
+
+      // With one exception: the SDK saying it is *playing*, while this
+      // provider is not the thing holding it paused.
+      //
+      // What the outage produces is paused-at-zero — that is the lie the guard
+      // exists for — and there is no version of a dropped connection that
+      // reports audio coming out. So this is the device confirming the restart
+      // landed, which it does within a few hundred milliseconds of the sound
+      // returning. Waiting for the next check instead meant the button sat on
+      // "loading" for two seconds after the music was audibly back.
+      if (!state.paused && !this.pausedByStall) {
+        this.leaveStall('the device is playing again', state.position);
+        return;
+      }
+
       this.report('ignored an SDK state while stalled');
       return;
     }
