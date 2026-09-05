@@ -325,8 +325,7 @@ export class SpotifyProvider extends BaseProvider {
     // says why, which beats a play button that quietly does nothing.
     const at = this.positionMs;
     const deviceId = await this.waitForDevice();
-    await playOnDevice(deviceId, this.playing);
-    await this.player?.seek(at);
+    await playOnDevice(deviceId, this.playing, at);
     this.positionMs = at;
   }
 
@@ -764,12 +763,14 @@ export class SpotifyProvider extends BaseProvider {
     try {
       // Starting the track again supersedes the pause that the stall applied.
       this.pausedByStall = false;
-      await playOnDevice(this.deviceId, this.playing);
+      // The position goes with the request. Playing and then seeking put the
+      // song back to the top: the seek reached the SDK while the track was
+      // still loading and went nowhere.
+      await playOnDevice(this.deviceId, this.playing, at);
       // Counted here rather than above, so the ceiling measures Spotify
       // declining rather than the network being out. A request that never
       // arrived says nothing about whether Spotify would have played.
       this.restartsTried += 1;
-      await this.player?.seek(at);
       this.positionMs = at;
     } catch {
       // Still out. The next check will try again.

@@ -509,9 +509,25 @@ export async function currentPlayback(): Promise<Playback> {
   }
 }
 
-export async function playOnDevice(deviceId: string, trackUri: string): Promise<void> {
+/**
+ * Start a track on a device, optionally partway in.
+ *
+ * The offset goes in the request rather than being seeked to afterwards.
+ * Playing and then seeking was two operations racing: the seek reached the SDK
+ * while the track it names was still loading, went nowhere, and the listener
+ * got the song from the top. Which is no way to come back from an outage —
+ * everything else recovered correctly and the song still started again.
+ */
+export async function playOnDevice(
+  deviceId: string,
+  trackUri: string,
+  positionMs = 0,
+): Promise<void> {
   await request(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
     method: 'PUT',
-    body: JSON.stringify({ uris: [trackUri] }),
+    body: JSON.stringify({
+      uris: [trackUri],
+      position_ms: Math.max(0, Math.round(positionMs)),
+    }),
   });
 }

@@ -286,3 +286,45 @@ describe('not asking the same thing twice', () => {
     expect(calls).toHaveLength(2);
   });
 });
+
+describe('starting a track on a device', () => {
+  /** `fetch`, keeping the body as well as the URL. */
+  function stubPlay() {
+    const sent: Array<Record<string, unknown>> = [];
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      calls.push(String(url));
+      sent.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    return sent;
+  }
+
+  it('starts at the beginning when nothing says otherwise', async () => {
+    const { playOnDevice } = await freshApi();
+    const sent = stubPlay();
+
+    await playOnDevice('device-1', 'spotify:track:1');
+    expect(sent[0]).toEqual({ uris: ['spotify:track:1'], position_ms: 0 });
+  });
+
+  it('carries the position rather than seeking to it afterwards', async () => {
+    // Coming back from an outage plays the track again from where the clock
+    // froze. Playing and then seeking is two operations racing: the seek
+    // reaches the SDK while the track it names is still loading, goes nowhere,
+    // and the listener gets the song from the top — which is what a recovery
+    // that worked in every other respect actually did.
+    const { playOnDevice } = await freshApi();
+    const sent = stubPlay();
+
+    await playOnDevice('device-1', 'spotify:track:1', 9_412.6);
+    expect(sent[0]).toEqual({ uris: ['spotify:track:1'], position_ms: 9_413 });
+  });
+
+  it('never asks Spotify to start before the beginning', async () => {
+    const { playOnDevice } = await freshApi();
+    const sent = stubPlay();
+
+    await playOnDevice('device-1', 'spotify:track:1', -50);
+    expect(sent[0]).toMatchObject({ position_ms: 0 });
+  });
+});
