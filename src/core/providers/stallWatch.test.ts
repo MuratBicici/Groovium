@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { STALL_AFTER, freshWatch, hasRecovered, hasStalled, observe, type Watch } from './stallWatch';
+import {
+  GIVE_UP_AFTER_MS,
+  RESTART_ATTEMPTS,
+  STALL_AFTER,
+  STALL_PATIENCE_MS,
+  VERIFY_ALERT_MS,
+  VERIFY_CALM_MS,
+  VERIFY_LOST_MS,
+  freshWatch,
+  giveUpReason,
+  hasRecovered,
+  hasStalled,
+  observe,
+  verifyGap,
+  type Watch,
+} from './stallWatch';
 
 /**
  * Pull the network mid-song and Spotify goes quiet, but the local clock does
@@ -81,5 +96,56 @@ describe('the first look', () => {
 
   it('counts against playback if the SDK cannot answer even once', () => {
     expect(observe(freshWatch, null).still).toBe(1);
+  });
+});
+
+describe('how often to ask', () => {
+  const now = 1_700_000_000_000;
+
+  it('asks slowly while nothing looks wrong', () => {
+    expect(verifyGap(false, 0, now)).toBe(VERIFY_CALM_MS);
+  });
+
+  it('asks quickly the moment something does', () => {
+    expect(verifyGap(true, 0, now)).toBe(VERIFY_ALERT_MS);
+    expect(verifyGap(true, now - 1000, now)).toBe(VERIFY_ALERT_MS);
+  });
+
+  it('slows down again once a silence stops being a blip', () => {
+    // The one loop in this app with no natural end. Thirty requests a minute
+    // is right for the seconds that decide whether an outage is over and wrong
+    // for a laptop left open on a dead network.
+    expect(verifyGap(true, now - (STALL_PATIENCE_MS + 1), now)).toBe(VERIFY_LOST_MS);
+  });
+
+  it('does not count a stall that is not happening', () => {
+    // `stalledSince` is zero when nothing is wrong, and zero is not a very old
+    // stall — which, read as a timestamp, is exactly what it would look like.
+    expect(verifyGap(true, 0, now)).toBe(VERIFY_ALERT_MS);
+  });
+});
+
+describe('when to stop waiting', () => {
+  const now = 1_700_000_000_000;
+
+  it('keeps watching through an ordinary outage', () => {
+    expect(giveUpReason(now - 20_000, 0, now)).toBeNull();
+    expect(giveUpReason(now - 60_000, RESTART_ATTEMPTS - 1, now)).toBeNull();
+  });
+
+  it('stops once the silence has outlasted any recovery', () => {
+    expect(giveUpReason(now - (GIVE_UP_AFTER_MS + 1), 0, now)).not.toBeNull();
+  });
+
+  it('stops asking Spotify to play when Spotify keeps declining', () => {
+    // The loop this exists for: Spotify answering, saying nothing is playing,
+    // being asked to play, and answering the same way — two requests every two
+    // seconds for as long as the window is open. A lapsed subscription and a
+    // track the account cannot play both sit here and neither ends by waiting.
+    expect(giveUpReason(now - 10_000, RESTART_ATTEMPTS, now)).not.toBeNull();
+  });
+
+  it('says nothing about a silence that has not started', () => {
+    expect(giveUpReason(0, 0, now)).toBeNull();
   });
 });

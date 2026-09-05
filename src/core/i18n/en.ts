@@ -141,6 +141,7 @@ export const en = {
   'spotify.loadingPlaylists': 'Fetching your playlists…',
   'spotify.noPlaylists': 'No playlists here yet. Ones you make on Spotify show up here.',
   'spotify.crateEmpty': 'Nothing in here can be played.',
+  'spotify.gaveUp': 'Spotify stopped and would not start again. Press play to try once more.',
   /** The sleeve is empty because this record is on the deck. */
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',

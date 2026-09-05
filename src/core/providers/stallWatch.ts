@@ -61,6 +61,51 @@ export const VERIFY_ALERT_MS = 2000;
 export const VERIFY_CALM_MS = 12_000;
 
 /**
+ * How often to ask once a stall has stopped looking like a blip.
+ *
+ * The fast cadence is for the moment something goes wrong, when the next few
+ * answers decide whether it is over. An outage that has lasted half a minute is
+ * not that moment any more, and thirty requests a minute for as long as it
+ * lasts is the one loop in this app with no natural end — a laptop left open on
+ * a dead network would spend the day asking.
+ *
+ * Every one of those still costs. It is tempting to think an outage is free
+ * because the requests do not arrive, and that is true of a severed route and
+ * untrue of the case that actually happens: Spotify reachable and answering
+ * with an error, which counts exactly like any other request.
+ */
+export const VERIFY_LOST_MS = 15_000;
+
+/** How long a stall is treated as a blip worth watching closely. */
+export const STALL_PATIENCE_MS = 30_000;
+
+/**
+ * How long to keep trying before letting the silence stand.
+ *
+ * Nothing here recovers on its own after ten minutes. Either the network came
+ * back long ago and something else is wrong, or the listener has gone. Both are
+ * better answered by stopping and saying so than by asking Spotify the same
+ * question until the app is closed — and a player that quietly resumes music
+ * ten minutes into a silence is not what anybody wanted either.
+ */
+export const GIVE_UP_AFTER_MS = 10 * 60_000;
+
+/**
+ * How many times to ask Spotify to start again before believing it.
+ *
+ * This path is not an outage: Spotify is answering, and it is saying nothing is
+ * playing. Asking it to play, being told again that nothing is playing, and
+ * asking again is a loop that was bounded by nothing at all — two requests
+ * every two seconds, thirty-six hundred an hour, for as long as the window was
+ * open. A lapsed subscription, a track the account cannot play, or a device id
+ * Spotify has forgotten all sit in it and none of them resolve by waiting.
+ *
+ * Five, because a genuine outage ending needs one or two and anything that
+ * needs six was never going to work.
+ */
+export const RESTART_ATTEMPTS = 5;
+
+/**
  * Consecutive checks finding nothing playing before it is called stalled.
  *
  * This is the patient path, for Spotify answering that it is not playing —
@@ -71,6 +116,45 @@ export const VERIFY_CALM_MS = 12_000;
  * ambiguous and the provider acts on it immediately.
  */
 export const STALL_AFTER = 2;
+
+/**
+ * How long until the next check.
+ *
+ * Three cadences rather than two. Fast while something has just looked wrong
+ * and the next answer decides whether it is over; slow while everything is
+ * fine; slower again once a silence has lasted past `STALL_PATIENCE_MS` — the
+ * only one of the three with no natural end, and so the only one where the
+ * rate is the whole of the cost.
+ *
+ * `stalledSince` is zero when nothing is wrong.
+ */
+export function verifyGap(alert: boolean, stalledSince: number, now = Date.now()): number {
+  if (!alert) return VERIFY_CALM_MS;
+  if (stalledSince > 0 && now - stalledSince > STALL_PATIENCE_MS) return VERIFY_LOST_MS;
+  return VERIFY_ALERT_MS;
+}
+
+/**
+ * Whether a silence is still worth watching, and why not when it is not.
+ *
+ * The two ways this used to run forever, in one place. A stall that has lasted
+ * ten minutes is not ending; and Spotify answering "nothing is playing" five
+ * times after five requests to play is Spotify declining rather than
+ * recovering.
+ *
+ * Null means carry on.
+ */
+export function giveUpReason(
+  stalledSince: number,
+  restartsTried: number,
+  now = Date.now(),
+): string | null {
+  if (stalledSince > 0 && now - stalledSince > GIVE_UP_AFTER_MS) {
+    return 'the silence outlasted the watching';
+  }
+  if (restartsTried >= RESTART_ATTEMPTS) return 'Spotify would not start again';
+  return null;
+}
 
 export interface Watch {
   /** Where Spotify last said it was, or null before the first look. */

@@ -1,13 +1,14 @@
 import type { AuthResult, SourceType } from '@/core/types';
 import { beginAuth, accessToken, isAuthenticated } from '@/core/security/spotifyAuth';
 import { clamp } from '@/core/utils/time';
+import { say } from '@/core/i18n';
 import {
-  VERIFY_ALERT_MS,
-  VERIFY_CALM_MS,
   freshWatch,
+  giveUpReason,
   hasRecovered,
   hasStalled,
   observe,
+  verifyGap,
   type Watch,
 } from './stallWatch';
 import { BaseProvider } from './BaseProvider';
@@ -148,6 +149,17 @@ export class SpotifyProvider extends BaseProvider {
   private playing: string | null = null;
   /** One restart attempt at a time. */
   private restarting = false;
+  /**
+   * When the current silence began, and how many times playing has been asked
+   * for since.
+   *
+   * Both are ceilings on a loop that had none. The watchdog's whole design is
+   * to keep asking until the music comes back, which is right for a blip and
+   * is, for anything that will not recover, a request every two seconds until
+   * the window is closed.
+   */
+  private stalledSince = 0;
+  private restartsTried = 0;
   /** Whether the silence was this provider's doing, and so is its to undo. */
   private pausedByStall = false;
 
@@ -489,7 +501,7 @@ export class SpotifyProvider extends BaseProvider {
       void this.verify().finally(() => {
         if (this.verifier) this.scheduleVerify();
       });
-    }, this.alert ? VERIFY_ALERT_MS : VERIFY_CALM_MS);
+    }, verifyGap(this.alert, this.stalledSince));
   }
 
   /** Something looked wrong: check often until it stops looking wrong. */
@@ -507,6 +519,29 @@ export class SpotifyProvider extends BaseProvider {
     }
     this.watch = freshWatch;
     this.stalled = false;
+    this.stalledSince = 0;
+    this.restartsTried = 0;
+  }
+
+  /**
+   * Stop waiting for music that is not coming back.
+   *
+   * The watchdog is built to keep asking, which is right up to a point and past
+   * it is an app talking to Spotify about a listener who left. Everything stops
+   * — the clock, the checking, the asking to play again — and the silence is
+   * reported rather than papered over, because a player that says PLAYING over
+   * nothing is the fault this whole file exists to prevent.
+   *
+   * Left paused rather than idle: what was loaded is still loaded, and pressing
+   * play starts the whole watch again from the top.
+   */
+  private giveUp(why: string): void {
+    this.report(`gave up: ${why}`);
+    this.stopTicker();
+    this.stopVerifier();
+    this.pausedByStall = false;
+    this.setState('PAUSED');
+    this.emit({ type: 'error', error: say('spotify.gaveUp') });
   }
 
   /**
@@ -555,6 +590,15 @@ export class SpotifyProvider extends BaseProvider {
     // Spotify is asked, rather than anything local being read. The provider's
     // clock is extrapolated and so is the SDK's — both go on counting through
     // an outage, which is why two earlier versions of this never fired.
+    // Before anything is asked of Spotify. Both ceilings live in `stallWatch`
+    // with the rest of the rules about a sequence of observations, where they
+    // can be tested without an SDK, a subscription and a network cable to pull.
+    const done = this.stalled ? giveUpReason(this.stalledSince, this.restartsTried) : null;
+    if (done) {
+      this.giveUp(done);
+      return;
+    }
+
     const playback = await currentPlayback();
 
     // No answer is not ambiguous, and waiting for a second opinion is what
@@ -574,6 +618,9 @@ export class SpotifyProvider extends BaseProvider {
     // — so it has to be asked, at the position the clock was frozen at.
     if (this.stalled && !playback.isPlaying) {
       this.alert = true;
+      // Asking again is worth a few tries — the end of an outage looks exactly
+      // like this — and past that it is a loop rather than a recovery. The
+      // count is checked at the top of the next round.
       void this.restartWhereItStopped();
       this.report('asking Spotify to start again', null);
       return;
@@ -624,6 +671,8 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
     this.stalled = false;
+    this.stalledSince = 0;
+    this.restartsTried = 0;
     this.watch = freshWatch;
 
     // Undo the silence this provider caused. Harmless when the track was
@@ -652,6 +701,7 @@ export class SpotifyProvider extends BaseProvider {
   private async restartWhereItStopped(): Promise<void> {
     if (this.restarting || !this.playing || !this.deviceId) return;
     this.restarting = true;
+    this.restartsTried += 1;
     const at = this.positionMs;
     try {
       // Starting the track again supersedes the pause that the stall applied.
@@ -669,6 +719,8 @@ export class SpotifyProvider extends BaseProvider {
   private enterStall(why: string): void {
     if (this.stalled || this.state !== 'PLAYING') return;
     this.stalled = true;
+    this.stalledSince = Date.now();
+    this.restartsTried = 0;
     this.stopTicker();
 
     // Stop the sound, not just the picture. The outage is caught inside a
