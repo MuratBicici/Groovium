@@ -82,11 +82,11 @@ export async function setWindowSize(width: number, height: number, dx = 0): Prom
   const w = Math.round(width);
   const h = Math.round(height);
 
-  // Anything that moves the window goes through Rust, where the move and the
-  // resize are one `SetWindowPos` rather than two calls with a presented frame
-  // between them. The drawer opening leftwards changes the width and the x by
-  // the same amount, and either of them landing alone puts the player six
-  // hundred and eighty pixels from where it was for that frame.
+  // Anything that moves the window goes through Rust, where the resize and the
+  // move happen microseconds apart inside one command rather than across two
+  // IPC round trips. The drawer opening leftwards changes the width and the x
+  // by the same amount, and either of them landing a frame before the other
+  // puts the player six hundred and eighty pixels from where it was.
   if (dx !== 0) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');

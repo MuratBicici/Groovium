@@ -24,7 +24,8 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
-import { useShellSize } from '@/components/controls/useShellSize';
+import { DURATION_MS, useShellSize } from '@/components/controls/useShellSize';
+import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
@@ -98,7 +99,17 @@ export default function App() {
 
   const compact = useSettingsStore((s) => s.compact);
   const drawerOpen = useSettingsStore((s) => s.drawerOpen);
-  const drawerSide = useSettingsStore((s) => s.drawerSide);
+  const chosenSide = useSettingsStore((s) => s.drawerSide);
+  /**
+   * The side the window is laid out for, which lags the setting through a swap.
+   *
+   * Changing sides with the drawer already out used to move the whole window
+   * sideways in one go, and a window teleporting six hundred and eighty pixels
+   * is not an animation. It reads as what it is instead: the drawer shuts on
+   * the side it was on, and opens on the other one.
+   */
+  const [drawerSide, setDrawerSide] = useState(chosenSide);
+  const [swapping, setSwapping] = useState(false);
   const setDrawerOpen = useSettingsStore((s) => s.setDrawerOpen);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
@@ -111,7 +122,28 @@ export default function App() {
   // What was chosen, and what is on screen. Collapsing hides the drawer without
   // answering for it, the same way `shown` hides a panel without forgetting
   // which one was open — so expanding brings back whatever was out.
-  const wide = drawerOpen && !compact;
+  const wide = drawerOpen && !compact && !swapping;
+
+  // Adjusted during render rather than in an effect, which is React's own
+  // guidance for state derived from something else — and the shape the drawer's
+  // own close already uses in `useShellSize`.
+  if (chosenSide !== drawerSide && !swapping) {
+    // Nothing on screen to move: take the new side straight away.
+    if (drawerOpen && !compact) setSwapping(true);
+    else setDrawerSide(chosenSide);
+  }
+
+  useEffect(() => {
+    if (!swapping) return;
+    const timer = setTimeout(
+      () => {
+        setDrawerSide(chosenSide);
+        setSwapping(false);
+      },
+      prefersReducedMotion() ? 0 : DURATION_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [swapping, chosenSide]);
   const { shellRef, stageRef, trackRef, bottomRef, drawerPresent } = useShellSize(
     compact,
     wide,

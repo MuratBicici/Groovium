@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import type { DrawerSide } from '@/core/settings';
-import { DRAWER_WIDTH, EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
+import { EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
 
 /**
  * Collapsing the widget to its controls, and opening it back up.
@@ -50,7 +50,7 @@ import { DRAWER_WIDTH, EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platfo
  * they will end up, and only the box around them moves.
  */
 
-const DURATION_MS = 260;
+export const DURATION_MS = 260;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
 export function useShellSize(
@@ -98,7 +98,6 @@ export function useShellSize(
 
   const was = useRef(compact);
   const wasWide = useRef(wide);
-  const wasSide = useRef(side);
   const applied = useRef(false);
   /** The current state's geometry, taken while it is at rest. */
   const settled = useRef<{
@@ -124,26 +123,6 @@ export function useShellSize(
       rects: morphRects(shell),
     };
   };
-
-  /**
-   * Swapping sides while the drawer is out.
-   *
-   * Neither edge of the window survives this — the player has to stay put, so
-   * the whole window slides by the drawer's width without changing size. It is
-   * the one move that belongs to no anchor, which is why the Rust side takes a
-   * distance rather than a side.
-   */
-  useLayoutEffect(() => {
-    if (wasSide.current === side) return;
-    const moved = wasSide.current;
-    wasSide.current = side;
-    if (!wide || !ready) return;
-    void setWindowSize(
-      width,
-      EXPANDED_HEIGHT,
-      moved === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH,
-    );
-  }, [side, wide, ready, width]);
 
   useLayoutEffect(() => {
     const shell = shellRef.current;

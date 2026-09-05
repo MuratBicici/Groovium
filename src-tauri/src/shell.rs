@@ -1,28 +1,27 @@
-//! Moving and resizing the window as one operation.
+//! Moving and resizing the window together.
 //!
-//! Tauri offers `set_position` and `set_size` and nothing that does both, which
-//! is fine until the two have to agree. Opening the drawer on the left keeps
-//! the window's *right* edge still, so its width and its x change together and
-//! by the same amount — and either order leaves an instant where one has landed
-//! and the other has not. On Windows that instant is a presented frame, and a
-//! frame with the player six hundred and eighty pixels from where it was is
-//! precisely the flicker this exists to remove.
+//! Opening the drawer on the left keeps the window's *right* edge still, so its
+//! width and its x change by the same amount and have to agree. Tauri offers
+//! `set_position` and `set_size` and nothing that does both, so this does them
+//! back to back inside one command — microseconds apart, and well inside the
+//! frame the compositor is going to present.
 //!
-//! `SetWindowPos` takes both and is one call. Everywhere else falls back to the
-//! two, which is what the platform offers.
+//! It was one `SetWindowPos` before that, which is genuinely atomic and looked
+//! like the better answer. It was not: moving the top-level window that way
+//! leaves the WebView2 child where it was until Tauri hears about it, and the
+//! window blinked out for a frame on every open and close. Going through Tauri
+//! means the webview is moved with the window rather than after it.
 
-use tauri::Window;
+use tauri::{PhysicalPosition, PhysicalSize, Window};
 
-/// Resize the window and move its left edge by `dx`, together.
+/// Resize the window and move its left edge by `dx`, in that order.
 ///
 /// `dx` is how far the left edge travels, in logical pixels. Zero is an
 /// ordinary resize. Minus the width gained is the drawer opening leftwards: the
-/// right edge stays where it is, so the player underneath does not move. And a
-/// `dx` with no change of width at all is the drawer swapping sides while it is
-/// open, which is a pure translation and belongs to neither anchor.
+/// right edge stays where it is, so the player underneath does not move.
 ///
-/// The frontend supplies it rather than this working it out, because the
-/// frontend is where the widths come from — it knows what the window is
+/// The frontend supplies the distance rather than this working it out, because
+/// the frontend is where the widths come from — it knows what the window is
 /// changing from as well as to, and a second opinion here could only disagree.
 ///
 /// Where the window is *now* is read here, which keeps the frontend from
@@ -31,51 +30,19 @@ use tauri::Window;
 pub fn set_window_box(window: Window, width: f64, height: f64, dx: f64) -> Result<(), String> {
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let at = window.outer_position().map_err(|e| e.to_string())?;
+    let px = |v: f64| (v * scale).round() as i32;
 
-    place(
-        &window,
-        at.x + (dx * scale).round() as i32,
-        at.y,
-        (width * scale).round() as i32,
-        (height * scale).round() as i32,
-    )
-}
-
-#[cfg(windows)]
-fn place(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), String> {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER,
-    };
-
-    let handle = window.hwnd().map_err(|e| e.to_string())?;
-    // Safety: the handle comes from the window this call is about, and it is
-    // alive for the duration — the command holds it.
-    unsafe {
-        SetWindowPos(
-            HWND(handle.0 as *mut _),
-            None,
-            x,
-            y,
-            width,
-            height,
-            SWP_NOZORDER | SWP_NOACTIVATE,
-        )
-        .map_err(|e| e.to_string())
-    }
-}
-
-#[cfg(not(windows))]
-fn place(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), String> {
-    use tauri::{PhysicalPosition, PhysicalSize};
-
-    // Size first, then position. Growing to the right and then sliding left
-    // shows a frame of window that was going to be there anyway; the other
-    // order shows a frame of the window somewhere it never belongs.
+    // Size first. Growing to the right briefly covers ground the window is
+    // about to occupy anyway; moving first would put it somewhere it never
+    // belongs. Neither is normally seen — the webview lays out on the next
+    // frame, by which time both have landed.
     window
-        .set_size(PhysicalSize::new(width.max(1) as u32, height.max(1) as u32))
+        .set_size(PhysicalSize::new(
+            px(width).max(1) as u32,
+            px(height).max(1) as u32,
+        ))
         .map_err(|e| e.to_string())?;
     window
-        .set_position(PhysicalPosition::new(x, y))
+        .set_position(PhysicalPosition::new(at.x + px(dx), at.y))
         .map_err(|e| e.to_string())
 }
