@@ -127,20 +127,60 @@ export const RESTART_ATTEMPTS = 5;
 export const STALL_AFTER = 2;
 
 /**
+ * How soon to look again once Spotify has taken a restart.
+ *
+ * Recovery is not "Spotify accepted the request" — that is the command
+ * registering, and the SDK's own playing flag flips at the same useless
+ * moment. Recovery is Spotify reporting a position that has *moved*, which is
+ * the only evidence available that audio is actually coming out.
+ *
+ * So the wait after a restart is a round trip rather than a cadence. At the
+ * two-second pace the sound came back and the window said "loading" for two
+ * more seconds; before that, needing two observations, four.
+ */
+export const VERIFY_CONFIRM_MS = 600;
+
+/** How many quick looks a restart earns before the ordinary pace resumes. */
+export const CONFIRM_CHECKS = 5;
+
+export interface Pacing {
+  /** Something looked wrong, and the next few answers decide whether it is over. */
+  alert: boolean;
+  /** When the current silence began, or zero when there is not one. */
+  stalledSince: number;
+  /** A restart Spotify has accepted, still waiting to be heard. */
+  confirming?: boolean;
+}
+
+/**
  * How long until the next check.
  *
- * Three cadences rather than two. Fast while something has just looked wrong
- * and the next answer decides whether it is over; slow while everything is
- * fine; slower again once a silence has lasted past `STALL_PATIENCE_MS` — the
- * only one of the three with no natural end, and so the only one where the
- * rate is the whole of the cost.
- *
- * `stalledSince` is zero when nothing is wrong.
+ * Four cadences. A round trip while a restart is waiting to be confirmed;
+ * fast while something has just looked wrong and the next answer decides
+ * whether it is over; slow while everything is fine; slower again once a
+ * silence has lasted past `STALL_PATIENCE_MS` — the only one with no natural
+ * end, and so the only one where the rate is the whole of the cost.
  */
-export function verifyGap(alert: boolean, stalledSince: number, now = Date.now()): number {
-  if (!alert) return VERIFY_CALM_MS;
-  if (stalledSince > 0 && now - stalledSince > STALL_PATIENCE_MS) return VERIFY_LOST_MS;
+export function verifyGap(pacing: Pacing, now = Date.now()): number {
+  if (pacing.confirming) return VERIFY_CONFIRM_MS;
+  if (!pacing.alert) return VERIFY_CALM_MS;
+  if (pacing.stalledSince > 0 && now - pacing.stalledSince > STALL_PATIENCE_MS) {
+    return VERIFY_LOST_MS;
+  }
   return VERIFY_ALERT_MS;
+}
+
+/**
+ * A watch that expects playback to have moved on from `position`.
+ *
+ * Seeded after a restart, so the very next answer can settle it. Without this
+ * the watch comes out of a stall knowing nothing, `hasRecovered` has no
+ * previous reading to compare against, and the first "yes, playing" is thrown
+ * away — recovery needed two answers where it needs one, and the listener
+ * watched a loading spinner over music that was already playing.
+ */
+export function watchingFrom(position: number): Watch {
+  return { seen: position, still: 0 };
 }
 
 /**

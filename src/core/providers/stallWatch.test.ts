@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GIVE_UP_AFTER_MS,
   RESTART_ATTEMPTS,
+  VERIFY_CONFIRM_MS,
   STALL_AFTER,
   STALL_PATIENCE_MS,
   VERIFY_ALERT_MS,
@@ -13,6 +14,7 @@ import {
   hasStalled,
   observe,
   verifyGap,
+  watchingFrom,
   type Watch,
 } from './stallWatch';
 
@@ -103,25 +105,58 @@ describe('how often to ask', () => {
   const now = 1_700_000_000_000;
 
   it('asks slowly while nothing looks wrong', () => {
-    expect(verifyGap(false, 0, now)).toBe(VERIFY_CALM_MS);
+    expect(verifyGap({ alert: false, stalledSince: 0 }, now)).toBe(VERIFY_CALM_MS);
   });
 
   it('asks quickly the moment something does', () => {
-    expect(verifyGap(true, 0, now)).toBe(VERIFY_ALERT_MS);
-    expect(verifyGap(true, now - 1000, now)).toBe(VERIFY_ALERT_MS);
+    expect(verifyGap({ alert: true, stalledSince: 0 }, now)).toBe(VERIFY_ALERT_MS);
+    expect(verifyGap({ alert: true, stalledSince: now - 1000 }, now)).toBe(VERIFY_ALERT_MS);
   });
 
   it('slows down again once a silence stops being a blip', () => {
     // The one loop in this app with no natural end. Thirty requests a minute
     // is right for the seconds that decide whether an outage is over and wrong
     // for a laptop left open on a dead network.
-    expect(verifyGap(true, now - (STALL_PATIENCE_MS + 1), now)).toBe(VERIFY_LOST_MS);
+    const old = { alert: true, stalledSince: now - (STALL_PATIENCE_MS + 1) };
+    expect(verifyGap(old, now)).toBe(VERIFY_LOST_MS);
   });
 
   it('does not count a stall that is not happening', () => {
     // `stalledSince` is zero when nothing is wrong, and zero is not a very old
     // stall — which, read as a timestamp, is exactly what it would look like.
-    expect(verifyGap(true, 0, now)).toBe(VERIFY_ALERT_MS);
+    expect(verifyGap({ alert: true, stalledSince: 0 }, now)).toBe(VERIFY_ALERT_MS);
+  });
+
+  it('waits a round trip, not a cadence, for a restart to be heard', () => {
+    // Spotify accepting the play is the command registering, not sound coming
+    // out. Confirming beats every other pace, including the slow one a long
+    // outage would otherwise be sitting in.
+    const old = now - (STALL_PATIENCE_MS + 1);
+    expect(verifyGap({ alert: true, stalledSince: old, confirming: true }, now)).toBe(
+      VERIFY_CONFIRM_MS,
+    );
+  });
+});
+
+describe('confirming that a restart was heard', () => {
+  it('settles on the first answer that has moved on', () => {
+    // Coming out of a stall the watch has seen nothing, so `hasRecovered` has
+    // nothing to compare against and throws the first "yes, playing" away.
+    // That cost a whole extra check — a loading spinner over music that was
+    // already audible.
+    const blind = observe(freshWatch, null);
+    expect(hasRecovered(blind, 9_500)).toBe(false);
+
+    const seeded = watchingFrom(9_000);
+    expect(hasRecovered(seeded, 9_500)).toBe(true);
+  });
+
+  it('is not fooled by a position that has not moved', () => {
+    expect(hasRecovered(watchingFrom(9_000), 9_000)).toBe(false);
+  });
+
+  it('is not fooled by Spotify saying nothing is playing', () => {
+    expect(hasRecovered(watchingFrom(9_000), null)).toBe(false);
   });
 });
 

@@ -3,12 +3,14 @@ import { beginAuth, accessToken, isAuthenticated } from '@/core/security/spotify
 import { clamp } from '@/core/utils/time';
 import { say } from '@/core/i18n';
 import {
+  CONFIRM_CHECKS,
   freshWatch,
   giveUpReason,
   hasRecovered,
   hasStalled,
   observe,
   verifyGap,
+  watchingFrom,
   type Watch,
 } from './stallWatch';
 import { BaseProvider } from './BaseProvider';
@@ -171,6 +173,13 @@ export class SpotifyProvider extends BaseProvider {
    */
   private stalledSince = 0;
   private restartsTried = 0;
+  /**
+   * Quick looks still owed to a restart Spotify has accepted.
+   *
+   * Bounded, because "ask again in half a second" is a fine way to learn
+   * whether the music came back and a terrible one to wait out an outage.
+   */
+  private confirmsLeft = 0;
   /** Whether the silence was this provider's doing, and so is its to undo. */
   private pausedByStall = false;
 
@@ -452,20 +461,11 @@ export class SpotifyProvider extends BaseProvider {
     if (this.stalled) {
       if (state.duration > 0) this.durationMs = state.duration;
 
-      // With one exception: the SDK saying it is *playing*, while this
-      // provider is not the thing holding it paused.
-      //
-      // What the outage produces is paused-at-zero — that is the lie the guard
-      // exists for — and there is no version of a dropped connection that
-      // reports audio coming out. So this is the device confirming the restart
-      // landed, which it does within a few hundred milliseconds of the sound
-      // returning. Waiting for the next check instead meant the button sat on
-      // "loading" for two seconds after the music was audibly back.
-      if (!state.paused && !this.pausedByStall) {
-        this.leaveStall('the device is playing again', state.position);
-        return;
-      }
-
+      // No exception for a state that says playing, which was tried and is
+      // wrong in the other direction: the SDK sets that flag when the play
+      // command registers, not when audio comes out, so the window said
+      // playing the instant the network returned and then sat silent. Nothing
+      // local knows whether there is sound. That is the premise of this file.
       this.report('ignored an SDK state while stalled');
       return;
     }
@@ -568,7 +568,11 @@ export class SpotifyProvider extends BaseProvider {
       void this.verify().finally(() => {
         if (this.verifier) this.scheduleVerify();
       });
-    }, verifyGap(this.alert, this.stalledSince));
+    }, verifyGap({
+      alert: this.alert,
+      stalledSince: this.stalledSince,
+      confirming: this.confirmsLeft > 0,
+    }));
   }
 
   /** Something looked wrong: check often until it stops looking wrong. */
@@ -588,6 +592,7 @@ export class SpotifyProvider extends BaseProvider {
     this.stalled = false;
     this.stalledSince = 0;
     this.restartsTried = 0;
+    this.confirmsLeft = 0;
   }
 
   /**
@@ -668,6 +673,7 @@ export class SpotifyProvider extends BaseProvider {
       this.giveUp(done);
       return;
     }
+    if (this.confirmsLeft > 0) this.confirmsLeft -= 1;
 
     const playback = await currentPlayback();
 
@@ -743,6 +749,7 @@ export class SpotifyProvider extends BaseProvider {
     this.stalled = false;
     this.stalledSince = 0;
     this.restartsTried = 0;
+    this.confirmsLeft = 0;
     this.watch = freshWatch;
 
     // Undo the silence this provider caused. Harmless when the track was
@@ -787,6 +794,12 @@ export class SpotifyProvider extends BaseProvider {
       // arrived says nothing about whether Spotify would have played.
       this.restartsTried += 1;
       this.positionMs = at;
+      // Spotify has the track and the position. What is not yet known is
+      // whether any sound is coming out, and the only thing that can say so is
+      // Spotify reporting a position past this one. Ask soon, and ask with
+      // something to compare against.
+      this.watch = watchingFrom(at);
+      this.confirmsLeft = CONFIRM_CHECKS;
     } catch {
       // Still out. The next check will try again.
     } finally {
@@ -799,6 +812,7 @@ export class SpotifyProvider extends BaseProvider {
     this.stalled = true;
     this.stalledSince = Date.now();
     this.restartsTried = 0;
+    this.confirmsLeft = 0;
     this.stopTicker();
 
     // Stop the sound, not just the picture. The outage is caught inside a
