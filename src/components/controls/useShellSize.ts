@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
+import type { DrawerSide } from '@/core/settings';
+import { DRAWER_WIDTH, EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
 
 /**
  * Collapsing the widget to its controls, and opening it back up.
@@ -52,7 +53,12 @@ import { EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
 const DURATION_MS = 260;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
-export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
+export function useShellSize(
+  compact: boolean,
+  wide: boolean,
+  ready: boolean,
+  side: DrawerSide,
+) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +98,7 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
 
   const was = useRef(compact);
   const wasWide = useRef(wide);
+  const wasSide = useRef(side);
   const applied = useRef(false);
   /** The current state's geometry, taken while it is at rest. */
   const settled = useRef<{
@@ -118,12 +125,42 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
     };
   };
 
+  /**
+   * Swapping sides while the drawer is out.
+   *
+   * Neither edge of the window survives this — the player has to stay put, so
+   * the whole window slides by the drawer's width without changing size. It is
+   * the one move that belongs to no anchor, which is why the Rust side takes a
+   * distance rather than a side.
+   */
+  useLayoutEffect(() => {
+    if (wasSide.current === side) return;
+    const moved = wasSide.current;
+    wasSide.current = side;
+    if (!wide || !ready) return;
+    void setWindowSize(
+      width,
+      EXPANDED_HEIGHT,
+      moved === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH,
+    );
+  }, [side, wide, ready, width]);
+
   useLayoutEffect(() => {
     const shell = shellRef.current;
     const stage = stageRef.current;
     const track = trackRef.current;
     const bottom = bottomRef.current;
     if (!shell || !stage || !track || !bottom) return;
+
+    /**
+     * How far the window's left edge must travel to hold its right edge still.
+     *
+     * Zero when the drawer opens to the right, which is a plain resize.
+     * Opening to the left, the window gains width on its left side, so the
+     * edge moves by exactly what the width gained — and the player, drawn
+     * against the far edge, does not move at all.
+     */
+    const hold = (from: number, to: number) => (side === 'left' ? from - to : 0);
 
     // Starting collapsed, from a stored preference. The window opens at the
     // size in `tauri.conf.json` every time — the state plugin saves position
@@ -178,15 +215,16 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
     // for the duration, or the shell would animate past its edge and be cut
     // off. Shrinking, the surplus is transparent and nobody sees it; the exact
     // size is set at the far end.
-    void setWindowSize(Math.max(fromWidth, width), EXPANDED_HEIGHT);
+    const wideEnough = Math.max(fromWidth, width);
+    void setWindowSize(wideEnough, EXPANDED_HEIGHT, hold(fromWidth, wideEnough));
 
     if (prefersReducedMotion()) {
       shell.style.width = '';
       if (compact) {
         shell.style.height = 'auto';
-        void setWindowSize(width, chrome + to.stage + to.bottom);
+        void setWindowSize(width, chrome + to.stage + to.bottom, hold(wideEnough, width));
       } else {
-        void setWindowSize(width, EXPANDED_HEIGHT);
+        void setWindowSize(width, EXPANDED_HEIGHT, hold(wideEnough, width));
       }
       record();
       return;
@@ -266,7 +304,11 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
       // ends up exactly as tall as what it is showing. Expanded, the height is
       // known and only the width needed correcting from the larger of the two.
       if (shellRef.current) {
-        void setWindowSize(width, compact ? shellRef.current.offsetHeight : EXPANDED_HEIGHT);
+        void setWindowSize(
+          width,
+          compact ? shellRef.current.offsetHeight : EXPANDED_HEIGHT,
+          hold(wideEnough, width),
+        );
       }
       record();
     }, DURATION_MS + 40);
@@ -280,7 +322,7 @@ export function useShellSize(compact: boolean, wide: boolean, ready: boolean) {
     // guard above returns before anything is animated. What it must not do is
     // go stale: the next collapse has to resize to the width the window
     // actually has, not the one it had when the panel was last toggled.
-  }, [compact, wide, ready, width]);
+  }, [compact, wide, ready, width, side]);
 
   return { shellRef, stageRef, trackRef, bottomRef, drawerPresent };
 }

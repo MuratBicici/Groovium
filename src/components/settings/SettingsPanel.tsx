@@ -56,9 +56,11 @@ export function SettingsPanel({
   const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
   const boostContrast = useSettingsStore((s) => s.boostContrast);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
+  const drawerSide = useSettingsStore((s) => s.drawerSide);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
+  const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
@@ -258,6 +260,26 @@ export function SettingsPanel({
             on={visualizer}
             onChange={setVisualizer}
           />
+
+          {/* Two buttons rather than a toggle. A switch would have to be
+              labelled for one of the two sides and read as off for the other,
+              and neither side is the absence of the other. */}
+          <div className="flex flex-col gap-1.5">
+            <div>
+              <p className="text-body font-medium text-cream-50">{t('settings.drawerSide')}</p>
+              <p className="text-meta leading-snug text-cream-300">
+                {t('settings.drawerSideHint')}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <Choice active={drawerSide === 'left'} onClick={() => setDrawerSide('left')}>
+                {t('settings.drawerSideLeft')}
+              </Choice>
+              <Choice active={drawerSide === 'right'} onClick={() => setDrawerSide('right')}>
+                {t('settings.drawerSideRight')}
+              </Choice>
+            </div>
+          </div>
         </Section>
 
         <Section title={t('settings.language')}>

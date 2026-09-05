@@ -229,6 +229,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.boostContrast': 'Okunabilirliği artır',
   'settings.boostContrastHint':
     'Yazıyı zeminine karşı güçlendirir, en çok da ikincil yazıyı. Başka hiçbir renk değişmez.',
+  'settings.drawerSide': 'Çekmece yönü',
+  'settings.drawerSideHint':
+    'Spotify çekmecesinin oynatıcının hangi yanından açılacağı. Pencere yer açmak için o yöne doğru büyür, bu yüzden yanında boşluk olan tarafı seçin.',
+  'settings.drawerSideLeft': 'Sol',
+  'settings.drawerSideRight': 'Sağ',
   'settings.windowBorder': 'Pencere çerçevesi',
   'settings.windowBorderHint': 'Vurgu renginde ince bir kenar çizgisi.',
   /** The bars behind the deck. The hint has to say what it listens to. */

@@ -45,6 +45,16 @@ export interface Settings {
    */
   drawerOpen: boolean;
   /**
+   * Which side of the player the drawer comes out of.
+   *
+   * The window grows sideways to make room, and which edge stays still is the
+   * whole of the difference: opening right moves the right edge, opening left
+   * moves the left one so the player stays where the eye left it. Worth having
+   * because a widget parked near the right edge of a screen has nowhere to grow
+   * to the right.
+   */
+  drawerSide: DrawerSide;
+  /**
    * The two colours a hand-rolled palette is built from.
    *
    * Kept even while a preset is selected, so switching away and back does not
@@ -97,6 +107,8 @@ export interface Settings {
   declinedVersion: string | null;
 }
 
+export type DrawerSide = 'left' | 'right';
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: null,
   language: null,
@@ -104,6 +116,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alwaysOnTop: false,
   compact: false,
   drawerOpen: false,
+  drawerSide: 'right',
   customPrimary: null,
   customSecondary: null,
   boostContrast: false,
@@ -122,7 +135,12 @@ export async function loadSettings(): Promise<Settings> {
     // Spread over the defaults rather than trusting the payload: a config file
     // is editable by hand, and a missing field should read as its default
     // instead of arriving as `undefined` and being written back that way.
-    return { ...DEFAULT_SETTINGS, ...stored };
+    const settings = { ...DEFAULT_SETTINGS, ...stored };
+    // And the same argument one step further for the one field with a shape
+    // narrower than its type. `drawerSide` decides which way the window grows;
+    // a word nobody recognises would leave it growing in neither.
+    if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
+    return settings;
   } catch (err) {
     console.warn('[settings] could not load settings', err);
     return DEFAULT_SETTINGS;

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/core/settings', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/core/settings')>()),
@@ -36,6 +36,7 @@ describe('remembering that a version has been shown', () => {
       alwaysOnTop: true,
       compact: true,
       drawerOpen: true,
+      drawerSide: 'left',
       customPrimary: '#123456',
       customSecondary: '#654321',
       boostContrast: true,
@@ -53,6 +54,7 @@ describe('remembering that a version has been shown', () => {
       alwaysOnTop: true,
       compact: true,
       drawerOpen: true,
+      drawerSide: 'left',
       customPrimary: '#123456',
       customSecondary: '#654321',
       boostContrast: true,
@@ -137,5 +139,38 @@ describe('collapsing the window', () => {
     useSettingsStore.setState({ compact: true, drawerOpen: false });
     useSettingsStore.getState().setCompact(false);
     expect(lastWrite()).toMatchObject({ compact: false, drawerOpen: false });
+  });
+});
+
+describe('reading a config file somebody has edited', () => {
+  const stored = (settings: Record<string, unknown>) => {
+    vi.stubGlobal('window', { __TAURI_INTERNALS__: {} });
+    vi.doMock('@tauri-apps/api/core', () => ({ invoke: async () => settings }));
+  };
+
+  afterEach(() => {
+    vi.doUnmock('@tauri-apps/api/core');
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps a side it recognises', async () => {
+    stored({ drawerSide: 'left' });
+    const { loadSettings } = await import('@/core/settings');
+    expect((await loadSettings()).drawerSide).toBe('left');
+  });
+
+  it('opens on the right when the side is not a side', async () => {
+    // `config.json` is a file on somebody's disk and this one field decides
+    // which way the window grows. A word nobody recognises would leave it
+    // growing in neither direction.
+    stored({ drawerSide: 'up' });
+    const { loadSettings } = await import('@/core/settings');
+    expect((await loadSettings()).drawerSide).toBe('right');
+  });
+
+  it('opens on the right when the field is not there at all', async () => {
+    stored({});
+    const { loadSettings } = await import('@/core/settings');
+    expect((await loadSettings()).drawerSide).toBe('right');
   });
 });

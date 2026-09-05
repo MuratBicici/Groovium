@@ -98,6 +98,7 @@ export default function App() {
 
   const compact = useSettingsStore((s) => s.compact);
   const drawerOpen = useSettingsStore((s) => s.drawerOpen);
+  const drawerSide = useSettingsStore((s) => s.drawerSide);
   const setDrawerOpen = useSettingsStore((s) => s.setDrawerOpen);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
@@ -115,6 +116,7 @@ export default function App() {
     compact,
     wide,
     settingsReady,
+    drawerSide,
   );
 
   const [overlay, setOverlay] = useState<Overlay>('none');
@@ -249,7 +251,15 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
-      className="relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900"
+      // `ml-auto` when the drawer is on the left, which is what makes the shell
+      // grow leftwards inside a window that is already wide enough. The window
+      // moves at the same instant it is resized, so the far edge — the one the
+      // player is drawn against — never moves at all. Without this the shell
+      // would stay pinned to the window's left edge and the player would jump
+      // there with it.
+      className={`relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ${
+        drawerSide === 'left' ? 'ml-auto' : ''
+      }`}
     >
       <PlaylistPickerProvider>
       <Visualizer on={visualizer} />
@@ -264,7 +274,7 @@ export default function App() {
           A row inside the shell rather than turning the shell itself sideways:
           `useCompactShell` reads the shell's height as chrome + stage + bottom,
           and that arithmetic only holds while the shell is a column. */}
-      <div className="flex min-h-0 flex-1">
+      <div className={`flex min-h-0 flex-1 ${drawerSide === 'left' ? 'flex-row-reverse' : ''}`}>
       {/* The player keeps its designed width whatever else is open, so that
           the shell narrowing around it during the drawer's animation moves
           nothing inside it.

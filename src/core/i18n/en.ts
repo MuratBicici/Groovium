@@ -242,6 +242,11 @@ export const en = {
   'settings.boostContrast': 'Increase readability',
   'settings.boostContrastHint':
     'Strengthens text against its background, secondary text most of all. No other colour changes.',
+  'settings.drawerSide': 'Drawer side',
+  'settings.drawerSideHint':
+    'Which side of the player the Spotify drawer opens on. The window grows that way to make room, so pick the side with space next to it.',
+  'settings.drawerSideLeft': 'Left',
+  'settings.drawerSideRight': 'Right',
   'settings.windowBorder': 'Window border',
   'settings.windowBorderHint': 'A hairline around the widget in the accent colour.',
   /** The bars behind the deck. The hint has to say what it listens to. */

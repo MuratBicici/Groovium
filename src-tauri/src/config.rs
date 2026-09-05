@@ -71,6 +71,15 @@ pub struct Settings {
     /// `compact` is: the window plugin restores position but not size.
     #[serde(default)]
     pub drawer_open: bool,
+    /// Which side of the player the drawer comes out of: `"left"` or `"right"`.
+    ///
+    /// A string rather than a flag, because this file is meant to be readable
+    /// by the person whose file it is, and `"drawerSide": "left"` says what it
+    /// means where `"drawerOnLeft": true` needs the reader to know which way
+    /// round the default was. Anything unrecognised reads as the default on the
+    /// way in, so a typo loses the preference rather than the window.
+    #[serde(default = "right_side")]
+    pub drawer_side: String,
     /// The two colours a hand-rolled palette is built from, as `#rrggbb`.
     /// Only meaningful while `theme` is `custom`, but kept either way so
     /// switching to a preset and back does not lose the choice.
@@ -123,6 +132,7 @@ impl Default for Settings {
             always_on_top: false,
             compact: false,
             drawer_open: false,
+            drawer_side: right_side(),
             custom_primary: None,
             custom_secondary: None,
             boost_contrast: false,
@@ -135,6 +145,14 @@ impl Default for Settings {
 }
 
 /// Serde needs a function rather than a literal for a non-`false` default.
+/// The side a drawer comes out of unless somebody has said otherwise.
+///
+/// Right, because that is where it has always been and because a window near
+/// the left edge of a screen has nowhere to grow the other way.
+fn right_side() -> String {
+    "right".to_owned()
+}
+
 fn on_unless_turned_off() -> bool {
     true
 }
@@ -208,6 +226,14 @@ mod tests {
     }
 
     #[test]
+    fn a_config_from_before_the_drawer_had_a_side_opens_on_the_right() {
+        // Where it has always been. An upgrade must not move somebody's window
+        // because a field appeared.
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert_eq!(config.settings.drawer_side, "right");
+    }
+
+    #[test]
     fn a_missing_field_reads_as_none() {
         let config: AppConfig = serde_json::from_str("{}").expect("empty object parses");
         assert!(config.spotify_client_id.is_none());
@@ -229,6 +255,7 @@ mod tests {
             always_on_top: false,
             compact: true,
             drawer_open: true,
+            drawer_side: "left".into(),
             custom_primary: Some("#2e231b".into()),
             custom_secondary: None,
             boost_contrast: true,

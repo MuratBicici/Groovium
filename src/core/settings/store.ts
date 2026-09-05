@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   loadSettings,
   saveSettings,
+  type DrawerSide,
   type Language,
   type Settings,
 } from '@/core/settings';
@@ -40,6 +41,7 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
+  setDrawerSide: (side: DrawerSide) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
   setBoostContrast: (boost: boolean) => void;
   setWindowBorder: (on: boolean) => void;
@@ -259,7 +261,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   /** Apply, then persist. Never called before `ready`. */
   const commit = (patch: Partial<Settings>) => {
     set(patch);
-    const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen } = get();
+    const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder, visualizer } = get();
     const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -272,6 +274,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       alwaysOnTop,
       compact,
       drawerOpen,
+      drawerSide,
       customPrimary,
       customSecondary,
       boostContrast,
@@ -311,6 +314,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     // from collapsed straight back to open-with-drawer.
     setCompact: (compact) => commit({ compact }),
     setDrawerOpen: (drawerOpen) => commit({ drawerOpen }),
+    setDrawerSide: (drawerSide) => commit({ drawerSide }),
     setCustomColour: (which, colour) =>
       commit(
         which === 'primary'

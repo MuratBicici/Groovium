@@ -11,6 +11,7 @@ mod media;
 mod metadata;
 mod playlists;
 mod session;
+mod shell;
 mod shortcuts;
 mod spotify;
 mod tray;
@@ -99,6 +100,7 @@ fn main() {
             lastfm::lastfm_similar_tracks,
             lastfm::lastfm_artist_candidates,
             audio::audio_backend_available,
+            shell::set_window_box,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groovium");

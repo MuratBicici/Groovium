@@ -76,11 +76,28 @@ export function widthFor(drawerOpen: boolean): number {
  * from a `void` call site with nothing to catch it, over a window that is
  * merely the wrong size.
  */
-export async function setWindowSize(width: number, height: number): Promise<void> {
+export async function setWindowSize(width: number, height: number, dx = 0): Promise<void> {
   if (!isTauri()) return;
 
   const w = Math.round(width);
   const h = Math.round(height);
+
+  // Anything that moves the window goes through Rust, where the move and the
+  // resize are one `SetWindowPos` rather than two calls with a presented frame
+  // between them. The drawer opening leftwards changes the width and the x by
+  // the same amount, and either of them landing alone puts the player six
+  // hundred and eighty pixels from where it was for that frame.
+  if (dx !== 0) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_window_box', { width: w, height: h, dx: Math.round(dx) });
+      return;
+    } catch (err) {
+      // Falling through to the plain resize. A window at the right size in the
+      // wrong place beats one at neither.
+      console.warn('[window] could not move and resize', err);
+    }
+  }
 
   try {
     const { LogicalSize } = await import('@tauri-apps/api/dpi');
