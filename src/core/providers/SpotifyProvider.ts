@@ -103,7 +103,18 @@ export class SpotifyProvider extends BaseProvider {
   readonly displayName = 'Spotify';
 
   private player: SpotifyPlayer | null = null;
+  /**
+   * The last device id Spotify issued, kept until this provider is disposed.
+   *
+   * It used to be cleared the moment the SDK reported `not_ready`, which is
+   * what a dropped connection reports — and the restart that recovers from a
+   * dropped connection needs a device id to aim at. So the outage cleared the
+   * one thing required to come back from it, and nothing ever restored it
+   * short of picking a different track.
+   */
   private deviceId: string | null = null;
+  /** Whether the SDK's link to Spotify is up, which is a different question. */
+  private connected = false;
   private volume = 1;
 
   /** Local position clock, since the SDK does not stream progress. */
@@ -177,9 +188,22 @@ export class SpotifyProvider extends BaseProvider {
     this.raiseAlert();
     this.enterStall('offline');
   };
+  /**
+   * The network is back. That is all it is.
+   *
+   * This used to end the stall outright — resume the player, start the clock,
+   * call it PLAYING — on the strength of a browser event that knows nothing
+   * about Spotify. Measured, that is exactly wrong: after twenty seconds off
+   * the network the SDK is not playing, `resume()` on it does nothing, and the
+   * position it reports has been extrapolating the whole time. So the bar
+   * jumped twenty seconds forward and carried on over silence, which is the
+   * one fault this entire file exists to prevent.
+   *
+   * Being told the interface is up is a reason to ask Spotify sooner, and
+   * nothing more. Whether there is music is Spotify's to answer.
+   */
   private onOnline = () => {
     this.raiseAlert();
-    this.leaveStall('back online');
   };
 
   constructor() {
@@ -280,8 +304,30 @@ export class SpotifyProvider extends BaseProvider {
     await this.player?.pause();
   }
 
+  /**
+   * Play again.
+   *
+   * `player.resume()` is a message to the SDK, and after the link has dropped
+   * there is nothing at the other end of it: the call resolves, nothing plays,
+   * and the only way back used to be picking a different track — which goes
+   * through `play` and the Web API, and works. So when the link is down this
+   * takes that road itself.
+   */
   async resume(): Promise<void> {
-    await this.player?.resume();
+    if (this.connected || !this.playing) {
+      await this.player?.resume();
+      return;
+    }
+
+    // The link is down. Wait for the SDK to register a device again — it
+    // reconnects on its own, usually within a second or two — and start the
+    // track through the Web API at the position the clock stopped at. Failing
+    // says why, which beats a play button that quietly does nothing.
+    const at = this.positionMs;
+    const deviceId = await this.waitForDevice();
+    await playOnDevice(deviceId, this.playing);
+    await this.player?.seek(at);
+    this.positionMs = at;
   }
 
   async seek(positionMs: number): Promise<void> {
@@ -306,6 +352,7 @@ export class SpotifyProvider extends BaseProvider {
     this.player?.disconnect();
     this.player = null;
     this.deviceId = null;
+    this.connected = false;
     this.currentTrack = null;
     this.state = 'IDLE';
     super.dispose();
@@ -322,7 +369,9 @@ export class SpotifyProvider extends BaseProvider {
     const deadline = Date.now() + DEVICE_READY_TIMEOUT_MS;
 
     while (Date.now() < deadline) {
-      if (this.deviceId) return this.deviceId;
+      // Both: the id outlives a dropped connection now, and starting a track
+      // on a device Spotify has stopped listening to would fail silently.
+      if (this.connected && this.deviceId) return this.deviceId;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
@@ -334,6 +383,10 @@ export class SpotifyProvider extends BaseProvider {
   private attachListeners(player: SpotifyPlayer): void {
     player.addListener('ready', ((payload: { device_id: string }) => {
       this.deviceId = payload.device_id;
+      this.connected = true;
+      // A device coming back mid-silence is the best news the watchdog gets.
+      // Ask Spotify now rather than at the far end of the slow cadence.
+      if (this.stalled) this.raiseAlert();
       // The volume the store pushed during `initialize` was set before Spotify
       // had registered the device, so it went nowhere. Re-assert it now that
       // there is something to apply it to — otherwise the first track plays at
@@ -342,7 +395,7 @@ export class SpotifyProvider extends BaseProvider {
     }) as never);
 
     player.addListener('not_ready', (() => {
-      this.deviceId = null;
+      this.connected = false;
       // Not while stalled: this is the connection dropping, and tearing the
       // watchdog down here is what left nothing running to notice it return.
       if (this.stalled) {
@@ -573,7 +626,10 @@ export class SpotifyProvider extends BaseProvider {
         note: this.lastNote,
         state: this.state,
         reachable: this.reachable,
+        connected: this.connected,
         stalled: this.stalled,
+        stalledFor: this.stalledSince ? Date.now() - this.stalledSince : 0,
+        restartsTried: this.restartsTried,
         spotifySaid: this.lastReported,
         localClock: Math.round(this.positionMs),
         watch: { ...this.watch },
@@ -699,14 +755,20 @@ export class SpotifyProvider extends BaseProvider {
    * comes in two seconds, and an outage that has not finished is not an error.
    */
   private async restartWhereItStopped(): Promise<void> {
-    if (this.restarting || !this.playing || !this.deviceId) return;
+    // Nothing to aim at. Asking Spotify to play to a device that is not
+    // listening spends a request on a certainty, and the `ready` event is
+    // already wired to ask the moment there is one again.
+    if (this.restarting || !this.playing || !this.deviceId || !this.connected) return;
     this.restarting = true;
-    this.restartsTried += 1;
     const at = this.positionMs;
     try {
       // Starting the track again supersedes the pause that the stall applied.
       this.pausedByStall = false;
       await playOnDevice(this.deviceId, this.playing);
+      // Counted here rather than above, so the ceiling measures Spotify
+      // declining rather than the network being out. A request that never
+      // arrived says nothing about whether Spotify would have played.
+      this.restartsTried += 1;
       await this.player?.seek(at);
       this.positionMs = at;
     } catch {
