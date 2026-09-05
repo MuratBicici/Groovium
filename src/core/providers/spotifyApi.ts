@@ -140,7 +140,87 @@ async function send(path: string, token: string, init?: RequestInit): Promise<Re
   });
 }
 
+/**
+ * Answers already given, and answers still being fetched.
+ *
+ * Only searches, and only ones that were asked for with GET. Searching is the
+ * quota this app runs out of, and a great deal of what it spends is the same
+ * question twice: typing a word and backspacing asks for every prefix on the
+ * way down as well as on the way up, and the station looks up the same artist
+ * again a few tracks later. None of those answers change in the minutes
+ * between.
+ *
+ * Kept here, around the request, rather than around any one of the functions
+ * that make it. There are three of them — `searchTracks`, `searchArtists` and
+ * `tracksByArtist` — and a cache on the first is a cache the station walks
+ * straight past, which is exactly what it was doing: four fresh searches every
+ * time `tracksLikeArtist` was called, for an artist it may well have asked
+ * about a minute ago.
+ *
+ * The second map is the same idea for requests that have not landed yet, so
+ * two callers wanting the same thing at the same moment make one request
+ * rather than two — the search box and the station overlap easily.
+ */
+const answered = new Map<string, { at: number; body: unknown }>();
+const asking = new Map<string, Promise<unknown>>();
+
+/** Long enough to cover typing and a station's run, short enough to stay true. */
+const SEARCH_CACHE_MS = 10 * 60_000;
+
+/** Beyond this the oldest go. A few hundred answers is nothing; unbounded is. */
+const SEARCH_CACHE_MAX = 120;
+
+/** Whether this is a question worth remembering the answer to. */
+function repeatable(path: string, init?: RequestInit): boolean {
+  return (init?.method ?? 'GET') === 'GET' && path.startsWith('/search?');
+}
+
+function keep(key: string, body: unknown): void {
+  answered.set(key, { at: Date.now(), body });
+  if (answered.size <= SEARCH_CACHE_MAX) return;
+  // Insertion order, so the first key is the oldest.
+  const oldest = answered.keys().next().value;
+  if (oldest !== undefined) answered.delete(oldest);
+}
+
+/**
+ * Ask Spotify, or hand back what it said last time.
+ *
+ * Not an optimisation. `/search` is the endpoint whose quota runs out — a day
+ * of it, on a real registration, and every search is refused until the
+ * following day — and the cheapest request is the one that is not made.
+ */
 export async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
+  if (!repeatable(path, init)) return perform<T>(path, init);
+
+  // Lower-cased: Spotify's search does not care about case, so two spellings
+  // of the same word are one question.
+  const key = path.toLowerCase();
+  const known = answered.get(key);
+  if (known && Date.now() - known.at < SEARCH_CACHE_MS) return known.body as T | null;
+
+  const already = asking.get(key);
+  if (already) return (await already) as T | null;
+
+  const pending = perform<T>(path, init).then(
+    (body) => {
+      asking.delete(key);
+      keep(key, body);
+      return body;
+    },
+    (err: unknown) => {
+      // Not remembered. A refusal is about this moment rather than about the
+      // question, and caching one would keep answering with it long after the
+      // quota came back.
+      asking.delete(key);
+      throw err;
+    },
+  );
+  asking.set(key, pending);
+  return pending;
+}
+
+async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
   // Refused here rather than on the network. Sending anyway would be asking a
   // question this app has already been told the answer to, and every one of
   // them counts against the window that has to empty before it can ask again.
@@ -280,74 +360,17 @@ interface SearchResponse {
 }
 
 /**
- * Searches already answered, and searches still being answered.
- *
- * Searching is the quota this app runs out of, and a great deal of what it
- * spends is the same question twice. Typing a word and backspacing asks for
- * every prefix on the way down as well as on the way up; the station looks up
- * "this artist — this title" and may well want the same one again a few tracks
- * later. None of those answers change in the minutes between.
- *
- * The second map is the same idea for requests that have not landed yet, so two
- * callers wanting the same thing at the same moment make one request rather
- * than two — the search box and the station can easily overlap.
- */
-const searched = new Map<string, { at: number; tracks: TrackMetadata[] }>();
-const searching = new Map<string, Promise<TrackMetadata[]>>();
-
-/** Long enough to cover typing and a station's run, short enough to stay true. */
-const SEARCH_CACHE_MS = 10 * 60_000;
-
-/** Beyond this the oldest go. A few hundred results is nothing; unbounded is. */
-const SEARCH_CACHE_MAX = 120;
-
-function remember(key: string, tracks: TrackMetadata[]): void {
-  searched.set(key, { at: Date.now(), tracks });
-  if (searched.size <= SEARCH_CACHE_MAX) return;
-  // Insertion order, so the first key is the oldest.
-  const oldest = searched.keys().next().value;
-  if (oldest !== undefined) searched.delete(oldest);
-}
-
-/**
  * Find tracks. Results come back as ordinary `TrackMetadata`, so they can be
  * played or added to a playlist without any Spotify-shaped type leaking further
  * into the app.
  *
- * Answered from memory when the same thing has been asked recently. Not an
- * optimisation: this is the endpoint whose quota runs out, and the cheapest
- * request is the one that is not made.
+ * Repeats are answered from memory — see `request`, which does that for every
+ * search this file makes rather than only for this one.
  */
 export async function searchTracks(query: string): Promise<TrackMetadata[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const key = trimmed.toLowerCase();
-  const known = searched.get(key);
-  if (known && Date.now() - known.at < SEARCH_CACHE_MS) return known.tracks;
-
-  const already = searching.get(key);
-  if (already) return already;
-
-  const pending = fetchTracks(trimmed).then(
-    (tracks) => {
-      searching.delete(key);
-      remember(key, tracks);
-      return tracks;
-    },
-    (err: unknown) => {
-      // Not remembered. A refusal is about this moment rather than about the
-      // question, and caching one would keep answering with it after the quota
-      // came back.
-      searching.delete(key);
-      throw err;
-    },
-  );
-  searching.set(key, pending);
-  return pending;
-}
-
-async function fetchTracks(trimmed: string): Promise<TrackMetadata[]> {
   const params = new URLSearchParams({
     q: trimmed,
     type: 'track',
@@ -383,6 +406,7 @@ interface ArtistSearchResponse {
   artists?: { items: (ApiArtist | null)[] };
 }
 
+/** Artists by name or by `genre:`. Repeats are answered from memory; see `request`. */
 async function searchArtists(query: string, limit: number): Promise<ApiArtist[]> {
   const params = new URLSearchParams({ q: query, type: 'artist', limit: String(limit) });
   const data = await request<ArtistSearchResponse>(`/search?${params}`);

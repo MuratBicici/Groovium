@@ -251,4 +251,38 @@ describe('not asking the same thing twice', () => {
     await searchTracks('kong');
     expect(calls).toHaveLength(2);
   });
+  it('remembers a station lookup as well as a typed search', async () => {
+    // The reason the cache sits on the request rather than on `searchTracks`.
+    // `tracksLikeArtist` spends four searches — the artist, its genre, and a
+    // track list for each of two peers — through two other functions that both
+    // walked straight past a cache built around the first one. The station
+    // comes back to the same artist constantly.
+    const { tracksLikeArtist } = await freshApi();
+    const artist = '{"id":"a1","name":"Kraftwerk","genres":["krautrock"]}';
+    const peer = '{"id":"a2","name":"Neu","genres":[]}';
+    stubFetch([
+      answer(200, {}, `{"artists":{"items":[${artist}]}}`),
+      answer(200, {}, `{"artists":{"items":[${artist},${peer}]}}`),
+      answer(200, {}, '{"tracks":{"items":[]}}'),
+    ]);
+
+    await tracksLikeArtist('Kraftwerk');
+    const spent = calls.length;
+    expect(spent).toBe(3);
+
+    await tracksLikeArtist('Kraftwerk');
+    expect(calls).toHaveLength(spent);
+  });
+
+  it('does not remember anything but a search', async () => {
+    // The transport and the shelf change under the app's feet — what is playing
+    // now, which playlists exist — and an answer from ten minutes ago is not an
+    // answer to those.
+    const { request } = await freshApi();
+    stubFetch([answer(200, {}, '{"ok":true}')]);
+
+    await request('/me/player');
+    await request('/me/player');
+    expect(calls).toHaveLength(2);
+  });
 });
