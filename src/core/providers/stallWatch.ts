@@ -53,12 +53,21 @@ export const VERIFY_ALERT_MS = 2000;
  * while the last few answers were fine and drops back to `VERIFY_ALERT_MS` the
  * moment anything looks off.
  *
- * The cost of the slower cadence is honest and worth writing down: a silent
- * route death that the SDK says nothing about is now noticed in up to twelve
- * seconds rather than two, which is after the audio buffer has run out rather
- * than before. That case trades a warning for a request count of one twelfth.
+ * Thirty seconds, having been twelve, having been two. The step from two to
+ * twelve was the one that mattered — it is where ninety-odd percent of this
+ * app's requests went — and twelve was chosen while still half hoping the
+ * check could beat the audio buffer. It cannot: the buffer runs about six
+ * seconds, so any cadence above that notices the silence after the listener
+ * does, and twelve bought nothing over thirty except requests.
+ *
+ * The cost, written down plainly: a route that dies without the SDK saying a
+ * word leaves the record turning over silence for up to half a minute before
+ * the window admits it. Everything else is faster than that and always was —
+ * `playback_error` from the SDK goes straight to a stall for free, the offline
+ * event does the same, and the first answer that looks at all wrong drops the
+ * cadence back to `VERIFY_ALERT_MS` until it looks right again.
  */
-export const VERIFY_CALM_MS = 12_000;
+export const VERIFY_CALM_MS = 30_000;
 
 /**
  * How often to ask once a stall has stopped looking like a blip.
