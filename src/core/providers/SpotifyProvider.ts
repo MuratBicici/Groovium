@@ -2,7 +2,8 @@ import type { AuthResult, SourceType } from '@/core/types';
 import { beginAuth, accessToken, isAuthenticated } from '@/core/security/spotifyAuth';
 import { clamp } from '@/core/utils/time';
 import {
-  VERIFY_EVERY_MS,
+  VERIFY_ALERT_MS,
+  VERIFY_CALM_MS,
   freshWatch,
   hasRecovered,
   hasStalled,
@@ -119,7 +120,15 @@ export class SpotifyProvider extends BaseProvider {
    * happening and stops believing the clock when the answer is "nothing" — see
    * `stallWatch.ts` for why nothing local can answer that.
    */
-  private verifier: ReturnType<typeof setInterval> | null = null;
+  private verifier: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Whether the watchdog is on its fast cadence.
+   *
+   * Set by anything that gives reason for concern and cleared by an answer
+   * that says everything is fine. The slow cadence is what makes this loop
+   * affordable; this is what stops it being slow when it matters.
+   */
+  private alert = true;
   private watch: Watch = freshWatch;
   /** True between noticing the silence and hearing something again. */
   private stalled = false;
@@ -149,8 +158,17 @@ export class SpotifyProvider extends BaseProvider {
    * beats waiting for the next check. WebView2 was measured not to report it at
    * all, so nothing depends on it.
    */
-  private onOffline = () => this.enterStall('offline');
-  private onOnline = () => this.leaveStall('back online');
+  // The adapter going is instant and free, and it is most of what the watchdog
+  // was polling to find out. Both raise the alert: one because something is
+  // wrong, the other because the next few answers decide whether it is over.
+  private onOffline = () => {
+    this.raiseAlert();
+    this.enterStall('offline');
+  };
+  private onOnline = () => {
+    this.raiseAlert();
+    this.leaveStall('back online');
+  };
 
   constructor() {
     super();
@@ -335,6 +353,7 @@ export class SpotifyProvider extends BaseProvider {
         // is no route to Spotify, in which case they are the outage wearing a
         // different hat.
         if (event === 'playback_error' || !this.reachable) {
+          this.raiseAlert();
           this.enterStall(event);
           return;
         }
@@ -447,13 +466,43 @@ export class SpotifyProvider extends BaseProvider {
     if (this.verifier) return;
     this.watch = freshWatch;
     this.stalled = false;
-    this.verifier = setInterval(() => void this.verify(), VERIFY_EVERY_MS);
+    // Fast to begin with: the first answer is the one that establishes there
+    // is nothing to worry about, and until it lands there is no ground for
+    // being relaxed.
+    this.alert = true;
+    this.scheduleVerify();
     this.report('watching');
   }
 
+  /**
+   * Book the next check, at whichever cadence the last one earned.
+   *
+   * A timeout that books the next rather than an interval, because the gap
+   * between checks is not a constant any more — and because an interval fires
+   * on a schedule regardless of whether the previous check has come back,
+   * which at twelve seconds a request would be fine and at two is a way to
+   * have several in flight at once.
+   */
+  private scheduleVerify(): void {
+    if (this.verifier) clearTimeout(this.verifier);
+    this.verifier = setTimeout(() => {
+      void this.verify().finally(() => {
+        if (this.verifier) this.scheduleVerify();
+      });
+    }, this.alert ? VERIFY_ALERT_MS : VERIFY_CALM_MS);
+  }
+
+  /** Something looked wrong: check often until it stops looking wrong. */
+  private raiseAlert(): void {
+    if (this.alert) return;
+    this.alert = true;
+    if (this.verifier) this.scheduleVerify();
+  }
+
   private stopVerifier(): void {
+    this.alert = true;
     if (this.verifier) {
-      clearInterval(this.verifier);
+      clearTimeout(this.verifier);
       this.verifier = null;
     }
     this.watch = freshWatch;
@@ -514,6 +563,7 @@ export class SpotifyProvider extends BaseProvider {
     // landed after the silence rather than before it.
     this.reachable = playback.answered;
     if (!playback.answered) {
+      this.alert = true;
       this.report('Spotify did not answer', null);
       this.enterStall('no route to Spotify');
       return;
@@ -523,6 +573,7 @@ export class SpotifyProvider extends BaseProvider {
     // resume on its own after an outage — the device it was playing to is gone
     // — so it has to be asked, at the position the clock was frozen at.
     if (this.stalled && !playback.isPlaying) {
+      this.alert = true;
       void this.restartWhereItStopped();
       this.report('asking Spotify to start again', null);
       return;
@@ -539,7 +590,16 @@ export class SpotifyProvider extends BaseProvider {
 
     this.watch = observe(this.watch, reported);
 
-    if (!this.stalled && hasStalled(this.watch)) this.enterStall('Spotify says nothing is playing');
+    if (!this.stalled && hasStalled(this.watch)) {
+      this.alert = true;
+      this.enterStall('Spotify says nothing is playing');
+      return;
+    }
+
+    // Playing, moving, and reachable. The first "not playing" is enough to go
+    // back to asking quickly — `STALL_AFTER` wants its second observation
+    // soon, not twelve seconds later — and only a clean answer relaxes it.
+    this.alert = this.stalled || reported === null || !navigator.onLine;
   }
 
   /**

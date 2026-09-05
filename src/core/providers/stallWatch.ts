@@ -36,7 +36,29 @@
  * caught inside two — while there is still sound, as a warning rather than an
  * explanation.
  */
-export const VERIFY_EVERY_MS = 2000;
+export const VERIFY_ALERT_MS = 2000;
+
+/**
+ * How often to ask when there is no reason to think anything is wrong.
+ *
+ * Asking every two seconds for the length of every track was, measured, about
+ * ninety-seven percent of everything this app asked Spotify for: eighteen
+ * hundred requests an hour against a quota that is counted by the day. Nearly
+ * all of them answered "yes, still playing", to a question nobody had reason
+ * to ask.
+ *
+ * The fast signal is not this loop anyway. The SDK reports `playback_error`
+ * when the audio breaks and that goes straight to a stall, for free. This is
+ * the backstop for an outage that arrives without one — so it runs slowly
+ * while the last few answers were fine and drops back to `VERIFY_ALERT_MS` the
+ * moment anything looks off.
+ *
+ * The cost of the slower cadence is honest and worth writing down: a silent
+ * route death that the SDK says nothing about is now noticed in up to twelve
+ * seconds rather than two, which is after the audio buffer has run out rather
+ * than before. That case trades a warning for a request count of one twelfth.
+ */
+export const VERIFY_CALM_MS = 12_000;
 
 /**
  * Consecutive checks finding nothing playing before it is called stalled.
