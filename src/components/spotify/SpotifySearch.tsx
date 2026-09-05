@@ -7,8 +7,24 @@ import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { useT } from '@/core/i18n';
 
-/** Wait for typing to settle before spending a request. */
-const DEBOUNCE_MS = 350;
+/**
+ * Wait for typing to settle before spending a request.
+ *
+ * Longer than it was. Searching is the quota this app runs out of, and at 350ms
+ * an ordinary typing speed spends one on most of the word's prefixes; the extra
+ * hundred milliseconds costs nobody anything they notice and asks Spotify a
+ * good deal less.
+ */
+const DEBOUNCE_MS = 450;
+
+/**
+ * Below this, a search is not worth making.
+ *
+ * A single letter matches most of Spotify and tells nobody anything, and it is
+ * the first thing typed every single time — so it is a request spent on every
+ * search anyone ever makes, for a result they will not read.
+ */
+const SHORTEST_QUERY = 2;
 
 /**
  * Find one song on Spotify.
@@ -38,7 +54,7 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
   const requestSeq = useRef(0);
 
   const run = useCallback(async (text: string) => {
-    if (!text.trim()) {
+    if (text.trim().length < SHORTEST_QUERY) {
       setResults([]);
       setProblem(null);
       return;

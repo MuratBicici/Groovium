@@ -280,14 +280,74 @@ interface SearchResponse {
 }
 
 /**
+ * Searches already answered, and searches still being answered.
+ *
+ * Searching is the quota this app runs out of, and a great deal of what it
+ * spends is the same question twice. Typing a word and backspacing asks for
+ * every prefix on the way down as well as on the way up; the station looks up
+ * "this artist — this title" and may well want the same one again a few tracks
+ * later. None of those answers change in the minutes between.
+ *
+ * The second map is the same idea for requests that have not landed yet, so two
+ * callers wanting the same thing at the same moment make one request rather
+ * than two — the search box and the station can easily overlap.
+ */
+const searched = new Map<string, { at: number; tracks: TrackMetadata[] }>();
+const searching = new Map<string, Promise<TrackMetadata[]>>();
+
+/** Long enough to cover typing and a station's run, short enough to stay true. */
+const SEARCH_CACHE_MS = 10 * 60_000;
+
+/** Beyond this the oldest go. A few hundred results is nothing; unbounded is. */
+const SEARCH_CACHE_MAX = 120;
+
+function remember(key: string, tracks: TrackMetadata[]): void {
+  searched.set(key, { at: Date.now(), tracks });
+  if (searched.size <= SEARCH_CACHE_MAX) return;
+  // Insertion order, so the first key is the oldest.
+  const oldest = searched.keys().next().value;
+  if (oldest !== undefined) searched.delete(oldest);
+}
+
+/**
  * Find tracks. Results come back as ordinary `TrackMetadata`, so they can be
  * played or added to a playlist without any Spotify-shaped type leaking further
  * into the app.
+ *
+ * Answered from memory when the same thing has been asked recently. Not an
+ * optimisation: this is the endpoint whose quota runs out, and the cheapest
+ * request is the one that is not made.
  */
 export async function searchTracks(query: string): Promise<TrackMetadata[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  const key = trimmed.toLowerCase();
+  const known = searched.get(key);
+  if (known && Date.now() - known.at < SEARCH_CACHE_MS) return known.tracks;
+
+  const already = searching.get(key);
+  if (already) return already;
+
+  const pending = fetchTracks(trimmed).then(
+    (tracks) => {
+      searching.delete(key);
+      remember(key, tracks);
+      return tracks;
+    },
+    (err: unknown) => {
+      // Not remembered. A refusal is about this moment rather than about the
+      // question, and caching one would keep answering with it after the quota
+      // came back.
+      searching.delete(key);
+      throw err;
+    },
+  );
+  searching.set(key, pending);
+  return pending;
+}
+
+async function fetchTracks(trimmed: string): Promise<TrackMetadata[]> {
   const params = new URLSearchParams({
     q: trimmed,
     type: 'track',

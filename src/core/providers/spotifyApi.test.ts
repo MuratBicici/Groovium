@@ -193,3 +193,62 @@ describe('when Spotify says slow down', () => {
     expect(calls).toHaveLength(asked);
   });
 });
+
+describe('not asking the same thing twice', () => {
+  it('answers a repeated search from memory', async () => {
+    // Searching is the quota this app runs out of, and typing a word and
+    // backspacing asks for every prefix on the way down as well as up.
+    const { searchTracks } = await freshApi();
+    stubFetch([answer(200, {}, '{"tracks":{"items":[]}}')]);
+
+    await searchTracks('redreaming');
+    await searchTracks('redreaming');
+    await searchTracks('  REDREAMING  ');
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it('makes one request when two callers ask at once', async () => {
+    // The search box and the station's background lookups overlap easily.
+    const { searchTracks } = await freshApi();
+    stubFetch([answer(200, {}, '{"tracks":{"items":[]}}')]);
+
+    await Promise.all([searchTracks('kong'), searchTracks('kong')]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('still asks for a different search', async () => {
+    const { searchTracks } = await freshApi();
+    stubFetch([answer(200, {}, '{"tracks":{"items":[]}}')]);
+
+    await searchTracks('one');
+    await searchTracks('two');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('does not remember a refusal', async () => {
+    // A 429 is about this moment rather than about the question; remembering
+    // one would keep answering with it after the quota came back.
+    const { searchTracks } = await freshApi();
+    stubFetch([answer(429), answer(429), answer(200, {}, '{"tracks":{"items":[]}}')]);
+
+    const first = searchTracks('kong').catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await first;
+
+    // Past the gate, and the question is asked again rather than answered
+    // from a cached failure.
+    vi.setSystemTime(Date.now() + 5_000);
+    await expect(searchTracks('kong')).resolves.toEqual([]);
+  });
+
+  it('asks again once the answer is old', async () => {
+    const { searchTracks } = await freshApi();
+    stubFetch([answer(200, {}, '{"tracks":{"items":[]}}')]);
+
+    await searchTracks('kong');
+    vi.setSystemTime(Date.now() + 11 * 60_000);
+    await searchTracks('kong');
+    expect(calls).toHaveLength(2);
+  });
+});
