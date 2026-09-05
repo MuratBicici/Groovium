@@ -4,6 +4,7 @@ vi.mock('@/core/providers/spotifyPlaylists', () => ({
   playlistPage: vi.fn(),
   playlistTrackPage: vi.fn(),
   wholeCrate: vi.fn(),
+  forgetCrates: vi.fn(),
 }));
 
 // The deck, stubbed to the one thing this store asks of it.

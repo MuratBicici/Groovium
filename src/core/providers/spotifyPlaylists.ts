@@ -279,8 +279,26 @@ export async function playlistTrackPage(
  * Records Spotify cannot play — a removed track, a local file it only knows
  * the name of — are already dropped by the page below, so a crate of two
  * hundred may well return fewer.
+ *
+ * Answered from memory when the crate has not changed since it was last read.
+ * Dropping a crate on the deck is up to six requests, and dropping the same one
+ * again — which is what listening to a playlist twice in an evening is — used
+ * to be six more.
+ *
+ * `snapshotId` is what makes that safe. Spotify changes it whenever anything in
+ * the playlist moves, so the shelf handing over the one it holds is the crate
+ * saying whether this is still the same crate. The age check underneath it is
+ * for the shelf itself being old: a playlist edited on the phone half an hour
+ * ago has a new snapshot that nobody here has seen yet.
  */
-export async function wholeCrate(id: string): Promise<TrackMetadata[]> {
+export async function wholeCrate(id: string, snapshotId?: string): Promise<TrackMetadata[]> {
+  const known = crates.get(id);
+  const fresh =
+    known &&
+    Date.now() - known.at < CRATE_CACHE_MS &&
+    (snapshotId === undefined || known.snapshotId === snapshotId);
+  if (fresh) return known.tracks;
+
   const all: TrackMetadata[] = [];
   let cursor: string | null = null;
   do {
@@ -288,5 +306,36 @@ export async function wholeCrate(id: string): Promise<TrackMetadata[]> {
     all.push(...page.items);
     cursor = page.cursor;
   } while (cursor && all.length < PLAY_CAP);
+
+  crates.set(id, { at: Date.now(), snapshotId, tracks: all });
+  if (crates.size > CRATE_CACHE_MAX) {
+    // Insertion order, so the first key is the oldest.
+    const oldest = crates.keys().next().value;
+    if (oldest !== undefined) crates.delete(oldest);
+  }
   return all;
+}
+
+/** Crates read in full, by playlist id. */
+const crates = new Map<
+  string,
+  { at: number; snapshotId: string | undefined; tracks: TrackMetadata[] }
+>();
+
+/**
+ * How long a crate is believed without a matching snapshot behind it.
+ *
+ * Half an hour. Long enough that playing the same playlist through an evening
+ * costs one read of it, short enough that an edit made somewhere else turns up
+ * in the same sitting.
+ */
+const CRATE_CACHE_MS = 30 * 60_000;
+
+/** Three hundred tracks each; a handful is a listening session, not a library. */
+const CRATE_CACHE_MAX = 8;
+
+/** Forget a crate — it has been written to, or the account has changed. */
+export function forgetCrates(id?: string): void {
+  if (id === undefined) crates.clear();
+  else crates.delete(id);
 }

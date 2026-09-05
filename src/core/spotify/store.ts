@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { TrackMetadata } from '@/core/types';
 import {
+  forgetCrates,
   playlistPage,
   playlistTrackPage,
   wholeCrate,
@@ -59,10 +60,10 @@ interface SpotifyPlaylistsState {
   /**
    * The crate that is open, if one is.
    *
-   * One at a time, and its contents are not kept when it closes. Holding every
-   * playlist's tracks would be a cache, and a cache of something that changes
-   * on another device needs a story about going stale — which is a later piece
-   * of work with `snapshotId` at the middle of it. Until then, opening a crate
+   * One at a time, and its contents are not kept when it closes. The crate the
+   * deck plays is remembered — `wholeCrate` keys that on `snapshotId`, which is
+   * Spotify's own answer to "has this changed" — but what the drawer shows is
+   * paged, and a half-read list is not a thing to hold on to. Opening a crate
    * asks.
    */
   openId: string | null;
@@ -174,7 +175,10 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       if (get().starting) return;
       set({ starting: id, playError: null });
       try {
-        const tracks = await wholeCrate(id);
+        // The snapshot the shelf holds goes with it: Spotify changes that
+        // whenever anything in the playlist moves, so it is what lets a crate
+        // read a moment ago be handed back instead of read again.
+        const tracks = await wholeCrate(id, get().playlists.find((p) => p.id === id)?.snapshotId);
         if (tracks.length === 0) {
           set({ starting: null, playError: say('spotify.crateEmpty') });
           return;
@@ -199,6 +203,9 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     },
 
     forget() {
+      // The crates as well as the shelf. What was read belonged to the account
+      // that is going away.
+      forgetCrates();
       set({
         playlists: [],
         cursor: null,

@@ -5,7 +5,14 @@ vi.mock('@/core/security/spotifyAuth', () => ({
   account: vi.fn(async () => ({ displayName: 'Me', id: 'me' })),
 }));
 
-import { offsetFromNext, playlistPage, playlistTrackPage, readableBy } from './spotifyPlaylists';
+import {
+  forgetCrates,
+  offsetFromNext,
+  playlistPage,
+  playlistTrackPage,
+  readableBy,
+  wholeCrate,
+} from './spotifyPlaylists';
 
 /**
  * The playlist reader, against a fabricated Spotify.
@@ -210,5 +217,85 @@ describe('reading what is in a playlist', () => {
     await fresh.playlistTrackPage('p5');
     expect(calls).not.toHaveLength(0);
     expect(calls.every((u) => u.includes('/tracks'))).toBe(true);
+  });
+});
+
+describe('reading a whole crate to play it', () => {
+  beforeEach(() => {
+    // Module-level, because the crate belongs to the account rather than to a
+    // caller. One test's reading would otherwise answer the next one's.
+    forgetCrates();
+  });
+
+  const page = (uris: string[], next: string | null = null) => ({
+    body: { items: uris.map((u) => ({ track: track(u) })), next },
+  });
+
+  it('does not read the same crate twice when nothing has changed', async () => {
+    // Dropping a crate on the deck is up to six requests. Playing the same
+    // playlist again in the same evening used to be six more.
+    answer = () => page(['spotify:track:1', 'spotify:track:2']);
+
+    const first = await wholeCrate('p1', 'snap-1');
+    calls.length = 0;
+    const second = await wholeCrate('p1', 'snap-1');
+
+    expect(second).toEqual(first);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('reads it again when Spotify says the crate has changed', async () => {
+    // `snapshot_id` moves whenever anything in the playlist does, so a shelf
+    // carrying a new one is the playlist saying it is not the same playlist.
+    answer = () => page(['spotify:track:1']);
+    await wholeCrate('p1', 'snap-1');
+
+    answer = () => page(['spotify:track:9']);
+    calls.length = 0;
+    const again = await wholeCrate('p1', 'snap-2');
+
+    expect(again.map((t) => t.id)).toEqual(['spotify:track:9']);
+    expect(calls).not.toHaveLength(0);
+  });
+
+  it('reads it again once what it holds is old', async () => {
+    // The snapshot the shelf carries can itself be stale — a playlist edited on
+    // the phone half an hour ago has a new one nobody here has seen.
+    vi.useFakeTimers();
+    try {
+      answer = () => page(['spotify:track:1']);
+      await wholeCrate('p1', 'snap-1');
+
+      vi.setSystemTime(Date.now() + 31 * 60_000);
+      calls.length = 0;
+      await wholeCrate('p1', 'snap-1');
+      expect(calls).not.toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps reading until the pages run out', async () => {
+    answer = (url) =>
+      url.includes('offset=50')
+        ? page(['spotify:track:3'])
+        : page(['spotify:track:1', 'spotify:track:2'], 'https://api.spotify.com/x?offset=50');
+
+    const all = await wholeCrate('p1', 'snap-1');
+    expect(all.map((t) => t.id)).toEqual([
+      'spotify:track:1',
+      'spotify:track:2',
+      'spotify:track:3',
+    ]);
+  });
+
+  it('forgets everything when the account goes', async () => {
+    answer = () => page(['spotify:track:1']);
+    await wholeCrate('p1', 'snap-1');
+
+    forgetCrates();
+    calls.length = 0;
+    await wholeCrate('p1', 'snap-1');
+    expect(calls).not.toHaveLength(0);
   });
 });
