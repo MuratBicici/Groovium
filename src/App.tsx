@@ -24,7 +24,7 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
-import { DURATION_MS, useShellSize } from '@/components/controls/useShellSize';
+import { SETTLE_MS, useShellSize } from '@/components/controls/useShellSize';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
@@ -140,7 +140,12 @@ export default function App() {
         setDrawerSide(chosenSide);
         setSwapping(false);
       },
-      prefersReducedMotion() ? 0 : DURATION_MS,
+      // `SETTLE_MS`, not the animation's own length. The window is put right
+      // a little after the shell stops moving, and opening the other side
+      // before that happens starts it from a window that is still the old
+      // size — which threw the player across the screen instead of leaving it
+      // where it was.
+      prefersReducedMotion() ? 0 : SETTLE_MS,
     );
     return () => clearTimeout(timer);
   }, [swapping, chosenSide]);

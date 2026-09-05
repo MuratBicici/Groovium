@@ -51,6 +51,18 @@ import { EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
  */
 
 export const DURATION_MS = 260;
+
+/**
+ * When the window has finished catching up with the animation.
+ *
+ * The shell stops moving at `DURATION_MS`; the window is corrected to its exact
+ * size a little after, once the shell has settled and can be measured. Anything
+ * that wants to act on a finished drawer has to wait for this rather than for
+ * the animation — starting the next one in between leaves it working from a
+ * window that is still the old size, which is how swapping sides teleported the
+ * player across the screen.
+ */
+export const SETTLE_MS = DURATION_MS + 40;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
 export function useShellSize(
@@ -195,17 +207,16 @@ export function useShellSize(
     // off. Shrinking, the surplus is transparent and nobody sees it; the exact
     // size is set at the far end.
     const wideEnough = Math.max(fromWidth, width);
-    void setWindowSize(wideEnough, EXPANDED_HEIGHT, hold(fromWidth, wideEnough));
+    const room = setWindowSize(wideEnough, EXPANDED_HEIGHT, hold(fromWidth, wideEnough));
 
     if (prefersReducedMotion()) {
-      shell.style.width = '';
-      if (compact) {
-        shell.style.height = 'auto';
-        void setWindowSize(width, chrome + to.stage + to.bottom, hold(wideEnough, width));
-      } else {
-        void setWindowSize(width, EXPANDED_HEIGHT, hold(wideEnough, width));
-      }
-      record();
+      if (compact) shell.style.height = 'auto';
+      shell.style.width = `${width}px`;
+      const settledHeight = compact ? chrome + to.stage + to.bottom : EXPANDED_HEIGHT;
+      void setWindowSize(width, settledHeight, hold(wideEnough, width)).then(() => {
+        shell.style.width = '';
+        record();
+      });
       return;
     }
 
@@ -245,16 +256,26 @@ export function useShellSize(
     // Two frames: one to paint the starting heights, one to change them. Both
     // in a single frame land in the same style recalculation, and the browser
     // has nothing to interpolate from.
-    const start = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        shell.style.transition = `width ${DURATION_MS}ms ${EASING}`;
-        shell.style.width = `${width}px`;
-        if (heightMoves && arriving) {
-          stage.style.transition = `height ${DURATION_MS}ms ${EASING}`;
-          bottom.style.transition = `height ${DURATION_MS}ms ${EASING}`;
-          pin(to);
-          morph(shell, before.rects, arriving);
-        }
+    let alive = true;
+    let start = 0;
+    // Behind the window rather than alongside it. Where the shell lands on
+    // screen is measured from the window's edges, so a shell that starts
+    // moving before the window has finished is being drawn against edges that
+    // are about to change — which on the left, where the window's own position
+    // moves, is the difference between growing leftwards and jumping.
+    void room.then(() => {
+      if (!alive) return;
+      start = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          shell.style.transition = `width ${DURATION_MS}ms ${EASING}`;
+          shell.style.width = `${width}px`;
+          if (heightMoves && arriving) {
+            stage.style.transition = `height ${DURATION_MS}ms ${EASING}`;
+            bottom.style.transition = `height ${DURATION_MS}ms ${EASING}`;
+            pin(to);
+            morph(shell, before.rects, arriving);
+          }
+        });
       });
     });
 
@@ -270,29 +291,30 @@ export function useShellSize(
         stage.style.paddingTop = '';
         shell.style.height = compact ? 'auto' : '';
       }
-      // Collapsed, the shell keeps sizing to its content rather than to the
-      // window. The two are the same number once the resize lands, but this
-      // way round the bar still looks right if the resize does not — and it is
-      // what makes the collapsed state visible in a plain browser, where there
-      // is no window to resize at all.
-      // Handed back to the window. Left pinned, the shell would stop following
-      // a window that changed size for any other reason.
-      shell.style.width = '';
-      shell.style.transition = '';
+      // The window first, the shell's pinned width after it. The other way
+      // round hands the shell back to a window that has not been resized yet,
+      // so it snaps out to the old width — the whole drawer, back for as long
+      // as the resize takes to land.
+      //
       // Measured off the settled shell rather than predicted, so the window
-      // ends up exactly as tall as what it is showing. Expanded, the height is
-      // known and only the width needed correcting from the larger of the two.
-      if (shellRef.current) {
-        void setWindowSize(
-          width,
-          compact ? shellRef.current.offsetHeight : EXPANDED_HEIGHT,
-          hold(wideEnough, width),
-        );
-      }
-      record();
-    }, DURATION_MS + 40);
+      // ends up exactly as tall as what it is showing. Read while the shell is
+      // still pinned to the width it is about to keep, which is the width the
+      // height belongs to.
+      const settledHeight = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
+      void setWindowSize(width, settledHeight, hold(wideEnough, width)).then(() => {
+        if (!alive) return;
+        // Handed back to the window. Left pinned, the shell would stop
+        // following a window that changed size for any other reason — and
+        // collapsed it keeps sizing to its contents, which is what makes the
+        // bar look right in a plain browser where there is no window at all.
+        shell.style.width = '';
+        shell.style.transition = '';
+        record();
+      });
+    }, SETTLE_MS);
 
     return () => {
+      alive = false;
       cancelAnimationFrame(start);
       clearTimeout(settle);
     };
