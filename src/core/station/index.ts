@@ -28,14 +28,42 @@ export type { SimilarTrack } from './lastfm';
  */
 
 /**
- * Searches one fill may spend resolving candidates through Spotify.
+ * Searches one fill may spend, across everything it tries.
  *
- * A bound rather than a budget: Spotify's published limit is a rolling
- * 30-second window, so a handful of sequential requests is unremarkable. This
- * exists so a candidate list full of songs Spotify cannot match cannot turn
- * one fill into fifty requests.
+ * A budget rather than a bound, and this used to be neither. Eight was checked
+ * inside the candidate loop, and that loop ran once per seed — four of them —
+ * while the deeper genre lookup below spent four more of its own on each of
+ * the two seeds allowed one. Worst case a single fill was forty searches, not
+ * eight, and nothing in the code said so.
+ *
+ * Spotify's quota turns out to be counted by the day and not only by the
+ * rolling thirty seconds its documentation describes, so a fill that can cost
+ * forty is a fill that can be run a hundred and twenty times before searching
+ * stops working for the rest of the day. One purse, passed to everything that
+ * spends, and twelve rather than eight because it is now shared between all
+ * the seeds instead of being handed out fresh to each.
  */
-const SPOTIFY_SEARCH_BUDGET = 8;
+const SPOTIFY_SEARCH_BUDGET = 12;
+
+/**
+ * What the genre lookup costs when it runs.
+ *
+ * Two artist searches and one track search per artist it settles on — see
+ * `tracksLikeArtist`. Named here because it comes out of the same purse as
+ * everything else, and a purse that only knows about the cheap spender is not
+ * a budget.
+ */
+const GENRE_LOOKUP_COST = 4;
+
+/**
+ * One fill's allowance, spent by whoever needs it.
+ *
+ * Mutable and passed around on purpose: the point is that the candidate loop,
+ * the second seed and the genre lookup are all spending the same money.
+ */
+export interface SearchPurse {
+  left: number;
+}
 
 /**
  * Searches any one artist may consume out of that budget.
@@ -325,6 +353,8 @@ export async function resolveViaSpotify(
     searchSpotify: (query: string) => Promise<TrackMetadata[]>;
   },
   limit: number,
+  /** The fill's purse. A fresh full one when nobody is sharing. */
+  purse: SearchPurse = { left: SPOTIFY_SEARCH_BUDGET },
 ): Promise<TrackMetadata[]> {
   const { played, excludeArtists, searchSpotify } = options;
 
@@ -362,12 +392,12 @@ export async function resolveViaSpotify(
   /** Resolved, but heard before. Already in least-recently-played order. */
   const heardBefore: TrackMetadata[] = [];
 
-  let spent = 0;
+
   /** Searches already spent on each artist, so none of them can take the lot. */
   const spentOn = new Map<string, number>();
 
   for (const candidate of attempts) {
-    if (picked.length >= limit || spent >= SPOTIFY_SEARCH_BUDGET) break;
+    if (picked.length >= limit || purse.left <= 0) break;
 
     const wanted = matchKey(candidate.artist, candidate.title);
     if (takenKeys.has(wanted)) continue;
@@ -376,7 +406,7 @@ export async function resolveViaSpotify(
     if ((spentOn.get(artist) ?? 0) >= SEARCHES_PER_ARTIST) continue;
     spentOn.set(artist, (spentOn.get(artist) ?? 0) + 1);
 
-    spent++;
+    purse.left--;
     const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
 
     // Spotify's field search is fuzzy; take a result only if it really is the
@@ -466,12 +496,18 @@ const DEEP_LOOKUPS_PER_FILL = 2;
 async function deeperCandidatesFor(
   seed: TrackMetadata,
   options: ResolveOptions,
+  purse: SearchPurse,
 ): Promise<Candidates> {
   // Last.fm knows far more artists than it knows tracks.
   const byArtist = await quietly('artist', () => artistCandidates(seed.artist));
   if (byArtist.length > 0) return { kind: 'names', names: byArtist };
 
   if (!options.spotifyAvailable) return NOTHING;
+  // Four searches in one go, so it is only worth starting if there are four to
+  // spend. Charged before rather than after: the requests happen whatever the
+  // answer, and a purse that only pays for successes is not one.
+  if (purse.left < GENRE_LOOKUP_COST) return NOTHING;
+  purse.left -= GENRE_LOOKUP_COST;
 
   const byGenre = await quietly('genre', () => options.tracksLikeArtist(seed.artist));
   return byGenre.length > 0 ? { kind: 'tracks', tracks: byGenre } : NOTHING;
@@ -538,6 +574,7 @@ async function pickFrom(
   candidates: Candidates,
   options: ResolveOptions,
   limit: number,
+  purse: SearchPurse,
 ): Promise<TrackMetadata[]> {
   const { library, played, excludeArtists, spotifyAvailable, searchSpotify } = options;
 
@@ -563,6 +600,7 @@ async function pickFrom(
         searchSpotify,
       },
       limit - picked.length,
+      purse,
     ),
   );
   return [...picked, ...fromSpotify];
@@ -576,6 +614,9 @@ export async function resolveNextTracks(
   // dead end costs a request instead of the run. In the ordinary case the
   // first seed answers and the rest are never asked about.
   let deepBudget = DEEP_LOOKUPS_PER_FILL;
+  // One purse for the whole fill. It used to be one per seed, which is how a
+  // fill that reads as "eight searches" cost forty.
+  const purse: SearchPurse = { left: SPOTIFY_SEARCH_BUDGET };
 
   for (const seed of orderSeeds(options.seeds)) {
     const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
@@ -586,10 +627,10 @@ export async function resolveNextTracks(
       // expensive one, or a pool of dead ends turns one fill into a burst.
       if (deepBudget <= 0) continue;
       deepBudget--;
-      candidates = await deeperCandidatesFor(seed, options);
+      candidates = await deeperCandidatesFor(seed, options, purse);
     }
 
-    const picked = await pickFrom(candidates, options, limit);
+    const picked = await pickFrom(candidates, options, limit, purse);
     if (picked.length > 0) return picked;
   }
   return [];

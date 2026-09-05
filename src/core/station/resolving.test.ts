@@ -174,4 +174,33 @@ describe('when a source fails rather than coming up empty', () => {
 
     expect(picked.map((t) => t.title)).toEqual(['Dino']);
   });
+});
+
+describe('what one fill is allowed to spend', () => {
+  it('shares one budget across every seed rather than handing each a fresh one', async () => {
+    // The fault: the budget was checked inside the candidate loop, and that
+    // loop ran once per seed. Four seeds meant four budgets, so a fill that
+    // read as eight searches was thirty-two — and the genre lookup below spent
+    // four more of its own on top of that.
+    similarTracks.mockResolvedValue([
+      { artist: 'Nobody', title: 'A', matchScore: 0.9 },
+      { artist: 'Nobody', title: 'B', matchScore: 0.8 },
+      { artist: 'Someone', title: 'C', matchScore: 0.7 },
+      { artist: 'Someone', title: 'D', matchScore: 0.6 },
+      { artist: 'Third', title: 'E', matchScore: 0.5 },
+      { artist: 'Third', title: 'F', matchScore: 0.4 },
+      { artist: 'Fourth', title: 'G', matchScore: 0.3 },
+      { artist: 'Fourth', title: 'H', matchScore: 0.2 },
+      { artist: 'Fifth', title: 'I', matchScore: 0.15 },
+      { artist: 'Fifth', title: 'J', matchScore: 0.1 },
+    ]);
+    // Nothing Spotify can match, so every seed goes the whole way and the
+    // fill ends empty — the case that used to cost forty requests.
+    searchSpotify.mockResolvedValue([]);
+
+    const picked = await resolve({ spotifyAvailable: true, library: [] });
+
+    expect(picked).toEqual([]);
+    expect(searchSpotify.mock.calls.length).toBeLessThanOrEqual(12);
+  });
 });

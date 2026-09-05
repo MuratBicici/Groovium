@@ -240,9 +240,9 @@ describe('resolveViaSpotify', () => {
   });
 
   it('bounds how many searches one fill can spend', async () => {
-    // Spotify limits on a rolling window and Development Mode adds quota
-    // buckets of undisclosed size, so a candidate list it cannot match must not
-    // turn one fill into fifty requests.
+    // Spotify's quota turns out to be counted by the day as well as by the
+    // rolling window its documentation describes, so a candidate list it
+    // cannot match must not turn one fill into fifty requests.
     const many = Array.from({ length: 40 }, (_, i) => candidate(`Band${i}`, `T${i}`, 0.5));
     const s = searcher(() => []);
     const picked = await resolveViaSpotify(
@@ -251,7 +251,7 @@ describe('resolveViaSpotify', () => {
       5,
     );
     expect(picked).toEqual([]);
-    expect(s.calls).toBe(8);
+    expect(s.calls).toBe(12);
   });
 
   it('does not hand back the same song after the same song every time', async () => {
