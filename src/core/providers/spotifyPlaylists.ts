@@ -130,26 +130,22 @@ export function readableBy(ownerId: string, meId: string | null): boolean {
 }
 
 /**
- * This account's Spotify id, asked for once.
+ * This account's Spotify id.
  *
- * Cached for the session because it cannot change while one is running: it is
- * fixed at the moment a token was issued, and signing out throws the module
- * away along with everything else.
+ * `account` holds on to its own answer for the session, so this asks Spotify
+ * once however many pages the shelf fills. It used to keep a second copy here,
+ * including the null it fell back to — which meant one moment offline while
+ * the shelf was loading left it empty until the app was restarted.
  */
-let meId: string | null = null;
-
 async function currentUserId(): Promise<string | null> {
-  if (meId) return meId;
   try {
-    const who = await account();
-    meId = who?.id ?? null;
+    return (await account())?.id ?? null;
   } catch {
     // Not a reason to show nothing. Without an id nothing is known to be
     // readable, which is the honest answer, and the shelf says it is empty
     // rather than filling with crates that will refuse to open.
-    meId = null;
+    return null;
   }
-  return meId;
 }
 
 function toPlaylist(raw: ApiPlaylist): SpotifyPlaylist {

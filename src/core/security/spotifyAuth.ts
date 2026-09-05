@@ -69,6 +69,9 @@ export async function setClientId(clientId: string): Promise<void> {
 
 export async function clearClientId(): Promise<void> {
   if (!isTauri()) return;
+  // A different registration is a different set of authorised users, so who
+  // was signed in under the old one is no longer the answer.
+  forgetAccount();
   await invoke('spotify_clear_client_id');
 }
 
@@ -98,6 +101,24 @@ export async function isAuthenticated(): Promise<boolean> {
 }
 
 /**
+ * Who is signed in, asked once.
+ *
+ * The promise rather than the answer, so two callers in the same tick share
+ * one request. That is not a rare case: the drawer asks on mount and the shelf
+ * asks while filling, and in development React mounts every effect twice —
+ * which was three `/me` requests for one drawer being opened.
+ *
+ * Held for the session because it cannot change during one. Which account this
+ * is was fixed when the token was issued; signing out or signing in clears it
+ * explicitly below.
+ *
+ * A failure is not remembered. Being unable to reach Spotify says nothing
+ * about who is signed in, and a cached null would leave the shelf empty for
+ * the rest of the session over one moment offline.
+ */
+let known: Promise<SpotifyAccount | null> | null = null;
+
+/**
  * Who is signed in.
  *
  * Separate from `isAuthenticated`, which only asks whether a token is on disk:
@@ -106,7 +127,16 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export async function account(): Promise<SpotifyAccount | null> {
   if (!isTauri()) return null;
-  return invoke<SpotifyAccount>('spotify_account');
+  known ??= invoke<SpotifyAccount>('spotify_account').catch((err: unknown) => {
+    known = null;
+    throw err;
+  });
+  return known;
+}
+
+/** Forget who is signed in — the account has changed, or is going away. */
+export function forgetAccount(): void {
+  known = null;
 }
 
 /**
@@ -115,11 +145,15 @@ export async function account(): Promise<SpotifyAccount | null> {
  */
 export async function beginAuth(): Promise<SpotifyAccount> {
   if (!isTauri()) throw { code: 'unsupported', detail: 'Spotify requires the desktop app.' };
-  return invoke<SpotifyAccount>('spotify_begin_auth');
+  const who = await invoke<SpotifyAccount>('spotify_begin_auth');
+  // Signing in answers the question, so nobody has to ask it again.
+  known = Promise.resolve(who);
+  return who;
 }
 
 export async function signOut(): Promise<void> {
   if (!isTauri()) return;
+  forgetAccount();
   await invoke('spotify_sign_out');
 }
 
