@@ -182,7 +182,7 @@ describe('what one fill is allowed to spend', () => {
     // loop ran once per seed. Four seeds meant four budgets, so a fill that
     // read as eight searches was thirty-two — and the genre lookup below spent
     // four more of its own on top of that.
-    similarTracks.mockResolvedValue([
+    askedAboutTrack.mockResolvedValue([
       { artist: 'Nobody', title: 'A', matchScore: 0.9 },
       { artist: 'Nobody', title: 'B', matchScore: 0.8 },
       { artist: 'Someone', title: 'C', matchScore: 0.7 },
