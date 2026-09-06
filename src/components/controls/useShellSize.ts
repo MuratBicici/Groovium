@@ -209,7 +209,10 @@ export function useShellSize(
     if (!shell || !ready) return;
     shell.style.width = restingWidth(side, width);
     const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-    void setWindowMask(null);
+    // Going back to the right, the old shape names a strip that will be off the
+    // end of the narrower window, which would leave nothing of it visible at
+    // all. Going the other way there is no shape yet to be wrong.
+    if (side === 'right') void setWindowMask(null);
     void setWindowSize(
       windowWidth,
       height,
@@ -278,11 +281,8 @@ export function useShellSize(
     // off. Shrinking, the surplus is transparent and nobody sees it; the exact
     // size is set at the far end.
     // Room for both ends before anything moves, and on the left the window is
-    // already at both. Whole-window first: whatever the drawer is about to do,
-    // the strip beside the player has to be part of the window while it does
-    // it, or half the drawer would not take a click.
+    // already at both.
     const wideEnough = Math.max(fromWidth, width, windowWidth);
-    void setWindowMask(null);
     const room = setWindowSize(wideEnough, EXPANDED_HEIGHT);
 
     if (prefersReducedMotion()) {
@@ -335,6 +335,30 @@ export function useShellSize(
     // has nothing to interpolate from.
     let alive = true;
     let start = 0;
+    let tracking = 0;
+
+    /**
+     * Keep the window's shape on the shell while the shell is moving.
+     *
+     * The shape used to be opened to the whole window before the animation and
+     * closed again after, and for the length of the animation the window was
+     * larger than anything drawn in it. Windows draws its own frame around a
+     * window's shape, so what that produced was an empty bordered rectangle
+     * sitting where the drawer was about to be — a window from a much older
+     * Windows, and the fault three attempts at repainting could not touch,
+     * because it was never the painting.
+     *
+     * Followed frame by frame instead. The shape is the shell, always, so the
+     * frame is drawn around the drawer as it grows rather than around where it
+     * is going. A shape change neither moves nor resizes the window, so unlike
+     * a resize per frame this asks nothing of the webview at all.
+     */
+    const follow = () => {
+      if (!alive) return;
+      tracking = requestAnimationFrame(follow);
+      const box = shell.getBoundingClientRect();
+      void shape(side, windowWidth, box.width, box.height);
+    };
     // Behind the window rather than alongside it. Where the shell lands on
     // screen is measured from the window's edges, so a shell that starts
     // moving before the window has finished is being drawn against edges that
@@ -344,6 +368,7 @@ export function useShellSize(
       if (!alive) return;
       start = requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          if (side === 'left') follow();
           shell.style.transition = `width ${DURATION_MS}ms ${EASING}`;
           shell.style.width = `${width}px`;
           if (heightMoves && arriving) {
@@ -377,6 +402,8 @@ export function useShellSize(
       // ends up exactly as tall as what it is showing. Read while the shell is
       // still pinned to the width it is about to keep, which is the width the
       // height belongs to.
+      cancelAnimationFrame(tracking);
+      tracking = 0;
       const settledHeight = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
       void setWindowSize(windowWidth, settledHeight).then(() => {
         if (!alive) return;
@@ -397,6 +424,7 @@ export function useShellSize(
     return () => {
       alive = false;
       cancelAnimationFrame(start);
+      cancelAnimationFrame(tracking);
       clearTimeout(settle);
     };
     // `width` and `windowWidth` are read, so they are declared — but neither
