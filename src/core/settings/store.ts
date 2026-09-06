@@ -15,6 +15,7 @@ import {
   isThemeId,
 } from '@/core/settings/themes';
 import { NOTCHES } from '@/core/visualizer';
+import type { CoverPalette } from '@/core/theme/fromCover';
 import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
@@ -49,6 +50,10 @@ interface SettingsStore extends Settings {
   setWindowBorder: (on: boolean) => void;
   setVisualizer: (on: boolean) => void;
   setWindowGlow: (on: boolean) => void;
+  setThemeFromCover: (on: boolean) => void;
+  /** The palette taken from the cover on the deck, or null for none. */
+  coverPalette: CoverPalette | null;
+  setCoverPalette: (palette: CoverPalette | null) => void;
   setGlow: (knob: GlowKnob, notch: number) => void;
   /** Record that this version's summary has been shown, so it is not shown again. */
   markVersionSeen: () => void;
@@ -83,7 +88,7 @@ function systemLanguage(): Language {
  * other case rule that comes with a language, without a single special case in
  * the components.
  */
-function applyToDocument(settings: Settings): void {
+function applyToDocument(settings: Settings, cover: CoverPalette | null = null): void {
   if (typeof document === 'undefined') return;
 
   const root = document.documentElement;
@@ -108,9 +113,16 @@ function applyToDocument(settings: Settings): void {
   let lightGround = false;
   let faintAccent = false;
 
-  if (settings.theme === CUSTOM_THEME) {
-    const primary = settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
-    const secondary = settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
+  // A cover's colours go down the same road a hand-picked pair does, which is
+  // the whole reason this is two colours and not a palette: everything that
+  // keeps the text readable is `derivePalette`'s, and it does not care where
+  // the pair came from. Layered over the chosen theme rather than replacing
+  // it, so switching the setting off puts back exactly what was there.
+  const painting = settings.themeFromCover ? cover : null;
+
+  if (painting || settings.theme === CUSTOM_THEME) {
+    const primary = painting?.surface ?? settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
+    const secondary = painting?.accent ?? settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
 
     // The whole ramp is derived here rather than by `color-mix()` in the
     // stylesheet. Not a preference: CSS cannot measure what it produced, and
@@ -262,12 +274,17 @@ function sheenFrom(hex: string, lightGround: boolean): string {
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
-  /** Apply, then persist. Never called before `ready`. */
-  const commit = (patch: Partial<Settings>) => {
-    set(patch);
+  /**
+   * Everything that goes to disk, as it stands.
+   *
+   * One place, because two callers need it now: the commit that saves and the
+   * cover palette that only repaints. A second copy of this list is a second
+   * place to forget a field.
+   */
+  const settingsNow = (): Settings => {
     const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
-    const { visualizer, windowGlow } = get();
+    const { visualizer, windowGlow, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed } = get();
     const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -287,19 +304,28 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       windowBorder,
       visualizer,
       windowGlow,
+      themeFromCover,
       glowStrength,
       glowSensitivity,
       glowSpeed,
       lastSeenVersion,
       declinedVersion,
     };
-    applyToDocument(settings);
+    return settings;
+  };
+
+  /** Apply, then persist. Never called before `ready`. */
+  const commit = (patch: Partial<Settings>) => {
+    set(patch);
+    const settings = settingsNow();
+    applyToDocument(settings, get().coverPalette);
     void saveSettings(settings);
   };
 
   return {
     ...DEFAULT_SETTINGS,
     ready: false,
+    coverPalette: null,
 
     async initialize() {
       if (get().ready) return;
@@ -309,7 +335,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         ...stored,
         language: stored.language ?? systemLanguage(),
       };
-      applyToDocument(settings);
+      applyToDocument(settings, get().coverPalette);
       set({ ...settings, ready: true });
     },
 
@@ -335,6 +361,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setWindowBorder: (windowBorder) => commit({ windowBorder }),
     setVisualizer: (visualizer) => commit({ visualizer }),
     setWindowGlow: (windowGlow) => commit({ windowGlow }),
+    setThemeFromCover: (themeFromCover) => commit({ themeFromCover }),
+
+    /**
+     * What the artwork on the deck came out as.
+     *
+     * Not a setting and never written to disk: it belongs to whatever is
+     * playing, and a palette from last night's last song is not a preference.
+     * Applied through the same path as everything else, because that path is
+     * the one that knows how to take a pair of colours apart.
+     */
+    setCoverPalette(coverPalette) {
+      const { coverPalette: was } = get();
+      if (was?.surface === coverPalette?.surface && was?.accent === coverPalette?.accent) return;
+      set({ coverPalette });
+      applyToDocument(settingsNow(), coverPalette);
+    },
     setGlow: (knob, notch) =>
       commit({ [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     // Through `commit` like everything else: it is the one place that knows the

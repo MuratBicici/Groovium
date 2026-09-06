@@ -59,6 +59,7 @@ export function SettingsPanel({
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const drawerSide = useSettingsStore((s) => s.drawerSide);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
+  const themeFromCover = useSettingsStore((s) => s.themeFromCover);
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
   const glowSpeed = useSettingsStore((s) => s.glowSpeed);
@@ -67,6 +68,7 @@ export function SettingsPanel({
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
   const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
   const setWindowGlow = useSettingsStore((s) => s.setWindowGlow);
+  const setThemeFromCover = useSettingsStore((s) => s.setThemeFromCover);
   const setGlow = useSettingsStore((s) => s.setGlow);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -266,6 +268,13 @@ export function SettingsPanel({
             hint={t('settings.visualizerHint')}
             on={visualizer}
             onChange={setVisualizer}
+          />
+
+          <Toggle
+            label={t('settings.themeFromCover')}
+            hint={t('settings.themeFromCoverHint')}
+            on={themeFromCover}
+            onChange={setThemeFromCover}
           />
 
           <Toggle

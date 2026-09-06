@@ -112,6 +112,13 @@ pub struct Settings {
     /// to the shape of the app rather than something added to it.
     #[serde(default)]
     pub window_glow: bool,
+    /// Take the palette from the cover of whatever is playing.
+    ///
+    /// Off unless asked for. A window that repaints itself every few minutes is
+    /// a thing somebody chooses, not something an update does to them — and it
+    /// overrides the theme they picked, which nothing should do quietly.
+    #[serde(default)]
+    pub theme_from_cover: bool,
     /// How the edge light is tuned: a notch from -4 to 4, nought in the middle.
     ///
     /// Nought is what it was tuned to before there was anything to move it
@@ -157,6 +164,7 @@ impl Default for Settings {
             window_border: false,
             visualizer: on_unless_turned_off(),
             window_glow: false,
+            theme_from_cover: false,
             glow_strength: 0,
             glow_sensitivity: 0,
             glow_speed: 0,
@@ -323,6 +331,7 @@ mod tests {
             window_border: false,
             visualizer: true,
             window_glow: true,
+            theme_from_cover: true,
             glow_strength: 3,
             glow_sensitivity: -2,
             glow_speed: 0,

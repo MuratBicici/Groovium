@@ -97,6 +97,20 @@ export interface Settings {
    */
   windowGlow: boolean;
   /**
+   * Take the palette from the cover of whatever is playing.
+   *
+   * The two colours come out of the artwork the same way a person picks them
+   * in the colour settings, and the same machinery builds the ramp — so the
+   * text stays readable by the route it always did. What a cover cannot supply
+   * is refused rather than invented: a sleeve with no colour in it leaves the
+   * chosen theme alone.
+   *
+   * Kept apart from `theme` and the two custom colours on purpose. This is a
+   * layer over whatever was chosen, not a replacement for it, so switching it
+   * off puts back exactly what was there.
+   */
+  themeFromCover: boolean;
+  /**
    * How the edge light is tuned: a notch from -4 to 4 each, nought in the
    * middle.
    *
@@ -150,6 +164,7 @@ export const DEFAULT_SETTINGS: Settings = {
   windowBorder: false,
   visualizer: true,
   windowGlow: false,
+  themeFromCover: false,
   glowStrength: 0,
   glowSensitivity: 0,
   glowSpeed: 0,

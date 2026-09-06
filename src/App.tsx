@@ -10,6 +10,7 @@ import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
 import { WindowGlow } from '@/components/player/WindowGlow';
+import { CoverTheme } from '@/components/player/CoverTheme';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
@@ -316,6 +317,8 @@ export default function App() {
       }`}
     >
       <PlaylistPickerProvider>
+      {/* Draws nothing; it paints the palette from the sleeve on the deck. */}
+      <CoverTheme />
       <Visualizer on={visualizer} />
 
       <DiscFlightProvider>

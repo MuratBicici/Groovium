@@ -242,6 +242,9 @@ export const en = {
   'settings.boostContrast': 'Increase readability',
   'settings.boostContrastHint':
     'Strengthens text against its background, secondary text most of all. No other colour changes.',
+  'settings.themeFromCover': 'Colours from the cover',
+  'settings.themeFromCoverHint':
+    'The palette follows the artwork of whatever is playing. A sleeve with no colour in it leaves your theme alone.',
   'settings.windowGlow': 'Edge light',
   'settings.windowGlowHint':
     'The window’s border lights up with the music, climbing higher and brighter the louder it gets.',
