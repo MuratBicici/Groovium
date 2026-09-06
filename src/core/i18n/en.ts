@@ -245,6 +245,9 @@ export const en = {
   'settings.windowGlow': 'Edge light',
   'settings.windowGlowHint':
     'The window’s border lights up with the music, climbing higher and brighter the louder it gets.',
+  'settings.glowStrength': 'Strength',
+  'settings.glowSensitivity': 'Sensitivity',
+  'settings.glowSpeed': 'Speed',
   'settings.drawerSide': 'Drawer side',
   'settings.drawerSideHint':
     'Which side of the player the Spotify drawer opens on. The window grows that way to make room, so pick the side with space next to it.',

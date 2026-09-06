@@ -232,6 +232,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.windowGlow': 'Kenar ışığı',
   'settings.windowGlowHint':
     'Pencerenin çerçevesi müzikle birlikte ışıklanır; ses yükseldikçe daha yukarı ve daha parlak çıkar.',
+  'settings.glowStrength': 'Güç',
+  'settings.glowSensitivity': 'Hassasiyet',
+  'settings.glowSpeed': 'Hız',
   'settings.drawerSide': 'Çekmece yönü',
   'settings.drawerSideHint':
     'Spotify çekmecesinin oynatıcının hangi yanından açılacağı. Pencere yer açmak için o yöne doğru büyür, bu yüzden yanında boşluk olan tarafı seçin.',

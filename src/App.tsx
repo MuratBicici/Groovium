@@ -116,6 +116,9 @@ export default function App() {
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
+  const glowStrength = useSettingsStore((s) => s.glowStrength);
+  const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
+  const glowSpeed = useSettingsStore((s) => s.glowSpeed);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
@@ -509,7 +512,12 @@ export default function App() {
           `pointer-events-none` means nothing has to be. */}
       {/* Under the edge and on the same layer, so the hairline stays crisp on
           top of the light rather than being drawn through it. */}
-      <WindowGlow on={windowGlow} />
+      <WindowGlow
+        on={windowGlow}
+        strength={glowStrength}
+        sensitivity={glowSensitivity}
+        speed={glowSpeed}
+      />
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute inset-0 z-50 rounded-[var(--radius-widget)] ring-1 ring-inset ${

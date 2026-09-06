@@ -87,6 +87,40 @@ export function watchBars(watcher: Watcher): () => void {
 }
 
 /**
+ * What a slider at `value` means, between the two ends of its range.
+ *
+ * Every one of these is nought to one with a half in the middle, and a half is
+ * always what the edge was tuned to before any of them existed — so a fresh
+ * install, a slider nobody has touched, and the way this looked when it was
+ * built are all the same thing. Anything outside is clamped rather than
+ * refused: `config.json` is a file somebody can edit.
+ */
+export function span(value: number, atNone: number, atFull: number): number {
+  const held = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0.5));
+  return atNone + (atFull - atNone) * held;
+}
+
+/**
+ * The three the edge is tuned by, as the numbers the drawing wants.
+ *
+ * Named here rather than at the three places that read them, so the ends of
+ * each range are written down together and it is one job to see that the
+ * middle of every one of them is the tuning it shipped with.
+ */
+export const GLOW = {
+  /** How wide and how hard the lights burn. */
+  strength: (value: number) => span(value, 0.45, 1.55),
+  /** How fast they climb. */
+  speed: (value: number) => span(value, 0.5, 1.5),
+  /**
+   * How far above its average the bass must jump to count as a hit.
+   *
+   * Backwards on purpose: more sensitive is a lower bar to clear.
+   */
+  threshold: (value: number) => span(value, 1.7, 1.0),
+} as const;
+
+/**
  * How much more the lowest band counts than the highest.
  *
  * The bands arrive low to high, and this leans the answer onto the low ones:

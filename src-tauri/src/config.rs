@@ -112,6 +112,15 @@ pub struct Settings {
     /// to the shape of the app rather than something added to it.
     #[serde(default)]
     pub window_glow: bool,
+    /// How the edge light is tuned, each nought to one with a half in the
+    /// middle. A half is what it was tuned to before there was anything to
+    /// move it with, so a config from before these existed reads as unchanged.
+    #[serde(default = "middling")]
+    pub glow_strength: f32,
+    #[serde(default = "middling")]
+    pub glow_sensitivity: f32,
+    #[serde(default = "middling")]
+    pub glow_speed: f32,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -147,6 +156,9 @@ impl Default for Settings {
             window_border: false,
             visualizer: on_unless_turned_off(),
             window_glow: false,
+            glow_strength: middling(),
+            glow_sensitivity: middling(),
+            glow_speed: middling(),
             last_seen_version: None,
             declined_version: None,
         }
@@ -158,6 +170,11 @@ impl Default for Settings {
 ///
 /// Right, because that is where it has always been and because a window near
 /// the left edge of a screen has nowhere to grow the other way.
+/// The middle of a slider, which is the tuning everything shipped with.
+fn middling() -> f32 {
+    0.5
+}
+
 fn right_side() -> String {
     "right".to_owned()
 }
@@ -271,6 +288,9 @@ mod tests {
             window_border: false,
             visualizer: true,
             window_glow: true,
+            glow_strength: 0.8,
+            glow_sensitivity: 0.2,
+            glow_speed: 0.5,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };

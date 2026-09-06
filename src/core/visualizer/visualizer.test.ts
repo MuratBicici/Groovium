@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { levelFrom, settleLevel } from './index';
+import { GLOW, levelFrom, settleLevel, span } from './index';
 
 describe('how loud it is', () => {
   it('is nothing when there is nothing', () => {
@@ -71,5 +71,30 @@ describe('the level being shown', () => {
     let showing = 0.5;
     for (let frame = 0; frame < 20; frame++) showing = settleLevel(showing, 0.5);
     expect(showing).toBe(0.5);
+  });
+});
+
+describe('the sliders', () => {
+  it('means the tuning it shipped with when nobody has touched it', () => {
+    // Half is not an arbitrary middle: it is what these numbers were before
+    // there was anything to move them with.
+    expect(GLOW.strength(0.5)).toBeCloseTo(1);
+    expect(GLOW.speed(0.5)).toBeCloseTo(1);
+    expect(GLOW.threshold(0.5)).toBeCloseTo(1.35);
+  });
+
+  it('reaches both ends', () => {
+    expect(span(0, 2, 6)).toBe(2);
+    expect(span(1, 2, 6)).toBe(6);
+  });
+
+  it('holds a value somebody typed into the file by hand', () => {
+    expect(span(-3, 2, 6)).toBe(2);
+    expect(span(99, 2, 6)).toBe(6);
+    expect(span(Number.NaN, 2, 6)).toBe(4);
+  });
+
+  it('makes a higher sensitivity easier to trigger, not harder', () => {
+    expect(GLOW.threshold(1)).toBeLessThan(GLOW.threshold(0));
   });
 });

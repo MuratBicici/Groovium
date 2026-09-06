@@ -43,6 +43,9 @@ describe('remembering that a version has been shown', () => {
       windowBorder: true,
       visualizer: false,
       windowGlow: true,
+      glowStrength: 0.8,
+      glowSensitivity: 0.2,
+      glowSpeed: 0.35,
       declinedVersion: '2.0.0',
     });
 
@@ -62,6 +65,9 @@ describe('remembering that a version has been shown', () => {
       windowBorder: true,
       visualizer: false,
       windowGlow: true,
+      glowStrength: 0.8,
+      glowSensitivity: 0.2,
+      glowSpeed: 0.35,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
     });

@@ -96,6 +96,18 @@ export interface Settings {
    */
   windowGlow: boolean;
   /**
+   * How the edge light is tuned, each nought to one.
+   *
+   * A half is not an arbitrary middle: it is what these were before there was
+   * anything to move them with, so a config file from before they existed and
+   * a slider nobody has touched are the same thing. `strength` is how wide and
+   * how hard the lights burn, `sensitivity` how readily the music sets one
+   * off, `speed` how fast they climb.
+   */
+  glowStrength: number;
+  glowSensitivity: number;
+  glowSpeed: number;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -119,6 +131,9 @@ export interface Settings {
 
 export type DrawerSide = 'left' | 'right';
 
+/** Which of the edge light's three the settings panel is moving. */
+export type GlowKnob = 'glowStrength' | 'glowSensitivity' | 'glowSpeed';
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: null,
   language: null,
@@ -133,6 +148,9 @@ export const DEFAULT_SETTINGS: Settings = {
   windowBorder: false,
   visualizer: true,
   windowGlow: false,
+  glowStrength: 0.5,
+  glowSensitivity: 0.5,
+  glowSpeed: 0.5,
   lastSeenVersion: null,
   declinedVersion: null,
 };
@@ -151,6 +169,11 @@ export async function loadSettings(): Promise<Settings> {
     // narrower than its type. `drawerSide` decides which way the window grows;
     // a word nobody recognises would leave it growing in neither.
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
+    // And the sliders, which are numbers somebody could put anything in.
+    for (const knob of ['glowStrength', 'glowSensitivity', 'glowSpeed'] as const) {
+      const held = Number(settings[knob]);
+      settings[knob] = Number.isFinite(held) ? Math.min(1, Math.max(0, held)) : 0.5;
+    }
     return settings;
   } catch (err) {
     console.warn('[settings] could not load settings', err);

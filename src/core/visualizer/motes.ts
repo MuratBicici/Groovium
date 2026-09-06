@@ -57,11 +57,11 @@ export function spawning(level: number, seconds: number): number {
 }
 
 /** A new light at the foot of both edges. */
-export function lit(level: number, roll: () => number): Mote {
+export function lit(level: number, roll: () => number, speed = 1): Mote {
   return {
     // Just below the sill, so it is already moving when it becomes visible.
     height: -0.02,
-    speed: RISE_BASE + level * RISE_WITH_LEVEL * (0.7 + roll() * 0.6),
+    speed: (RISE_BASE + level * RISE_WITH_LEVEL * (0.7 + roll() * 0.6)) * speed,
     size: 0.55 + roll() * 0.75,
     // Not quite the level, so a steady passage still has bright ones and dim
     // ones in it rather than a row of identical lights.
@@ -98,6 +98,7 @@ export function advance(
   seconds: number,
   owed: number,
   roll: () => number,
+  speed = 1,
 ): { motes: Mote[]; owed: number } {
   const risen: Mote[] = [];
   for (const mote of motes) {
@@ -108,7 +109,7 @@ export function advance(
   let due = owed + spawning(level, seconds);
   while (due >= 1) {
     due -= 1;
-    if (risen.length < MOTE_LIMIT) risen.push(lit(level, roll));
+    if (risen.length < MOTE_LIMIT) risen.push(lit(level, roll, speed));
   }
 
   return { motes: risen, owed: due };
@@ -122,9 +123,15 @@ export function advance(
  * rather than replacing the level — a soft kick in a loud passage is still a
  * bright light, and a hard one in a quiet passage is still not a blinding one.
  */
-export function launch(motes: Mote[], level: number, force: number, roll: () => number): Mote[] {
+export function launch(
+  motes: Mote[],
+  level: number,
+  force: number,
+  roll: () => number,
+  speed = 1,
+): Mote[] {
   if (motes.length >= MOTE_LIMIT) return motes;
-  const born = lit(level, roll);
+  const born = lit(level, roll, speed);
   return [
     ...motes,
     {

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { levelFrom, settleLevel, watchBars } from '@/core/visualizer';
+import { GLOW, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, bassOf, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
@@ -129,12 +129,37 @@ function bolt(colour: string, facing: -1 | 1): HTMLCanvasElement {
   return canvas;
 }
 
-export function WindowGlow({ on }: { on: boolean }) {
+export function WindowGlow({
+  on,
+  /** How wide and how hard the lights burn. */
+  strength,
+  /** How readily the music sets one off. */
+  sensitivity,
+  /** How fast they climb. */
+  speed,
+}: {
+  on: boolean;
+  strength: number;
+  sensitivity: number;
+  speed: number;
+}) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
   const measured = useRef(0);
   /** The low end on its own, which is what the hits are heard in. */
   const bass = useRef(0);
+  /**
+   * What the sliders currently say.
+   *
+   * A ref that every render refreshes, rather than a dependency. Moving a
+   * slider would otherwise tear the drawing down and build it again — losing
+   * every light in the air — which is the opposite of what somebody dragging
+   * one wants to see.
+   */
+  const tuning = useRef({ strength, sensitivity, speed });
+  useEffect(() => {
+    tuning.current = { strength, sensitivity, speed };
+  }, [strength, sensitivity, speed]);
 
   useEffect(() => {
     if (!on) return;
@@ -227,15 +252,19 @@ export function WindowGlow({ on }: { on: boolean }) {
       last = now;
       measure();
 
+      const { strength, sensitivity, speed } = tuning.current;
+      const climb = GLOW.speed(speed);
+      const force = GLOW.strength(strength);
+
       showing = settleLevel(showing, measured.current);
-      ({ motes, owed } = advance(motes, showing, seconds, owed, Math.random));
+      ({ motes, owed } = advance(motes, showing, seconds, owed, Math.random, climb));
 
       // The hits, which are what the edge is actually keeping time with.
-      const heard = listen(beat, bass.current, seconds);
+      const heard = listen(beat, bass.current, seconds, GLOW.threshold(sensitivity));
       beat = heard.beat;
       punch = Math.max(0, punch - (seconds * 1000) / PUNCH_MS);
       if (heard.hit > 0) {
-        motes = launch(motes, showing, heard.hit, Math.random);
+        motes = launch(motes, showing, heard.hit, Math.random, climb);
         punch = Math.max(punch, heard.hit);
       }
       // Never past one: a flare is the edge doing more, not the edge being
@@ -248,13 +277,13 @@ export function WindowGlow({ on }: { on: boolean }) {
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.
       context.globalCompositeOperation = 'lighter';
-      haze(-1, felt);
-      haze(1, felt);
+      haze(-1, felt * force);
+      haze(1, felt * force);
 
       // Wider and harder the louder it is, which on a bass-leaning level means
       // the edge breathes with the kick rather than with the whole mix.
-      const reach = BOLT_REACH * (SWELL_AT_REST + felt * SWELL_WITH_LEVEL);
-      const burn = BURN_AT_REST + felt * BURN_WITH_LEVEL;
+      const reach = BOLT_REACH * (SWELL_AT_REST + felt * SWELL_WITH_LEVEL) * force;
+      const burn = (BURN_AT_REST + felt * BURN_WITH_LEVEL) * force;
 
       for (const mote of motes) {
         const alpha = Math.min(1, brightness(mote) * burn);

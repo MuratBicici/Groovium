@@ -4,6 +4,7 @@ import {
   loadSettings,
   saveSettings,
   type DrawerSide,
+  type GlowKnob,
   type Language,
   type Settings,
 } from '@/core/settings';
@@ -47,6 +48,7 @@ interface SettingsStore extends Settings {
   setWindowBorder: (on: boolean) => void;
   setVisualizer: (on: boolean) => void;
   setWindowGlow: (on: boolean) => void;
+  setGlow: (knob: GlowKnob, value: number) => void;
   /** Record that this version's summary has been shown, so it is not shown again. */
   markVersionSeen: () => void;
   /** Record that an offer to install this version was turned down. */
@@ -265,6 +267,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow } = get();
+    const { glowStrength, glowSensitivity, glowSpeed } = get();
     const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
@@ -283,6 +286,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       windowBorder,
       visualizer,
       windowGlow,
+      glowStrength,
+      glowSensitivity,
+      glowSpeed,
       lastSeenVersion,
       declinedVersion,
     };
@@ -328,6 +334,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setWindowBorder: (windowBorder) => commit({ windowBorder }),
     setVisualizer: (visualizer) => commit({ visualizer }),
     setWindowGlow: (windowGlow) => commit({ windowGlow }),
+    setGlow: (knob, value) => commit({ [knob]: Math.min(1, Math.max(0, value)) }),
     // Through `commit` like everything else: it is the one place that knows the
     // whole shape of what goes to disk, and going around it is how a write ends
     // up dropping a field. Re-applying the palette on the way is wasted work

@@ -58,11 +58,15 @@ export function SettingsPanel({
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const drawerSide = useSettingsStore((s) => s.drawerSide);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
+  const glowStrength = useSettingsStore((s) => s.glowStrength);
+  const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
+  const glowSpeed = useSettingsStore((s) => s.glowSpeed);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
   const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
   const setWindowGlow = useSettingsStore((s) => s.setWindowGlow);
+  const setGlow = useSettingsStore((s) => s.setGlow);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
@@ -269,6 +273,29 @@ export function SettingsPanel({
             on={windowGlow}
             onChange={setWindowGlow}
           />
+
+          {/* Only while it is on. Three sliders for something switched off are
+              three things to wonder about, and the light they describe is the
+              only explanation any of them has. */}
+          {windowGlow && (
+            <div className="flex flex-col gap-1.5 border-l border-shell-600 pl-2.5">
+              <Slider
+                label={t('settings.glowStrength')}
+                value={glowStrength}
+                onChange={(value) => setGlow('glowStrength', value)}
+              />
+              <Slider
+                label={t('settings.glowSensitivity')}
+                value={glowSensitivity}
+                onChange={(value) => setGlow('glowSensitivity', value)}
+              />
+              <Slider
+                label={t('settings.glowSpeed')}
+                value={glowSpeed}
+                onChange={(value) => setGlow('glowSpeed', value)}
+              />
+            </div>
+          )}
 
           {/* Two buttons rather than a toggle. A switch would have to be
               labelled for one of the two sides and read as off for the other,
@@ -620,6 +647,39 @@ function Toggle({
         />
       </span>
     </button>
+  );
+}
+
+/**
+ * One of the edge light's three, nought to one.
+ *
+ * No number beside it. What these do is only findable by moving one and
+ * watching the window, and a figure invites reading the number instead of
+ * looking at the light — which is the one place the answer is.
+ */
+function Slider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-meta text-cream-300">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={Math.round(value * 100)}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        className="groove-range mt-1 h-3 w-full cursor-pointer appearance-none rounded-full bg-shell-600 ring-1 ring-[var(--color-edge)]"
+      />
+    </label>
   );
 }
 

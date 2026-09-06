@@ -27,8 +27,13 @@ export const NO_BEAT: Beat = { average: 0, since: 0 };
 /** How much of the spectrum counts as the low end. */
 const BASS_BANDS = 0.25;
 
-/** How far above its average the bass has to jump to be a hit. */
-const OVER = 1.35;
+/**
+ * How far above its average the bass has to jump to be a hit.
+ *
+ * The tuned value, and what a caller gets by saying nothing. The edge-light
+ * settings hand a different one in — see `GLOW.threshold`.
+ */
+export const OVER = 1.35;
 
 /**
  * How quiet is too quiet to call anything a hit.
@@ -69,10 +74,11 @@ export function listen(
   beat: Beat,
   bass: number,
   seconds: number,
+  over = OVER,
 ): { beat: Beat; hit: number } {
   const since = beat.since + seconds;
   const struck =
-    bass > TOO_QUIET && bass > beat.average * OVER && since >= GAP && beat.average > 0;
+    bass > TOO_QUIET && bass > beat.average * over && since >= GAP && beat.average > 0;
 
   // Exponential, so the rate is about time and not about how often this is
   // called. `1 - e^(-dt/tau)` is the share of the gap closed in this frame.
