@@ -72,16 +72,24 @@ pub fn set_window_mask(
     y: f64,
     width: f64,
     height: f64,
+    radius: f64,
 ) -> Result<(), String> {
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let px = |v: f64| (v * scale).round() as i32;
-    mask(&window, px(x), px(y), px(width), px(height))
+    mask(&window, px(x), px(y), px(width), px(height), px(radius))
 }
 
 #[cfg(windows)]
-fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), String> {
+fn mask(
+    window: &Window,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    radius: i32,
+) -> Result<(), String> {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Gdi::{CreateRectRgn, SetWindowRgn};
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, CreateRoundRectRgn, SetWindowRgn};
 
     let handle = window.hwnd().map_err(|e| e.to_string())?;
     let hwnd = HWND(handle.0 as *mut _);
@@ -90,8 +98,33 @@ fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), 
     // for its duration. `SetWindowRgn` takes ownership of the region, so the
     // one made here is deliberately not deleted.
     unsafe {
+        // Rounded to the same corner the shell paints, not a plain rectangle.
+        // A rectangular shape around a rounded window leaves a wedge at each
+        // corner where the window is still there and nothing has drawn in it,
+        // and Windows fills that with its own frame — a square corner in the
+        // system accent colour, poking out past the rounded one, most visible
+        // the moment focus goes to another application and it is repainted.
+        //
+        // The left-hand drawer is where it showed, because that is the one
+        // arrangement whose shape has an edge running through the middle of the
+        // window rather than along it.
+        //
+        // The ellipse is twice the radius: `CreateRoundRectRgn` takes the width
+        // and height of the ellipse its corners are quarters of.
         let region = if width < 0 || height < 0 {
             None
+        } else if radius > 0 {
+            Some(CreateRoundRectRgn(
+                x,
+                y,
+                // Exclusive on the far edge, and a round-rect region is a pixel
+                // tighter than a rectangular one — without this the last column
+                // and row of the shell are cut off.
+                x + width + 1,
+                y + height + 1,
+                radius * 2,
+                radius * 2,
+            ))
         } else {
             Some(CreateRectRgn(x, y, x + width, y + height))
         };
@@ -110,7 +143,14 @@ fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), 
 }
 
 #[cfg(not(windows))]
-fn mask(_window: &Window, _x: i32, _y: i32, _width: i32, _height: i32) -> Result<(), String> {
+fn mask(
+    _window: &Window,
+    _x: i32,
+    _y: i32,
+    _width: i32,
+    _height: i32,
+    _radius: i32,
+) -> Result<(), String> {
     // Nothing to do and nothing to fail: the left-hand drawer moves the window
     // on platforms without a window region, which is what the fallback in
     // `place` is for.

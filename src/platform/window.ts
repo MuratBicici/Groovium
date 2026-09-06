@@ -77,7 +77,24 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
 }
 
 /**
- * Cut the window down to one rectangle, or hand it back whole with `null`.
+ * The corner the shell is drawn with, in px.
+ *
+ * Read from the stylesheet rather than named here, so the window's shape and
+ * the shell's cannot drift apart — a rectangular shape around a rounded window
+ * leaves a wedge at each corner where the window is still there and nothing has
+ * painted, which Windows fills with a frame of its own.
+ */
+function shellRadius(): number {
+  if (typeof getComputedStyle !== 'function') return 0;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue('--radius-widget')
+    .trim();
+  return Number.parseFloat(value) || 0;
+}
+
+/**
+ * Cut the window down to the shape of the shell, or hand it back whole with
+ * `null`.
  *
  * Everything outside is not the window any more — not for the mouse, not for
  * the compositor. This is what makes a window permanently wider than what it
@@ -94,8 +111,9 @@ export async function setWindowMask(
   // window before it starts, which on the right is the shape the window has
   // always had — and re-cutting a window to the shape it is already cut to is
   // a compositor round trip for no reason.
+  const radius = rect ? shellRadius() : 0;
   const wanted = rect
-    ? `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`
+    ? [rect.x, rect.y, rect.width, rect.height, radius].map(Math.round).join(',')
     : 'none';
   if (wanted === masked) return;
   masked = wanted;
@@ -110,6 +128,7 @@ export async function setWindowMask(
       // window be moved without being watched.
       width: rect ? Math.round(rect.width) : -1,
       height: rect ? Math.round(rect.height) : -1,
+      radius: Math.round(radius),
     });
   } catch (err) {
     // Forgotten again, so the next attempt is not skipped as a repeat of a
