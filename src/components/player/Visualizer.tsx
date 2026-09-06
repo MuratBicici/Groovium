@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { isTauri } from '@/core/utils/env';
+import { watchBars } from '@/core/visualizer';
 import { prefersReducedMotion } from '@/core/utils/motion';
 
 /**
@@ -95,36 +95,13 @@ export function Visualizer({ on }: { on: boolean }) {
   const bars = useRef<number[]>([]);
 
   useEffect(() => {
-    if (!on || !isTauri()) return;
-    let alive = true;
-    let stop: (() => void) | undefined;
-
-    void (async () => {
-      const [{ invoke }, { listen }] = await Promise.all([
-        import('@tauri-apps/api/core'),
-        import('@tauri-apps/api/event'),
-      ]);
-      const unlisten = await listen<number[]>('visualizer:bars', (event) => {
-        bars.current = event.payload;
-      });
-      // Both, and in this order: a listener attached after the capture started
-      // would miss frames, and one left attached after it stopped would hold a
-      // handle to a window that may be closing.
-      if (!alive) {
-        unlisten();
-        return;
-      }
-      stop = () => {
-        unlisten();
-        void invoke('visualizer_stop');
-      };
-      await invoke('visualizer_start');
-    })();
-
-    return () => {
-      alive = false;
-      stop?.();
-    };
+    if (!on) return;
+    // Counted rather than started here. The light around the window's edge
+    // wants the same frames, and two components calling the capture's own stop
+    // is one of them switching the other off.
+    return watchBars((frame) => {
+      bars.current = frame;
+    });
   }, [on]);
 
   useEffect(() => {

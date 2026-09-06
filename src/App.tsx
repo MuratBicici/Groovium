@@ -9,6 +9,7 @@ import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
+import { WindowGlow } from '@/components/player/WindowGlow';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
@@ -63,7 +64,7 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * | z-20   | Panels: Library, Playlists, Spotify             |
  * | z-30   | Modal sheets: playlist picker, station setup    |
  * | z-40   | The picker's confirmation, over its own sheet   |
- * | z-50   | The window's edge, which nothing may cover      |
+ * | z-50   | The window's edge and its light, which nothing may cover |
  *
  * Below all of it, at `-z-10`, is the visualiser. A negative index is the one
  * way to be under an element's content and still over its background, which is
@@ -114,6 +115,7 @@ export default function App() {
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const visualizer = useSettingsStore((s) => s.visualizer);
+  const windowGlow = useSettingsStore((s) => s.windowGlow);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
@@ -505,6 +507,9 @@ export default function App() {
           a sheet's backdrop did the same to all four. An edge that a menu can
           switch off is not an edge. Nothing is above this, and
           `pointer-events-none` means nothing has to be. */}
+      {/* Under the edge and on the same layer, so the hairline stays crisp on
+          top of the light rather than being drawn through it. */}
+      <WindowGlow on={windowGlow} />
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute inset-0 z-50 rounded-[var(--radius-widget)] ring-1 ring-inset ${

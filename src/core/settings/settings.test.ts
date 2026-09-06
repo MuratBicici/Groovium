@@ -42,6 +42,7 @@ describe('remembering that a version has been shown', () => {
       boostContrast: true,
       windowBorder: true,
       visualizer: false,
+      windowGlow: true,
       declinedVersion: '2.0.0',
     });
 
@@ -60,6 +61,7 @@ describe('remembering that a version has been shown', () => {
       boostContrast: true,
       windowBorder: true,
       visualizer: false,
+      windowGlow: true,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
     });

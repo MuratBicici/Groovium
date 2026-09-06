@@ -104,6 +104,14 @@ pub struct Settings {
     /// mean most people never saw it.
     #[serde(default = "on_unless_turned_off")]
     pub visualizer: bool,
+    /// Light around the window's edge, climbing with how loud the music is.
+    ///
+    /// Off unless asked for, unlike the visualiser. That one is behind the deck
+    /// where an ornament belongs; this one is on the window's own border, and a
+    /// border that started moving on its own after an update would be a change
+    /// to the shape of the app rather than something added to it.
+    #[serde(default)]
+    pub window_glow: bool,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -138,6 +146,7 @@ impl Default for Settings {
             boost_contrast: false,
             window_border: false,
             visualizer: on_unless_turned_off(),
+            window_glow: false,
             last_seen_version: None,
             declined_version: None,
         }
@@ -261,6 +270,7 @@ mod tests {
             boost_contrast: true,
             window_border: false,
             visualizer: true,
+            window_glow: true,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };

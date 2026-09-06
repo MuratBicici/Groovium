@@ -57,10 +57,12 @@ export function SettingsPanel({
   const boostContrast = useSettingsStore((s) => s.boostContrast);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const drawerSide = useSettingsStore((s) => s.drawerSide);
+  const windowGlow = useSettingsStore((s) => s.windowGlow);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
   const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
+  const setWindowGlow = useSettingsStore((s) => s.setWindowGlow);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
@@ -259,6 +261,13 @@ export function SettingsPanel({
             hint={t('settings.visualizerHint')}
             on={visualizer}
             onChange={setVisualizer}
+          />
+
+          <Toggle
+            label={t('settings.windowGlow')}
+            hint={t('settings.windowGlowHint')}
+            on={windowGlow}
+            onChange={setWindowGlow}
           />
 
           {/* Two buttons rather than a toggle. A switch would have to be

@@ -86,6 +86,16 @@ export interface Settings {
    */
   visualizer: boolean;
   /**
+   * Light around the window's edge, climbing with how loud the music is.
+   *
+   * Fed by the same frames as the visualiser, read as one number rather than
+   * two dozen. Off unless asked for: the blocks are behind the deck where an
+   * ornament belongs, and this is on the window's own border — which starting
+   * to move on its own after an update would read as the app changing shape
+   * rather than as something added to it.
+   */
+  windowGlow: boolean;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -122,6 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
   boostContrast: false,
   windowBorder: false,
   visualizer: true,
+  windowGlow: false,
   lastSeenVersion: null,
   declinedVersion: null,
 };
