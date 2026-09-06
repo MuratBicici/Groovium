@@ -87,6 +87,24 @@ export const SETTLE_MS = DURATION_MS + 40;
  * which is what it is: nobody presses this by accident.
  */
 const SWAP_FADE_MS = 130;
+
+/**
+ * The whole of the side swap: out, across, and back in.
+ *
+ * Exported because the drawer must not start opening on the new side while this
+ * is still running. It used to, both at once, which put a drawer growing out of
+ * a shell that was fading and a window that was moving.
+ */
+export const SWAP_MS = SWAP_FADE_MS * 2;
+
+/**
+ * A beat after the swap before the drawer opens again.
+ *
+ * Short enough not to feel like waiting and long enough to read as two things
+ * rather than one blurred one: the widget settles on its new side, and then the
+ * drawer comes out of it.
+ */
+export const SWAP_PAUSE_MS = 90;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
 /**

@@ -24,7 +24,7 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
-import { SETTLE_MS, useShellSize } from '@/components/controls/useShellSize';
+import { SETTLE_MS, SWAP_MS, SWAP_PAUSE_MS, useShellSize } from '@/components/controls/useShellSize';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
@@ -135,19 +135,31 @@ export default function App() {
 
   useEffect(() => {
     if (!swapping) return;
-    const timer = setTimeout(
-      () => {
-        setDrawerSide(chosenSide);
-        setSwapping(false);
-      },
-      // `SETTLE_MS`, not the animation's own length. The window is put right
-      // a little after the shell stops moving, and opening the other side
-      // before that happens starts it from a window that is still the old
-      // size — which threw the player across the screen instead of leaving it
-      // where it was.
-      prefersReducedMotion() ? 0 : SETTLE_MS,
+
+    // Three beats, and they must not run into each other.
+    //
+    // The drawer shuts on the side it was on. Then the widget changes sides,
+    // which `useShellSize` does behind a fade because the window itself has to
+    // move. Only then does the drawer open again — it used to start the moment
+    // the side flipped, so a drawer was growing out of a shell that was fading
+    // and a window that was travelling.
+    //
+    // `SETTLE_MS` rather than the animation's own length: the window is put
+    // right a little after the shell stops moving, and anything that starts
+    // before that is working from a window that is still the old size.
+    //
+    // With motion turned down there are no beats: both land in the same tick,
+    // in this order, and the drawer is simply on the other side.
+    const quick = prefersReducedMotion();
+    const swap = setTimeout(() => setDrawerSide(chosenSide), quick ? 0 : SETTLE_MS);
+    const reopen = setTimeout(
+      () => setSwapping(false),
+      quick ? 0 : SETTLE_MS + SWAP_MS + SWAP_PAUSE_MS,
     );
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(swap);
+      clearTimeout(reopen);
+    };
   }, [swapping, chosenSide]);
   const { shellRef, stageRef, trackRef, bottomRef, drawerPresent } = useShellSize(
     compact,
