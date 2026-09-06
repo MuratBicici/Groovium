@@ -13,6 +13,7 @@ import {
   hasRecovered,
   hasStalled,
   observe,
+  stayAlert,
   verifyGap,
   watchingFrom,
   type Watch,
@@ -182,5 +183,37 @@ describe('when to stop waiting', () => {
 
   it('says nothing about a silence that has not started', () => {
     expect(giveUpReason(0, 0, now)).toBeNull();
+  });
+});
+
+describe('when to keep asking quickly', () => {
+  it('relaxes on an answer that is playing and moving', () => {
+    expect(stayAlert(false, 41_000)).toBe(false);
+  });
+
+  it('stays alert while stalled', () => {
+    expect(stayAlert(true, 41_000)).toBe(true);
+  });
+
+  it('stays alert on an answer that nothing is playing', () => {
+    // `STALL_AFTER` is counting and wants its second look soon rather than
+    // half a minute later.
+    expect(stayAlert(false, null)).toBe(true);
+  });
+
+  it('does not answer to anything but Spotify', () => {
+    // `navigator.onLine` used to be part of this, and held the watchdog at its
+    // fastest rate for as long as it was false — fifteen times the requests,
+    // with nothing on screen to say so. A position that has arrived and moved
+    // is the network working; the flag is a hint about an interface, true on a
+    // router with nothing behind it and unreliable in this app's own webview.
+    const wasOffline = Object.getOwnPropertyDescriptor(navigator, 'onLine');
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    try {
+      expect(stayAlert(false, 41_000)).toBe(false);
+    } finally {
+      if (wasOffline) Object.defineProperty(navigator, 'onLine', wasOffline);
+      else delete (navigator as { onLine?: boolean }).onLine;
+    }
   });
 });

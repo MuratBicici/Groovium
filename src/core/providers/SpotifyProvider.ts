@@ -9,6 +9,7 @@ import {
   hasRecovered,
   hasStalled,
   observe,
+  stayAlert,
   verifyGap,
   watchingFrom,
   type Watch,
@@ -721,8 +722,8 @@ export class SpotifyProvider extends BaseProvider {
 
     // Playing, moving, and reachable. The first "not playing" is enough to go
     // back to asking quickly — `STALL_AFTER` wants its second observation
-    // soon, not twelve seconds later — and only a clean answer relaxes it.
-    this.alert = this.stalled || reported === null || !navigator.onLine;
+    // soon, not half a minute later — and only a clean answer relaxes it.
+    this.alert = stayAlert(this.stalled, reported);
   }
 
   /**

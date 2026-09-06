@@ -205,6 +205,30 @@ export function giveUpReason(
   return null;
 }
 
+/**
+ * Whether to keep asking quickly.
+ *
+ * Two things, and deliberately not a third. A stall is unfinished business, and
+ * Spotify answering that nothing is playing wants its second look soon rather
+ * than half a minute later — `STALL_AFTER` is counting.
+ *
+ * What is *not* here is `navigator.onLine`, which used to be, and which held
+ * the watchdog at its fastest rate for as long as it was false. It is a hint
+ * about a network interface: true on a router with no internet behind it, and
+ * measured unreliable in this app's own webview, which is why nothing else here
+ * depends on it either. Set against it is a request that has just come back
+ * from Spotify carrying a position that has moved since the last one. That is
+ * not a hint about the network; it is the network working, and it outranks any
+ * opinion the browser holds about the matter.
+ *
+ * The cost of having it backwards was fifteen times the requests: half an hour
+ * of listening at thirty a minute instead of two, for as long as the flag was
+ * wrong, and nothing on screen to say so.
+ */
+export function stayAlert(stalled: boolean, reported: number | null): boolean {
+  return stalled || reported === null;
+}
+
 export interface Watch {
   /** Where Spotify last said it was, or null before the first look. */
   seen: number | null;
