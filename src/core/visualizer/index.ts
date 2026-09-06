@@ -60,7 +60,9 @@ async function begin(mine: number): Promise<void> {
  * sound to draw and every edge stays dark. The same shape as the store handles
  * in `main.tsx`, and stripped from a build by the `DEV` guard.
  */
-if (import.meta.env.DEV) {
+// `window` as well as the flag: the tests run in node, where the module is
+// imported for the two functions below and there is no window to hang this on.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__grooviumBars = (bars: number[]) => {
     for (const watcher of watchers) watcher(bars);
   };
@@ -85,6 +87,21 @@ export function watchBars(watcher: Watcher): () => void {
 }
 
 /**
+ * How much more the lowest band counts than the highest.
+ *
+ * The bands arrive low to high, and this leans the answer onto the low ones:
+ * what should move an ornament on the window's edge is the part of the music
+ * you feel rather than the part you hear the words in. A hi-hat is a band at
+ * full height every half second and would have the edge flickering through a
+ * quiet passage; a kick is what should push it.
+ *
+ * Not all the way, though — the last band still carries a little, so a track
+ * with no bass in it at all still lights the window.
+ */
+const BASS_TILT = 2.2;
+const TREBLE_FLOOR = 0.12;
+
+/**
  * One number for how loud it is, from a frame of bands.
  *
  * A mean rather than a peak. Music lights a handful of bands hard and leaves
@@ -97,8 +114,13 @@ export function watchBars(watcher: Watcher): () => void {
 export function levelFrom(bars: number[]): number {
   if (bars.length === 0) return 0;
   let sum = 0;
-  for (const bar of bars) sum += bar;
-  return Math.min(1, Math.pow(sum / bars.length, 0.6));
+  let weights = 0;
+  for (let band = 0; band < bars.length; band++) {
+    const weight = Math.pow(1 - band / bars.length, BASS_TILT) + TREBLE_FLOOR;
+    sum += (bars[band] ?? 0) * weight;
+    weights += weight;
+  }
+  return Math.min(1, Math.pow(sum / weights, 0.6));
 }
 
 /** Below this a level is nothing, and saying so stops it decaying forever. */

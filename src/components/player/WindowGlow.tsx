@@ -31,6 +31,23 @@ const HAZE = 26;
 const BOLT_REACH = 15;
 const BOLT_LENGTH = 96;
 
+/**
+ * How much the level swells a bolt and lifts it.
+ *
+ * A bolt is born with the loudness it was born at, and then goes on answering
+ * to the loudness now — it widens and burns harder on a kick and settles back
+ * between them. The level it answers to leans on the low bands (see
+ * `levelFrom`), so what swells them is the part of the music you feel.
+ *
+ * The first number of each pair is what a bolt is at silence, the second what
+ * the level can add. Kept modest on purpose: this is an edge, and an edge that
+ * doubles in width is a second window rather than a light on this one.
+ */
+const SWELL_AT_REST = 0.68;
+const SWELL_WITH_LEVEL = 0.62;
+const BURN_AT_REST = 0.72;
+const BURN_WITH_LEVEL = 0.55;
+
 /** The lowest level worth drawing anything for. */
 const FLOOR = 0.004;
 
@@ -202,8 +219,13 @@ export function WindowGlow({ on }: { on: boolean }) {
       haze(-1, showing);
       haze(1, showing);
 
+      // Wider and harder the louder it is, which on a bass-leaning level means
+      // the edge breathes with the kick rather than with the whole mix.
+      const reach = BOLT_REACH * (SWELL_AT_REST + showing * SWELL_WITH_LEVEL);
+      const burn = BURN_AT_REST + showing * BURN_WITH_LEVEL;
+
       for (const mote of motes) {
-        const alpha = brightness(mote);
+        const alpha = Math.min(1, brightness(mote) * burn);
         if (alpha <= 0) continue;
         const length = BOLT_LENGTH * mote.size;
         const y = height * (1 - mote.height) - length / 2;
@@ -211,12 +233,12 @@ export function WindowGlow({ on }: { on: boolean }) {
         // two streams: sparks going off independently on either side read as
         // noise, and two that move together read as the window doing it.
         for (const facing of [0, 1] as const) {
-          const x = facing === 0 ? 0 : width - BOLT_REACH;
+          const x = facing === 0 ? 0 : width - reach;
           // Deep at the foot and bright at the top, crossed over as it climbs.
           context.globalAlpha = alpha * (1 - mote.height);
-          context.drawImage(bolts.low[facing], x, y, BOLT_REACH, length);
+          context.drawImage(bolts.low[facing], x, y, reach, length);
           context.globalAlpha = alpha * mote.height;
-          context.drawImage(bolts.high[facing], x, y, BOLT_REACH, length);
+          context.drawImage(bolts.high[facing], x, y, reach, length);
         }
       }
 

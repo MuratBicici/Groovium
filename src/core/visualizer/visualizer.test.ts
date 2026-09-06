@@ -24,6 +24,25 @@ describe('how loud it is', () => {
     expect(chorus).toBeGreaterThan(verse + 0.25);
   });
 
+  it('answers to the bass more than to the top end', () => {
+    // What should move an ornament on the window's edge is the part of the
+    // music you feel. A hi-hat is a band at full height every half second and
+    // would have the edge flickering through a quiet passage; a kick is what
+    // should push it.
+    const low = Array(24).fill(0);
+    const high = Array(24).fill(0);
+    for (let band = 0; band < 6; band++) low[band] = 0.9;
+    for (let band = 18; band < 24; band++) high[band] = 0.9;
+    expect(levelFrom(low)).toBeGreaterThan(levelFrom(high) * 1.8);
+  });
+
+  it('still lights for a track with no bass in it', () => {
+    // Leaning on the low end is not ignoring everything else.
+    const high = Array(24).fill(0);
+    for (let band = 16; band < 24; band++) high[band] = 1;
+    expect(levelFrom(high)).toBeGreaterThan(0.15);
+  });
+
   it('does not let quiet read as loud', () => {
     // The curve lifts the middle of the range. It must not lift the bottom of
     // it — a room tone should leave the light off.
