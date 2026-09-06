@@ -24,6 +24,31 @@ import { whilePaletteMoves } from '@/core/theme/palette';
 const HAZE = 26;
 
 /**
+ * The haze that is always there, from how loud the passage is.
+ *
+ * Deliberately a narrow range. This is the room the flare happens in, not the
+ * flare — if the standing haze is already bright there is nothing left for a
+ * kick to add.
+ */
+const HAZE_AT_REST = 0.11;
+const HAZE_WITH_LEVEL = 0.26;
+
+/**
+ * And the flare itself: a second pass over the whole edge on every hit.
+ *
+ * In the bright brass rather than the deep one, reaching further in, and added
+ * on top rather than painted over — so a kick lights both frames at once and by
+ * as much as it was worth. The bolts answer a hit too, but they are a handful
+ * of narrow things travelling; what makes a room feel struck is the light in
+ * all of it changing at once.
+ *
+ * Driven by the hit alone, not by the level. Loud music should not sit at
+ * permanent full flare, or there is nothing left to notice when the drum lands.
+ */
+const FLASH_ALPHA = 0.5;
+const FLASH_REACH = 0.9;
+
+/**
  * One rising light: how far in it reaches, and how long it is.
  *
  * Narrow and long, so it reads as a bolt travelling up the edge rather than as
@@ -254,15 +279,16 @@ export function WindowGlow({
     let last = performance.now();
     let frame = 0;
 
-    /** The haze that lies on an edge whatever else is happening on it. */
-    const haze = (side: -1 | 1, level: number) => {
+    /** One wash of light along an edge, fading inwards from it. */
+    const haze = (side: -1 | 1, colour: string, reach: number, alpha: number) => {
+      if (alpha <= 0) return;
       const from = side < 0 ? 0 : width;
-      const inward = context.createLinearGradient(from, 0, from + side * -HAZE, 0);
-      inward.addColorStop(0, colours.low);
+      const inward = context.createLinearGradient(from, 0, from + side * -reach, 0);
+      inward.addColorStop(0, colour);
       inward.addColorStop(1, 'transparent');
-      context.globalAlpha = 0.14 + level * 0.36;
+      context.globalAlpha = Math.min(1, alpha);
       context.fillStyle = inward;
-      context.fillRect(side < 0 ? 0 : width - HAZE, 0, HAZE, height);
+      context.fillRect(side < 0 ? 0 : width - reach, 0, reach, height);
     };
 
     const draw = (now: number) => {
@@ -298,8 +324,15 @@ export function WindowGlow({
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.
       context.globalCompositeOperation = 'lighter';
-      haze(-1, felt * force);
-      haze(1, felt * force);
+      // The room, then the flare in it. Added rather than painted over, so a
+      // kick brightens the whole of both frames by what it was worth.
+      const standing = (HAZE_AT_REST + felt * HAZE_WITH_LEVEL) * force;
+      const flare = punch * FLASH_ALPHA * force;
+      const flareReach = HAZE * (1 + punch * FLASH_REACH);
+      for (const side of [-1, 1] as const) {
+        haze(side, colours.low, HAZE, standing);
+        haze(side, colours.high, flareReach, flare);
+      }
 
       // Wider and harder the louder it is, which on a bass-leaning level means
       // the edge breathes with the kick rather than with the whole mix.
@@ -334,8 +367,8 @@ export function WindowGlow({
       measure();
       context.clearRect(0, 0, width, height);
       context.globalCompositeOperation = 'lighter';
-      haze(-1, 0);
-      haze(1, 0);
+      haze(-1, colours.low, HAZE, HAZE_AT_REST);
+      haze(1, colours.low, HAZE, HAZE_AT_REST);
       context.globalAlpha = 1;
       context.globalCompositeOperation = 'source-over';
     } else {
