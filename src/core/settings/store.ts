@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -7,18 +7,24 @@ import {
   type GlowKnob,
   type Language,
   type Settings,
-} from '@/core/settings';
+} from "@/core/settings";
 import {
   CUSTOM_DEFAULTS,
   CUSTOM_THEME,
   DEFAULT_THEME,
   isThemeId,
-} from '@/core/settings/themes';
-import { NOTCHES } from '@/core/visualizer';
-import type { CoverPalette } from '@/core/theme/fromCover';
-import { APP_VERSION } from '@/core/version';
-import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
-import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
+} from "@/core/settings/themes";
+import { NOTCHES } from "@/core/visualizer";
+import type { CoverPalette } from "@/core/theme/fromCover";
+import { whenPaletteSettles } from "@/core/theme/palette";
+import { APP_VERSION } from "@/core/version";
+import { parseCssColour, toHex, type Rgb } from "@/core/utils/colour";
+import {
+  derivePalette,
+  edgeFor,
+  onAccentFor,
+  strengthenText,
+} from "@/core/utils/contrast";
 
 /**
  * Preferences, in their own store.
@@ -45,7 +51,7 @@ interface SettingsStore extends Settings {
   setCompact: (compact: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
   setDrawerSide: (side: DrawerSide) => void;
-  setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
+  setCustomColour: (which: "primary" | "secondary", colour: string) => void;
   setBoostContrast: (boost: boolean) => void;
   setWindowBorder: (on: boolean) => void;
   setVisualizer: (on: boolean) => void;
@@ -69,8 +75,8 @@ interface SettingsStore extends Settings {
  * a distinct state from `language: 'en'` rather than a default value.
  */
 function systemLanguage(): Language {
-  if (typeof navigator === 'undefined') return 'en';
-  return navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+  if (typeof navigator === "undefined") return "en";
+  return navigator.language.toLowerCase().startsWith("tr") ? "tr" : "en";
 }
 
 /**
@@ -88,12 +94,19 @@ function systemLanguage(): Language {
  * other case rule that comes with a language, without a single special case in
  * the components.
  */
-function applyToDocument(settings: Settings, cover: CoverPalette | null = null): void {
-  if (typeof document === 'undefined') return;
+function applyToDocument(
+  settings: Settings,
+  cover: CoverPalette | null = null,
+): void {
+  if (typeof document === "undefined") return;
 
   const root = document.documentElement;
-  root.lang = settings.language ?? 'en';
-  if (settings.theme && settings.theme !== DEFAULT_THEME && isThemeId(settings.theme)) {
+  root.lang = settings.language ?? "en";
+  if (
+    settings.theme &&
+    settings.theme !== DEFAULT_THEME &&
+    isThemeId(settings.theme)
+  ) {
     root.dataset.theme = settings.theme;
   } else {
     delete root.dataset.theme;
@@ -121,75 +134,102 @@ function applyToDocument(settings: Settings, cover: CoverPalette | null = null):
   const painting = settings.themeFromCover ? cover : null;
 
   if (painting || settings.theme === CUSTOM_THEME) {
-    const primary = painting?.surface ?? settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
-    const secondary = painting?.accent ?? settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
+    const primary =
+      painting?.surface ?? settings.customPrimary ?? CUSTOM_DEFAULTS.primary;
+    const secondary =
+      painting?.accent ?? settings.customSecondary ?? CUSTOM_DEFAULTS.secondary;
 
     // The whole ramp is derived here rather than by `color-mix()` in the
     // stylesheet. Not a preference: CSS cannot measure what it produced, and
     // what it produced for a light surface was light text on a light ground.
     const derived = derivePalette(primary, secondary, settings.boostContrast);
     if (derived) {
-      for (const [name, value] of Object.entries(derived.variables)) set(name, value);
+      for (const [name, value] of Object.entries(derived.variables))
+        set(name, value);
       lightGround = derived.lightGround;
       faintAccent = derived.accentUnreadable;
     }
     // The light in the room, which every palette tints to match its own.
     // `DiscLight` needs raw channels to mix its own alphas against, so this is
     // the one value that cannot be a colour.
-    set('--sheen', sheenFrom(primary, lightGround));
+    set("--sheen", sheenFrom(primary, lightGround));
   } else {
     // The five hand-written palettes are calibrated hex in the stylesheet, so
     // there is nothing to rebuild. Two things still have to be computed from
     // them, and both are read back off the document rather than copied into
     // TypeScript, so a palette added later gets them without being told.
-    const seen = readPalette(root);
-    if (seen) {
-      // What reads on an accent-filled button. Every palette needs this, not
-      // just a custom one — the five built-in accents are all light, but a
-      // hard-coded dark text colour is a guess that happens to be right rather
-      // than an answer.
-      set('--color-on-accent', toHex(onAccentFor(seen.accents, settings.boostContrast)));
+    //
+    // Twice, though. The palette variables are registered and `:root` puts a
+    // transition across all of them, so reading one the instant the theme
+    // changed gives where the animation *starts* — the palette on the way out.
+    // These were a theme behind for exactly that reason, and the hairline
+    // between the player and the drawer is drawn in one of them. There is no
+    // asking a registered property for its target while it is in flight, so it
+    // is asked again once it has landed.
+    const derive = () => {
+      const seen = readPalette(root);
+      if (seen) {
+        // What reads on an accent-filled button. Every palette needs this, not
+        // just a custom one — the five built-in accents are all light, but a
+        // hard-coded dark text colour is a guess that happens to be right rather
+        // than an answer.
+        set(
+          "--color-on-accent",
+          toHex(onAccentFor(seen.accents, settings.boostContrast)),
+        );
 
-      // The hairline around inputs, sheets and swatches. Handed straight back
-      // for these five — their rings already read — but computed rather than
-      // assumed, so a palette added later cannot lose its edges silently.
-      set(
-        '--color-edge',
-        // The recess fill and the panel behind it — the two surfaces a
-        // hairline actually separates. `shell-700` is deliberately not here.
-        toHex(edgeFor(seen.surfaces.slice(1), seen.edge, settings.boostContrast)),
-      );
+        // The hairline around inputs, sheets and swatches. Handed straight back
+        // for these five — their rings already read — but computed rather than
+        // assumed, so a palette added later cannot lose its edges silently.
+        set(
+          "--color-edge",
+          // The recess fill and the panel behind it — the two surfaces a
+          // hairline actually separates. `shell-700` is deliberately not here.
+          toHex(
+            edgeFor(seen.surfaces.slice(1), seen.edge, settings.boostContrast),
+          ),
+        );
 
-      if (settings.boostContrast) {
-        for (const [name, value] of Object.entries(
-          strengthenText(seen.surfaces, seen.text, true),
-        )) {
-          set(name, value);
+        if (settings.boostContrast) {
+          for (const [name, value] of Object.entries(
+            strengthenText(seen.surfaces, seen.text, true),
+          )) {
+            set(name, value);
+          }
         }
       }
-    }
+    };
+
+    derive();
+    // Only the last theme chosen is waiting to be asked again.
+    stopWaiting?.();
+    stopWaiting = whenPaletteSettles(() => {
+      stopWaiting?.();
+      stopWaiting = null;
+      derive();
+    });
   }
 
   if (faintAccent) {
-    root.dataset.accent = 'faint';
+    root.dataset.accent = "faint";
   } else {
     delete root.dataset.accent;
   }
 
   if (lightGround) {
-    root.dataset.ground = 'light';
+    root.dataset.ground = "light";
   } else {
     delete root.dataset.ground;
   }
 
   if (settings.windowBorder) {
-    root.dataset.border = 'on';
+    root.dataset.border = "on";
   } else {
     delete root.dataset.border;
   }
 
   if (settings.reduceMotion) {
-    root.dataset.motion = 'off';
+    root.dataset.motion = "off";
   } else {
     delete root.dataset.motion;
   }
@@ -206,6 +246,16 @@ function applyToDocument(settings: Settings, cover: CoverPalette | null = null):
 const applied = new Set<string>();
 
 /**
+ * The listener waiting for the current theme change to finish, if there is one.
+ *
+ * Module-level beside `applied` and for the same reason: this function is
+ * called again long before anybody thinks about the last time it ran, and two
+ * of these waiting at once would both answer for a theme only one of them is
+ * about.
+ */
+let stopWaiting: (() => void) | null = null;
+
+/**
  * The palette as the document currently resolves it.
  *
  * Returns null outside a browser, and whenever a value comes back empty —
@@ -219,7 +269,7 @@ function readPalette(root: HTMLElement): {
   edge: Rgb;
   text: { strong: Rgb; body: Rgb; quiet: Rgb };
 } | null {
-  if (typeof getComputedStyle !== 'function') return null;
+  if (typeof getComputedStyle !== "function") return null;
   const styles = getComputedStyle(root);
   const read = (name: string): Rgb | null => {
     const value = styles.getPropertyValue(name).trim();
@@ -229,16 +279,21 @@ function readPalette(root: HTMLElement): {
     return value ? parseCssColour(value) : null;
   };
 
-  const surfaces = ['--color-shell-700', '--color-shell-800', '--color-shell-900'].map(read);
+  const surfaces = [
+    "--color-shell-700",
+    "--color-shell-800",
+    "--color-shell-900",
+  ].map(read);
   // 600 first: it is the darker of the two a button fills with, so it leads the
   // list `onAccentFor` tints from.
-  const accents = ['--color-brass-600', '--color-brass-500'].map(read);
-  const edge = read('--color-shell-600');
-  const strong = read('--color-cream-50');
-  const body = read('--color-cream-200');
-  const quiet = read('--color-cream-400');
+  const accents = ["--color-brass-600", "--color-brass-500"].map(read);
+  const edge = read("--color-shell-600");
+  const strong = read("--color-cream-50");
+  const body = read("--color-cream-200");
+  const quiet = read("--color-cream-400");
 
-  if (surfaces.some((s) => s === null) || accents.some((a) => a === null)) return null;
+  if (surfaces.some((s) => s === null) || accents.some((a) => a === null))
+    return null;
   if (!edge || !strong || !body || !quiet) return null;
   return {
     surfaces: surfaces as Rgb[],
@@ -263,14 +318,14 @@ function readPalette(root: HTMLElement): {
  * tinted the same way.
  */
 function sheenFrom(hex: string, lightGround: boolean): string {
-  const fallback = lightGround ? '20 16 12' : '255 247 235';
-  const value = hex.replace('#', '');
+  const fallback = lightGround ? "20 16 12" : "255 247 235";
+  const value = hex.replace("#", "");
   if (value.length !== 6) return fallback;
   const channels = [0, 2, 4].map((at) => parseInt(value.slice(at, at + 2), 16));
   if (channels.some(Number.isNaN)) return fallback;
 
   const towards = lightGround ? 0 : 255;
-  return channels.map((c) => Math.round(c * 0.08 + towards * 0.92)).join(' ');
+  return channels.map((c) => Math.round(c * 0.08 + towards * 0.92)).join(" ");
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
@@ -282,8 +337,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
    * place to forget a field.
    */
   const settingsNow = (): Settings => {
-    const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
-    const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
+    const {
+      theme,
+      language,
+      reduceMotion,
+      alwaysOnTop,
+      compact,
+      drawerOpen,
+      drawerSide,
+    } = get();
+    const { customPrimary, customSecondary, boostContrast, windowBorder } =
+      get();
     const { visualizer, windowGlow, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed } = get();
     const { lastSeenVersion, declinedVersion } = get();
@@ -353,7 +417,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setDrawerSide: (drawerSide) => commit({ drawerSide }),
     setCustomColour: (which, colour) =>
       commit(
-        which === 'primary'
+        which === "primary"
           ? { customPrimary: colour, theme: CUSTOM_THEME }
           : { customSecondary: colour, theme: CUSTOM_THEME },
       ),
@@ -373,12 +437,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
      */
     setCoverPalette(coverPalette) {
       const { coverPalette: was } = get();
-      if (was?.surface === coverPalette?.surface && was?.accent === coverPalette?.accent) return;
+      if (
+        was?.surface === coverPalette?.surface &&
+        was?.accent === coverPalette?.accent
+      )
+        return;
       set({ coverPalette });
       applyToDocument(settingsNow(), coverPalette);
     },
     setGlow: (knob, notch) =>
-      commit({ [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
+      commit({
+        [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))),
+      }),
     // Through `commit` like everything else: it is the one place that knows the
     // whole shape of what goes to disk, and going around it is how a write ends
     // up dropping a field. Re-applying the palette on the way is wasted work
@@ -399,8 +469,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
 /** The current language, readable outside React — the tray labels need it. */
 export function currentLanguage(): Language {
-  return useSettingsStore.getState().language ?? 'en';
+  return useSettingsStore.getState().language ?? "en";
 }
 
-export const useLanguage = () => useSettingsStore((s) => s.language ?? 'en');
+export const useLanguage = () => useSettingsStore((s) => s.language ?? "en");
 export const useTheme = () => useSettingsStore((s) => s.theme ?? DEFAULT_THEME);

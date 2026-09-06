@@ -3,6 +3,7 @@ import { GLOW, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, bassOf, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { whenPaletteSettles } from '@/core/theme/palette';
 
 /**
  * An aura along the window's edges, with lights rising through it.
@@ -213,17 +214,23 @@ export function WindowGlow({
 
     // A theme change rewrites the custom properties on the root and changes no
     // size at all, so nothing watching the element would hear about it.
-    const themed = new MutationObserver(() => {
+    const reread = () => {
       colours = palette(document.documentElement);
       bolts = {
         low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
         high: [bolt(colours.high, -1), bolt(colours.high, 1)] as const,
       };
-    });
+    };
+    const themed = new MutationObserver(reread);
     themed.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme', 'data-ground', 'style'],
     });
+    // And again when the fade between palettes is over. The variables are
+    // registered and transitioned, so what the document reports the instant
+    // the attribute changes is where the animation *starts* — the palette on
+    // the way out, which is why this edge was a theme behind.
+    const settled = whenPaletteSettles(reread);
 
     let motes: Mote[] = [];
     let owed = 0;
@@ -323,6 +330,7 @@ export function WindowGlow({
     return () => {
       cancelAnimationFrame(frame);
       themed.disconnect();
+      settled();
     };
   }, [on]);
 

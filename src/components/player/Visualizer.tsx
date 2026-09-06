@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { watchBars } from '@/core/visualizer';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { whenPaletteSettles } from '@/core/theme/palette';
 
 /**
  * Bars behind the deck, moving to whatever the speakers are playing.
@@ -141,14 +142,21 @@ export function Visualizer({ on }: { on: boolean }) {
       colours = palette(document.documentElement);
     };
     // A theme change rewrites the custom properties on the root and changes no
-    // size at all, so the observer above would never hear about it.
-    const themed = new MutationObserver(() => {
+    // size at all, so nothing watching the element for its size would hear
+    // about it.
+    const reread = () => {
       colours = palette(document.documentElement);
-    });
+    };
+    const themed = new MutationObserver(reread);
     themed.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme', 'data-ground', 'style'],
     });
+    // And again when the fade between palettes is over. The variables are
+    // registered and transitioned, so what the document reports the instant
+    // the attribute changes is where the animation *starts* — the palette on
+    // the way out, which is why these bars were a theme behind.
+    const settled = whenPaletteSettles(reread);
 
     let frame = 0;
     const draw = () => {
@@ -195,6 +203,7 @@ export function Visualizer({ on }: { on: boolean }) {
     return () => {
       cancelAnimationFrame(frame);
       themed.disconnect();
+      settled();
     };
   }, [on]);
 
