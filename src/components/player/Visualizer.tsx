@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { watchBars } from '@/core/visualizer';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { whenPaletteSettles } from '@/core/theme/palette';
+import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**
  * Bars behind the deck, moving to whatever the speakers are playing.
@@ -152,11 +152,13 @@ export function Visualizer({ on }: { on: boolean }) {
       attributes: true,
       attributeFilter: ['data-theme', 'data-ground', 'style'],
     });
-    // And again when the fade between palettes is over. The variables are
-    // registered and transitioned, so what the document reports the instant
-    // the attribute changes is where the animation *starts* — the palette on
-    // the way out, which is why these bars were a theme behind.
-    const settled = whenPaletteSettles(reread);
+    // And every frame for as long as the fade lasts. The variables are
+    // registered and transitioned, so the document reports wherever the
+    // animation currently is — which is exactly what should be drawn, and
+    // exactly what makes this fade along with the window instead of switching
+    // at one end of it. Reading once, at the moment the attribute changed, is
+    // what left these a theme behind.
+    const fading = whilePaletteMoves(reread);
 
     let frame = 0;
     const draw = () => {
@@ -203,7 +205,7 @@ export function Visualizer({ on }: { on: boolean }) {
     return () => {
       cancelAnimationFrame(frame);
       themed.disconnect();
-      settled();
+      fading();
     };
   }, [on]);
 
