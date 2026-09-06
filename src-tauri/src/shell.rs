@@ -92,9 +92,14 @@ fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), 
         } else {
             None
         };
-        // Redrawing, because the shape is what changed and nothing else will
-        // ask for it.
-        if SetWindowRgn(hwnd, region, true) == 0 {
+        // Emphatically without a redraw. The region is a clip over a surface
+        // the webview has already painted, and everything outside the shell on
+        // that surface is transparent — so revealing more of it is nothing but
+        // an unclip. Asking Windows to redraw the strip instead makes it paint
+        // an area the webview has not composited yet, and that bare frame is
+        // the empty window that appeared in the direction the drawer was about
+        // to open.
+        if SetWindowRgn(hwnd, region, false) == 0 {
             return Err("the window would not take the region".into());
         }
     }

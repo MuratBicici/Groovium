@@ -83,10 +83,23 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
  * the compositor. This is what makes a window permanently wider than what it
  * shows behave like a window the size of what it shows.
  */
+let masked = 'none';
+
 export async function setWindowMask(
   rect: { x: number; y: number; width: number; height: number } | null,
 ): Promise<void> {
   if (!isTauri()) return;
+
+  // Skipped when it would change nothing. Every animation asks for the whole
+  // window before it starts, which on the right is the shape the window has
+  // always had — and re-cutting a window to the shape it is already cut to is
+  // a compositor round trip for no reason.
+  const wanted = rect
+    ? `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`
+    : 'none';
+  if (wanted === masked) return;
+  masked = wanted;
+
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     await invoke('set_window_mask', {
@@ -96,6 +109,9 @@ export async function setWindowMask(
       height: Math.round(rect?.height ?? 0),
     });
   } catch (err) {
+    // Forgotten again, so the next attempt is not skipped as a repeat of a
+    // shape the window never took.
+    masked = 'unknown';
     // A window that is the wrong shape still shows what it should. The cost is
     // clicks landing on a transparent edge, which is worth a warning and not an
     // interruption.
