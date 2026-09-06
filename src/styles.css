@@ -204,24 +204,6 @@ body,
   background: transparent;
 }
 
-/*
- * A colour so faint it is not one, over the whole window.
- *
- * Not decoration. On the left the window is deliberately wider than the shell,
- * and a fully transparent area is one the compositor gets no pixels for at all
- * — so when the window's shape opened up to let the drawer out, DWM had nothing
- * from this app to draw there and fell back to the window's own frame. That was
- * the empty bordered rectangle that flashed in the direction the drawer was
- * about to open, looking like a window from a much older Windows.
- *
- * Four thousandths of black is below anything an eye can find against a
- * desktop, and it means every pixel of the window is composited by this app
- * whatever shape the window is currently cut to.
- */
-#root {
-  background: rgb(0 0 0 / 0.004);
-}
-
 body {
   overflow: hidden;
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
