@@ -226,7 +226,10 @@ export function Visualizer({ on }: { on: boolean }) {
       // offsets are simply over-constrained and ignored. Measuring that and
       // writing it back grew it every frame; it reached twenty-six thousand
       // pixels across, covered the window and washed everything out.
-      className="pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-25"
+      // Rounded like the shell, for the same reason the edge light is: a
+      // canvas repainting every frame gets a compositor layer of its own, and a
+      // promoted layer can escape an ancestor's rounded clip.
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full rounded-[var(--radius-widget)] opacity-25"
     />
   );
 }

@@ -347,7 +347,14 @@ export function WindowGlow({
     <canvas
       ref={canvas}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 z-50 h-full w-full"
+      // Rounded like the shell it sits in, as well as clipped by it. The
+      // shell's `overflow-hidden` should be enough and is not always: a canvas
+      // repainting every frame gets a compositor layer of its own, and a
+      // promoted layer can escape an ancestor's rounded clip — which shows as
+      // exactly this shape, a square corner in the light's own colour poking
+      // out past the rounded one, repainting when focus moves. Its own radius
+      // costs nothing and does not depend on being clipped by anybody.
+      className="pointer-events-none absolute inset-0 z-50 h-full w-full rounded-[var(--radius-widget)]"
     />
   );
 }
