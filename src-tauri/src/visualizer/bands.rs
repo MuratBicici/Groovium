@@ -26,9 +26,13 @@ const HIGH_HZ: f32 = 14_000.0;
 ///
 /// Rising is instant and falling is not, which is what makes a bar chart read
 /// as an analyser rather than as noise: a peak is legible for a moment after
-/// the sound that made it. At about 30 frames a second this empties a full bar
-/// in a little under half a second.
-const FALL: f32 = 0.86;
+/// the sound that made it. A full bar empties in a little under half a second.
+///
+/// The number is per frame rather than per second, so it moved when the frame
+/// rate did: at 60 a second, 0.86 empties a bar twice as fast as it used to and
+/// the bars would flicker where they used to fall. 0.93 is the same half-second
+/// at the new rate.
+const FALL: f32 = 0.93;
 
 /// Where each bar's frequencies start and end, as indices into a spectrum.
 ///

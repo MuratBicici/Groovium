@@ -48,9 +48,18 @@ const WINDOW: usize = 2048;
 /// What the capture is asked for, and so what the spectrum is computed against.
 const RATE: u32 = 48_000;
 
-/// How often a frame is sent. Thirty a second is smooth, and is half the work
-/// sixty would be for something sitting behind the real interface.
-const FRAME: Duration = Duration::from_millis(33);
+/// How often a frame is sent.
+///
+/// Sixty, having been thirty. Thirty was chosen when the only thing listening
+/// was a wall of blocks behind the deck, where half a frame of lag is nothing.
+/// The window's edge answers to the hits in the music instead, and there the
+/// wait between frames *is* the lag — a kick landing up to a thirtieth of a
+/// second after it was played is a light that follows the music rather than
+/// keeping time with it.
+///
+/// The cost is one more array of two dozen floats over the bridge per frame,
+/// against a spectrum that was already being computed.
+const FRAME: Duration = Duration::from_millis(16);
 
 /// The event the webview listens on. One array of `BARS` floats in 0..=1.
 const EVENT: &str = "visualizer:bars";

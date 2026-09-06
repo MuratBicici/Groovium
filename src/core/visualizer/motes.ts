@@ -32,12 +32,19 @@ export interface Mote {
  */
 export const MOTE_LIMIT = 16;
 
-/** How many appear per second when it is as loud as it gets. */
-const MOTES_PER_SECOND = 9;
+/**
+ * How many appear per second when it is as loud as it gets.
+ *
+ * A trickle rather than the supply. Most of them are launched on the hits in
+ * the music (see `onset`), which is what makes the edge read as being in the
+ * song rather than beside it; this is what keeps something happening through a
+ * passage with no drums in it.
+ */
+const MOTES_PER_SECOND = 3.5;
 
 /** How fast they climb: the first at any volume, the second only when loud. */
-const RISE_BASE = 0.22;
-const RISE_WITH_LEVEL = 0.42;
+const RISE_BASE = 0.3;
+const RISE_WITH_LEVEL = 0.55;
 
 /**
  * How many to try to light this frame.
@@ -105,4 +112,26 @@ export function advance(
   }
 
   return { motes: risen, owed: due };
+}
+
+/**
+ * Light one now, because the music just did something.
+ *
+ * Apart from the trickle in `advance` on purpose: that one is a rate and this
+ * one is an event. `force` is how hard the hit was, and it goes into the light
+ * rather than replacing the level — a soft kick in a loud passage is still a
+ * bright light, and a hard one in a quiet passage is still not a blinding one.
+ */
+export function launch(motes: Mote[], level: number, force: number, roll: () => number): Mote[] {
+  if (motes.length >= MOTE_LIMIT) return motes;
+  const born = lit(level, roll);
+  return [
+    ...motes,
+    {
+      ...born,
+      heat: Math.min(1, born.heat + force * 0.45),
+      // A hit throws its light harder as well as brighter.
+      speed: born.speed * (1 + force * 0.35),
+    },
+  ];
 }

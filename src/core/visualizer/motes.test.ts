@@ -38,11 +38,12 @@ describe('lighting new ones', () => {
   });
 
   it('carries the fraction of one it could not light', () => {
-    // A sixtieth of a second is a quarter of a mote. Rounded away every frame,
-    // the window never lights at all.
+    // The trickle is a few a second, so a frame is a small fraction of one
+    // light. Rounded away every frame, the window never lights at all — and
+    // two seconds is long enough that a working one certainly has.
     let owed = 0;
     let motes: Mote[] = [];
-    for (let frame = 0; frame < 30; frame++) {
+    for (let frame = 0; frame < 120; frame++) {
       ({ motes, owed } = advance(motes, 0.5, FRAME, owed, rolls(0.5)));
     }
     expect(motes.length).toBeGreaterThan(0);

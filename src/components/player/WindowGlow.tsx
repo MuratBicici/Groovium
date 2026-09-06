@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { levelFrom, settleLevel, watchBars } from '@/core/visualizer';
-import { advance, brightness, type Mote } from '@/core/visualizer/motes';
+import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
+import { NO_BEAT, bassOf, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
 
 /**
@@ -47,6 +48,17 @@ const SWELL_AT_REST = 0.68;
 const SWELL_WITH_LEVEL = 0.62;
 const BURN_AT_REST = 0.72;
 const BURN_WITH_LEVEL = 0.55;
+
+/**
+ * How long a hit is still felt, and how much of one counts as level.
+ *
+ * The swell and the burn follow the level, and a level is an envelope: it says
+ * how loud the passage is, not that something just happened. A hit is added to
+ * it for a fifth of a second and fades, so a kick is a flare on the edge rather
+ * than a slightly larger number.
+ */
+const PUNCH_MS = 210;
+const PUNCH_WEIGHT = 0.55;
 
 /** The lowest level worth drawing anything for. */
 const FLOOR = 0.004;
@@ -121,11 +133,17 @@ export function WindowGlow({ on }: { on: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
   const measured = useRef(0);
+  /** The low end on its own, which is what the hits are heard in. */
+  const bass = useRef(0);
 
   useEffect(() => {
     if (!on) return;
     return watchBars((bars) => {
       measured.current = levelFrom(bars);
+      // Kept apart from the level. The level is the whole mix leaning on the
+      // low end; this is the low end alone, and only it can say that something
+      // was struck rather than that the music got louder.
+      bass.current = bassOf(bars);
     });
   }, [on]);
 
@@ -185,6 +203,8 @@ export function WindowGlow({ on }: { on: boolean }) {
     let motes: Mote[] = [];
     let owed = 0;
     let showing = 0;
+    let beat: Beat = NO_BEAT;
+    let punch = 0;
     let last = performance.now();
     let frame = 0;
 
@@ -210,19 +230,31 @@ export function WindowGlow({ on }: { on: boolean }) {
       showing = settleLevel(showing, measured.current);
       ({ motes, owed } = advance(motes, showing, seconds, owed, Math.random));
 
+      // The hits, which are what the edge is actually keeping time with.
+      const heard = listen(beat, bass.current, seconds);
+      beat = heard.beat;
+      punch = Math.max(0, punch - (seconds * 1000) / PUNCH_MS);
+      if (heard.hit > 0) {
+        motes = launch(motes, showing, heard.hit, Math.random);
+        punch = Math.max(punch, heard.hit);
+      }
+      // Never past one: a flare is the edge doing more, not the edge being
+      // replaced by a white rectangle.
+      const felt = Math.min(1, showing + punch * PUNCH_WEIGHT);
+
       context.clearRect(0, 0, width, height);
       if (showing <= FLOOR && motes.length === 0) return;
 
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.
       context.globalCompositeOperation = 'lighter';
-      haze(-1, showing);
-      haze(1, showing);
+      haze(-1, felt);
+      haze(1, felt);
 
       // Wider and harder the louder it is, which on a bass-leaning level means
       // the edge breathes with the kick rather than with the whole mix.
-      const reach = BOLT_REACH * (SWELL_AT_REST + showing * SWELL_WITH_LEVEL);
-      const burn = BURN_AT_REST + showing * BURN_WITH_LEVEL;
+      const reach = BOLT_REACH * (SWELL_AT_REST + felt * SWELL_WITH_LEVEL);
+      const burn = BURN_AT_REST + felt * BURN_WITH_LEVEL;
 
       for (const mote of motes) {
         const alpha = Math.min(1, brightness(mote) * burn);
