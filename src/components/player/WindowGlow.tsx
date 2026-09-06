@@ -51,6 +51,18 @@ const BURN_AT_REST = 0.72;
 const BURN_WITH_LEVEL = 0.55;
 
 /**
+ * And how much longer a bolt runs when the music hits.
+ *
+ * Width and brightness were doing all the answering, and neither of them says
+ * anything about *travel*. A bolt is a shape whose whole meaning is its long
+ * axis, so stretching it on a kick is the change that reads as the edge being
+ * struck rather than merely turned up. Stretched about its own middle, so it
+ * grows both ways from where it is rather than lurching up the window.
+ */
+const STRETCH_AT_REST = 0.85;
+const STRETCH_WITH_LEVEL = 0.6;
+
+/**
  * How long a hit is still felt, and how much of one counts as level.
  *
  * The swell and the burn follow the level, and a level is an envelope: it says
@@ -291,13 +303,14 @@ export function WindowGlow({
 
       // Wider and harder the louder it is, which on a bass-leaning level means
       // the edge breathes with the kick rather than with the whole mix.
+      const stretch = STRETCH_AT_REST + felt * STRETCH_WITH_LEVEL;
       const reach = BOLT_REACH * (SWELL_AT_REST + felt * SWELL_WITH_LEVEL) * force;
       const burn = (BURN_AT_REST + felt * BURN_WITH_LEVEL) * force;
 
       for (const mote of motes) {
         const alpha = Math.min(1, brightness(mote) * burn);
         if (alpha <= 0) continue;
-        const length = BOLT_LENGTH * mote.size;
+        const length = BOLT_LENGTH * mote.size * stretch;
         const y = height * (1 - mote.height) - length / 2;
         // Both edges, the same light on each. They are a mirror rather than
         // two streams: sparks going off independently on either side read as
