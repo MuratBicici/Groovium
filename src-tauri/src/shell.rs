@@ -98,32 +98,38 @@ fn mask(
     // for its duration. `SetWindowRgn` takes ownership of the region, so the
     // one made here is deliberately not deleted.
     unsafe {
-        // Rounded to the same corner the shell paints, not a plain rectangle.
-        // A rectangular shape around a rounded window leaves a wedge at each
-        // corner where the window is still there and nothing has drawn in it,
-        // and Windows fills that with its own frame — a square corner in the
-        // system accent colour, poking out past the rounded one, most visible
-        // the moment focus goes to another application and it is repainted.
+        // Rounded like the shell, and a shade larger than it.
         //
-        // The left-hand drawer is where it showed, because that is the one
-        // arrangement whose shape has an edge running through the middle of the
-        // window rather than along it.
+        // Rounded, because a rectangular shape around a rounded window leaves a
+        // wedge at each corner where the window is still there and nothing has
+        // painted, which Windows fills with a frame of its own — a square
+        // corner poking out past the rounded one, repainted in its inactive
+        // shade the moment focus goes elsewhere. The left-hand drawer is where
+        // it showed, being the one arrangement whose shape has an edge running
+        // through the middle of the window rather than along it.
+        //
+        // Larger, because a region is a one-bit cut: a pixel is in the window
+        // or it is not, and a curve made of whole pixels is a staircase. Held
+        // a couple of pixels off the shell, the cut lands where the shell has
+        // already faded to nothing and what shows is the shell's own corner,
+        // drawn with all the smoothing a browser does. Whatever wedge is left
+        // is two pixels wide, which is nothing to fill.
         //
         // The ellipse is twice the radius: `CreateRoundRectRgn` takes the width
         // and height of the ellipse its corners are quarters of.
+        const SLACK: i32 = 2;
         let region = if width < 0 || height < 0 {
             None
         } else if radius > 0 {
             Some(CreateRoundRectRgn(
-                x,
-                y,
+                x - SLACK,
+                y - SLACK,
                 // Exclusive on the far edge, and a round-rect region is a pixel
-                // tighter than a rectangular one — without this the last column
-                // and row of the shell are cut off.
-                x + width + 1,
-                y + height + 1,
-                radius * 2,
-                radius * 2,
+                // tighter than a rectangular one.
+                x + width + SLACK + 1,
+                y + height + SLACK + 1,
+                (radius + SLACK) * 2,
+                (radius + SLACK) * 2,
             ))
         } else {
             Some(CreateRectRgn(x, y, x + width, y + height))
