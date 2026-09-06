@@ -18,9 +18,18 @@ import { prefersReducedMotion } from '@/core/utils/motion';
  * without a window or a sound card.
  */
 
-/** How far the haze reaches in from an edge, and how far a rising light does. */
+/** How far the haze reaches in from an edge. */
 const HAZE = 26;
-const MOTE_REACH = 54;
+
+/**
+ * One rising light: how far in it reaches, and how long it is.
+ *
+ * Narrow and long, so it reads as a bolt travelling up the edge rather than as
+ * something floating past it. A round one was tried and looks like a bubble;
+ * the length is what makes the direction visible.
+ */
+const BOLT_REACH = 15;
+const BOLT_LENGTH = 96;
 
 /** The lowest level worth drawing anything for. */
 const FLOOR = 0.004;
@@ -48,28 +57,46 @@ function palette(root: HTMLElement): Palette {
 }
 
 /**
- * One soft light, drawn once and kept.
+ * One bolt of light, drawn once and kept.
  *
- * A radial gradient per light per frame is a gradient object built thirty-odd
- * times every frame; drawn once into its own canvas it is an image copy, which
- * is the thing hardware is good at. Redrawn only when the theme changes.
+ * Built in two passes: a sideways gradient for how it fades in from the edge,
+ * and then a vertical one composited as `destination-in`, which keeps the
+ * first pass only where the second is opaque. That is what tapers both ends
+ * without drawing a shape — a rectangle fading to nothing at the top and the
+ * bottom, which is the flat streak this wants rather than a blob.
+ *
+ * `facing` is which edge it belongs to: -1 fades to the right, 1 to the left.
+ * Two sprites rather than one and a transform, because a transform is state on
+ * the context and this is drawn a couple of dozen times a frame.
+ *
+ * Once per theme, not once per frame. A gradient built per light per frame is
+ * thirty-odd objects a frame; a sprite is an image copy, which is the thing
+ * hardware is good at.
  */
-function sprite(colour: string, radius: number): HTMLCanvasElement {
-  const size = radius * 2;
+function bolt(colour: string, facing: -1 | 1): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = BOLT_REACH;
+  canvas.height = BOLT_LENGTH;
   const context = canvas.getContext('2d');
   if (!context) return canvas;
 
-  const shine = context.createRadialGradient(radius, radius, 0, radius, radius, radius);
-  shine.addColorStop(0, colour);
-  // A stop partway out as well as at the ends, so the falloff is a glow rather
-  // than a disc with a soft edge.
-  shine.addColorStop(0.3, colour);
-  shine.addColorStop(1, 'transparent');
-  context.fillStyle = shine;
-  context.fillRect(0, 0, size, size);
+  const near = facing < 0 ? 0 : BOLT_REACH;
+  const inward = context.createLinearGradient(near, 0, BOLT_REACH - near, 0);
+  inward.addColorStop(0, colour);
+  // Bright for the first third, then away: an edge-lit line rather than a
+  // band of even colour.
+  inward.addColorStop(0.3, colour);
+  inward.addColorStop(1, 'transparent');
+  context.fillStyle = inward;
+  context.fillRect(0, 0, BOLT_REACH, BOLT_LENGTH);
+
+  const along = context.createLinearGradient(0, 0, 0, BOLT_LENGTH);
+  along.addColorStop(0, 'rgba(0,0,0,0)');
+  along.addColorStop(0.5, 'rgba(0,0,0,1)');
+  along.addColorStop(1, 'rgba(0,0,0,0)');
+  context.globalCompositeOperation = 'destination-in';
+  context.fillStyle = along;
+  context.fillRect(0, 0, BOLT_REACH, BOLT_LENGTH);
   return canvas;
 }
 
@@ -93,8 +120,11 @@ export function WindowGlow({ on }: { on: boolean }) {
     if (!context) return;
 
     let colours = palette(document.documentElement);
-    let low = sprite(colours.low, MOTE_REACH);
-    let high = sprite(colours.high, MOTE_REACH);
+    // Deep and bright, one of each per edge.
+    let bolts = {
+      low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
+      high: [bolt(colours.high, -1), bolt(colours.high, 1)] as const,
+    };
     let width = 0;
     let height = 0;
 
@@ -125,8 +155,10 @@ export function WindowGlow({ on }: { on: boolean }) {
     // size at all, so nothing watching the element would hear about it.
     const themed = new MutationObserver(() => {
       colours = palette(document.documentElement);
-      low = sprite(colours.low, MOTE_REACH);
-      high = sprite(colours.high, MOTE_REACH);
+      bolts = {
+        low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
+        high: [bolt(colours.high, -1), bolt(colours.high, 1)] as const,
+      };
     });
     themed.observe(document.documentElement, {
       attributes: true,
@@ -173,16 +205,19 @@ export function WindowGlow({ on }: { on: boolean }) {
       for (const mote of motes) {
         const alpha = brightness(mote);
         if (alpha <= 0) continue;
-        const radius = MOTE_REACH * mote.size;
-        // Centred on the edge itself, so half of every light falls outside the
-        // window and what shows is the half reaching in.
-        const x = mote.side < 0 ? 0 : width;
-        const y = height * (1 - mote.height);
-        // Deep at the foot and bright at the top, crossed over as it climbs.
-        context.globalAlpha = alpha * (1 - mote.height);
-        context.drawImage(low, x - radius, y - radius, radius * 2, radius * 2);
-        context.globalAlpha = alpha * mote.height;
-        context.drawImage(high, x - radius, y - radius, radius * 2, radius * 2);
+        const length = BOLT_LENGTH * mote.size;
+        const y = height * (1 - mote.height) - length / 2;
+        // Both edges, the same light on each. They are a mirror rather than
+        // two streams: sparks going off independently on either side read as
+        // noise, and two that move together read as the window doing it.
+        for (const facing of [0, 1] as const) {
+          const x = facing === 0 ? 0 : width - BOLT_REACH;
+          // Deep at the foot and bright at the top, crossed over as it climbs.
+          context.globalAlpha = alpha * (1 - mote.height);
+          context.drawImage(bolts.low[facing], x, y, BOLT_REACH, length);
+          context.globalAlpha = alpha * mote.height;
+          context.drawImage(bolts.high[facing], x, y, BOLT_REACH, length);
+        }
       }
 
       context.globalAlpha = 1;

@@ -6,13 +6,13 @@
  * climbs, how it fades — and those are worth being able to try out without a
  * window, a sound card and something playing.
  *
- * Nothing here knows about pixels. A mote lives in the window's own terms: one
- * of the two edges, and how far up it is.
+ * Nothing here knows about pixels, or about which edge anything is on. A mote
+ * is one light and it climbs both edges at once — the two sides are a mirror
+ * rather than two independent streams, which is what makes them read as the
+ * window doing something rather than as sparks going off at random.
  */
 
 export interface Mote {
-  /** Which edge it climbs: -1 the left, 1 the right. */
-  side: -1 | 1;
   /** How far up, nought at the bottom and one at the top. */
   height: number;
   /** How fast it rises, in heights per second. */
@@ -28,12 +28,12 @@ export interface Mote {
  *
  * A ceiling rather than a target. Loud music would otherwise keep adding them
  * for as long as it stayed loud, and a crowd of them is a glowing edge rather
- * than lights rising along one.
+ * than lights rising along one. Each is drawn twice, once per edge.
  */
-export const MOTE_LIMIT = 34;
+export const MOTE_LIMIT = 16;
 
 /** How many appear per second when it is as loud as it gets. */
-const MOTES_PER_SECOND = 16;
+const MOTES_PER_SECOND = 9;
 
 /** How fast they climb: the first at any volume, the second only when loud. */
 const RISE_BASE = 0.22;
@@ -49,10 +49,9 @@ export function spawning(level: number, seconds: number): number {
   return level * MOTES_PER_SECOND * seconds;
 }
 
-/** A new light at the foot of one of the edges. */
+/** A new light at the foot of both edges. */
 export function lit(level: number, roll: () => number): Mote {
   return {
-    side: roll() < 0.5 ? -1 : 1,
     // Just below the sill, so it is already moving when it becomes visible.
     height: -0.02,
     speed: RISE_BASE + level * RISE_WITH_LEVEL * (0.7 + roll() * 0.6),

@@ -57,16 +57,11 @@ describe('lighting new ones', () => {
     expect(motes.length).toBeLessThanOrEqual(MOTE_LIMIT);
   });
 
-  it('uses both edges', () => {
-    const left = lit(1, rolls(0.2));
-    const right = lit(1, rolls(0.8));
-    expect(left.side).toBe(-1);
-    expect(right.side).toBe(1);
-  });
-
   it('does not make every light the same', () => {
-    const a = lit(1, rolls(0.1, 0.2, 0.3, 0.4));
-    const b = lit(1, rolls(0.9, 0.8, 0.7, 0.6));
+    // Along the climb, not across the window: a light is one light on both
+    // edges at once, so the two sides are a mirror rather than two streams.
+    const a = lit(1, rolls(0.1, 0.2, 0.3));
+    const b = lit(1, rolls(0.9, 0.8, 0.7));
     expect(a.heat).not.toBe(b.heat);
     expect(a.size).not.toBe(b.size);
     expect(a.speed).not.toBe(b.speed);
@@ -75,7 +70,6 @@ describe('lighting new ones', () => {
 
 describe('rising and going out', () => {
   const at = (height: number, heat = 1): Mote => ({
-    side: 1,
     height,
     speed: 0.3,
     size: 1,
