@@ -81,6 +81,33 @@ describe('hearing a hit', () => {
     expect(Math.abs(at(1 / 60) - at(1 / 30))).toBeLessThanOrEqual(1);
   });
 
+  it('hits as hard on the twentieth kick as on the first', () => {
+    // The reported want. Following the music at one rate, the level a jump is
+    // measured against climbs through a bass-heavy passage until it sits among
+    // the kicks themselves — so a kick barely clears it, and the edge stops
+    // answering exactly where the music is busiest. Settling into the quiet
+    // between them instead, every kick is the same jump the first one made.
+    const heard = play(pattern(900, 30, 0.95, 0.55)).filter((hit) => hit > 0);
+    expect(heard.length).toBeGreaterThan(24);
+
+    const last = heard.slice(-8);
+    for (const hit of last) expect(hit).toBeGreaterThan(0.5);
+  });
+
+  it('is not fooled into hitting on the quiet between them', () => {
+    // The other half of a floor that drops quickly: it must not drop so far
+    // that the gaps themselves start clearing it. Twenty-nine of every thirty
+    // frames are the quiet part, so a floor that had fallen through it would
+    // put the count many times above the number of kicks.
+    //
+    // Counted from the second kick onwards. The first half-second is the floor
+    // finding the music from nothing, and it fires two or three extra times
+    // getting there — which is the start of a track flaring, and right.
+    const heard = play(pattern(900, 30, 0.95, 0.55)).slice(60);
+    const kicks = heard.length / 30;
+    expect(heard.filter((hit) => hit > 0).length).toBe(kicks);
+  });
+
   it('says how hard it was hit', () => {
     const soft = play([...Array(60).fill(0.3), 0.45]).at(-1) ?? 0;
     const hard = play([...Array(60).fill(0.3), 1]).at(-1) ?? 0;
