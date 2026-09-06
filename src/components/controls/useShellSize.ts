@@ -4,7 +4,7 @@ import type { DrawerSide } from '@/core/settings';
 import {
   DRAWER_WIDTH,
   EXPANDED_HEIGHT,
-  setWindowMask,
+  setClickArea,
   setWindowSize,
   widthFor,
   windowWidthFor,
@@ -136,7 +136,7 @@ function shape(
   shellWidth: number,
   height: number,
 ): Promise<void> {
-  return setWindowMask(
+  return setClickArea(
     side === 'left' && shellWidth < windowWidth
       ? { x: windowWidth - shellWidth, y: 0, width: shellWidth, height }
       : null,
@@ -255,7 +255,7 @@ export function useShellSize(
     };
 
     if (prefersReducedMotion()) {
-      void setWindowMask(null);
+      void setClickArea(null);
       void move();
       return;
     }
@@ -268,7 +268,7 @@ export function useShellSize(
       if (!alive) return;
       // No shape at all, so there is no outline around a window with nothing
       // in it while it travels.
-      void setWindowMask({ x: 0, y: 0, width: 0, height: 0 });
+      void setClickArea({ x: 0, y: 0, width: 0, height: 0 });
       void move().then(() => {
         if (!alive) return;
         shell.style.opacity = '1';

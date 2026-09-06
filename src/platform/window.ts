@@ -77,67 +77,55 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
 }
 
 /**
- * The corner the shell is drawn with, in px.
+ * Say which part of the window takes clicks, or `null` for all of it.
  *
- * Read from the stylesheet rather than named here, so the window's shape and
- * the shell's cannot drift apart — a rectangular shape around a rounded window
- * leaves a wedge at each corner where the window is still there and nothing has
- * painted, which Windows fills with a frame of its own.
- */
-function shellRadius(): number {
-  if (typeof getComputedStyle !== 'function') return 0;
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue('--radius-widget')
-    .trim();
-  return Number.parseFloat(value) || 0;
-}
-
-/**
- * Cut the window down to the shape of the shell, or hand it back whole with
- * `null`.
+ * The drawer opening leftwards needs the window wider than what it shows, which
+ * is what lets it stay still — and a window that stays still cannot flicker.
+ * What that leaves is a stretch of transparent window beside the player, which
+ * would otherwise swallow clicks meant for whatever is behind it.
  *
- * Everything outside is not the window any more — not for the mouse, not for
- * the compositor. This is what makes a window permanently wider than what it
- * shows behave like a window the size of what it shows.
+ * Cutting the window's *shape* was the obvious answer and was the wrong one. A
+ * window that composes with per-pixel alpha stops doing so once it is given a
+ * region: the corners outside the rounded shell, transparent until then, began
+ * to be painted — a square corner sitting past the rounded one, repainted every
+ * time focus went elsewhere. Rounding the cut and holding it clear of the shell
+ * both failed, because the shape was never what was drawing there.
+ *
+ * So the shape is left alone, and Rust watches the cursor instead: over the
+ * player the window takes its clicks, anywhere else it is transparent to the
+ * mouse. The window's outline, and its transparency, are exactly as they were.
  */
-let masked = 'none';
+let clickable = 'none';
 
-export async function setWindowMask(
+export async function setClickArea(
   rect: { x: number; y: number; width: number; height: number } | null,
 ): Promise<void> {
   if (!isTauri()) return;
 
   // Skipped when it would change nothing. Every animation asks for the whole
-  // window before it starts, which on the right is the shape the window has
-  // always had — and re-cutting a window to the shape it is already cut to is
-  // a compositor round trip for no reason.
-  const radius = rect ? shellRadius() : 0;
+  // window before it starts, which on the right is what it always had.
   const wanted = rect
-    ? [rect.x, rect.y, rect.width, rect.height, radius].map(Math.round).join(',')
+    ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',')
     : 'none';
-  if (wanted === masked) return;
-  masked = wanted;
+  if (wanted === clickable) return;
+  clickable = wanted;
 
   try {
     const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('set_window_mask', {
+    await invoke('set_click_area', {
       x: Math.round(rect?.x ?? 0),
       y: Math.round(rect?.y ?? 0),
-      // Minus one for "no shape at all", which is not the same as a shape with
-      // no area: that one is a window nobody can see, and it is what lets the
-      // window be moved without being watched.
+      // Negative for "all of it".
       width: rect ? Math.round(rect.width) : -1,
       height: rect ? Math.round(rect.height) : -1,
-      radius: Math.round(radius),
     });
   } catch (err) {
-    // Forgotten again, so the next attempt is not skipped as a repeat of a
-    // shape the window never took.
-    masked = 'unknown';
-    // A window that is the wrong shape still shows what it should. The cost is
-    // clicks landing on a transparent edge, which is worth a warning and not an
-    // interruption.
-    console.warn('[window] could not shape the window', err);
+    // Forgotten again, so the next attempt is not skipped as a repeat of
+    // something the window never took.
+    clickable = 'unknown';
+    // The window still shows what it should. The cost is clicks landing on a
+    // transparent edge, which is worth a warning and not an interruption.
+    console.warn('[window] could not set the clickable area', err);
   }
 }
 

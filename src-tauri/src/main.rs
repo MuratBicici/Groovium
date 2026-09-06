@@ -44,6 +44,7 @@ fn main() {
         .manage(library::ImportControl::default())
         .manage(library::PickedPaths::default())
         .manage(spotify::tokens::AccessTokenCache::default())
+        .manage(shell::ClickArea::default())
         .manage(visualizer::Running::default())
         .setup(|app| {
             // Before anything is shown. The window has a frame of its own that
@@ -106,7 +107,7 @@ fn main() {
             lastfm::lastfm_artist_candidates,
             audio::audio_backend_available,
             shell::set_window_box,
-            shell::set_window_mask,
+            shell::set_click_area,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groovium");
