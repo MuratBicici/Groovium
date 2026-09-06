@@ -116,3 +116,56 @@ fn mask(_window: &Window, _x: i32, _y: i32, _width: i32, _height: i32) -> Result
     // `place` is for.
     Ok(())
 }
+
+/// Take away the frame Windows draws around this window.
+///
+/// The shell inside is rounded to eighteen pixels and painted by the webview.
+/// Windows 11 has its own ideas: a rounded corner of a different radius, and a
+/// one-pixel border in the system accent colour. Neither is hidden by the
+/// shell, because they are drawn outside it — so what shows is a square-ish
+/// corner in somebody's accent colour, poking out past the corner this app
+/// drew. Most visibly when focus leaves for another window, because that is
+/// when the border is repainted in its inactive shade.
+///
+/// Both are one call each. A window that draws its whole self, transparency
+/// and corners included, is telling the truth by asking for neither.
+///
+/// Failure is ignored on purpose. These attributes arrived in Windows 11, and
+/// on anything older the call is refused — which is the correct outcome there
+/// rather than a problem: nothing draws that border on Windows 10 either.
+pub fn undress(window: &Window) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::Graphics::Dwm::{
+            DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE,
+            DWMWCP_DONOTROUND,
+        };
+
+        let Ok(handle) = window.hwnd() else { return };
+        let hwnd = HWND(handle.0 as *mut _);
+
+        /// `DWMWA_COLOR_NONE`: no border at all, as against a colour to draw it in.
+        const NO_BORDER: u32 = 0xFFFF_FFFE;
+        let corners = DWMWCP_DONOTROUND;
+
+        // Safety: the handle belongs to the window this is about and is alive
+        // for the call; both attributes are the size the API documents for them.
+        unsafe {
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                std::ptr::from_ref(&NO_BORDER).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                std::ptr::from_ref(&corners).cast(),
+                std::mem::size_of::<i32>() as u32,
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = window;
+}

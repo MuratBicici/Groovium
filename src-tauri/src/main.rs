@@ -17,7 +17,7 @@ mod spotify;
 mod tray;
 mod visualizer;
 
-use tauri::WindowEvent;
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_window_state::StateFlags;
 
 fn main() {
@@ -46,6 +46,11 @@ fn main() {
         .manage(spotify::tokens::AccessTokenCache::default())
         .manage(visualizer::Running::default())
         .setup(|app| {
+            // Before anything is shown. The window has a frame of its own that
+            // this app draws over, and the corners are where that shows.
+            if let Some(window) = app.get_webview_window("main") {
+                shell::undress(&window.as_ref().window());
+            }
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
             shortcuts::register(app.handle());
