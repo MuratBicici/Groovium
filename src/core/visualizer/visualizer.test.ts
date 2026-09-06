@@ -81,6 +81,16 @@ describe('the sliders', () => {
     expect(GLOW.strength(0)).toBeCloseTo(1);
     expect(GLOW.speed(0)).toBeCloseTo(1);
     expect(GLOW.threshold(0)).toBeCloseTo(1.35);
+    expect(GLOW.flash(0)).toBeCloseTo(0.5);
+    expect(GLOW.flashReach(0)).toBeCloseTo(0.9);
+    expect(GLOW.flare(0)).toBeCloseTo(210);
+  });
+
+  it('moves the flash and its reach together', () => {
+    // One notch for the two, because they are one gesture: a bigger flare is
+    // brighter and larger, and nobody moving this is asking for a ratio.
+    expect(GLOW.flash(NOTCHES)).toBeGreaterThan(GLOW.flash(0));
+    expect(GLOW.flashReach(NOTCHES)).toBeGreaterThan(GLOW.flashReach(0));
   });
 
   it('reaches both ends', () => {

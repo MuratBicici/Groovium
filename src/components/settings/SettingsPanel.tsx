@@ -63,6 +63,8 @@ export function SettingsPanel({
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
   const glowSpeed = useSettingsStore((s) => s.glowSpeed);
+  const glowFlash = useSettingsStore((s) => s.glowFlash);
+  const glowFlare = useSettingsStore((s) => s.glowFlare);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
@@ -312,6 +314,16 @@ export function SettingsPanel({
                   label={t('settings.glowSpeed')}
                   notch={glowSpeed}
                   onChange={(notch) => setGlow('glowSpeed', notch)}
+                />
+                <Slider
+                  label={t('settings.glowFlash')}
+                  notch={glowFlash}
+                  onChange={(notch) => setGlow('glowFlash', notch)}
+                />
+                <Slider
+                  label={t('settings.glowFlare')}
+                  notch={glowFlare}
+                  onChange={(notch) => setGlow('glowFlare', notch)}
                 />
               </div>
             </div>

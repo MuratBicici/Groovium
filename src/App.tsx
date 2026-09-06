@@ -120,6 +120,8 @@ export default function App() {
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
   const glowSpeed = useSettingsStore((s) => s.glowSpeed);
+  const glowFlash = useSettingsStore((s) => s.glowFlash);
+  const glowFlare = useSettingsStore((s) => s.glowFlare);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
@@ -520,6 +522,8 @@ export default function App() {
         strength={glowStrength}
         sensitivity={glowSensitivity}
         speed={glowSpeed}
+        flash={glowFlash}
+        flare={glowFlare}
       />
       <div
         aria-hidden="true"

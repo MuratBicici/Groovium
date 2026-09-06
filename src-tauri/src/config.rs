@@ -129,6 +129,10 @@ pub struct Settings {
     pub glow_sensitivity: i32,
     #[serde(default, deserialize_with = "notch")]
     pub glow_speed: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub glow_flash: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub glow_flare: i32,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -168,6 +172,8 @@ impl Default for Settings {
             glow_strength: 0,
             glow_sensitivity: 0,
             glow_speed: 0,
+            glow_flash: 0,
+            glow_flare: 0,
             last_seen_version: None,
             declined_version: None,
         }
@@ -335,6 +341,8 @@ mod tests {
             glow_strength: 3,
             glow_sensitivity: -2,
             glow_speed: 0,
+            glow_flash: -1,
+            glow_flare: 2,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };

@@ -123,6 +123,8 @@ export interface Settings {
   glowStrength: number;
   glowSensitivity: number;
   glowSpeed: number;
+  glowFlash: number;
+  glowFlare: number;
   /**
    * The last version whose "what's new" was actually shown.
    *
@@ -147,8 +149,16 @@ export interface Settings {
 
 export type DrawerSide = 'left' | 'right';
 
-/** Which of the edge light's three the settings panel is moving. */
-export type GlowKnob = 'glowStrength' | 'glowSensitivity' | 'glowSpeed';
+/** Which of the edge light's dials the settings panel is moving. */
+export const GLOW_KNOBS = [
+  'glowStrength',
+  'glowSensitivity',
+  'glowSpeed',
+  'glowFlash',
+  'glowFlare',
+] as const;
+
+export type GlowKnob = (typeof GLOW_KNOBS)[number];
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: null,
@@ -168,6 +178,8 @@ export const DEFAULT_SETTINGS: Settings = {
   glowStrength: 0,
   glowSensitivity: 0,
   glowSpeed: 0,
+  glowFlash: 0,
+  glowFlare: 0,
   lastSeenVersion: null,
   declinedVersion: null,
 };
@@ -188,7 +200,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
     // And the sliders, which are numbers somebody could put anything in — a
     // fraction among them, since these were fractions for one afternoon.
-    for (const knob of ['glowStrength', 'glowSensitivity', 'glowSpeed'] as const) {
+    for (const knob of GLOW_KNOBS) {
       const held = Math.round(Number(settings[knob]));
       settings[knob] = Number.isFinite(held) ? Math.max(-NOTCHES, Math.min(NOTCHES, held)) : 0;
     }

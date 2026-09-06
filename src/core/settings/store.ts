@@ -307,7 +307,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, themeFromCover } = get();
-    const { glowStrength, glowSensitivity, glowSpeed } = get();
+    const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare } = get();
     const { lastSeenVersion, declinedVersion } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
@@ -330,6 +330,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       glowStrength,
       glowSensitivity,
       glowSpeed,
+      glowFlash,
+      glowFlare,
       lastSeenVersion,
       declinedVersion,
     };

@@ -126,6 +126,23 @@ export const GLOW = {
    * Backwards on purpose: more sensitive is a lower bar to clear.
    */
   threshold: (value: number) => span(value, 1.7, 1.0),
+  /**
+   * How hard a hit lights both frames, and how far that light reaches in.
+   *
+   * One notch for the two, because they are one gesture: a bigger flare is
+   * brighter *and* larger, and a person moving this is asking for "more", not
+   * for a particular ratio between them.
+   */
+  flash: (value: number) => span(value, 0.1, 0.9),
+  flashReach: (value: number) => span(value, 0.3, 1.5),
+  /**
+   * How long a hit is still felt, in milliseconds.
+   *
+   * Everything a hit does fades over this — the flare on the frames, and the
+   * swell, burn and stretch of the bolts — so it is the one knob that says
+   * whether the edge reads as sharp or as flowing.
+   */
+  flare: (value: number) => span(value, 90, 330),
 } as const;
 
 /**

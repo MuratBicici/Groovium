@@ -33,11 +33,14 @@ const HAZE = 26;
 const HAZE_AT_REST = 0.11;
 const HAZE_WITH_LEVEL = 0.26;
 
-/**
- * And the flare itself: a second pass over the whole edge on every hit.
+/*
+ * The flare itself — a second pass over the whole edge on every hit — is
+ * `GLOW.flash` and `GLOW.flashReach`, and how long it is felt is `GLOW.flare`.
+ * All three are settings, so their numbers live with the other dials rather
+ * than here.
  *
  * In the bright brass rather than the deep one, reaching further in, and added
- * on top rather than painted over — so a kick lights both frames at once and by
+ * on top rather than painted over, so a kick lights both frames at once and by
  * as much as it was worth. The bolts answer a hit too, but they are a handful
  * of narrow things travelling; what makes a room feel struck is the light in
  * all of it changing at once.
@@ -45,8 +48,6 @@ const HAZE_WITH_LEVEL = 0.26;
  * Driven by the hit alone, not by the level. Loud music should not sit at
  * permanent full flare, or there is nothing left to notice when the drum lands.
  */
-const FLASH_ALPHA = 0.5;
-const FLASH_REACH = 0.9;
 
 /**
  * One rising light: how far in it reaches, and how long it is.
@@ -88,14 +89,13 @@ const STRETCH_AT_REST = 0.85;
 const STRETCH_WITH_LEVEL = 0.6;
 
 /**
- * How long a hit is still felt, and how much of one counts as level.
+ * How much of a hit counts as level.
  *
  * The swell and the burn follow the level, and a level is an envelope: it says
  * how loud the passage is, not that something just happened. A hit is added to
- * it for a fifth of a second and fades, so a kick is a flare on the edge rather
- * than a slightly larger number.
+ * it while it fades, so a kick is a flare on the edge rather than a slightly
+ * larger number. How long that fade takes is `GLOW.flare`.
  */
-const PUNCH_MS = 210;
 const PUNCH_WEIGHT = 0.55;
 
 /** The lowest level worth drawing anything for. */
@@ -175,11 +175,17 @@ export function WindowGlow({
   sensitivity,
   /** How fast they climb. */
   speed,
+  /** How hard a hit lights both frames. */
+  flash,
+  /** How long a hit is still felt. */
+  flare,
 }: {
   on: boolean;
   strength: number;
   sensitivity: number;
   speed: number;
+  flash: number;
+  flare: number;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
@@ -194,10 +200,10 @@ export function WindowGlow({
    * every light in the air — which is the opposite of what somebody dragging
    * one wants to see.
    */
-  const tuning = useRef({ strength, sensitivity, speed });
+  const tuning = useRef({ strength, sensitivity, speed, flash, flare });
   useEffect(() => {
-    tuning.current = { strength, sensitivity, speed };
-  }, [strength, sensitivity, speed]);
+    tuning.current = { strength, sensitivity, speed, flash, flare };
+  }, [strength, sensitivity, speed, flash, flare]);
 
   useEffect(() => {
     if (!on) return;
@@ -299,7 +305,8 @@ export function WindowGlow({
       last = now;
       measure();
 
-      const { strength, sensitivity, speed } = tuning.current;
+      const { strength, sensitivity, speed, flash, flare } = tuning.current;
+      const felt_ms = GLOW.flare(flare);
       const climb = GLOW.speed(speed);
       const force = GLOW.strength(strength);
 
@@ -309,7 +316,7 @@ export function WindowGlow({
       // The hits, which are what the edge is actually keeping time with.
       const heard = listen(beat, bass.current, seconds, GLOW.threshold(sensitivity));
       beat = heard.beat;
-      punch = Math.max(0, punch - (seconds * 1000) / PUNCH_MS);
+      punch = Math.max(0, punch - (seconds * 1000) / felt_ms);
       if (heard.hit > 0) {
         motes = launch(motes, showing, heard.hit, Math.random, climb);
         punch = Math.max(punch, heard.hit);
@@ -327,11 +334,11 @@ export function WindowGlow({
       // The room, then the flare in it. Added rather than painted over, so a
       // kick brightens the whole of both frames by what it was worth.
       const standing = (HAZE_AT_REST + felt * HAZE_WITH_LEVEL) * force;
-      const flare = punch * FLASH_ALPHA * force;
-      const flareReach = HAZE * (1 + punch * FLASH_REACH);
+      const flaring = punch * GLOW.flash(flash) * force;
+      const flareReach = HAZE * (1 + punch * GLOW.flashReach(flash));
       for (const side of [-1, 1] as const) {
         haze(side, colours.low, HAZE, standing);
-        haze(side, colours.high, flareReach, flare);
+        haze(side, colours.high, flareReach, flaring);
       }
 
       // Wider and harder the louder it is, which on a bass-leaning level means

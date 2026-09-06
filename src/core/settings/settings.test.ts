@@ -47,6 +47,8 @@ describe('remembering that a version has been shown', () => {
       glowStrength: 3,
       glowSensitivity: -2,
       glowSpeed: 0,
+      glowFlash: -1,
+      glowFlare: 2,
       declinedVersion: '2.0.0',
     });
 
@@ -70,6 +72,8 @@ describe('remembering that a version has been shown', () => {
       glowStrength: 3,
       glowSensitivity: -2,
       glowSpeed: 0,
+      glowFlash: -1,
+      glowFlare: 2,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
     });
