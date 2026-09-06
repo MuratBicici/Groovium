@@ -1,4 +1,5 @@
 import { isTauri } from '@/core/utils/env';
+import { NOTCHES } from '@/core/visualizer';
 
 /**
  * Preferences that survive a restart.
@@ -96,9 +97,10 @@ export interface Settings {
    */
   windowGlow: boolean;
   /**
-   * How the edge light is tuned, each nought to one.
+   * How the edge light is tuned: a notch from -4 to 4 each, nought in the
+   * middle.
    *
-   * A half is not an arbitrary middle: it is what these were before there was
+   * Nought is not an arbitrary default: it is what these were before there was
    * anything to move them with, so a config file from before they existed and
    * a slider nobody has touched are the same thing. `strength` is how wide and
    * how hard the lights burn, `sensitivity` how readily the music sets one
@@ -148,9 +150,9 @@ export const DEFAULT_SETTINGS: Settings = {
   windowBorder: false,
   visualizer: true,
   windowGlow: false,
-  glowStrength: 0.5,
-  glowSensitivity: 0.5,
-  glowSpeed: 0.5,
+  glowStrength: 0,
+  glowSensitivity: 0,
+  glowSpeed: 0,
   lastSeenVersion: null,
   declinedVersion: null,
 };
@@ -169,10 +171,11 @@ export async function loadSettings(): Promise<Settings> {
     // narrower than its type. `drawerSide` decides which way the window grows;
     // a word nobody recognises would leave it growing in neither.
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
-    // And the sliders, which are numbers somebody could put anything in.
+    // And the sliders, which are numbers somebody could put anything in — a
+    // fraction among them, since these were fractions for one afternoon.
     for (const knob of ['glowStrength', 'glowSensitivity', 'glowSpeed'] as const) {
-      const held = Number(settings[knob]);
-      settings[knob] = Number.isFinite(held) ? Math.min(1, Math.max(0, held)) : 0.5;
+      const held = Math.round(Number(settings[knob]));
+      settings[knob] = Number.isFinite(held) ? Math.max(-NOTCHES, Math.min(NOTCHES, held)) : 0;
     }
     return settings;
   } catch (err) {

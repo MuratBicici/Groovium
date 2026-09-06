@@ -112,15 +112,16 @@ pub struct Settings {
     /// to the shape of the app rather than something added to it.
     #[serde(default)]
     pub window_glow: bool,
-    /// How the edge light is tuned, each nought to one with a half in the
-    /// middle. A half is what it was tuned to before there was anything to
-    /// move it with, so a config from before these existed reads as unchanged.
-    #[serde(default = "middling")]
-    pub glow_strength: f32,
-    #[serde(default = "middling")]
-    pub glow_sensitivity: f32,
-    #[serde(default = "middling")]
-    pub glow_speed: f32,
+    /// How the edge light is tuned: a notch from -4 to 4, nought in the middle.
+    ///
+    /// Nought is what it was tuned to before there was anything to move it
+    /// with, so a config from before these existed reads as unchanged.
+    #[serde(default, deserialize_with = "notch")]
+    pub glow_strength: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub glow_sensitivity: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub glow_speed: i32,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -156,9 +157,9 @@ impl Default for Settings {
             window_border: false,
             visualizer: on_unless_turned_off(),
             window_glow: false,
-            glow_strength: middling(),
-            glow_sensitivity: middling(),
-            glow_speed: middling(),
+            glow_strength: 0,
+            glow_sensitivity: 0,
+            glow_speed: 0,
             last_seen_version: None,
             declined_version: None,
         }
@@ -170,9 +171,24 @@ impl Default for Settings {
 ///
 /// Right, because that is where it has always been and because a window near
 /// the left edge of a screen has nowhere to grow the other way.
-/// The middle of a slider, which is the tuning everything shipped with.
-fn middling() -> f32 {
-    0.5
+/// The furthest a notch goes either way.
+const NOTCHES: i32 = 4;
+
+/// A notch, out of whatever kind of number is in the file.
+///
+/// Read as a float and rounded, rather than demanded as an integer. These were
+/// fractions for one afternoon, and a whole file that fails to parse is not a
+/// setting reset — `read` throws the parsed value away on any error and falls
+/// back to a default, which would take somebody's Spotify Client ID with it.
+fn notch<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = f64::deserialize(deserializer)?;
+    if !raw.is_finite() {
+        return Ok(0);
+    }
+    Ok((raw.round() as i32).clamp(-NOTCHES, NOTCHES))
 }
 
 fn right_side() -> String {
@@ -252,6 +268,25 @@ mod tests {
     }
 
     #[test]
+    fn a_notch_survives_having_been_a_fraction() {
+        // These were nought-to-one for an afternoon. A file with the old shape
+        // in it must not fail to parse: `read` discards the whole config on any
+        // error, which would take somebody's Spotify Client ID with it.
+        let stored = r#"{"settings":{"glowStrength":0.5,"glowSpeed":1.0}}"#;
+        let config: AppConfig = serde_json::from_str(stored).expect("parses");
+        assert_eq!(config.settings.glow_strength, 1);
+        assert_eq!(config.settings.glow_speed, 1);
+    }
+
+    #[test]
+    fn a_notch_typed_in_by_hand_is_held_to_its_range() {
+        let stored = r#"{"settings":{"glowStrength":99,"glowSensitivity":-99}}"#;
+        let config: AppConfig = serde_json::from_str(stored).expect("parses");
+        assert_eq!(config.settings.glow_strength, 4);
+        assert_eq!(config.settings.glow_sensitivity, -4);
+    }
+
+    #[test]
     fn a_config_from_before_the_drawer_had_a_side_opens_on_the_right() {
         // Where it has always been. An upgrade must not move somebody's window
         // because a field appeared.
@@ -288,9 +323,9 @@ mod tests {
             window_border: false,
             visualizer: true,
             window_glow: true,
-            glow_strength: 0.8,
-            glow_sensitivity: 0.2,
-            glow_speed: 0.5,
+            glow_strength: 3,
+            glow_sensitivity: -2,
+            glow_speed: 0,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
         };

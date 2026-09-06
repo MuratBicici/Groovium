@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GLOW, levelFrom, settleLevel, span } from './index';
+import { GLOW, NOTCHES, levelFrom, settleLevel, span } from './index';
 
 describe('how loud it is', () => {
   it('is nothing when there is nothing', () => {
@@ -75,26 +75,35 @@ describe('the level being shown', () => {
 });
 
 describe('the sliders', () => {
-  it('means the tuning it shipped with when nobody has touched it', () => {
-    // Half is not an arbitrary middle: it is what these numbers were before
+  it('means the tuning it shipped with at the middle notch', () => {
+    // Nought is not an arbitrary default: it is what these numbers were before
     // there was anything to move them with.
-    expect(GLOW.strength(0.5)).toBeCloseTo(1);
-    expect(GLOW.speed(0.5)).toBeCloseTo(1);
-    expect(GLOW.threshold(0.5)).toBeCloseTo(1.35);
+    expect(GLOW.strength(0)).toBeCloseTo(1);
+    expect(GLOW.speed(0)).toBeCloseTo(1);
+    expect(GLOW.threshold(0)).toBeCloseTo(1.35);
   });
 
   it('reaches both ends', () => {
-    expect(span(0, 2, 6)).toBe(2);
-    expect(span(1, 2, 6)).toBe(6);
+    expect(span(-NOTCHES, 2, 6)).toBe(2);
+    expect(span(NOTCHES, 2, 6)).toBe(6);
+    expect(span(0, 2, 6)).toBe(4);
+  });
+
+  it('steps evenly from one notch to the next', () => {
+    const step = span(1, 2, 6) - span(0, 2, 6);
+    expect(span(2, 2, 6) - span(1, 2, 6)).toBeCloseTo(step);
+    expect(span(-3, 2, 6) - span(-4, 2, 6)).toBeCloseTo(step);
   });
 
   it('holds a value somebody typed into the file by hand', () => {
-    expect(span(-3, 2, 6)).toBe(2);
+    expect(span(-99, 2, 6)).toBe(2);
     expect(span(99, 2, 6)).toBe(6);
     expect(span(Number.NaN, 2, 6)).toBe(4);
+    // A fraction, which is what these were for one afternoon.
+    expect(span(0.5, 2, 6)).toBe(span(1, 2, 6));
   });
 
   it('makes a higher sensitivity easier to trigger, not harder', () => {
-    expect(GLOW.threshold(1)).toBeLessThan(GLOW.threshold(0));
+    expect(GLOW.threshold(NOTCHES)).toBeLessThan(GLOW.threshold(-NOTCHES));
   });
 });

@@ -43,9 +43,9 @@ describe('remembering that a version has been shown', () => {
       windowBorder: true,
       visualizer: false,
       windowGlow: true,
-      glowStrength: 0.8,
-      glowSensitivity: 0.2,
-      glowSpeed: 0.35,
+      glowStrength: 3,
+      glowSensitivity: -2,
+      glowSpeed: 0,
       declinedVersion: '2.0.0',
     });
 
@@ -65,9 +65,9 @@ describe('remembering that a version has been shown', () => {
       windowBorder: true,
       visualizer: false,
       windowGlow: true,
-      glowStrength: 0.8,
-      glowSensitivity: 0.2,
-      glowSpeed: 0.35,
+      glowStrength: 3,
+      glowSensitivity: -2,
+      glowSpeed: 0,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
     });
@@ -180,5 +180,15 @@ describe('reading a config file somebody has edited', () => {
     stored({});
     const { loadSettings } = await import('@/core/settings');
     expect((await loadSettings()).drawerSide).toBe('right');
+  });
+  it('rounds a notch somebody left as a fraction', async () => {
+    // These were nought-to-one for an afternoon, and a config written then is
+    // still on somebody's disk.
+    stored({ glowStrength: 0.5, glowSpeed: 99, glowSensitivity: 'x' });
+    const { loadSettings } = await import('@/core/settings');
+    const settings = await loadSettings();
+    expect(settings.glowStrength).toBe(1);
+    expect(settings.glowSpeed).toBe(4);
+    expect(settings.glowSensitivity).toBe(0);
   });
 });

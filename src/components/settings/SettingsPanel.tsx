@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
+import { NOTCHES } from '@/core/visualizer';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
@@ -274,28 +275,38 @@ export function SettingsPanel({
             onChange={setWindowGlow}
           />
 
-          {/* Only while it is on. Three sliders for something switched off are
-              three things to wonder about, and the light they describe is the
-              only explanation any of them has. */}
-          {windowGlow && (
-            <div className="flex flex-col gap-1.5 border-l border-shell-600 pl-2.5">
-              <Slider
-                label={t('settings.glowStrength')}
-                value={glowStrength}
-                onChange={(value) => setGlow('glowStrength', value)}
-              />
-              <Slider
-                label={t('settings.glowSensitivity')}
-                value={glowSensitivity}
-                onChange={(value) => setGlow('glowSensitivity', value)}
-              />
-              <Slider
-                label={t('settings.glowSpeed')}
-                value={glowSpeed}
-                onChange={(value) => setGlow('glowSpeed', value)}
-              />
+          {/* Kept mounted and folded away, rather than added and removed. The
+              row template goes from nothing to its content's own height, which
+              is the one way to animate to a height nobody has to measure — and
+              `inert` takes the sliders out of the tab order while they are
+              folded, so there is nothing to reach that cannot be seen. */}
+          <div
+            inert={!windowGlow}
+            aria-hidden={!windowGlow}
+            className={`grid overflow-hidden transition-all duration-200 ease-out ${
+              windowGlow ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            }`}
+          >
+            <div className="min-h-0">
+              <div className="flex flex-col gap-2 border-l border-shell-600 pt-1 pl-2.5">
+                <Slider
+                  label={t('settings.glowStrength')}
+                  notch={glowStrength}
+                  onChange={(notch) => setGlow('glowStrength', notch)}
+                />
+                <Slider
+                  label={t('settings.glowSensitivity')}
+                  notch={glowSensitivity}
+                  onChange={(notch) => setGlow('glowSensitivity', notch)}
+                />
+                <Slider
+                  label={t('settings.glowSpeed')}
+                  notch={glowSpeed}
+                  onChange={(notch) => setGlow('glowSpeed', notch)}
+                />
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Two buttons rather than a toggle. A switch would have to be
               labelled for one of the two sides and read as off for the other,
@@ -651,19 +662,23 @@ function Toggle({
 }
 
 /**
- * One of the edge light's three, nought to one.
+ * One of the edge light's three, in notches from -4 to 4.
  *
- * No number beside it. What these do is only findable by moving one and
- * watching the window, and a figure invites reading the number instead of
- * looking at the light — which is the one place the answer is.
+ * Notches rather than a smooth run, because these are settled by moving one and
+ * looking at the window: a handful of positions can be tried and compared, and
+ * an unbroken range only invites hunting for a number that is not there.
+ *
+ * No figure beside it either, and the marks underneath carry no numbers. Which
+ * notch it is on is worth seeing; what the notch is called is not — the answer
+ * is the light.
  */
 function Slider({
   label,
-  value,
+  notch,
   onChange,
 }: {
   label: string;
-  value: number;
+  notch: number;
   onChange: (next: number) => void;
 }) {
   return (
@@ -671,14 +686,27 @@ function Slider({
       <span className="text-meta text-cream-300">{label}</span>
       <input
         type="range"
-        min={0}
-        max={100}
+        min={-NOTCHES}
+        max={NOTCHES}
         step={1}
-        value={Math.round(value * 100)}
+        value={notch}
         aria-label={label}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        aria-valuetext={notch > 0 ? `+${notch}` : String(notch)}
+        onChange={(e) => onChange(Number(e.target.value))}
         className="groove-range mt-1 h-3 w-full cursor-pointer appearance-none rounded-full bg-shell-600 ring-1 ring-[var(--color-edge)]"
       />
+      {/* One mark per notch, the middle one taller: where the slider came from
+          is the thing worth being able to find again without thinking. */}
+      <span aria-hidden="true" className="mt-0.5 flex items-start justify-between px-1">
+        {Array.from({ length: NOTCHES * 2 + 1 }, (_, at) => (
+          <span
+            key={at}
+            className={`w-px rounded-full ${
+              at === NOTCHES ? 'h-1.5 bg-brass-500' : 'h-1 bg-shell-500'
+            }`}
+          />
+        ))}
+      </span>
     </label>
   );
 }

@@ -86,18 +86,26 @@ export function watchBars(watcher: Watcher): () => void {
   };
 }
 
+/** How far a notch goes either way from the middle. */
+export const NOTCHES = 4;
+
 /**
- * What a slider at `value` means, between the two ends of its range.
+ * What a slider at `notch` means, between the two ends of its range.
  *
- * Every one of these is nought to one with a half in the middle, and a half is
- * always what the edge was tuned to before any of them existed — so a fresh
- * install, a slider nobody has touched, and the way this looked when it was
- * built are all the same thing. Anything outside is clamped rather than
- * refused: `config.json` is a file somebody can edit.
+ * Every one of these runs from minus four to four with nought in the middle,
+ * and nought is always what the edge was tuned to before any of them existed —
+ * so a fresh install, a slider nobody has touched, and the way this looked when
+ * it was built are all the same thing.
+ *
+ * Rounded and clamped rather than refused: `config.json` is a file somebody can
+ * edit, and these were fractions for one afternoon.
  */
-export function span(value: number, atNone: number, atFull: number): number {
-  const held = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0.5));
-  return atNone + (atFull - atNone) * held;
+export function span(notch: number, atLeast: number, atMost: number): number {
+  const held = Math.max(
+    -NOTCHES,
+    Math.min(NOTCHES, Math.round(Number.isFinite(notch) ? notch : 0)),
+  );
+  return (atLeast + atMost) / 2 + ((atMost - atLeast) / 2) * (held / NOTCHES);
 }
 
 /**

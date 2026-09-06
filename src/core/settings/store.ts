@@ -14,6 +14,7 @@ import {
   DEFAULT_THEME,
   isThemeId,
 } from '@/core/settings/themes';
+import { NOTCHES } from '@/core/visualizer';
 import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
@@ -48,7 +49,7 @@ interface SettingsStore extends Settings {
   setWindowBorder: (on: boolean) => void;
   setVisualizer: (on: boolean) => void;
   setWindowGlow: (on: boolean) => void;
-  setGlow: (knob: GlowKnob, value: number) => void;
+  setGlow: (knob: GlowKnob, notch: number) => void;
   /** Record that this version's summary has been shown, so it is not shown again. */
   markVersionSeen: () => void;
   /** Record that an offer to install this version was turned down. */
@@ -334,7 +335,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setWindowBorder: (windowBorder) => commit({ windowBorder }),
     setVisualizer: (visualizer) => commit({ visualizer }),
     setWindowGlow: (windowGlow) => commit({ windowGlow }),
-    setGlow: (knob, value) => commit({ [knob]: Math.min(1, Math.max(0, value)) }),
+    setGlow: (knob, notch) =>
+      commit({ [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     // Through `commit` like everything else: it is the one place that knows the
     // whole shape of what goes to disk, and going around it is how a write ends
     // up dropping a field. Re-applying the palette on the way is wasted work
