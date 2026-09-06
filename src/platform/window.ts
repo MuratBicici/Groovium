@@ -51,9 +51,56 @@ export const EXPANDED_HEIGHT = 480;
  */
 export const DRAWER_WIDTH = 680;
 
-/** The window's width for a given drawer state. One place decides this. */
+/** The shell's width for a given drawer state. One place decides this. */
 export function widthFor(drawerOpen: boolean): number {
   return drawerOpen ? PLAYER_WIDTH + DRAWER_WIDTH : PLAYER_WIDTH;
+}
+
+/**
+ * The window's width, which on the left is not the shell's.
+ *
+ * Opening to the left means the player has to stay where it is while the drawer
+ * appears beside it, and the only way to do that by resizing is to move the
+ * window's left edge — which flickers, unfixably: the window takes its existing
+ * pixels with it and the webview lays out again a frame later, so for that frame
+ * the shell is drawn where the window used to be. No ordering of the two calls
+ * helps, because the lag is inside the webview.
+ *
+ * So on the left the window does not change at all. It is always as wide as the
+ * drawer needs and the shell grows into it, exactly as the shell grows inside a
+ * widening window on the right — except that here there is no widening. What it
+ * leaves is transparent window beside the player, which `setWindowMask` cuts
+ * away so that clicks land on whatever is actually behind it.
+ */
+export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): number {
+  return side === 'left' ? PLAYER_WIDTH + DRAWER_WIDTH : widthFor(drawerOpen);
+}
+
+/**
+ * Cut the window down to one rectangle, or hand it back whole with `null`.
+ *
+ * Everything outside is not the window any more — not for the mouse, not for
+ * the compositor. This is what makes a window permanently wider than what it
+ * shows behave like a window the size of what it shows.
+ */
+export async function setWindowMask(
+  rect: { x: number; y: number; width: number; height: number } | null,
+): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_window_mask', {
+      x: Math.round(rect?.x ?? 0),
+      y: Math.round(rect?.y ?? 0),
+      width: Math.round(rect?.width ?? 0),
+      height: Math.round(rect?.height ?? 0),
+    });
+  } catch (err) {
+    // A window that is the wrong shape still shows what it should. The cost is
+    // clicks landing on a transparent edge, which is worth a warning and not an
+    // interruption.
+    console.warn('[window] could not shape the window', err);
+  }
 }
 
 /**

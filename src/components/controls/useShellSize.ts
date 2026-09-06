@@ -1,7 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import type { DrawerSide } from '@/core/settings';
-import { EXPANDED_HEIGHT, setWindowSize, widthFor } from '@/platform/window';
+import {
+  DRAWER_WIDTH,
+  EXPANDED_HEIGHT,
+  setWindowMask,
+  setWindowSize,
+  widthFor,
+  windowWidthFor,
+} from '@/platform/window';
 
 /**
  * Collapsing the widget to its controls, and opening it back up.
@@ -65,6 +72,42 @@ export const DURATION_MS = 260;
 export const SETTLE_MS = DURATION_MS + 40;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
+/**
+ * Cut the window down to the part of it the shell is actually using.
+ *
+ * Narrower than the window only on the left, and only while the drawer is shut
+ * — which is the whole of what pays for the window never moving. Outside the
+ * shape the window is not there at all, so the transparent strip beside the
+ * player does not swallow clicks meant for whatever is behind it.
+ *
+ * Every other case hands the window back whole.
+ */
+/**
+ * The width to leave the shell at once it has stopped moving.
+ *
+ * Empty on the right, where the window is exactly the shell and letting the
+ * shell follow it is what keeps the two in step through anything else that
+ * resizes the window. On the left the window is deliberately wider than the
+ * shell, so releasing it there would fill the drawer's space with opaque
+ * player.
+ */
+function restingWidth(side: DrawerSide, width: number): string {
+  return side === 'left' ? `${width}px` : '';
+}
+
+function shape(
+  side: DrawerSide,
+  windowWidth: number,
+  shellWidth: number,
+  height: number,
+): Promise<void> {
+  return setWindowMask(
+    side === 'left' && shellWidth < windowWidth
+      ? { x: windowWidth - shellWidth, y: 0, width: shellWidth, height }
+      : null,
+  );
+}
+
 export function useShellSize(
   compact: boolean,
   wide: boolean,
@@ -77,6 +120,14 @@ export function useShellSize(
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const width = widthFor(wide);
+  /**
+   * The window's width, which on the left is not the shell's.
+   *
+   * See `windowWidthFor`: opening leftwards without moving the window is the
+   * only arrangement that does not flicker, so on that side the window is
+   * always as wide as the drawer needs and the shell grows inside it.
+   */
+  const windowWidth = windowWidthFor(wide, side);
 
   /**
    * Whether to render the drawer, which outlives `wide` by the length of the
@@ -110,6 +161,7 @@ export function useShellSize(
 
   const was = useRef(compact);
   const wasWide = useRef(wide);
+  const wasSide = useRef(side);
   const applied = useRef(false);
   /** The current state's geometry, taken while it is at rest. */
   const settled = useRef<{
@@ -136,6 +188,35 @@ export function useShellSize(
     };
   };
 
+  /**
+   * Changing which side the drawer belongs to.
+   *
+   * The one time the window moves, and the only one left. On the left it is
+   * permanently as wide as the drawer needs, so going there widens it leftwards
+   * and coming back narrows it from the left — either way by the drawer's own
+   * width, and either way the player stays exactly where it is.
+   *
+   * Declared before the animation below so that when a swap does both at once —
+   * the drawer shuts on one side and opens on the other — the window is the
+   * right size and in the right place before anything starts moving inside it.
+   */
+  useLayoutEffect(() => {
+    if (wasSide.current === side) return;
+    const cameFrom = wasSide.current;
+    wasSide.current = side;
+
+    const shell = shellRef.current;
+    if (!shell || !ready) return;
+    shell.style.width = restingWidth(side, width);
+    const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
+    void setWindowMask(null);
+    void setWindowSize(
+      windowWidth,
+      height,
+      cameFrom === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH,
+    ).then(() => shape(side, windowWidth, width, height));
+  }, [side, ready, compact, windowWidth, width]);
+
   useLayoutEffect(() => {
     const shell = shellRef.current;
     const stage = stageRef.current;
@@ -143,15 +224,6 @@ export function useShellSize(
     const bottom = bottomRef.current;
     if (!shell || !stage || !track || !bottom) return;
 
-    /**
-     * How far the window's left edge must travel to hold its right edge still.
-     *
-     * Zero when the drawer opens to the right, which is a plain resize.
-     * Opening to the left, the window gains width on its left side, so the
-     * edge moves by exactly what the width gained — and the player, drawn
-     * against the far edge, does not move at all.
-     */
-    const hold = (from: number, to: number) => (side === 'left' ? from - to : 0);
 
     // Starting collapsed, from a stored preference. The window opens at the
     // size in `tauri.conf.json` every time — the state plugin saves position
@@ -161,12 +233,11 @@ export function useShellSize(
       applied.current = true;
       was.current = compact;
       wasWide.current = wide;
-      if (compact) {
-        shell.style.height = 'auto';
-        void setWindowSize(width, shell.offsetHeight);
-      } else if (wide) {
-        void setWindowSize(width, EXPANDED_HEIGHT);
-      }
+      // On the left the window is wider than the shell even when the drawer
+      // is shut, so this runs whichever state it starts in.
+      shell.style.width = restingWidth(side, width);
+      const height = compact ? ((shell.style.height = 'auto'), shell.offsetHeight) : EXPANDED_HEIGHT;
+      void setWindowSize(windowWidth, height).then(() => shape(side, windowWidth, width, height));
       record();
       return;
     }
@@ -206,15 +277,21 @@ export function useShellSize(
     // for the duration, or the shell would animate past its edge and be cut
     // off. Shrinking, the surplus is transparent and nobody sees it; the exact
     // size is set at the far end.
-    const wideEnough = Math.max(fromWidth, width);
-    const room = setWindowSize(wideEnough, EXPANDED_HEIGHT, hold(fromWidth, wideEnough));
+    // Room for both ends before anything moves, and on the left the window is
+    // already at both. Whole-window first: whatever the drawer is about to do,
+    // the strip beside the player has to be part of the window while it does
+    // it, or half the drawer would not take a click.
+    const wideEnough = Math.max(fromWidth, width, windowWidth);
+    void setWindowMask(null);
+    const room = setWindowSize(wideEnough, EXPANDED_HEIGHT);
 
     if (prefersReducedMotion()) {
       if (compact) shell.style.height = 'auto';
       shell.style.width = `${width}px`;
       const settledHeight = compact ? chrome + to.stage + to.bottom : EXPANDED_HEIGHT;
-      void setWindowSize(width, settledHeight, hold(wideEnough, width)).then(() => {
-        shell.style.width = '';
+      void setWindowSize(windowWidth, settledHeight).then(() => {
+        shell.style.width = restingWidth(side, width);
+        void shape(side, windowWidth, width, settledHeight);
         record();
       });
       return;
@@ -301,13 +378,17 @@ export function useShellSize(
       // still pinned to the width it is about to keep, which is the width the
       // height belongs to.
       const settledHeight = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-      void setWindowSize(width, settledHeight, hold(wideEnough, width)).then(() => {
+      void setWindowSize(windowWidth, settledHeight).then(() => {
         if (!alive) return;
-        // Handed back to the window. Left pinned, the shell would stop
-        // following a window that changed size for any other reason — and
-        // collapsed it keeps sizing to its contents, which is what makes the
-        // bar look right in a plain browser where there is no window at all.
-        shell.style.width = '';
+        // The shape last, once the window is the size the shape is measured
+        // against.
+        void shape(side, windowWidth, width, settledHeight);
+        // Handed back to the window, except on the left where the window is
+        // wider than the shell on purpose. Released, the shell follows a window
+        // that changed size for any other reason, and collapsed it keeps sizing
+        // to its contents — which is what makes the bar look right in a plain
+        // browser where there is no window at all.
+        shell.style.width = restingWidth(side, width);
         shell.style.transition = '';
         record();
       });
@@ -318,12 +399,13 @@ export function useShellSize(
       cancelAnimationFrame(start);
       clearTimeout(settle);
     };
-    // `width` is read, so it is declared — but it never drives this effect. A
-    // drawer opening changes the width without changing `compact`, and the
-    // guard above returns before anything is animated. What it must not do is
-    // go stale: the next collapse has to resize to the width the window
-    // actually has, not the one it had when the panel was last toggled.
-  }, [compact, wide, ready, width, side]);
+    // `width` and `windowWidth` are read, so they are declared — but neither
+    // drives this effect. A drawer opening changes them without changing
+    // `compact`, and the guard above returns before anything is animated. What
+    // they must not do is go stale: the next collapse has to resize to the
+    // width the window actually has, not the one it had when the panel was
+    // last toggled.
+  }, [compact, wide, ready, width, windowWidth, side]);
 
   return { shellRef, stageRef, trackRef, bottomRef, drawerPresent };
 }

@@ -101,6 +101,7 @@ fn main() {
             lastfm::lastfm_artist_candidates,
             audio::audio_backend_available,
             shell::set_window_box,
+            shell::set_window_mask,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groovium");

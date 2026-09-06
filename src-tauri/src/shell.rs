@@ -46,3 +46,65 @@ pub fn set_window_box(window: Window, width: f64, height: f64, dx: f64) -> Resul
         .set_position(PhysicalPosition::new(at.x + px(dx), at.y))
         .map_err(|e| e.to_string())
 }
+
+/// Cut the window down to one rectangle, for hit testing as well as for paint.
+///
+/// The drawer can open to the left without the window ever moving, which is the
+/// only arrangement that does not flicker: a window whose origin moves takes its
+/// existing pixels with it and the webview lays out again a frame later, so for
+/// that frame the shell is drawn where the window used to be. Nothing about the
+/// order of the calls fixes that — the lag is inside the webview.
+///
+/// So on the left the window is simply always as wide as the drawer needs, and
+/// the shell grows into it. What that leaves is six hundred and eighty pixels of
+/// transparent window beside the player, swallowing clicks meant for whatever is
+/// behind it. A window region is the answer to exactly that: outside it the
+/// window is not there at all, for the mouse or for the compositor.
+///
+/// A zero width clears it, which is the whole window again.
+#[tauri::command]
+pub fn set_window_mask(
+    window: Window,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let px = |v: f64| (v * scale).round() as i32;
+    mask(&window, px(x), px(y), px(width), px(height))
+}
+
+#[cfg(windows)]
+fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{CreateRectRgn, SetWindowRgn};
+
+    let handle = window.hwnd().map_err(|e| e.to_string())?;
+    let hwnd = HWND(handle.0 as *mut _);
+
+    // Safety: the handle belongs to the window this call is about and is alive
+    // for its duration. `SetWindowRgn` takes ownership of the region, so the
+    // one made here is deliberately not deleted.
+    unsafe {
+        let region = if width > 0 && height > 0 {
+            Some(CreateRectRgn(x, y, x + width, y + height))
+        } else {
+            None
+        };
+        // Redrawing, because the shape is what changed and nothing else will
+        // ask for it.
+        if SetWindowRgn(hwnd, region, true) == 0 {
+            return Err("the window would not take the region".into());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn mask(_window: &Window, _x: i32, _y: i32, _width: i32, _height: i32) -> Result<(), String> {
+    // Nothing to do and nothing to fail: the left-hand drawer moves the window
+    // on platforms without a window region, which is what the fallback in
+    // `place` is for.
+    Ok(())
+}
