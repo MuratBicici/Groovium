@@ -52,6 +52,20 @@ async function begin(mine: number): Promise<void> {
   await invoke('visualizer_start');
 }
 
+/**
+ * Hand a frame to everything watching, from outside Rust.
+ *
+ * Development only, and the only way to see any of this in a plain browser:
+ * the frames come from a Windows audio interface, so `npm run dev` has no
+ * sound to draw and every edge stays dark. The same shape as the store handles
+ * in `main.tsx`, and stripped from a build by the `DEV` guard.
+ */
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__grooviumBars = (bars: number[]) => {
+    for (const watcher of watchers) watcher(bars);
+  };
+}
+
 /** Hear every frame until the returned function is called. */
 export function watchBars(watcher: Watcher): () => void {
   watchers.add(watcher);
