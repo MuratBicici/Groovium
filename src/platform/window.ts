@@ -105,8 +105,11 @@ export async function setWindowMask(
     await invoke('set_window_mask', {
       x: Math.round(rect?.x ?? 0),
       y: Math.round(rect?.y ?? 0),
-      width: Math.round(rect?.width ?? 0),
-      height: Math.round(rect?.height ?? 0),
+      // Minus one for "no shape at all", which is not the same as a shape with
+      // no area: that one is a window nobody can see, and it is what lets the
+      // window be moved without being watched.
+      width: rect ? Math.round(rect.width) : -1,
+      height: rect ? Math.round(rect.height) : -1,
     });
   } catch (err) {
     // Forgotten again, so the next attempt is not skipped as a repeat of a

@@ -61,7 +61,10 @@ pub fn set_window_box(window: Window, width: f64, height: f64, dx: f64) -> Resul
 /// behind it. A window region is the answer to exactly that: outside it the
 /// window is not there at all, for the mouse or for the compositor.
 ///
-/// A zero width clears it, which is the whole window again.
+/// A negative width clears it, which is the whole window again. A zero width is
+/// a different thing and a useful one: a window with no shape at all is not on
+/// screen, which is how the side swap changes the window's place without
+/// anybody watching it happen.
 #[tauri::command]
 pub fn set_window_mask(
     window: Window,
@@ -87,10 +90,10 @@ fn mask(window: &Window, x: i32, y: i32, width: i32, height: i32) -> Result<(), 
     // for its duration. `SetWindowRgn` takes ownership of the region, so the
     // one made here is deliberately not deleted.
     unsafe {
-        let region = if width > 0 && height > 0 {
-            Some(CreateRectRgn(x, y, x + width, y + height))
-        } else {
+        let region = if width < 0 || height < 0 {
             None
+        } else {
+            Some(CreateRectRgn(x, y, x + width, y + height))
         };
         // Emphatically without a redraw. The region is a clip over a surface
         // the webview has already painted, and everything outside the shell on

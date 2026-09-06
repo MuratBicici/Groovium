@@ -70,6 +70,23 @@ export const DURATION_MS = 260;
  * player across the screen.
  */
 export const SETTLE_MS = DURATION_MS + 40;
+
+/**
+ * Half of the fade the window changes sides behind.
+ *
+ * The one geometry change left that cannot be made invisible by arranging it
+ * better. Going from one side to the other, the window's left edge moves and
+ * the shell's place inside the window moves by the same amount in the opposite
+ * direction — and those two live in different processes, so one of them is
+ * always a frame late. Whichever way round, that frame is the player six
+ * hundred and eighty pixels from where it belongs.
+ *
+ * So it happens with nothing on screen. The shell fades out, the window changes
+ * shape to nothing at all — no outline for Windows to draw — moves, comes back,
+ * and the shell fades in on the other side. It reads as a deliberate swap,
+ * which is what it is: nobody presses this by accident.
+ */
+const SWAP_FADE_MS = 130;
 const EASING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
 /**
@@ -203,21 +220,49 @@ export function useShellSize(
   useLayoutEffect(() => {
     if (wasSide.current === side) return;
     const cameFrom = wasSide.current;
-    wasSide.current = side;
 
     const shell = shellRef.current;
     if (!shell || !ready) return;
-    shell.style.width = restingWidth(side, width);
-    const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-    // Going back to the right, the old shape names a strip that will be off the
-    // end of the narrower window, which would leave nothing of it visible at
-    // all. Going the other way there is no shape yet to be wrong.
-    if (side === 'right') void setWindowMask(null);
-    void setWindowSize(
-      windowWidth,
-      height,
-      cameFrom === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH,
-    ).then(() => shape(side, windowWidth, width, height));
+
+    const dx = cameFrom === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH;
+    // Recorded at the point of no return rather than up here, so a swap
+    // interrupted before the window has moved is restarted rather than lost.
+    const move = () => {
+      wasSide.current = side;
+      shell.style.width = restingWidth(side, width);
+      const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
+      return setWindowSize(windowWidth, height, dx).then(() =>
+        shape(side, windowWidth, width, height),
+      );
+    };
+
+    if (prefersReducedMotion()) {
+      void setWindowMask(null);
+      void move();
+      return;
+    }
+
+    let alive = true;
+    shell.style.transition = `opacity ${SWAP_FADE_MS}ms linear`;
+    shell.style.opacity = '0';
+
+    const swap = setTimeout(() => {
+      if (!alive) return;
+      // No shape at all, so there is no outline around a window with nothing
+      // in it while it travels.
+      void setWindowMask({ x: 0, y: 0, width: 0, height: 0 });
+      void move().then(() => {
+        if (!alive) return;
+        shell.style.opacity = '1';
+      });
+    }, SWAP_FADE_MS);
+
+    return () => {
+      alive = false;
+      clearTimeout(swap);
+      shell.style.opacity = '';
+      shell.style.transition = '';
+    };
   }, [side, ready, compact, windowWidth, width]);
 
   useLayoutEffect(() => {
