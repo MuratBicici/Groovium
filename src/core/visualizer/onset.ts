@@ -62,7 +62,29 @@
  * drop. What was missing is how much of a moment it was: a part that is being
  * struck at a third of its range is not the same event as one being struck at
  * full, whatever the step. So the strength carries the level of the part that
- * was struck, and a lull now breathes where it used to burst.
+ * was struck, and a lull breathes where it used to burst.
+ *
+ * Which left it restless — everything the music did got a flare, and no two
+ * flares on the same beat were the same size. Two more things, and both are
+ * about steadiness rather than about hearing:
+ *
+ * **It read the level off the frame it fired on.** The bars arrive on the
+ * sound's clock and this runs on the drawing's, so which frame a beat is caught
+ * in is luck, and the level in that one frame swings by a fifth either way. A
+ * regular kick came out as a row of flares of visibly different sizes — a beat
+ * you can hear as even, lighting the window unevenly, which is most of what
+ * "jumpy" was. The level is taken over the last second or so instead. It says
+ * how loud the passage is rather than how loud that frame was, which is the
+ * question being asked anyway.
+ *
+ * **Everything that qualified was let through.** The bar to clear was about
+ * whether a sound started, and nearly everything in a busy arrangement starts.
+ * What decides whether it is worth *looking* at is a different question, asked
+ * once at the end: a hit has to be worth something on its own, and worth a fair
+ * share of what the last few seconds have been worth. In a chorus that leaves
+ * the kick and the snare and drops the rest; in a quiet stretch the memory
+ * fades and a modest thing is the biggest thing again. The pulse comes through
+ * and the chatter around it does not.
  */
 
 /** What one part of the spectrum has been doing. */
@@ -71,6 +93,8 @@ export interface Region {
   level: number;
   /** How big a step this part usually takes, so its own history is the bar. */
   usually: number;
+  /** How loud it has been lately, which is how much of a moment a hit is. */
+  carrying: number;
 }
 
 /** What the music has been doing, and how long since it last did something. */
@@ -83,10 +107,18 @@ export interface Beat {
   weighing: number;
   /** How long they have been gathering. */
   weighed: number;
+  /** What a hit has been worth lately, which is what a new one is judged by. */
+  lately: number;
 }
 
 /** Nothing heard yet. Holds no regions, so it fits any number of bands. */
-export const NO_BEAT: Beat = { regions: [], since: 0, weighing: 0, weighed: 0 };
+export const NO_BEAT: Beat = {
+  regions: [],
+  since: 0,
+  weighing: 0,
+  weighed: 0,
+  lately: 0,
+};
 
 /**
  * Where the spectrum is cut, and what a hit in each part is worth.
@@ -145,6 +177,47 @@ const FULL_STEP = 0.35;
  * between them is on the meter rather than in the attack.
  */
 const AT_FULL = 0.8;
+
+/**
+ * How long a part's loudness is taken over.
+ *
+ * Long enough that it describes the passage rather than the frame — which is
+ * the difference between a row of even flares on an even beat and a row of
+ * uneven ones. Short enough to arrive with a chorus rather than a bar into it.
+ */
+const CARRYING = 0.9;
+
+/**
+ * The least a hit can be worth at all.
+ *
+ * A floor against noise and nothing more. The work of deciding what is worth
+ * looking at belongs to the share below, because that one adapts: a fixed
+ * height here would silence a quiet song outright rather than scale it, and
+ * being quiet is not the same as having nothing to show.
+ */
+const WORTH_SHOWING = 0.06;
+
+/**
+ * And the share of what hits have lately been worth that one has to reach.
+ *
+ * This is what keeps a busy arrangement from lighting on everything it does.
+ * Two fifths is about the gap between a backbeat and the ornaments around it:
+ * in a chorus it passes the kick and the snare and stops the rest, and in a
+ * quiet stretch the memory has faded and a modest thing is the biggest thing
+ * again.
+ */
+const SHARE = 0.4;
+
+/**
+ * How long a hit is remembered for that comparison.
+ *
+ * Seconds rather than beats: what it has to describe is the stretch of music
+ * being played, and a few seconds of it is what somebody watching has in mind
+ * when they say the window is keeping time or is merely busy. It holds the
+ * largest and lets it fade, so one enormous hit governs what follows it for a
+ * moment and not for the rest of the song.
+ */
+const LATELY = 3;
 
 /**
  * How long candidates are gathered before the loudest of them goes.
@@ -218,18 +291,25 @@ export function listen(
   // Exponential, so the rate is about time and not about how often this is
   // called. `1 - e^(-dt/tau)` is the share of the gap closed in this frame.
   const caught = 1 - Math.exp(-seconds / MEMORY);
+  const settling = 1 - Math.exp(-seconds / CARRYING);
   const regions: Region[] = [];
   let hardest = 0;
 
   for (let at = 0; at < REGIONS.length; at++) {
-    const was = beat.regions[at] ?? { level: 0, usually: 0 };
+    const was = beat.regions[at] ?? { level: 0, usually: 0, carrying: 0 };
     const [from, to] = edges(bars.length, at);
     const now = peakIn(bars, from, to);
     const step = now - was.level;
+    // How loud this part has been, not how loud this frame is. Which frame a
+    // beat is caught in is luck, and reading the moment off that one frame made
+    // an even beat light the window unevenly.
+    const carrying = was.carrying + (now - was.carrying) * settling;
 
     if (now > TOO_QUIET && step > Math.max(was.usually, FAINTEST) * over) {
       const worth =
-        Math.min(1, step / FULL_STEP) * (REGIONS[at]?.worth ?? 1) * Math.min(1, now / AT_FULL);
+        Math.min(1, step / FULL_STEP) *
+        (REGIONS[at]?.worth ?? 1) *
+        Math.min(1, carrying / AT_FULL);
       hardest = Math.max(hardest, worth);
     }
 
@@ -237,7 +317,11 @@ export function listen(
     // measured against is how hard this part is usually struck, and a sound
     // dying away says nothing about that.
     const took = Math.max(0, step);
-    regions.push({ level: now, usually: was.usually + (took - was.usually) * caught });
+    regions.push({
+      level: now,
+      usually: was.usually + (took - was.usually) * caught,
+      carrying,
+    });
   }
 
   // Gathered rather than raced. A cluster that is already open takes this
@@ -247,21 +331,39 @@ export function listen(
   let weighing = beat.weighing;
   let weighed = beat.weighed;
   let waited = since;
+  let lately = beat.lately * Math.exp(-seconds / LATELY);
   let hit = 0;
 
   if (weighing > 0) {
     weighing = Math.max(weighing, hardest);
     weighed += seconds;
     if (weighed >= WEIGH) {
-      hit = weighing;
+      // Worth something on its own, and worth a fair share of what the music
+      // has lately been offering. A cluster that clears neither is dropped
+      // rather than shown small, and the gap is left running so the next thing
+      // that is worth looking at is not made to wait behind it.
+      if (weighing >= Math.max(WORTH_SHOWING * over, lately * SHARE)) {
+        hit = weighing;
+        waited = 0;
+      }
+      // What the music offered, shown or not. Written that way because that is
+      // the honest quantity, though it comes to the same thing either way:
+      // anything larger than the bar was shown, and anything smaller cannot
+      // raise a maximum.
+      //
+      // Taking the largest is what matters here. Following what it is handed
+      // instead is a loop that eats itself — the bar drifts down towards the
+      // small things, which lets more of them by, which pulls it down further,
+      // and a busy arrangement is soon lighting the window on everything it
+      // does again. That was measured, not guessed at.
+      lately = Math.max(lately, weighing);
       weighing = 0;
       weighed = 0;
-      waited = 0;
     }
   } else if (hardest > 0 && since >= GAP) {
     weighing = hardest;
     weighed = 0;
   }
 
-  return { beat: { regions, since: waited, weighing, weighed }, hit };
+  return { beat: { regions, since: waited, weighing, weighed, lately }, hit };
 }

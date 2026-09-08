@@ -30,6 +30,18 @@ const lows = (values: number[], seconds = FRAME, rest = 0.1) =>
   );
 
 /**
+ * How long a passage has to have been going before it is one.
+ *
+ * How much of a moment a hit is comes from how loud its part of the spectrum
+ * has been over the last second or so, so a run that starts a tenth of a second
+ * before the strike is a track fading in rather than a track playing. Two
+ * seconds of it, which is what any of this sees in use.
+ */
+const RUN_UP = 120;
+
+const runUp = (frame: number[]) => Array.from({ length: RUN_UP }, () => frame);
+
+/**
  * The hardest hit in a run, once it has had time to come out.
  *
  * Candidates are gathered for a moment before the loudest goes, so the frame a
@@ -49,14 +61,15 @@ describe('reading a part of the spectrum', () => {
   /** A run-up of quiet frames, then one where a single band is struck. */
   const oneBand = (band: number) =>
     struckAt([
-      ...Array.from({ length: 20 }, () => Array(BANDS).fill(0.05)),
-      Array.from({ length: BANDS }, (_, at) => (at === band ? 0.9 : 0.05)),
+      ...runUp(Array(BANDS).fill(0.4)),
+      Array.from({ length: BANDS }, (_, at) => (at === band ? 0.95 : 0.4)),
     ]);
 
   it('takes the loudest band of a part, not the part average', () => {
-    // A kick is one or two bands out of six, and an average across the six
-    // buries it: nine tenths in one band comes out at a seventh.
-    expect(oneBand(1)).toBeGreaterThan(0.5);
+    // A kick is one or two bands out of six, and averaging the six buries it:
+    // this same frame, read as a mean, is a step of a tenth rather than of half
+    // and is worth about a quarter of what it is worth read as a peak.
+    expect(oneBand(1)).toBeGreaterThan(0.3);
   });
 
   it('hears one struck anywhere across the spectrum', () => {
@@ -94,12 +107,17 @@ describe('hearing a hit', () => {
   it('hears one hit per kick and not one per frame', () => {
     // A kick is several frames wide. Every frame of one being its own hit is
     // what makes a visual stutter rather than pulse.
+    //
+    // Counted past the run-up: how much of a moment a hit is comes from how
+    // loud its part has been, and at the very start of a track it has not been
+    // loud for long. The first second or so of any song comes up rather than
+    // arrives, which is right, and is not what this is about.
     const every = 30;
-    const frames = 600;
-    const hits = lows(pattern(frames, every)).filter((hit) => hit > 0).length;
-    const kicks = frames / every;
+    const frames = 600 + RUN_UP;
+    const hits = lows(pattern(frames, every)).slice(RUN_UP).filter((hit) => hit > 0).length;
+    const kicks = (frames - RUN_UP) / every;
     expect(hits).toBeLessThanOrEqual(kicks);
-    expect(hits).toBeGreaterThanOrEqual(kicks - 2);
+    expect(hits).toBeGreaterThanOrEqual(kicks - 1);
   });
 
   it('hears the same music at thirty frames a second as at sixty', () => {
@@ -108,7 +126,10 @@ describe('hearing a hit', () => {
     const at = (seconds: number) => {
       const frames = Math.round(10 / seconds);
       const every = Math.round(0.5 / seconds);
-      return lows(pattern(frames, every, 0.95, 0.15), seconds).filter((hit) => hit > 0).length;
+      const settling = Math.round(2 / seconds);
+      return lows(pattern(frames, every, 0.95, 0.15), seconds)
+        .slice(settling)
+        .filter((hit) => hit > 0).length;
     };
     expect(Math.abs(at(1 / 60) - at(1 / 30))).toBeLessThanOrEqual(1);
   });
@@ -124,13 +145,13 @@ describe('hearing a hit', () => {
     // fall is not a step. Counted from the second kick onwards: the first is
     // inside the gap after nothing at all and is swallowed by it, which costs a
     // hit at the very start of a track and nothing after that.
-    const heard = lows(pattern(900, 30, 0.95, 0.55)).slice(60);
+    const heard = lows(pattern(900, 30, 0.95, 0.55)).slice(RUN_UP);
     expect(heard.filter((hit) => hit > 0).length).toBe(heard.length / 30);
   });
 
   it('says how hard it was hit', () => {
-    const at = (to: number) => struckAt([...Array(60).fill(spectrum(0.3)), spectrum(to)]);
-    const soft = at(0.45);
+    const at = (to: number) => struckAt([...runUp(spectrum(0.5)), spectrum(to)]);
+    const soft = at(0.62);
     const hard = at(1);
     expect(hard).toBeGreaterThan(soft);
     expect(hard).toBeLessThanOrEqual(1);
@@ -151,39 +172,35 @@ describe('hearing the rest of the music', () => {
     // low end sitting at nine tenths and counts as nothing — on a ratio there
     // is nothing left to clear. It is still a step, and a step is a hit.
     const squashed = Array.from({ length: 600 }, (_, at) => (at % 30 < 3 ? 0.95 : 0.86));
-    expect(lows(squashed).filter((hit) => hit > 0).length).toBeGreaterThan(15);
+    expect(lows(squashed).slice(RUN_UP).filter((hit) => hit > 0).length).toBeGreaterThan(12);
   });
 
   it('hears a snare with nothing underneath it', () => {
     // Nothing in the low end at all, which is where this used to look.
     const frames = Array.from({ length: 600 }, (_, at) =>
-      at % 30 < 3 ? only(6, 12, 0.8, 0.06) : only(6, 12, 0.2, 0.06),
+      at % 30 < 3 ? only(6, 12, 0.9, 0.06) : only(6, 12, 0.4, 0.06),
     );
-    expect(play(frames).filter((hit) => hit > 0).length).toBeGreaterThan(15);
+    expect(play(frames).slice(RUN_UP).filter((hit) => hit > 0).length).toBeGreaterThan(12);
   });
 
   it('hears the front of a sung phrase', () => {
     // Slower and softer than a drum, in the band a voice is heard in, over a
     // track with no percussion in it whatsoever.
     const frames: number[][] = [];
-    for (let phrase = 0; phrase < 8; phrase++) {
+    for (let phrase = 0; phrase < 10; phrase++) {
       for (let at = 0; at < 90; at++) {
         // Two frames climbing into the phrase, then it holds and falls away.
-        const level = at < 2 ? 0.2 + 0.2 * (at + 1) : Math.max(0.15, 0.6 - (at - 2) * 0.01);
+        const level = at < 2 ? 0.45 + 0.2 * (at + 1) : Math.max(0.45, 0.85 - (at - 2) * 0.01);
         frames.push(only(12, 18, level, 0.05));
       }
     }
-    expect(play(frames).filter((hit) => hit > 0).length).toBeGreaterThanOrEqual(6);
+    expect(play(frames).slice(RUN_UP).filter((hit) => hit > 0).length).toBeGreaterThanOrEqual(6);
   });
 
   it('counts the same hit for more down low than up top', () => {
     // A kick should still outweigh a hi-hat. It no longer silences it.
     const struck = (from: number, to: number) =>
-      struckAt([
-        // Long enough before the strike to be clear of the gap.
-        ...Array.from({ length: 20 }, () => only(from, to, 0.2, 0.05)),
-        only(from, to, 0.9, 0.05),
-      ]);
+      struckAt([...runUp(only(from, to, 0.5, 0.05)), only(from, to, 0.95, 0.05)]);
 
     const low = struck(0, 6);
     const high = struck(18, 24);
@@ -197,15 +214,27 @@ describe('hearing the rest of the music', () => {
     // cannot tell them apart — which is why a soft entry in a slow stretch used
     // to light the window like a chorus.
     const entry = (from: number) =>
-      struckAt([
-        ...Array.from({ length: 20 }, () => spectrum(from)),
-        spectrum(from + 0.3),
-      ]);
+      struckAt([...runUp(spectrum(from)), spectrum(from + 0.3)]);
 
-    const lull = entry(0.15);
-    const chorus = entry(0.62);
+    const lull = entry(0.3);
+    const chorus = entry(0.65);
     expect(lull).toBeGreaterThan(0);
     expect(lull).toBeLessThan(chorus * 0.75);
+  });
+
+  it('lights an even beat evenly, whichever frame each one is caught in', () => {
+    // Where most of "jumpy" came from. The bars arrive on the sound's clock and
+    // this runs on the drawing's, so whether a beat is caught at its peak or a
+    // frame into its decay is luck — and reading how much of a moment it was
+    // off that one frame put the luck into the flare twice over, once through
+    // the step and again through the level. Taking the level over the passage
+    // leaves only the step, and a beat you can hear as even looks it.
+    const caught = Array.from({ length: 900 }, (_, at) =>
+      at % 30 < 3 ? spectrum(at % 60 < 30 ? 0.75 : 0.6) : spectrum(0.35),
+    );
+    const flares = play(caught).slice(RUN_UP).filter((hit) => hit > 0);
+    expect(flares.length).toBeGreaterThan(20);
+    expect(Math.min(...flares) / Math.max(...flares)).toBeGreaterThan(0.65);
   });
 
   it('does not fire on a hi-hat while the rest of the window is silent', () => {
@@ -235,31 +264,70 @@ describe('picking out of a crowd', () => {
 
   /** A quiet run, then `first`, then `second` a frame or two later. */
   const twoInARow = (first: number[][], second: number[][]) =>
-    struckAt([...Array.from({ length: 20 }, () => mix(0.3, 0.3)), ...first, ...second]);
+    struckAt([...runUp(mix(0.5, 0.5)), ...first, ...second]);
 
   it('flares on the kick, not on the cymbal that got there first', () => {
     // Forty milliseconds apart, which is nothing to look at and everything to
     // a rule that takes the first and then stops listening.
     const heard = twoInARow(
-      [mix(0.3, 0.85), mix(0.3, 0.85)],
-      [mix(0.9, 0.85), mix(0.9, 0.85)],
+      [mix(0.5, 0.95), mix(0.5, 0.95)],
+      [mix(0.98, 0.95), mix(0.98, 0.95)],
     );
     // Only the low end reaches this. The cymbal alone is worth well under it.
-    const cymbalAlone = twoInARow([mix(0.3, 0.85)], [mix(0.3, 0.85)]);
+    const cymbalAlone = twoInARow([mix(0.5, 0.95)], [mix(0.5, 0.95)]);
     expect(heard).toBeGreaterThan(cymbalAlone * 1.5);
   });
 
   it('still flares on the cymbal when that is all there is', () => {
     // The gathering must not become a rule that only the low end counts.
-    expect(twoInARow([mix(0.3, 0.85)], [mix(0.3, 0.85)])).toBeGreaterThan(0);
+    expect(twoInARow([mix(0.5, 0.95)], [mix(0.5, 0.95)])).toBeGreaterThan(0);
   });
 
   it('lets go once, not once per part that was struck', () => {
     const together = play([
-      ...Array.from({ length: 20 }, () => mix(0.3, 0.3)),
-      mix(0.9, 0.85),
-      ...Array.from({ length: 12 }, () => mix(0.9, 0.85)),
+      ...runUp(mix(0.5, 0.5)),
+      mix(0.98, 0.95),
+      ...Array.from({ length: 12 }, () => mix(0.98, 0.95)),
     ]);
     expect(together.filter((hit) => hit > 0).length).toBe(1);
+  });
+});
+
+/**
+ * A busy arrangement, and what the window should pick out of it.
+ *
+ * Hearing everything was the point of dividing the spectrum; showing everything
+ * it heard was the mistake that came with it. Nearly everything in a dense
+ * passage is a sound starting, so nearly everything qualified, and the edge
+ * ended up restless rather than in time — flaring five or six times a second on
+ * whatever the arrangement happened to be doing.
+ */
+describe('keeping the pulse and dropping the chatter', () => {
+  /** A backbeat every half second, with an ornament every sixth of one. */
+  const busy = Array.from({ length: 900 }, (_, at) => {
+    const low = at % 30 < 3 ? 0.9 : 0.4;
+    const mid = at % 10 < 2 ? 0.55 : 0.35;
+    return Array.from({ length: BANDS }, (_, band) =>
+      band < 6 ? low : band >= 12 && band < 18 ? mid : 0.1,
+    );
+  });
+
+  it('flares on the beat and not on everything between them', () => {
+    const beats = (900 - RUN_UP) / 30;
+    const heard = play(busy).slice(RUN_UP).filter((hit) => hit > 0);
+    // Six ornaments to a beat. Without a bar to clear, every one of them is a
+    // sound starting and gets a flare of its own.
+    expect(heard.length).toBeLessThanOrEqual(beats + 2);
+    expect(heard.length).toBeGreaterThanOrEqual(beats - 2);
+  });
+
+  it('lets the ornaments through once the beat stops', () => {
+    // The bar is a share of what hits have lately been worth, not a fixed
+    // height. Take the backbeat away and what is left is the loudest thing
+    // there is, which is what should light the window in a quiet stretch.
+    const alone = busy.map((frame) =>
+      frame.map((level, band) => (band < 6 ? 0.4 : level)),
+    );
+    expect(play(alone).slice(RUN_UP).filter((hit) => hit > 0).length).toBeGreaterThan(20);
   });
 });
