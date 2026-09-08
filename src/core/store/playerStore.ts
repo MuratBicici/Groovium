@@ -447,9 +447,26 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     if (get().stationSeeds.length > 0) set({ stationSeeds: [] });
   }
 
-  async function prefetchStationTrack(): Promise<void> {
-    const { currentTrack, stationQueue } = get();
+  /**
+   * Find what could follow the playing track, and hold it ready.
+   *
+   * `asked` is the difference between somebody pressing for a successor and
+   * this getting one ready in case. Speculating is only worth requests when the
+   * station is switched on: the queue is emptied on every ordinary track change
+   * — that is what keeps one run's suggestions out of the next — so without
+   * this guard every skip, every next track of a playlist, every song picked by
+   * hand spent a Last.fm lookup and up to a dozen Spotify searches finding a
+   * successor for a listener who had the feature turned off and would never see
+   * it. Invisible, and by far the largest thing this app was spending.
+   *
+   * Pressing next at the end of a collection still reaches this with the toggle
+   * off, which is deliberate and is what `asked` carries: the toggle governs an
+   * ending track, not a button somebody pushed.
+   */
+  async function prefetchStationTrack(asked = false): Promise<void> {
+    const { currentTrack, stationQueue, station } = get();
     if (!currentTrack) return;
+    if (!station && !asked) return;
     // Already stocked. Refilling early would spend a lookup to replace answers
     // that have not been used yet.
     if (stationQueue.length > 0) return;
@@ -528,8 +545,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   async function playStationTrack(): Promise<boolean> {
     if (get().stationQueue.length === 0) {
       // Nothing queued — a very short track, or a press that arrived before the
-      // lookup finished. Look it up now and accept the gap.
-      await prefetchStationTrack();
+      // lookup finished. Look it up now and accept the gap. Asked for, because
+      // reaching here at all is somebody wanting a successor.
+      await prefetchStationTrack(true);
     }
     const [track, ...rest] = get().stationQueue;
     if (!track) return false;
