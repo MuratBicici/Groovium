@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { GLOW, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
-import { NO_BEAT, bassOf, listen, type Beat } from '@/core/visualizer/onset';
+import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
@@ -190,8 +190,8 @@ export function WindowGlow({
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
   const measured = useRef(0);
-  /** The low end on its own, which is what the hits are heard in. */
-  const bass = useRef(0);
+  /** The bands themselves, which is where the hits are heard. */
+  const spectrum = useRef<number[]>([]);
   /**
    * What the sliders currently say.
    *
@@ -209,10 +209,12 @@ export function WindowGlow({
     if (!on) return;
     return watchBars((bars) => {
       measured.current = levelFrom(bars);
-      // Kept apart from the level. The level is the whole mix leaning on the
-      // low end; this is the low end alone, and only it can say that something
-      // was struck rather than that the music got louder.
-      bass.current = bassOf(bars);
+      // Kept apart from the level. The level is one number for the whole mix,
+      // leaning on the low end; the bands are kept whole because a hit is heard
+      // in each part of the spectrum against that part's own history, and a
+      // single number has thrown that away. Only that can say something was
+      // struck rather than that the music got louder.
+      spectrum.current = bars;
     });
   }, [on]);
 
@@ -314,7 +316,7 @@ export function WindowGlow({
       ({ motes, owed } = advance(motes, showing, seconds, owed, Math.random, climb));
 
       // The hits, which are what the edge is actually keeping time with.
-      const heard = listen(beat, bass.current, seconds, GLOW.threshold(sensitivity));
+      const heard = listen(beat, spectrum.current, seconds, GLOW.threshold(sensitivity));
       beat = heard.beat;
       punch = Math.max(0, punch - (seconds * 1000) / felt_ms);
       if (heard.hit > 0) {
