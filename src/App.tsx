@@ -26,7 +26,13 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
-import { SETTLE_MS, SWAP_MS, SWAP_PAUSE_MS, useShellSize } from '@/components/controls/useShellSize';
+import {
+  SETTLE_MS,
+  SWAP_MS,
+  SWAP_PAUSE_MS,
+  sideArriving,
+  useShellSize,
+} from '@/components/controls/useShellSize';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
@@ -132,13 +138,29 @@ export default function App() {
   // which one was open — so expanding brings back whatever was out.
   const wide = drawerOpen && !compact && !swapping;
 
+  /**
+   * Whether the stored settings have landed once.
+   *
+   * What separates the side arriving from a file from somebody pressing the
+   * setting. See `sideArriving`: until they have landed there is nothing on
+   * screen, so a drawer that is out is out only in the file — and shutting it,
+   * moving the widget and opening it again is three beats of choreography
+   * performed on an empty window that end with it six hundred and eighty pixels
+   * to the left.
+   */
+  const [drawn, setDrawn] = useState(false);
+  if (settingsReady && !drawn) setDrawn(true);
+
   // Adjusted during render rather than in an effect, which is React's own
   // guidance for state derived from something else — and the shape the drawer's
   // own close already uses in `useShellSize`.
-  if (chosenSide !== drawerSide && !swapping) {
-    // Nothing on screen to move: take the new side straight away.
-    if (drawerOpen && !compact) setSwapping(true);
-    else setDrawerSide(chosenSide);
+  if (!swapping) {
+    const arriving = sideArriving(drawerSide, chosenSide, {
+      drawn,
+      drawerOut: drawerOpen && !compact,
+    });
+    if (arriving === 'take') setDrawerSide(chosenSide);
+    else if (arriving === 'choreograph') setSwapping(true);
   }
 
   useEffect(() => {

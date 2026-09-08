@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sideMove } from './useShellSize';
+import { sideArriving, sideMove } from './useShellSize';
 
 /**
  * Which side the widget is on, and what it costs to get that wrong at launch.
@@ -33,5 +33,38 @@ describe('a side arriving', () => {
     // Somebody pressing the setting, which is the case this was written for.
     expect(sideMove('right', 'left', true)).toBe('swap');
     expect(sideMove('left', 'right', true)).toBe('swap');
+  });
+});
+
+/**
+ * And the same question one level up, where the drawer is either out or not.
+ *
+ * The route that got past the fix above. A launch quit with the drawer out
+ * arrives with the stored side *and* a drawer that is open in the settings, and
+ * `App` reads an open drawer as something to shut before the widget can change
+ * sides. Three beats later the drawer is shut, the layout has been applied, and
+ * the side change that was only ever a file being read is now a swap: the
+ * window narrows to the player and moves a drawer's width to the left.
+ */
+describe('a side arriving with a drawer that might be out', () => {
+  const out = { drawn: true, drawerOut: true };
+
+  it('is choreographed when a drawer is actually out on screen', () => {
+    expect(sideArriving('left', 'right', out)).toBe('choreograph');
+  });
+
+  it('is simply taken when the drawer is shut', () => {
+    expect(sideArriving('left', 'right', { drawn: true, drawerOut: false })).toBe('take');
+  });
+
+  it('is simply taken at launch, however the drawer was left', () => {
+    // The one that shipped broken. Nothing has been drawn, so the drawer is
+    // open in the file and nowhere else, and there is nothing to shut.
+    expect(sideArriving('right', 'left', { drawn: false, drawerOut: true })).toBe('take');
+    expect(sideArriving('right', 'left', { drawn: false, drawerOut: false })).toBe('take');
+  });
+
+  it('is nothing at all when the side has not changed', () => {
+    expect(sideArriving('left', 'left', out)).toBe('nothing');
   });
 });

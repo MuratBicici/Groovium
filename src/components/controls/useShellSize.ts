@@ -159,6 +159,42 @@ export function sideMove(from: DrawerSide, to: DrawerSide, applied: boolean): Si
   return applied ? 'swap' : 'adopt';
 }
 
+/** What the widget as a whole should do about a side arriving. */
+export type SideArrival =
+  /** It is the side already on. */
+  | 'nothing'
+  /** Take it. Nothing has to move first.  */
+  | 'take'
+  /** Shut the drawer, move the widget, open it again on the other side. */
+  | 'choreograph';
+
+/**
+ * The same question one level up, where the drawer is either out or it is not.
+ *
+ * A drawer that is out has to be shut on the side it is on before the window
+ * can move, and opened again afterwards on the other one — three beats, which
+ * `App` runs. A drawer that is out *in the settings* and has never been on
+ * screen has nothing to shut.
+ *
+ * That distinction is the whole of this. At launch the stored side and the
+ * stored drawer arrive together, and taking that for a change of mind shut a
+ * drawer nobody had seen, narrowed the window to the player, and moved it by
+ * the drawer's width — the same drift `sideMove` describes, reached by the one
+ * route that gets past it. `sideMove` is asked before anything has been laid
+ * out and answers `adopt`; by the time the three beats have finished shutting
+ * the drawer, the layout has been applied and the answer is `swap`.
+ */
+export function sideArriving(
+  from: DrawerSide,
+  to: DrawerSide,
+  onScreen: { drawn: boolean; drawerOut: boolean },
+): SideArrival {
+  if (sideMove(from, to, onScreen.drawn) !== 'swap') {
+    return from === to ? 'nothing' : 'take';
+  }
+  return onScreen.drawerOut ? 'choreograph' : 'take';
+}
+
 function shape(
   side: DrawerSide,
   windowWidth: number,
