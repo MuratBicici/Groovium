@@ -130,6 +130,35 @@ function restingWidth(side: DrawerSide, width: number): string {
   return side === 'left' ? `${width}px` : '';
 }
 
+/** What a side arriving means. */
+export type SideMove =
+  /** It is the side already laid out for. */
+  | 'nothing'
+  /** Take it as the side this started on, without moving anything. */
+  | 'adopt'
+  /** Somebody changed their mind. Fade out, move the window, fade back in. */
+  | 'swap';
+
+/**
+ * Whether a side arriving is a change of mind or the stored setting landing.
+ *
+ * The settings are read from a file, so the first side this hook is given is
+ * whatever the store defaults to and the real one arrives a moment later. That
+ * arrival is not somebody pressing anything: nothing has been drawn yet, and
+ * the window is still exactly as it was restored — in the geometry of the side
+ * it was quit on, which is the side now arriving.
+ *
+ * Treated as a swap it moved the window by the drawer's width, on every launch,
+ * always the same way. Nothing showed while the position was never written
+ * down, because every launch started from the same stale place. Once the place
+ * was actually being saved, the widget walked six hundred and eighty pixels to
+ * the left each time it was opened and closed.
+ */
+export function sideMove(from: DrawerSide, to: DrawerSide, applied: boolean): SideMove {
+  if (from === to) return 'nothing';
+  return applied ? 'swap' : 'adopt';
+}
+
 function shape(
   side: DrawerSide,
   windowWidth: number,
@@ -236,7 +265,15 @@ export function useShellSize(
    * right size and in the right place before anything starts moving inside it.
    */
   useLayoutEffect(() => {
-    if (wasSide.current === side) return;
+    const move = sideMove(wasSide.current, side, applied.current);
+    if (move === 'nothing') return;
+    if (move === 'adopt') {
+      // The stored setting landing, not a gesture. See `sideMove`: the window
+      // is already in this side's geometry, and the first apply below will
+      // size it where it stands.
+      wasSide.current = side;
+      return;
+    }
     const cameFrom = wasSide.current;
 
     const shell = shellRef.current;
@@ -245,7 +282,7 @@ export function useShellSize(
     const dx = cameFrom === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH;
     // Recorded at the point of no return rather than up here, so a swap
     // interrupted before the window has moved is restarted rather than lost.
-    const move = () => {
+    const travel = () => {
       wasSide.current = side;
       shell.style.width = restingWidth(side, width);
       const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
@@ -256,7 +293,7 @@ export function useShellSize(
 
     if (prefersReducedMotion()) {
       void setClickArea(null);
-      void move();
+      void travel();
       return;
     }
 
@@ -269,7 +306,7 @@ export function useShellSize(
       // No shape at all, so there is no outline around a window with nothing
       // in it while it travels.
       void setClickArea({ x: 0, y: 0, width: 0, height: 0 });
-      void move().then(() => {
+      void travel().then(() => {
         if (!alive) return;
         shell.style.opacity = '1';
       });

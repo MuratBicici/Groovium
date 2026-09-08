@@ -314,9 +314,17 @@ export default function App() {
       // player is drawn against — never moves at all. Without this the shell
       // would stay pinned to the window's left edge and the player would jump
       // there with it.
+      //
+      // And nothing at all until the settings are in. The window comes back the
+      // size it was quit at, which on the left is the drawer's width wider than
+      // the player — while which side that width belongs to is in the file
+      // still being read. Drawn before it arrives, the shell fills the whole
+      // window and the player is painted hard against the wrong edge of it, for
+      // one frame, on every launch. A transparent window showing nothing for
+      // that frame is the honest version of not knowing yet.
       className={`relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ${
-        drawerSide === 'left' ? 'ml-auto' : ''
-      }`}
+        settingsReady ? '' : 'invisible'
+      } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
       {/* Draws nothing; it paints the palette from the sleeve on the deck. */}
