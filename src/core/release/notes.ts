@@ -51,9 +51,10 @@ export function summaryFor(changelog: string, version: string): string | null {
  *
  * The updater hands over a whole section — summary, highlights and every
  * change — as one blob, and that is right for `latest.json` and for the release
- * page. It is not right for a dialog offering the update, where the question is
- * whether to install it rather than what each line of it was. The full text
- * stays in Settings, which is where somebody goes to read it all.
+ * page. It is not right for a window offering the update, where the question is
+ * whether to install it rather than what each line of it was. The rest is not
+ * kept anywhere in the app: the release page has it, and `WhatsNew` tells the
+ * same story properly once the update is in.
  *
  * Notes in some other shape, with none of the markers this changelog uses, come
  * back whole rather than empty: better to show too much than to decide a

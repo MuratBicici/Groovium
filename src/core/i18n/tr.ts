@@ -143,7 +143,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'setup.optionalRest':
     'Kendi müziğiniz bunların hiçbiri olmadan çalar — yalnızca buradan Spotify’da arama yapmak istiyorsanız kurun.',
   'setup.oneTime':
-    'Spotify tek bir uygulamanın çok kişiye hizmet etmesine ancak küçük uygulamalara vermediği bir erişim düzeyinde izin veriyor; bu yüzden her kurulum kendi uygulamasını kaydeder. Bu tek seferlik bir işlemdir.',
+    'Tek bir uygulamanın çok kişiye hizmet edebilmesi için Spotify’ın küçük uygulamalara vermediği bir erişim düzeyi gerekiyor. Bu yüzden her kurulum kendi uygulamasını kaydeder. Bir kez yapılır, sonra unutulur.',
   'setup.step1': 'Bir uygulama oluşturun',
   'setup.step1Body': 'Herhangi bir ad ve açıklama olur.',
   'setup.step1Apis':
@@ -162,7 +162,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Az önce oluşturduğunuz uygulamanın sayfasında, Client Secret’ın yanında durur — Groovium onu hiç istemez ve hiç saklamaz.',
   'setup.idPlaceholder': '32 karakterlik Client ID',
   'setup.premium':
-    'Spotify Premium gerekir — yalnızca müzik çalmak için değil, kaydın kendisinin ayakta kalması için de: Spotify uygulamanın sahibi olan hesabın etkin bir aboneliği olmasını istiyor ve abonelik biterse uygulama çalışmayı bırakıyor.',
+    'Spotify Premium gerekir. Yalnızca müzik çalmak için değil: Spotify, uygulamayı kaydeden hesabın aboneliğinin sürmesini istiyor. Abonelik biterse uygulama da çalışmayı bırakır.',
   'setup.clipboardFailed': 'Panoya erişilemedi. Adresi seçip elle kopyalayın.',
 
   'station.heading': 'Sonsuz çalma',

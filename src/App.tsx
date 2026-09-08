@@ -94,6 +94,16 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * and hid a record being carried out of it.
  */
 
+/**
+ * How often the quiet update check is offered the chance to run.
+ *
+ * Not how often it asks — the store holds its own answer for six hours and
+ * turns most of these away. This is short enough that a machine which slept
+ * through the gap catches up on its next tick rather than waiting out another
+ * whole one.
+ */
+const ASK_AGAIN_MS = 15 * 60_000;
+
 export default function App() {
   const t = useT();
   const initialize = usePlayerStore((s) => s.initialize);
@@ -298,8 +308,17 @@ export default function App() {
     // Last of the three, and quiet. Startup already reads the library and the
     // session, and music starting must not wait behind a network request that
     // nobody asked for — a failure here is not an event, it is an offline
-    // launch. The mark on the settings button is the whole of the report.
+    // launch.
+    //
+    // And then again, because for this app "on the way in" is almost never:
+    // closing the window hides it to the tray, where it is meant to sit for
+    // weeks. The store holds its own answer for six hours, so this ticks often
+    // enough to survive a laptop lid rather than often enough to ask — a timer
+    // that slept through the gap catches up on its next tick instead of waiting
+    // out another whole one.
     void checkForUpdates();
+    const asking = setInterval(() => void checkForUpdates(), ASK_AGAIN_MS);
+    return () => clearInterval(asking);
   }, [checkForUpdates]);
 
   useEffect(() => {

@@ -46,9 +46,11 @@ export function UpdateOffer({ open, onDismiss, onLater }: UpdateOfferProps) {
   const restartNow = useUpdateStore((s) => s.restartNow);
   const { present, shown } = useSheet(open);
 
-  // The opening prose only. Everything the release said is still in Settings,
-  // which is where somebody goes to read it all rather than to answer a
-  // question about it.
+  // The opening prose only, which is the whole of what this window is for: the
+  // question is whether to install it, not what each line of it was. Settings
+  // used to carry the rest in a scrolling box four lines tall and no longer
+  // does — a status line is the wrong place for four hundred lines of
+  // changelog, and `WhatsNew` tells it properly once the update is in.
   const paragraphs = useMemo(() => (notes ? paragraphsOf(summaryOfNotes(notes)) : []), [notes]);
 
   /** Nothing is put away mid-download; there is no question on screen to leave. */

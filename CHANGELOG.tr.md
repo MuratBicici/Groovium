@@ -8,70 +8,73 @@ her değişiklik tek tek yazılıdır ve burada yazılmaz.
 
 Başlıklar İngilizcesiyle birebir aynı olmalı; bir testi var.
 
+Bu bir çeviri değil, Türkçe bir metin. İngilizcesi uzun cümleler ve araya
+sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yüklemi sayfanın
+sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
+"siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
+
 ## 1.0.5 — 2026-09-03
 
-Bir onarım sürümü, ve büyük kısmı kimsenin göremediği bir şekilde bozulmuş bir
+Bir onarım sürümü. Büyük kısmı, kimsenin fark edemeyeceği şekilde bozulan bir
 şeyle ilgili.
 
-Spotify şubat ayında Web API'sinin büyük bir bölümünü temizledi ve kaldırdığı
-uç noktalardan biri, sonsuz çalmanın son çare olarak yaslandığı şeydi: Last.fm'in
-hiç duymadığı bir parçadan sonra ne önerileceği. Spotify bu değişikliği daha önce
-oluşturulmuş kayıtlar için erteledi, dolayısıyla burada çalışmaya devam etti ama
-Groovium'u şubattan sonra kuran herkeste sessizce başarısız oluyordu. O boşluk
-kapandı; aynı adım artık aramayla çalışıyor.
+Spotify şubatta Web API'sinin büyük bir bölümünü kaldırdı. Gidenlerden biri,
+sonsuz çalmanın son çaresiydi: Last.fm'in hiç duymadığı bir parçadan sonra ne
+önerileceğini o söylüyordu. Spotify bu değişikliği eski kayıtlar için erteledi.
+Yani burada çalışmaya devam etti, ama Groovium'u şubattan sonra kuran herkeste
+sessizce bozuldu. O adım artık aramayla yürüyor.
 
-Aynı temizliğin diğer yarısı, bir hesabın Premium olup olmadığını söyleyen alanı
-kaldırdı. Bunun üzerine kurulu uyarı da herkese çıkmaya başladı — hiç
-hedeflemediği Premium hesaplara dahil. O uyarı kalktı. Artık bir Spotify hesabı
-bağlıysa Groovium Premium varsayıyor ve sözü çalmanın kendisine bırakıyor.
+Aynı temizlik, bir hesabın Premium olup olmadığını söyleyen alanı da kaldırdı.
+Alan boş gelince, ona bakan uyarı herkese çıkmaya başladı — Premium
+kullananlara bile. Uyarı tamamen kalktı. Bir Spotify hesabı bağlıysa Groovium
+artık Premium varsayıyor; gerisini çalmanın kendisi gösteriyor.
 
-Spotify kurulum yönergeleri de insanların ihtiyaç duyduğu birkaç şeyi
-söylemiyordu; bunlardan biri Spotify'ın kendi formundaki, kaçırıldığında sessizce
-başarısız olan bir cevap. Bir de pencerenin çizimine dair beş düzeltme var;
-bunlardan biri, açık bir panelin alt kenarında pencereyi boydan boya kesen o
-çizgi — panelin yüzeyi artık durmak yerine kabuğun rengine varıyor.
+Spotify kurulum adımları da eksikti. Biri şu: Spotify'ın kendi formunda bir
+seçeneği işaretlemezseniz hata almıyorsunuz, ama hiçbir şey de çalmıyor. Bir de
+pencerenin çiziminde beş düzeltme var. Bunlardan biri, açık bir panelin alt
+kenarında pencereyi boydan boya kesen çizgiydi.
 
 ## 1.0.4 — 2026-08-29
 
-Büyük ölçüde 1.0.3'ün iki noktadaki onarımı.
+Çoğunlukla 1.0.3'ün iki noktadan onarımı.
 
-Renkler yeniden senin. O sürüm kontrastı ölçülebilir hâle getirdi, sonra bu
-ölçümü senin seçtiğin renkleri değiştirmek için kullandı — ki bir renk
-seçicinin varlık sebebinin tam tersidir bu: koyu bir mavi vurgu soluk mavi bir
-oynat butonu üretiyordu, açık bir sarı koyu zeytin yeşili bir tane, ve
-"okunabilirliği artır"ı açmak vurgu rengini baştan boyuyordu. Seçtiğin iki renk
-artık tam olarak seçtiğin gibi kullanılıyor; onlara uyum sağlayan tek şey
-üzerlerine çizilen yazı ve ikonlar.
+Renkler yeniden sizin. O sürüm kontrastı ölçülebilir hâle getirdi, sonra da bu
+ölçüyle sizin seçtiğiniz rengi değiştirmeye başladı. Bir renk seçicinin tam
+tersi: koyu mavi bir vurgudan soluk mavi bir oynat butonu çıkıyordu, açık
+sarıdan koyu zeytin yeşili bir tane. "Okunabilirliği artır" seçeneği de vurgu
+rengini baştan boyuyordu. Seçtiğiniz iki renk artık aynen kullanılıyor. Onlara
+uyum sağlayan tek şey, üzerlerine çizilen yazı ve simgeler.
 
-Ve sonsuz çalma sonsuz kalıyor. 1.0.3'te çıkmaz sokakları kapatmak tükenmenin
-yeni bir yolunu açmıştı — aynı şarkıya birkaç kez dönmek, önerecek bir şey
-bırakmıyordu — ve Last.fm'in tanımadığı parçalarda aramayı gözle görülür ölçüde
-yavaşlatmıştı. İkisi de düzeldi, ve artık hiç durmadan beş yüz parça çalan bir
-test var.
+Sonsuz çalma da gerçekten sonsuz. 1.0.3 çıkmaz sokakları kapatırken tükenmenin
+yeni bir yolunu açmıştı: aynı şarkıya birkaç kez dönünce önerecek bir şey
+kalmıyordu. Last.fm'in tanımadığı parçalarda da arama gözle görülür şekilde
+yavaşlamıştı. İkisi de düzeldi. Artık hiç durmadan beş yüz parça çalan bir test
+var.
 
-Ayarlar da toparlandı: Hakkında ait olduğu yere, en alta indi ve güncelleme
-denetimi yeni bir şey olmadığında bunu söylüyor. Güncellemeler artık iki uçta da
-kendi adına konuşuyor: bekleyen bir sürüm, fark edilmesi gereken bir nokta
-olarak kalmak yerine uygulamayı açtığında ne olduğunu ve bir seçeneği önüne
-koyuyor; kurulduktan sonraki ilk açılışta da bu ekran neyin değiştiğini
-anlatıyor.
+Ayarlar da toparlandı. Hakkında bölümü en alta, ait olduğu yere indi. Güncelleme
+denetimi, yeni bir şey yoksa bunu söylüyor. Güncellemeler de artık iki uçta da
+kendini anlatıyor: bekleyen bir sürüm varsa uygulamayı açtığınızda ne olduğunu
+ve seçeneklerinizi önünüze koyuyor, fark etmeniz gereken bir noktaya
+dönüşmüyor. Kurulumdan sonraki ilk açılışta da neyin değiştiğini anlatıyor.
 
 ## 1.0.3 — 2026-08-28
 
-Bu sürüm özel paletlerle ilgili. Yazılar ve yüzeyler artık karıştırıp ummak
-yerine kontrast ölçülerek hesaplanıyor, böylece kendi iki renginden kurulan bir
-palet ne seçersen seç okunabilir kalıyor — açık bir yüzey dahil; o durum eskiden
-açık zemin üzerine açık yazı üretiyor ve yalnızca bir uyarıyla geçiştiriliyordu.
-Ayrıca kontrastı varsayılandan öteye taşıyan bir ayar, ve pencerenin çevresine
-vurgu renginde ince bir çerçeve seçeneği var.
+Bu sürüm özel paletlerle ilgili. Yazı ve yüzey renkleri artık karıştırıp umarak
+değil, kontrast ölçülerek bulunuyor. Böylece kendi iki renginizden kurulan bir
+palet ne seçerseniz seçin okunabilir kalıyor — açık bir yüzey seçseniz bile.
+Eskiden o durum açık zemin üzerine açık yazı üretiyor, sonra da bir uyarıyla
+geçiştiriliyordu. Ayrıca kontrastı varsayılanın ötesine taşıyan bir ayar var, ve
+pencerenin çevresine vurgu renginizde ince bir çerçeve ekleyebiliyorsunuz.
 
 ## 1.0.2 — 2026-08-26
 
-İnsanların gerçekten karşılaştığı iki arıza. Ağ koptuğunda Spotify plağı
-döndürmeye ve ilerleme çubuğunu doldurmaya devam ediyordu, oysa hoparlörden
-hiçbir şey çıkmıyordu; bağlantı geri geldiğinde de konum geriye sıçrıyordu.
-Kopukluk artık iki saniye kadar içinde fark ediliyor ve müzik görüntüyle
-birlikte duruyor, ondan saniyeler sonra değil. Bir de sonsuz çalma aynı şarkıya
-her seferinde aynı şarkıyla cevap veriyor, Last.fm'in hiç duymadığı bir parçada
-ise büsbütün duruyordu; artık benzerliği ağırlık sayarak rastgele seçiyor ve pes
-etmeden önce üç ayrı kaynağa soruyor.
+İnsanların gerçekten karşılaştığı iki arıza.
+
+Ağ koptuğunda Spotify plağı döndürmeye ve ilerleme çubuğunu doldurmaya devam
+ediyordu, oysa hoparlörden ses gelmiyordu. Bağlantı geri gelince de konum
+geriye sıçrıyordu. Kopukluk artık iki saniye kadar içinde fark ediliyor; müzik
+görüntüyle birlikte duruyor, ondan saniyeler sonra değil.
+
+Sonsuz çalma da aynı şarkıya her seferinde aynı şarkıyla cevap veriyordu.
+Last.fm'in hiç duymadığı bir parçada ise büsbütün duruyordu. Artık benzerliği
+ağırlık sayarak rastgele seçiyor ve pes etmeden önce üç ayrı kaynağa soruyor.

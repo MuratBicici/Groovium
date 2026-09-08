@@ -517,7 +517,6 @@ function Updates() {
   const t = useT();
   const status = useUpdateStore((s) => s.status);
   const version = useUpdateStore((s) => s.version);
-  const notes = useUpdateStore((s) => s.notes);
   const progress = useUpdateStore((s) => s.progress);
   const error = useUpdateStore((s) => s.error);
   const checkNow = useUpdateStore((s) => s.checkNow);
@@ -566,14 +565,12 @@ function Updates() {
       {status === 'available' && version && (
         <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
           <p className="text-meta text-cream-200">{t('update.available', { version })}</p>
-          {/* Whatever the release said, kept as written and left to scroll:
-              notes are the author's words, and truncating them is deciding
-              which half of a warning somebody gets. */}
-          {notes && (
-            <p className="max-h-40 overflow-y-auto text-meta leading-snug whitespace-pre-line text-cream-400">
-              {notes}
-            </p>
-          )}
+          {/* The version and a way to get it, and nothing else. Every word of
+              the release used to sit here in a little scrolling box, which is
+              the wrong shape for it twice over: this corner of Settings is a
+              status line, and nobody reads four hundred lines of changelog
+              through a slot four lines tall. What the release said is told
+              properly, once, by `WhatsNew` after it is installed. */}
           <button
             type="button"
             onClick={() => void download()}

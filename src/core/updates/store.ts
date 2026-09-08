@@ -41,7 +41,16 @@ interface UpdateState {
   error: string | null;
 
   /**
-   * Look once, quietly, on the way in.
+   * Look quietly, on the way in and every so often after that.
+   *
+   * Safe to call as often as you like: it holds its own answer for
+   * `QUIET_GAP_MS` and returns without asking anything inside that.
+   *
+   * "On the way in" was the whole of it, and for this app that is almost never.
+   * Closing the window hides it to the tray, where it is meant to sit for
+   * weeks — so a launch is a rare event, and an installed base could stay on an
+   * old release for as long as nobody rebooted. The check that runs once has to
+   * be the check that runs again.
    *
    * Swallows its failure on purpose. No network is not an event: nobody asked
    * about updates while opening a music player, and a red banner over an
@@ -63,6 +72,16 @@ interface UpdateState {
   restartNow: () => Promise<void>;
 }
 
+/**
+ * How long a quiet look holds good for.
+ *
+ * Long, because there is nothing here worth being eager about: a release is a
+ * thing that happens every few weeks, and four requests a day to a static file
+ * on GitHub is already more attention than that deserves. Short enough that
+ * somebody who leaves the widget running for a month is told inside a day.
+ */
+export const QUIET_GAP_MS = 6 * 60 * 60_000;
+
 export const useUpdateStore = create<UpdateState>((set, get) => {
   /**
    * The update itself, which never renders and so is not state.
@@ -71,8 +90,15 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
    * knows how to download this particular update.
    */
   let pending: AvailableUpdate | null = null;
-  /** So the quiet check runs once a launch rather than on every mount. */
-  let looked = false;
+  /**
+   * When the quiet check last asked, so it can be called freely.
+   *
+   * A time rather than a flag. The flag it replaced said "once a launch", which
+   * on an app that hides to the tray for weeks meant once a fortnight — and it
+   * also had to be a flag because it was doing double duty as the guard against
+   * StrictMode's double-invoked effects. A time answers both.
+   */
+  let lookedAt = 0;
 
   /**
    * `settled` is where to land when there is nothing new — the one thing the
@@ -98,8 +124,12 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
     error: null,
 
     async checkQuietly() {
-      if (looked || get().status !== 'idle') return;
-      looked = true;
+      // Anything but `idle` is an answer already in hand — one being asked for,
+      // one on offer, one downloading, one waiting to install. None of them is
+      // improved by asking again.
+      if (get().status !== 'idle') return;
+      if (lookedAt && Date.now() - lookedAt < QUIET_GAP_MS) return;
+      lookedAt = Date.now();
       try {
         // Back to `idle`, never `current`: this ran because the app started,
         // not because anybody wanted to know.
@@ -112,7 +142,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => {
 
     async checkNow() {
       if (get().status === 'checking' || get().status === 'downloading') return;
-      looked = true;
+      lookedAt = Date.now();
       try {
         // Somebody pressed a button, so an answer is owed either way.
         await look('current');

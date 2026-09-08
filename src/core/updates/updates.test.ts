@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useUpdateStore } from './store';
+import { QUIET_GAP_MS, useUpdateStore } from './store';
 import { checkForUpdate } from '@/core/updates';
 import type { AvailableUpdate } from '@/core/updates';
 
@@ -21,6 +21,22 @@ vi.mock('@/core/updates', () => ({
 
 const asMock = vi.mocked(checkForUpdate);
 
+/**
+ * The clock, because the quiet check keeps time.
+ *
+ * It holds its answer for six hours and these tests run in a millisecond, so
+ * without a clock to move the second quiet check in the file would return
+ * without doing anything and the test around it would pass for that reason
+ * rather than for the one it was written for. Two of them already did.
+ */
+let clock = QUIET_GAP_MS;
+vi.spyOn(Date, 'now').mockImplementation(() => clock);
+
+/** Far enough on that a quiet check is willing to ask again. */
+const laterOn = () => {
+  clock += QUIET_GAP_MS;
+};
+
 function offering(version: string, notes: string | null = null): AvailableUpdate {
   return { version, notes, install: async () => {} };
 }
@@ -33,6 +49,8 @@ function reset() {
     progress: null,
     error: null,
   });
+  // Each test starts able to ask, whatever the one before it asked.
+  laterOn();
 }
 
 describe('looking for an update', () => {
@@ -70,6 +88,42 @@ describe('looking for an update', () => {
     await useUpdateStore.getState().checkQuietly();
 
     expect(useUpdateStore.getState().status).toBe('idle');
+  });
+
+  it('holds its answer rather than asking again straight away', async () => {
+    // Called on the way in and then on a timer, so it is called far more often
+    // than it should ask. Deciding how often to ask is its own job — a caller
+    // that had to keep the time would be a second place to get it wrong.
+    asMock.mockResolvedValue(null);
+    await useUpdateStore.getState().checkQuietly();
+    await useUpdateStore.getState().checkQuietly();
+    await useUpdateStore.getState().checkQuietly();
+
+    expect(asMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again once enough time has gone by', async () => {
+    // The point of the timer. Closing the window hides this app to the tray
+    // for weeks, so a check that only ever ran at startup ran almost never,
+    // and an installed base could sit on an old release indefinitely.
+    asMock.mockResolvedValue(null);
+    await useUpdateStore.getState().checkQuietly();
+    laterOn();
+    await useUpdateStore.getState().checkQuietly();
+
+    expect(asMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops asking once something has been found', async () => {
+    // An update in hand is an answer. Asking over the top of it would replace
+    // the handle the download needs with an identical one, for nothing.
+    asMock.mockResolvedValue(offering('1.1.0'));
+    await useUpdateStore.getState().checkQuietly();
+    laterOn();
+    await useUpdateStore.getState().checkQuietly();
+
+    expect(asMock).toHaveBeenCalledTimes(1);
+    expect(useUpdateStore.getState().status).toBe('available');
   });
 
   it('is not something waiting to be installed', async () => {
