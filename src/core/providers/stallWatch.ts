@@ -115,6 +115,32 @@ export const GIVE_UP_AFTER_MS = 10 * 60_000;
 export const RESTART_ATTEMPTS = 5;
 
 /**
+ * How often playback may fall over before it is left alone.
+ *
+ * The ceilings above are per stall, and entering one resets them — which is
+ * right for a stall that follows an unrelated outage an hour later, and is a
+ * hole for a stall that keeps coming straight back. Recovering and falling over
+ * again three seconds later is a loop like any other; it just goes round
+ * through a state that looks like success.
+ *
+ * Six in two minutes. A pause, a change of network, somebody closing a laptop
+ * lid — none of those happen six times in two minutes, and something that does
+ * is not going to be fixed by a seventh attempt.
+ */
+export const STALLS_ALLOWED = 6;
+export const STALL_WINDOW_MS = 2 * 60_000;
+
+/** Add this stall to the recent ones, forgetting anything out of the window. */
+export function recordStall(at: readonly number[], now = Date.now()): number[] {
+  return [...at, now].filter((when) => now - when <= STALL_WINDOW_MS);
+}
+
+/** Whether playback keeps falling over rather than having fallen over once. */
+export function fallingRepeatedly(at: readonly number[]): boolean {
+  return at.length > STALLS_ALLOWED;
+}
+
+/**
  * Consecutive checks finding nothing playing before it is called stalled.
  *
  * This is the patient path, for Spotify answering that it is not playing —
@@ -197,11 +223,13 @@ export function giveUpReason(
   stalledSince: number,
   restartsTried: number,
   now = Date.now(),
+  stalls: readonly number[] = [],
 ): string | null {
   if (stalledSince > 0 && now - stalledSince > GIVE_UP_AFTER_MS) {
     return 'the silence outlasted the watching';
   }
   if (restartsTried >= RESTART_ATTEMPTS) return 'Spotify would not start again';
+  if (fallingRepeatedly(stalls)) return 'playback keeps falling over';
   return null;
 }
 

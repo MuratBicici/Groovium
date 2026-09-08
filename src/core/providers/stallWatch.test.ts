@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   GIVE_UP_AFTER_MS,
+  STALLS_ALLOWED,
+  STALL_WINDOW_MS,
   RESTART_ATTEMPTS,
   VERIFY_CONFIRM_MS,
   STALL_AFTER,
@@ -8,8 +10,10 @@ import {
   VERIFY_ALERT_MS,
   VERIFY_CALM_MS,
   VERIFY_LOST_MS,
+  fallingRepeatedly,
   freshWatch,
   giveUpReason,
+  recordStall,
   hasRecovered,
   hasStalled,
   observe,
@@ -215,5 +219,41 @@ describe('when to keep asking quickly', () => {
       if (wasOffline) Object.defineProperty(navigator, 'onLine', wasOffline);
       else delete (navigator as { onLine?: boolean }).onLine;
     }
+  });
+});
+
+describe('falling over again and again', () => {
+  const now = 1_700_000_000_000;
+
+  it('forgets a stall once it is out of the window', () => {
+    const old = [now - STALL_WINDOW_MS - 1, now - 1000];
+    expect(recordStall(old, now)).toHaveLength(2);
+    expect(recordStall(old, now)[0]).toBe(now - 1000);
+  });
+
+  it('lets ordinary trouble happen', () => {
+    // A pause, a change of network, a laptop lid. None of those happen six
+    // times in two minutes.
+    let stalls: number[] = [];
+    for (let at = 0; at < STALLS_ALLOWED; at++) stalls = recordStall(stalls, now + at * 1000);
+    expect(fallingRepeatedly(stalls)).toBe(false);
+    expect(giveUpReason(now, 0, now, stalls)).toBeNull();
+  });
+
+  it('stops once it is a loop rather than an outage', () => {
+    // The hole the per-stall ceilings leave: recovering and falling over again
+    // three seconds later resets them every time, so nothing ever ends.
+    let stalls: number[] = [];
+    for (let at = 0; at <= STALLS_ALLOWED; at++) stalls = recordStall(stalls, now + at * 3000);
+    expect(fallingRepeatedly(stalls)).toBe(true);
+    expect(giveUpReason(now, 0, now, stalls)).not.toBeNull();
+  });
+
+  it('does not count two outages an hour apart as a loop', () => {
+    let stalls: number[] = [];
+    for (let at = 0; at <= STALLS_ALLOWED; at++) {
+      stalls = recordStall(stalls, now + at * 10 * 60_000);
+    }
+    expect(fallingRepeatedly(stalls)).toBe(false);
   });
 });

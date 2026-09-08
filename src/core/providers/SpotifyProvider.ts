@@ -6,6 +6,7 @@ import {
   CONFIRM_CHECKS,
   freshWatch,
   giveUpReason,
+  recordStall,
   hasRecovered,
   hasStalled,
   observe,
@@ -181,6 +182,15 @@ export class SpotifyProvider extends BaseProvider {
    * whether the music came back and a terrible one to wait out an outage.
    */
   private confirmsLeft = 0;
+  /**
+   * When playback last fell over, for the last couple of minutes.
+   *
+   * The ceilings on a stall are per stall, and entering one resets them. That
+   * is right for two unrelated outages an hour apart and is a hole for a stall
+   * that keeps coming straight back — a loop like any other, going round
+   * through a state that looks like success.
+   */
+  private stalls: number[] = [];
   /** Whether the silence was this provider's doing, and so is its to undo. */
   private pausedByStall = false;
 
@@ -610,6 +620,8 @@ export class SpotifyProvider extends BaseProvider {
    */
   private giveUp(why: string): void {
     this.report(`gave up: ${why}`);
+    // Pressing play is a fresh start, not a seventh attempt at this one.
+    this.stalls = [];
     this.stopTicker();
     this.stopVerifier();
     this.pausedByStall = false;
@@ -669,7 +681,9 @@ export class SpotifyProvider extends BaseProvider {
     // Before anything is asked of Spotify. Both ceilings live in `stallWatch`
     // with the rest of the rules about a sequence of observations, where they
     // can be tested without an SDK, a subscription and a network cable to pull.
-    const done = this.stalled ? giveUpReason(this.stalledSince, this.restartsTried) : null;
+    const done = this.stalled
+      ? giveUpReason(this.stalledSince, this.restartsTried, Date.now(), this.stalls)
+      : null;
     if (done) {
       this.giveUp(done);
       return;
@@ -812,6 +826,7 @@ export class SpotifyProvider extends BaseProvider {
     if (this.stalled || this.state !== 'PLAYING') return;
     this.stalled = true;
     this.stalledSince = Date.now();
+    this.stalls = recordStall(this.stalls);
     this.restartsTried = 0;
     this.confirmsLeft = 0;
     this.stopTicker();
