@@ -31,7 +31,8 @@ fn main() {
         // Remember where the user put the widget. Position and size — see
         // `shell::PLACE_FLAGS` for why the size has to be saved even though the
         // frontend overwrites it a moment later, and `shell::PLACE_FILE` for
-        // why it is kept somewhere new.
+        // why it is kept somewhere new. When it is written is this app's job
+        // rather than the plugin's: see `shell::Placekeeper`.
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(shell::PLACE_FLAGS)
@@ -47,6 +48,7 @@ fn main() {
         .manage(library::PickedPaths::default())
         .manage(spotify::tokens::AccessTokenCache::default())
         .manage(shell::ClickArea::default())
+        .manage(shell::Placekeeper::default())
         .manage(visualizer::Running::default())
         .setup(|app| {
             // Before anything is shown. The window has a frame of its own that
@@ -60,13 +62,20 @@ fn main() {
             shortcuts::register(app.handle());
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // Closing hides to the tray rather than quitting, so playback
             // survives dismissing the window. Quit lives in the tray menu.
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
+                // The window can now sit in the tray for days, and whatever
+                // ends the process after that is unlikely to be a clean exit.
+                shell::write_place(window.app_handle());
             }
+            // Dragged, or moved by the drawer changing sides. Written down once
+            // it stops rather than sixty times a second while it goes.
+            WindowEvent::Moved(_) => shell::place_changed(window.app_handle()),
+            _ => {}
         })
         // No credential-store commands here on purpose. Reading a stored secret
         // by name used to be callable from the webview; it is now Rust-internal

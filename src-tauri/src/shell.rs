@@ -12,15 +12,16 @@
 //! window blinked out for a frame on every open and close. Going through Tauri
 //! means the webview is moved with the window rather than after it.
 //!
-//! And, at the two ends of a session, remembering where the window was left.
+//! And remembering where the window was left, which is a matter of writing it
+//! down at the right moments rather than of moving anything.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, State, Window};
-use tauri_plugin_window_state::StateFlags;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// What is remembered about where the window was left.
 ///
@@ -67,6 +68,105 @@ fn forget_old_place_in(dir: &Path) {
     // Missing is the ordinary case: every launch after the first, and every
     // install that never ran an older build.
     let _ = std::fs::remove_file(dir.join(OLD_PLACE_FILE));
+}
+
+/// Waiting for the window to hold still before writing down where it is.
+///
+/// The state plugin writes at one moment: a clean exit. That is the one moment
+/// a widget like this cannot count on. Closing it hides it to the tray, where
+/// it can sit for days, and what actually ends the process is an update, a
+/// shutdown, a crash, or somebody stopping a dev server — none of which is an
+/// exit the plugin ever hears about. Every one of them takes the position with
+/// it, so the widget opens in the middle of the screen having been dragged into
+/// a corner a week ago. Which is what it did.
+///
+/// So it is written when it changes instead. Dragging a window is sixty moves a
+/// second and not one of them is worth a file, so the write waits until the
+/// window has been still for a moment: each move pushes the deadline out, and
+/// the one waiter writes when it finally arrives.
+#[derive(Default)]
+pub struct Placekeeper {
+    /// When the place becomes worth writing down, or `None` for nothing owed.
+    owed: Mutex<Option<Instant>>,
+    /// Whether somebody is already waiting to write it.
+    waiting: AtomicBool,
+}
+
+/// How still the window has to be before its place is written down.
+const HOLD_STILL: Duration = Duration::from_millis(700);
+
+/// And how often the waiter looks. Fine enough that the wait is the wait above.
+const LOOK_FOR_STILLNESS: Duration = Duration::from_millis(150);
+
+/// What the waiter should do next.
+#[derive(Debug, PartialEq, Eq)]
+enum Next {
+    /// The window has moved again since last time.
+    Wait,
+    /// It has held still. Write, then come round once more.
+    Write,
+    /// Nothing owed. Stop, and let the next move start a new waiter.
+    Done,
+}
+
+/// Note that the window has moved. `true` when nobody is waiting to write yet.
+///
+/// The deadline is set before the flag is claimed and both under the one lock,
+/// so a waiter deciding to stop cannot slip between the two and leave nobody
+/// watching a move that has just been recorded.
+fn noted(keeper: &Placekeeper, now: Instant) -> bool {
+    let Ok(mut owed) = keeper.owed.lock() else {
+        return false;
+    };
+    *owed = Some(now + HOLD_STILL);
+    !keeper.waiting.swap(true, Ordering::SeqCst)
+}
+
+fn step(keeper: &Placekeeper, now: Instant) -> Next {
+    let Ok(mut owed) = keeper.owed.lock() else {
+        return Next::Done;
+    };
+    match *owed {
+        Some(deadline) if now < deadline => Next::Wait,
+        Some(_) => {
+            // Cleared before the write rather than after, so a move arriving
+            // during it is owed again and written on the next turn instead of
+            // being wiped out by this one finishing.
+            *owed = None;
+            Next::Write
+        }
+        None => {
+            // Released while the deadline is held, for the same reason `noted`
+            // claims it while holding: the two must not interleave.
+            keeper.waiting.store(false, Ordering::SeqCst);
+            Next::Done
+        }
+    }
+}
+
+/// Write the window's place down now, saying nothing if it cannot be.
+///
+/// A failure here is a file the app will write again on the next move, and
+/// every caller is an event handler with nobody to tell.
+pub fn write_place(app: &AppHandle) {
+    let _ = app.save_window_state(PLACE_FLAGS);
+}
+
+/// The window has moved; write its place down once it stops.
+pub fn place_changed(app: &AppHandle) {
+    if !noted(&app.state::<Placekeeper>(), Instant::now()) {
+        return;
+    }
+
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(LOOK_FOR_STILLNESS);
+        match step(&app.state::<Placekeeper>(), Instant::now()) {
+            Next::Wait => {}
+            Next::Write => write_place(&app),
+            Next::Done => return,
+        }
+    });
 }
 
 /// Resize the window and move its left edge by `dx`, in that order.
@@ -309,6 +409,64 @@ mod tests {
         // monitors, and with no size that rectangle is one corner.
         assert!(PLACE_FLAGS.contains(StateFlags::SIZE));
         assert!(PLACE_FLAGS.contains(StateFlags::POSITION));
+    }
+
+    /// Far enough past a deadline to be past it, however the clock rounds.
+    const LATER: Duration = Duration::from_millis(HOLD_STILL.as_millis() as u64 + 1);
+
+    #[test]
+    fn a_drag_puts_one_waiter_on_it_and_not_sixty() {
+        // Sixty moves a second, each of them spawning a thread that writes a
+        // file, is the reason the place is not simply saved on every move.
+        let keeper = Placekeeper::default();
+        let now = Instant::now();
+
+        assert!(noted(&keeper, now), "the first move needs somebody to wait");
+        for tick in 1..60 {
+            let again = noted(&keeper, now + Duration::from_millis(tick));
+            assert!(!again, "somebody already is");
+        }
+    }
+
+    #[test]
+    fn a_move_pushes_the_write_out_rather_than_letting_it_land() {
+        // What makes this a wait for stillness rather than a delay: a drag that
+        // runs for a second must not write halfway through it.
+        let keeper = Placekeeper::default();
+        let start = Instant::now();
+        noted(&keeper, start);
+
+        let nearly = start + LATER - Duration::from_millis(2);
+        assert_eq!(step(&keeper, nearly), Next::Wait);
+        noted(&keeper, nearly);
+        assert_eq!(step(&keeper, start + LATER), Next::Wait, "the deadline moved with it");
+        assert_eq!(step(&keeper, nearly + LATER), Next::Write);
+    }
+
+    #[test]
+    fn the_waiter_stops_once_the_place_is_written_and_a_later_move_starts_another() {
+        let keeper = Placekeeper::default();
+        let start = Instant::now();
+        noted(&keeper, start);
+
+        assert_eq!(step(&keeper, start + LATER), Next::Write);
+        assert_eq!(step(&keeper, start + LATER), Next::Done, "nothing is owed");
+        assert!(noted(&keeper, start + LATER), "and the next move is somebody's job again");
+    }
+
+    #[test]
+    fn a_move_during_the_write_is_owed_again_rather_than_swallowed() {
+        // The write happens between two turns of the loop. A move landing in
+        // that gap has to survive it, or the last thing somebody did with the
+        // window is the one thing never written down.
+        let keeper = Placekeeper::default();
+        let start = Instant::now();
+        noted(&keeper, start);
+        assert_eq!(step(&keeper, start + LATER), Next::Write);
+
+        assert!(!noted(&keeper, start + LATER), "the same waiter is still on it");
+        let after = start + LATER + LATER;
+        assert_eq!(step(&keeper, after), Next::Write, "and it writes again");
     }
 
     #[test]
