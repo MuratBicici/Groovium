@@ -349,12 +349,14 @@ export default function App() {
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
-      {/* Draws nothing; it paints the palette from the sleeve on the deck. */}
-      <CoverTheme />
       <Visualizer on={visualizer} />
 
       <DiscFlightProvider>
       <DiscHoldProvider>
+      {/* Draws nothing; it paints the palette from the sleeve on the deck.
+          Inside the hold provider because "on the deck" is meant literally —
+          a record in the hand is not one the window takes its colours from. */}
+      <CoverTheme />
       <WindowChrome />
 
       {/* The window's two halves. The titlebar above spans both, so the drawer
