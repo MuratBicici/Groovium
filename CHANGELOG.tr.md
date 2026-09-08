@@ -13,6 +13,37 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.1.0 — 2026-09-09
+
+Pencere açılıyor.
+
+Groovium bir pikaptı: tek seferde bir plak, bir de sonrakini bulmak için arama
+kutusu. Bu sürüm ona bir oda veriyor. Spotify çalma listeleriniz, oynatıcının
+yanından çıkan bir çekmecede duruyor — liste hâlinde değil, plak kasaları
+olarak. Bir plağı kılıfından çıkarıp pikaba taşıyarak çalıyorsunuz. Koca bir
+kasa da aynı şekilde taşınıyor. Çekmece ekranın hangi yanında yer varsa o yana
+açılıyor; hangisi olduğunu Ayarlar'dan söylüyorsunuz.
+
+Pikap artık dinliyor da. Plağın arkasında çubuklar yükseliyor. Bunları
+hoparlöre giden ses değil, bu uygulamanın gönderdiği ses hareket ettiriyor —
+Windows'ta ses tek bir işlem için isteniyor, yani başka bir penceredeki video
+onları oynatmıyor. Pencerenin kenarları da cevap veriyor. Oradaki ışık şarkıyla
+tempo tutuyor: spektrumu dört parçada dinliyor ve her vuruşun yanındaki en
+büyük şeyin üstünde patlıyor. Yani bası olmayan bir parçadaki trampet de,
+pencereyi bir kick gibi yakıyor. Zevkinize uymazsa anahtarın altında altı ayar
+var. Bir de palet, pikaptaki plağın kapağından alınabiliyor: kapak
+fotoğrafından bir yüzey ve bir vurgu rengi, elle seçtiğiniz bir çift hangi
+kontrast kurallarından geçiyorsa aynılarından geçirilerek.
+
+Bunun altında da bir sürü onarım var.
+
+Ağ koptuğunda plak artık sessizliğin üstünde dönmüyor. Çalma, parçanın başından
+değil durduğu yerden devam ediyor; sonsuza kadar denemek yerine yeterince
+başarısızlıktan sonra pes ediyor. Pencere, bıraktığınız yerde geri geliyor — bu
+sefer gerçekten, ekranın sol yarısına park edilmiş bir widget dahil. Eski
+düzenek onu tek kelime etmeden unutuyordu. Bir de uygulama Spotify'a çok daha az
+soruyor: en büyük harcaması, kapalı olan bir özellik için yapılıyordu.
+
 ## 1.0.5 — 2026-09-03
 
 Bir onarım sürümü. Büyük kısmı, kimsenin fark edemeyeceği şekilde bozulan bir

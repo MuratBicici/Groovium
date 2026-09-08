@@ -4,6 +4,195 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.1.0 — 2026-09-09
+
+The window opens.
+
+Groovium was a deck: one record at a time and a search box to find the next
+one. This release gives it a room. Your Spotify playlists live in a drawer that
+pulls out beside the player, as crates of records rather than as a list, and
+you take a record out of a sleeve and carry it to the deck to play it. A whole
+crate travels the same way. The drawer opens on whichever side of the screen
+has room for it, and Settings says which side that is.
+
+The deck listens now. Bars rise behind the record, driven by what this app is
+sending to the speakers rather than by whatever else is playing on the machine
+— on Windows that is asked for one process at a time, so a video in another
+window does not move them. The window's own edges answer too. The light there
+keeps time with the song: it hears the spectrum in four parts and flares on the
+largest thing near each beat, so a snare in a track with no bass in it lights
+the window the way a kick does. Six settings sit under the switch if the
+default is not to your taste. And the palette can be taken from the sleeve on
+the deck — one surface colour and one accent out of the cover art, held to the
+same contrast rules a pair you picked by hand goes through.
+
+Underneath that, a great deal of repair.
+
+Losing the network no longer leaves the record turning over silence. Playback
+comes back where it stopped rather than at the top of the track, and it gives
+up after enough failures instead of trying forever. The window comes back where
+you left it — properly this time, including a widget parked in the left half of
+the screen, which the old scheme forgot without a word. And the app asks
+Spotify for a great deal less: the largest thing it was spending went on a
+feature that was switched off.
+
+HIGHLIGHTS
+· Your Spotify playlists are here, in a drawer that opens beside the player.
+  They are crates of records rather than rows of text.
+· Take a record out of its sleeve with the pointer and carry it to the deck to
+  play it. Let go anywhere else and it goes back where it came from.
+· Carry a whole crate to the deck to play the lot, or press a crate to play it
+  in order or shuffled without opening it.
+· The drawer opens on the left or the right. Settings has the choice, so the
+  widget can sit against whichever edge of the screen you keep it on.
+· Bars rise behind the record, moving to this app's own sound. Nothing else
+  playing on the machine reaches them.
+· The window's edges light with the music — an aura that swells with the low
+  end and flares on the beat, with six settings under its switch.
+· The palette can be taken from the cover of whatever is playing. Pick the
+  record up off the deck and the colours you chose come back until you put it
+  down.
+· The window is remembered where you left it. It was being saved only on a
+  clean exit, which for an app that hides to the tray is almost never.
+· A dropped connection no longer restarts the track. Playback resumes at the
+  position it stopped at, and stops trying after six failures in two minutes
+  rather than retrying for as long as the window is open.
+· Groovium asks Spotify for far less. The single largest thing it spent went on
+  suggesting a next track for a feature that was switched off.
+· Updates are looked for every six hours rather than once a launch, so a widget
+  that sits in the tray for a fortnight still hears about a release.
+· The Turkish is rewritten. It had been translated clause by clause out of
+  English, which in Turkish leaves the verb at the end of a queue.
+
+ALL CHANGES
+
+The drawer
+· The window widens into a drawer beside the player rather than opening a panel
+  over it. The player keeps its size and its place while the drawer moves.
+· The drawer opens on the left or the right, set in Settings. On the left the
+  window does not move at all: it is always as wide as the drawer needs and the
+  shell grows inside it, which is the only arrangement that does not flicker.
+· What that leaves beside the player is transparent window, and clicks pass
+  through it to whatever is behind. The window's shape is untouched — cutting
+  it turns off per-pixel transparency and paints a square corner past the
+  rounded one.
+· Changing sides while the drawer is out shuts it, moves the widget behind a
+  fade, and opens it again on the other side, in three beats rather than all at
+  once.
+· Collapsing to the controls takes the drawer with it and gives it back on the
+  way up.
+
+Records and crates
+· Playlists are drawn as sleeves with the record showing inside, and open into
+  the whole drawer.
+· A record can be picked up and carried: out of a sleeve, off the deck, or from
+  one to the other. It follows the hand at the speed of an arm rather than at a
+  constant one, and lands where it is let go or goes home if that is nowhere.
+· A sleeve it came out of shows empty until it is back, and the deck shows
+  empty while its own record is in the hand.
+· An empty sleeve says so rather than handing over a record it does not have.
+· A crate can be carried to the deck as a whole. It opens out over the deck and
+  is gone, and the music it was carrying starts.
+· A crate plays in order or shuffled from a press, without being opened.
+· Records come out of a crate two dozen at a time rather than a hundred, and
+  the rest arrive as the list is scrolled.
+· Only the playlists this account can actually open are shelved.
+
+The visualiser
+· Bars behind the deck, twenty-four of them, spaced by octave rather than by
+  hertz.
+· The sound is read from Windows per-process, aimed at the webview that is
+  actually playing it, so nothing else on the machine moves them.
+· Bars rise instantly and fall over about half a second, at a rate that is the
+  same whatever the frame rate.
+
+The edge light
+· Light along both edges of the window, mirrored, rising from the bottom.
+· It swells with the low end and flares on a hit, and the flare's colour leans
+  deep for a kick and pale for a cymbal.
+· Hits are heard across the whole spectrum in four parts, each measured against
+  its own history, so a track carried by a voice lights the window at all. The
+  step a part takes is what counts rather than the level it reaches, which is
+  the only thing that still works on a mastered low end sitting at the top of
+  its range.
+· Candidates are gathered for fifty milliseconds and the loudest goes, so the
+  window flares on the beat rather than on whatever arrived first.
+· How much of a moment a hit is comes from how loud its part of the spectrum
+  has been over the last second, so a lull breathes where it used to burst and
+  an even beat lights the window evenly.
+· A hit has to be worth a fair share of what the last few seconds have been
+  worth, which keeps the pulse and drops the chatter around it.
+· Six settings under the switch: strength, sensitivity, speed, flash and flare,
+  each from -4 to +4 with marks under the slider.
+
+Colour
+· The palette can be taken from the cover of the playing track: a surface and
+  an accent, chosen for saturation and darkness and lifted until the accent can
+  be read against its ground. A cover with no colour in it leaves your palette
+  alone.
+· Colours derived from the palette — the hairline between the player and the
+  drawer, the text on a filled button — now change with the theme rather than a
+  moment after it.
+· The record's colours are lifted while the record is in your hand and come
+  back as it settles on the deck.
+
+The window
+· The window is remembered with its size beside its position. Without the size,
+  the check that decides whether a saved place is on screen tests a single
+  point — the window's top left corner, which on the left side sits six hundred
+  and eighty pixels from anything visible — so a widget in the left third of
+  the screen came back in the middle.
+· The place is written when it changes rather than on the way out. Closing
+  hides this app to the tray, and what ends the process after that is rarely a
+  clean exit.
+· The widget no longer walks a drawer's width to the left on every launch. The
+  stored side arriving out of the settings file was being read as somebody
+  changing their mind about it.
+· Windows is asked not to draw its own border and corner around a window that
+  draws its own.
+· The shell is not drawn at all until the settings are in, rather than for one
+  frame against the wrong edge.
+
+Spotify and Last.fm
+· Playlists are read with the scopes they need, and a notice appears when they
+  have not been granted — and goes when they are.
+· Search keeps working while playlists are being asked for.
+· Spotify's reason for a refusal is shown rather than a generic failure.
+· A refusal is not retried on the other route unless the route was the problem.
+· Searches are remembered for ten minutes, so the same question is not asked
+  twice.
+· A playlist is read once rather than once per play.
+· Who is signed in is asked once a session.
+· One access token is minted however many callers arrive at once.
+· Playback state is asked for twice a minute rather than five times, and only
+  when there is reason to.
+· A 429 shuts only the quota Spotify actually refused, and backs off further
+  each time it refuses without saying how long to wait.
+· Infinite play spends one search budget per fill rather than one per seed, and
+  stops spending searches to learn the same nothing.
+· Infinite play no longer looks for a successor while it is switched off. It
+  was the largest thing this app spent, and nothing held it.
+
+Playback
+· An outage is confirmed by asking Spotify rather than by trusting the browser.
+· Playback resumes at the position it stopped at rather than at the top of the
+  track.
+· The device is waited for rather than assumed, and the music is confirmed by
+  hearing the position move.
+· A stall that keeps coming back is bounded: six in two minutes ends it, where
+  the ceilings used to reset on every one.
+
+Updates
+· The check runs every six hours rather than once a launch.
+· Settings announces the version and offers the download. Every word of the
+  release used to sit there in a box four lines tall; what a release said is
+  told properly by the summary shown after it installs.
+
+Language
+· The Turkish changelog and two of the setup strings are rewritten as Turkish
+  rather than as a translation: shorter sentences, the verb where it can be
+  reached, and "siz" throughout, which is what the rest of the interface says.
+
 ## 1.0.5 — 2026-09-03
 
 A repair release, and most of it is about something that broke without anyone
