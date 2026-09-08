@@ -37,6 +37,32 @@
  * mix; and reading the same frame of sound twice, which this does whenever the
  * drawing outruns the capture, is a step of nothing rather than a hit reported
  * at some fraction of its size.
+ *
+ * That hears everything. Hearing everything is not the same as knowing what to
+ * look at, and the two faults left after it were both about that.
+ *
+ * **It fired on whatever came first.** A hit was let go the moment one turned
+ * up, and then nothing else could be heard for a tenth of a second. In sparse
+ * music that is the same thing as firing on the loudest, because there is only
+ * one candidate. In a dense passage there are several every tenth of a second,
+ * the beat is rarely the earliest of them, and what the edge kept time with was
+ * whatever smear of guitar happened to land forty milliseconds ahead of the
+ * kick — the beat itself arriving inside the gap that smear had just opened,
+ * and being thrown away. So candidates are now gathered for a moment and the
+ * loudest of them is what goes. Fifty milliseconds is under what anyone can see
+ * as a delay in a light and over the width of a drum, so what it costs is
+ * nothing and what it buys is that the biggest thing in each cluster is the
+ * thing the window flares on. It is not tempo tracking and does not pretend to
+ * be. It is the observation that the beat is almost always the largest event
+ * near itself.
+ *
+ * **It flared as hard in a lull as in a chorus.** How hard a hit landed was the
+ * size of the step and nothing else, so a soft attack in a quiet passage — a
+ * large step, because there was nothing there before it — lit the window like a
+ * drop. What was missing is how much of a moment it was: a part that is being
+ * struck at a third of its range is not the same event as one being struck at
+ * full, whatever the step. So the strength carries the level of the part that
+ * was struck, and a lull now breathes where it used to burst.
  */
 
 /** What one part of the spectrum has been doing. */
@@ -53,10 +79,14 @@ export interface Beat {
   regions: Region[];
   /** Seconds since the last hit, so two never land on top of each other. */
   since: number;
+  /** The best of the candidates being weighed up, or nought for none. */
+  weighing: number;
+  /** How long they have been gathering. */
+  weighed: number;
 }
 
 /** Nothing heard yet. Holds no regions, so it fits any number of bands. */
-export const NO_BEAT: Beat = { regions: [], since: 0 };
+export const NO_BEAT: Beat = { regions: [], since: 0, weighing: 0, weighed: 0 };
 
 /**
  * Where the spectrum is cut, and what a hit in each part is worth.
@@ -66,18 +96,22 @@ export const NO_BEAT: Beat = { regions: [], since: 0 };
  * cuts near 190Hz, 800Hz and 3.3kHz — about as well as three numbers can
  * separate a kick from a snare from a voice from a cymbal.
  *
- * The weights lean low without excluding: a kick outweighs a hi-hat by nearly
- * two to one, so the edge still keeps time with the thing you feel rather than
- * with the thing ticking on top of it — and a track with no low end in it now
- * lights the window at all, which is what this is for. The top part is worth
- * least on purpose: hats are the most regular thing in most music, and left
- * level with the rest they would set the pace on their own.
+ * The weights lean low without excluding: a kick counts for over twice a
+ * hi-hat, so the edge keeps time with the thing you feel rather than with the
+ * thing ticking on top of it — and a track with no low end in it still lights
+ * the window, which is what dividing the spectrum was for. The top part is
+ * worth least on purpose: hats are the most regular thing in most music, and
+ * left level with the rest they set the pace on their own.
+ *
+ * The weights matter twice over now that the loudest candidate in a cluster is
+ * the one that goes. Between a kick and a cymbal landing together, this is what
+ * decides which of them the window flares on.
  */
 const REGIONS = [
   { until: 0.25, worth: 1 },
-  { until: 0.5, worth: 0.9 },
-  { until: 0.75, worth: 0.8 },
-  { until: 1, worth: 0.55 },
+  { until: 0.5, worth: 0.85 },
+  { until: 0.75, worth: 0.7 },
+  { until: 1, worth: 0.45 },
 ] as const;
 
 /**
@@ -102,6 +136,24 @@ const FAINTEST = 0.05;
 
 /** The size of step that is worth all a hit can be worth. */
 const FULL_STEP = 0.35;
+
+/**
+ * The level at which a part is being struck for everything it has.
+ *
+ * What separates a snare in a breakdown from the same snare in the chorus. Both
+ * are a step of the same size; only one of them is a moment, and the difference
+ * between them is on the meter rather than in the attack.
+ */
+const AT_FULL = 0.8;
+
+/**
+ * How long candidates are gathered before the loudest of them goes.
+ *
+ * Under what anyone sees as a delay in a light, and over the width of a drum —
+ * so a kick, a snare and a hat landing together are weighed against each other
+ * rather than raced.
+ */
+const WEIGH = 0.05;
 
 /**
  * How quiet is too quiet to call anything a hit.
@@ -161,7 +213,7 @@ export function listen(
   over = OVER,
 ): { beat: Beat; hit: number } {
   const since = beat.since + seconds;
-  if (bars.length === 0) return { beat: { regions: beat.regions, since }, hit: 0 };
+  if (bars.length === 0) return { beat: { ...beat, since }, hit: 0 };
 
   // Exponential, so the rate is about time and not about how often this is
   // called. `1 - e^(-dt/tau)` is the share of the gap closed in this frame.
@@ -176,7 +228,9 @@ export function listen(
     const step = now - was.level;
 
     if (now > TOO_QUIET && step > Math.max(was.usually, FAINTEST) * over) {
-      hardest = Math.max(hardest, Math.min(1, step / FULL_STEP) * (REGIONS[at]?.worth ?? 1));
+      const worth =
+        Math.min(1, step / FULL_STEP) * (REGIONS[at]?.worth ?? 1) * Math.min(1, now / AT_FULL);
+      hardest = Math.max(hardest, worth);
     }
 
     // A fall counts as no step rather than as a negative one: what the bar is
@@ -186,6 +240,28 @@ export function listen(
     regions.push({ level: now, usually: was.usually + (took - was.usually) * caught });
   }
 
-  const struck = hardest > 0 && since >= GAP;
-  return { beat: { regions, since: struck ? 0 : since }, hit: struck ? hardest : 0 };
+  // Gathered rather than raced. A cluster that is already open takes this
+  // frame's candidate whether or not it is better, and goes once it has had its
+  // moment; one that is not open only starts if the last hit is far enough
+  // behind, which is what keeps the window from flickering.
+  let weighing = beat.weighing;
+  let weighed = beat.weighed;
+  let waited = since;
+  let hit = 0;
+
+  if (weighing > 0) {
+    weighing = Math.max(weighing, hardest);
+    weighed += seconds;
+    if (weighed >= WEIGH) {
+      hit = weighing;
+      weighing = 0;
+      weighed = 0;
+      waited = 0;
+    }
+  } else if (hardest > 0 && since >= GAP) {
+    weighing = hardest;
+    weighed = 0;
+  }
+
+  return { beat: { regions, since: waited, weighing, weighed }, hit };
 }

@@ -29,6 +29,18 @@ const lows = (values: number[], seconds = FRAME, rest = 0.1) =>
     seconds,
   );
 
+/**
+ * The hardest hit in a run, once it has had time to come out.
+ *
+ * Candidates are gathered for a moment before the loudest goes, so the frame a
+ * part is struck on is not the frame the hit lands on. Asking the run rather
+ * than its last frame is how "how hard was that struck" is asked now.
+ */
+function struckAt(frames: number[][], seconds = FRAME): number {
+  const settling = Array.from({ length: 8 }, () => frames.at(-1) ?? []);
+  return Math.max(...play([...frames, ...settling], seconds));
+}
+
 /** A kick every `every` frames, over `frames` frames. */
 const pattern = (frames: number, every: number, loud = 0.9, quiet = 0.15) =>
   Array.from({ length: frames }, (_, at) => (at % every < 3 ? loud : quiet));
@@ -36,10 +48,10 @@ const pattern = (frames: number, every: number, loud = 0.9, quiet = 0.15) =>
 describe('reading a part of the spectrum', () => {
   /** A run-up of quiet frames, then one where a single band is struck. */
   const oneBand = (band: number) =>
-    play([
+    struckAt([
       ...Array.from({ length: 20 }, () => Array(BANDS).fill(0.05)),
       Array.from({ length: BANDS }, (_, at) => (at === band ? 0.9 : 0.05)),
-    ]).at(-1) ?? 0;
+    ]);
 
   it('takes the loudest band of a part, not the part average', () => {
     // A kick is one or two bands out of six, and an average across the six
@@ -117,8 +129,9 @@ describe('hearing a hit', () => {
   });
 
   it('says how hard it was hit', () => {
-    const soft = lows([...Array(60).fill(0.3), 0.45]).at(-1) ?? 0;
-    const hard = lows([...Array(60).fill(0.3), 1]).at(-1) ?? 0;
+    const at = (to: number) => struckAt([...Array(60).fill(spectrum(0.3)), spectrum(to)]);
+    const soft = at(0.45);
+    const hard = at(1);
     expect(hard).toBeGreaterThan(soft);
     expect(hard).toBeLessThanOrEqual(1);
   });
@@ -166,16 +179,33 @@ describe('hearing the rest of the music', () => {
   it('counts the same hit for more down low than up top', () => {
     // A kick should still outweigh a hi-hat. It no longer silences it.
     const struck = (from: number, to: number) =>
-      play([
+      struckAt([
         // Long enough before the strike to be clear of the gap.
         ...Array.from({ length: 20 }, () => only(from, to, 0.2, 0.05)),
         only(from, to, 0.9, 0.05),
-      ]).at(-1) ?? 0;
+      ]);
 
     const low = struck(0, 6);
     const high = struck(18, 24);
     expect(low).toBeGreaterThan(high);
     expect(high).toBeGreaterThan(0);
+  });
+
+  it('flares at a lull the way a lull deserves', () => {
+    // The same attack, the same step, at two levels. One of them is a moment
+    // and the other is a passage going quietly on, and the size of the step
+    // cannot tell them apart — which is why a soft entry in a slow stretch used
+    // to light the window like a chorus.
+    const entry = (from: number) =>
+      struckAt([
+        ...Array.from({ length: 20 }, () => spectrum(from)),
+        spectrum(from + 0.3),
+      ]);
+
+    const lull = entry(0.15);
+    const chorus = entry(0.62);
+    expect(lull).toBeGreaterThan(0);
+    expect(lull).toBeLessThan(chorus * 0.75);
   });
 
   it('does not fire on a hi-hat while the rest of the window is silent', () => {
@@ -185,5 +215,51 @@ describe('hearing the rest of the music', () => {
       only(18, 24, at % 15 < 2 ? 0.07 : 0.01, 0),
     );
     expect(play(ticking).every((hit) => hit === 0)).toBe(true);
+  });
+});
+
+/**
+ * Which of several things at once the window should flare on.
+ *
+ * A tenth of a second is a long time in a busy arrangement, and a hit used to
+ * be let go the moment one turned up — after which nothing else could be heard
+ * until the gap ran out. In sparse music that is the same as firing on the
+ * loudest, because there is only ever one candidate. In a dense one the beat is
+ * rarely the earliest thing near itself, and what the window kept time with was
+ * whatever landed first.
+ */
+describe('picking out of a crowd', () => {
+  /** A frame where two parts of the spectrum are each at some level. */
+  const mix = (low: number, high: number) =>
+    Array.from({ length: BANDS }, (_, band) => (band < 6 ? low : band >= 18 ? high : 0.05));
+
+  /** A quiet run, then `first`, then `second` a frame or two later. */
+  const twoInARow = (first: number[][], second: number[][]) =>
+    struckAt([...Array.from({ length: 20 }, () => mix(0.3, 0.3)), ...first, ...second]);
+
+  it('flares on the kick, not on the cymbal that got there first', () => {
+    // Forty milliseconds apart, which is nothing to look at and everything to
+    // a rule that takes the first and then stops listening.
+    const heard = twoInARow(
+      [mix(0.3, 0.85), mix(0.3, 0.85)],
+      [mix(0.9, 0.85), mix(0.9, 0.85)],
+    );
+    // Only the low end reaches this. The cymbal alone is worth well under it.
+    const cymbalAlone = twoInARow([mix(0.3, 0.85)], [mix(0.3, 0.85)]);
+    expect(heard).toBeGreaterThan(cymbalAlone * 1.5);
+  });
+
+  it('still flares on the cymbal when that is all there is', () => {
+    // The gathering must not become a rule that only the low end counts.
+    expect(twoInARow([mix(0.3, 0.85)], [mix(0.3, 0.85)])).toBeGreaterThan(0);
+  });
+
+  it('lets go once, not once per part that was struck', () => {
+    const together = play([
+      ...Array.from({ length: 20 }, () => mix(0.3, 0.3)),
+      mix(0.9, 0.85),
+      ...Array.from({ length: 12 }, () => mix(0.9, 0.85)),
+    ]);
+    expect(together.filter((hit) => hit > 0).length).toBe(1);
   });
 });
