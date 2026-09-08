@@ -291,10 +291,11 @@ export function useShellSize(
     if (!shell || !stage || !track || !bottom) return;
 
 
-    // Starting collapsed, from a stored preference. The window opens at the
-    // size in `tauri.conf.json` every time — the state plugin saves position
-    // only — so it has to be brought down to size once, without animating
-    // something nobody asked to watch.
+    // Starting collapsed, from a stored preference. The window comes back at
+    // whatever size it was quit at, which is close but not what the stored
+    // preferences say — nothing on this side has run yet to agree with it — so
+    // it is brought to size once, without animating something nobody asked to
+    // watch.
     if (!applied.current && ready) {
       applied.current = true;
       was.current = compact;

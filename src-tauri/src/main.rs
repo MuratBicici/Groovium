@@ -18,7 +18,6 @@ mod tray;
 mod visualizer;
 
 use tauri::{Manager, WindowEvent};
-use tauri_plugin_window_state::StateFlags;
 
 fn main() {
     tauri::Builder::default()
@@ -29,11 +28,14 @@ fn main() {
             // a second copy that would fight over the media keys.
             tray::show_window(app);
         }))
-        // Remember where the user put the widget. Position only: the window is
-        // a fixed size, and restoring a size would fight `resizable: false`.
+        // Remember where the user put the widget. Position and size — see
+        // `shell::PLACE_FLAGS` for why the size has to be saved even though the
+        // frontend overwrites it a moment later, and `shell::PLACE_FILE` for
+        // why it is kept somewhere new.
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_state_flags(StateFlags::POSITION)
+                .with_state_flags(shell::PLACE_FLAGS)
+                .with_filename(shell::PLACE_FILE)
                 .build(),
         )
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -52,6 +54,7 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 shell::undress(&window.as_ref().window());
             }
+            shell::forget_old_place(app.handle());
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
             shortcuts::register(app.handle());

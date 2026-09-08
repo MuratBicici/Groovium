@@ -11,12 +11,63 @@
 //! leaves the WebView2 child where it was until Tauri hears about it, and the
 //! window blinked out for a frame on every open and close. Going through Tauri
 //! means the webview is moved with the window rather than after it.
+//!
+//! And, at the two ends of a session, remembering where the window was left.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::{PhysicalPosition, PhysicalSize, State, Window};
+use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, State, Window};
+use tauri_plugin_window_state::StateFlags;
+
+/// What is remembered about where the window was left.
+///
+/// Position and size both — though nothing restored from the size outlives the
+/// first second, because the frontend sets the window to whatever the drawer
+/// and the collapsed state call for the moment it has laid out. It is saved
+/// because **the position cannot be restored without it.**
+///
+/// The state plugin only puts a window back where its saved *rectangle* meets a
+/// monitor, and a rectangle with no size beside it is a single point: the
+/// window's top left corner. With the drawer on the left that corner is the
+/// worst possible thing to test. The window there is permanently as wide as the
+/// drawer needs and the player sits at its right edge — that is what lets the
+/// drawer open without the window moving — so the corner is the drawer's whole
+/// width away from anything anyone can see. Leave the widget in the left third
+/// of the screen and the corner is off the edge of it: the position was thrown
+/// away without a word and the window came back in the middle.
+///
+/// Given a real size the same test asks the question it was meant to ask — is
+/// any part of this window on a monitor — and answers yes everywhere the widget
+/// can actually be put.
+pub const PLACE_FLAGS: StateFlags = StateFlags::POSITION.union(StateFlags::SIZE);
+
+/// Where the window's place is kept, beside the app's other files.
+pub const PLACE_FILE: &str = "window.json";
+
+/// The file the position-only scheme wrote, which holds nothing worth keeping.
+const OLD_PLACE_FILE: &str = ".window-state.json";
+
+/// Throw away the place file written before a size was saved alongside.
+///
+/// Not converted, because there is nothing in it to convert: what it holds is a
+/// position and a zero size, which is exactly the pair that could not be
+/// restored — and read as it stands it would ask for a window no pixels wide.
+/// So the window's place is learned again from the next quit onwards, once, and
+/// the file goes rather than staying in the app's directory being wrong.
+pub fn forget_old_place(app: &AppHandle) {
+    if let Ok(dir) = app.path().app_config_dir() {
+        forget_old_place_in(&dir);
+    }
+}
+
+fn forget_old_place_in(dir: &Path) {
+    // Missing is the ordinary case: every launch after the first, and every
+    // install that never ran an older build.
+    let _ = std::fs::remove_file(dir.join(OLD_PLACE_FILE));
+}
 
 /// Resize the window and move its left edge by `dx`, in that order.
 ///
@@ -242,4 +293,41 @@ fn over(window: &Window, rect: Part) -> bool {
 #[cfg(not(windows))]
 fn over(_window: &Window, _rect: Part) -> bool {
     true
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_place_is_remembered_with_a_size_beside_it() {
+        // Not a formality. The size is overwritten by the frontend a moment
+        // after it is restored, which makes it read like something to drop —
+        // and dropping it is what quietly stopped the window coming back where
+        // it was left. The plugin tests the saved rectangle against the
+        // monitors, and with no size that rectangle is one corner.
+        assert!(PLACE_FLAGS.contains(StateFlags::SIZE));
+        assert!(PLACE_FLAGS.contains(StateFlags::POSITION));
+    }
+
+    #[test]
+    fn the_file_with_no_size_in_it_goes_and_the_one_in_use_stays() {
+        let dir = std::env::temp_dir().join(format!("groovium-place-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a directory to work in");
+        let old = dir.join(OLD_PLACE_FILE);
+        let current = dir.join(PLACE_FILE);
+        std::fs::write(&old, "{}").expect("the old file");
+        std::fs::write(&current, "{}").expect("the current one");
+
+        forget_old_place_in(&dir);
+        assert!(!old.exists(), "the position with no size beside it is gone");
+        assert!(current.exists(), "the file the window is remembered in is not");
+
+        // And again on a directory that has already had it taken away, which is
+        // every launch but one.
+        forget_old_place_in(&dir);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
