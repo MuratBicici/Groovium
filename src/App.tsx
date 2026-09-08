@@ -14,6 +14,7 @@ import { CoverTheme } from '@/components/player/CoverTheme';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
+import { shouldOffer } from '@/core/updates/offer';
 import { StationSetup } from '@/components/station/StationSetup';
 import { ColourPicker } from '@/components/settings/ColourPicker';
 import { WhatsNew } from '@/components/release/WhatsNew';
@@ -267,13 +268,14 @@ export default function App() {
    * pressing Download and then watching the window vanish, with the reason for
    * it filed in Settings, is not a way to be told that something went wrong.
    */
-  const offerUpdate =
-    settingsReady &&
-    !compact &&
-    !whatsNewOpen &&
-    offeredVersion !== null &&
-    putAwayVersion !== offeredVersion &&
-    declinedVersion !== offeredVersion;
+  const offerUpdate = shouldOffer({
+    settingsReady,
+    compact,
+    whatsNewOpen,
+    offeredVersion,
+    putAwayVersion,
+    declinedVersion,
+  });
   // Both read the version at the moment they are called rather than closing
   // over the one this render saw. A press lands on the DOM of whichever render
   // is committed, and if the offer had changed underneath it the closure would
