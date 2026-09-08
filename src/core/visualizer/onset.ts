@@ -51,7 +51,17 @@ const TOO_QUIET = 0.08;
  */
 const GAP = 0.11;
 
-/** How long the average takes to catch up with a change in the music. */
+/**
+ * How long the level a jump is measured against takes to follow the music.
+ *
+ * One rate, up and down alike. Falling faster than it rises was tried, on the
+ * theory that the level climbs through a bass-heavy passage until it sits among
+ * the kicks and they stop clearing it. Measured, it does not: a run of kicks
+ * over a bass floor already fires on every one of them at better than half
+ * strength, and the asymmetry bought nothing while costing two things that were
+ * true — one hit per kick rather than an occasional second, and hearing the
+ * same music at thirty frames a second as at sixty.
+ */
 const MEMORY = 0.34;
 
 /** The loudest of the low bands: a kick, rather than the mix's average. */

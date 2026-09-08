@@ -82,11 +82,12 @@ describe('hearing a hit', () => {
   });
 
   it('hits as hard on the twentieth kick as on the first', () => {
-    // The reported want. Following the music at one rate, the level a jump is
-    // measured against climbs through a bass-heavy passage until it sits among
-    // the kicks themselves — so a kick barely clears it, and the edge stops
-    // answering exactly where the music is busiest. Settling into the quiet
-    // between them instead, every kick is the same jump the first one made.
+    // Written to catch a fault that turned out not to be there. The worry was
+    // that the level a jump is measured against climbs through a bass-heavy
+    // passage until it sits among the kicks and they stop clearing it — so a
+    // run of them over a bass floor was measured, and every one fires at better
+    // than half strength. Kept, because it is the property that matters and
+    // nothing else was holding it.
     const heard = play(pattern(900, 30, 0.95, 0.55)).filter((hit) => hit > 0);
     expect(heard.length).toBeGreaterThan(24);
 
@@ -100,9 +101,9 @@ describe('hearing a hit', () => {
     // frames are the quiet part, so a floor that had fallen through it would
     // put the count many times above the number of kicks.
     //
-    // Counted from the second kick onwards. The first half-second is the floor
-    // finding the music from nothing, and it fires two or three extra times
-    // getting there — which is the start of a track flaring, and right.
+    // Counted from the second kick onwards. The first half-second is the level
+    // finding the music from nothing, and it fires an extra time or two getting
+    // there — which is the start of a track flaring, and right.
     const heard = play(pattern(900, 30, 0.95, 0.55)).slice(60);
     const kicks = heard.length / 30;
     expect(heard.filter((hit) => hit > 0).length).toBe(kicks);
