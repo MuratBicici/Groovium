@@ -105,6 +105,8 @@ export interface Beat {
   since: number;
   /** The best of the candidates being weighed up, or nought for none. */
   weighing: number;
+  /** Where in the spectrum that best one was struck. */
+  weighingTone: number;
   /** How long they have been gathering. */
   weighed: number;
   /** What a hit has been worth lately, which is what a new one is judged by. */
@@ -116,6 +118,7 @@ export const NO_BEAT: Beat = {
   regions: [],
   since: 0,
   weighing: 0,
+  weighingTone: 0,
   weighed: 0,
   lately: 0,
 };
@@ -138,12 +141,18 @@ export const NO_BEAT: Beat = {
  * The weights matter twice over now that the loudest candidate in a cluster is
  * the one that goes. Between a kick and a cymbal landing together, this is what
  * decides which of them the window flares on.
+ *
+ * `tone` is where each part sits between the bottom of the spectrum and the
+ * top, and it is the only thing here that is about looking rather than
+ * hearing: it goes out with the hit so the flare can be coloured by what was
+ * struck. The lowest is not quite nought — a kick should still read as a flare
+ * rather than as the edge's own colour getting briefly stronger.
  */
 const REGIONS = [
-  { until: 0.25, worth: 1 },
-  { until: 0.5, worth: 0.85 },
-  { until: 0.75, worth: 0.7 },
-  { until: 1, worth: 0.45 },
+  { until: 0.25, worth: 1, tone: 0.1 },
+  { until: 0.5, worth: 0.85, tone: 0.4 },
+  { until: 0.75, worth: 0.7, tone: 0.7 },
+  { until: 1, worth: 0.45, tone: 1 },
 ] as const;
 
 /**
@@ -274,19 +283,21 @@ function edges(bands: number, at: number): [number, number] {
 }
 
 /**
- * One frame on: how hard it was hit, and what to remember.
+ * One frame on: how hard it was hit, where, and what to remember.
  *
  * `hit` is nought for nothing and otherwise how hard the loudest of the four
- * parts was struck, weighted by which part it was and capped at one.
+ * parts was struck, weighted by which part it was and capped at one. `tone`
+ * says which part that was, as nought for the bottom of the spectrum and one
+ * for the top, and means nothing when there was no hit.
  */
 export function listen(
   beat: Beat,
   bars: number[],
   seconds: number,
   over = OVER,
-): { beat: Beat; hit: number } {
+): { beat: Beat; hit: number; tone: number } {
   const since = beat.since + seconds;
-  if (bars.length === 0) return { beat: { ...beat, since }, hit: 0 };
+  if (bars.length === 0) return { beat: { ...beat, since }, hit: 0, tone: 0 };
 
   // Exponential, so the rate is about time and not about how often this is
   // called. `1 - e^(-dt/tau)` is the share of the gap closed in this frame.
@@ -294,6 +305,7 @@ export function listen(
   const settling = 1 - Math.exp(-seconds / CARRYING);
   const regions: Region[] = [];
   let hardest = 0;
+  let hardestTone = 0;
 
   for (let at = 0; at < REGIONS.length; at++) {
     const was = beat.regions[at] ?? { level: 0, usually: 0, carrying: 0 };
@@ -310,7 +322,10 @@ export function listen(
         Math.min(1, step / FULL_STEP) *
         (REGIONS[at]?.worth ?? 1) *
         Math.min(1, carrying / AT_FULL);
-      hardest = Math.max(hardest, worth);
+      if (worth > hardest) {
+        hardest = worth;
+        hardestTone = REGIONS[at]?.tone ?? 0;
+      }
     }
 
     // A fall counts as no step rather than as a negative one: what the bar is
@@ -329,13 +344,21 @@ export function listen(
   // moment; one that is not open only starts if the last hit is far enough
   // behind, which is what keeps the window from flickering.
   let weighing = beat.weighing;
+  let weighingTone = beat.weighingTone;
   let weighed = beat.weighed;
   let waited = since;
   let lately = beat.lately * Math.exp(-seconds / LATELY);
   let hit = 0;
+  let tone = 0;
 
   if (weighing > 0) {
-    weighing = Math.max(weighing, hardest);
+    // The tone travels with the candidate it belongs to, so what colours the
+    // flare is the part that won the cluster rather than the last part to make
+    // a noise inside it.
+    if (hardest > weighing) {
+      weighing = hardest;
+      weighingTone = hardestTone;
+    }
     weighed += seconds;
     if (weighed >= WEIGH) {
       // Worth something on its own, and worth a fair share of what the music
@@ -344,6 +367,7 @@ export function listen(
       // that is worth looking at is not made to wait behind it.
       if (weighing >= Math.max(WORTH_SHOWING * over, lately * SHARE)) {
         hit = weighing;
+        tone = weighingTone;
         waited = 0;
       }
       // What the music offered, shown or not. Written that way because that is
@@ -362,8 +386,13 @@ export function listen(
     }
   } else if (hardest > 0 && since >= GAP) {
     weighing = hardest;
+    weighingTone = hardestTone;
     weighed = 0;
   }
 
-  return { beat: { regions, since: waited, weighing, weighed, lately }, hit };
+  return {
+    beat: { regions, since: waited, weighing, weighingTone, weighed, lately },
+    hit,
+    tone,
+  };
 }

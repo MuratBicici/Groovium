@@ -124,6 +124,55 @@ function palette(root: HTMLElement): Palette {
 }
 
 /**
+ * Whether the browser will mix two colours for us, asked once.
+ *
+ * `color-mix` has been in Chromium since 111 and this runs in a WebView2, so
+ * the answer is yes — but an unparseable colour is a thrown `SyntaxError` from
+ * inside the draw loop rather than a colour that quietly does not apply, and a
+ * drawing that stops is worse than a flare that does not lean. Asked with the
+ * same call the drawing uses, so what is tested is what is relied on.
+ */
+const MIX_PROBE = 'color-mix(in oklab, #000 50%, #fff)';
+
+let mixes: boolean | null = null;
+
+function canMix(context: CanvasRenderingContext2D): boolean {
+  if (mixes === null) {
+    try {
+      context.createLinearGradient(0, 0, 1, 0).addColorStop(0, MIX_PROBE);
+      mixes = true;
+    } catch {
+      mixes = false;
+    }
+  }
+  return mixes;
+}
+
+
+/**
+ * What colour a flare is, for a hit struck at `tone`.
+ *
+ * The one thing in here that says *what* was struck rather than how hard. A
+ * kick and a cymbal used to flare identically and differ only in size, which
+ * is the least of what tells them apart — so the low end of the spectrum
+ * flares in the deep tone and the top in the bright one, and everything
+ * between them lands between them.
+ *
+ * Only the flare. The bolts are sprites drawn once and kept, and re-rendering
+ * two of them on every hit to say the same thing twice is not worth a frame;
+ * the flare is what announces that something was struck, so the flare is where
+ * what it was belongs.
+ *
+ * Mixed in oklab, where a path between two colours passes through the colours
+ * between them rather than through the grey in the middle of the cube.
+ */
+function flareColour(colours: Palette, tone: number, mixing: boolean): string {
+  if (!mixing) return colours.high;
+  const deep = Math.round((1 - Math.min(1, Math.max(0, tone))) * 100);
+  return `color-mix(in oklab, ${colours.low} ${deep}%, ${colours.high})`;
+}
+
+/**
  * One bolt of light, drawn once and kept.
  *
  * Built in two passes: a sideways gradient for how it fades in from the edge,
@@ -279,11 +328,14 @@ export function WindowGlow({
     // what left this edge a theme behind.
     const fading = whilePaletteMoves(reread);
 
+    const mixing = canMix(context);
     let motes: Mote[] = [];
     let owed = 0;
     let showing = 0;
     let beat: Beat = NO_BEAT;
     let punch = 0;
+    /** Where the hit the flare is still showing was struck. */
+    let struckAt = 0;
     let last = performance.now();
     let frame = 0;
 
@@ -321,6 +373,10 @@ export function WindowGlow({
       punch = Math.max(0, punch - (seconds * 1000) / felt_ms);
       if (heard.hit > 0) {
         motes = launch(motes, showing, heard.hit, Math.random, climb);
+        // Only a hit that takes the flare over takes its colour with it. One
+        // landing under a larger one still fading would otherwise recolour a
+        // flare it is not responsible for.
+        if (heard.hit >= punch) struckAt = heard.tone;
         punch = Math.max(punch, heard.hit);
       }
       // Never past one: a flare is the edge doing more, not the edge being
@@ -338,9 +394,13 @@ export function WindowGlow({
       const standing = (HAZE_AT_REST + felt * HAZE_WITH_LEVEL) * force;
       const flaring = punch * GLOW.flash(flash) * force;
       const flareReach = HAZE * (1 + punch * GLOW.flashReach(flash));
+      // Read every frame rather than kept: the palette moves during a theme
+      // change, and a colour worked out when the hit landed would hold the old
+      // one until the next one did.
+      const flareTone = flareColour(colours, struckAt, mixing);
       for (const side of [-1, 1] as const) {
         haze(side, colours.low, HAZE, standing);
-        haze(side, colours.high, flareReach, flaring);
+        haze(side, flareTone, flareReach, flaring);
       }
 
       // Wider and harder the louder it is, which on a bass-leaning level means

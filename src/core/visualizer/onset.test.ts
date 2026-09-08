@@ -12,15 +12,19 @@ const spectrum = (low: number, rest = 0.1) =>
 const only = (from: number, to: number, loud: number, rest = 0.1) =>
   Array.from({ length: BANDS }, (_, band) => (band >= from && band < to ? loud : rest));
 
-/** Run a sequence of frames through, returning what was heard on each. */
-function play(frames: number[][], seconds = FRAME): number[] {
+/** Run a sequence of frames through, returning everything heard on each. */
+function hear(frames: number[][], seconds = FRAME): { hit: number; tone: number }[] {
   let beat: Beat = NO_BEAT;
   return frames.map((bars) => {
     const heard = listen(beat, bars, seconds);
     beat = heard.beat;
-    return heard.hit;
+    return { hit: heard.hit, tone: heard.tone };
   });
 }
+
+/** Just how hard each frame was hit, which is what most of this is about. */
+const play = (frames: number[][], seconds = FRAME): number[] =>
+  hear(frames, seconds).map((heard) => heard.hit);
 
 /** The same, over a low end that only ever moves. */
 const lows = (values: number[], seconds = FRAME, rest = 0.1) =>
@@ -329,5 +333,60 @@ describe('keeping the pulse and dropping the chatter', () => {
       frame.map((level, band) => (band < 6 ? 0.4 : level)),
     );
     expect(play(alone).slice(RUN_UP).filter((hit) => hit > 0).length).toBeGreaterThan(20);
+  });
+});
+
+/**
+ * Saying what was struck, and not only how hard.
+ *
+ * A kick and a cymbal used to reach the window identically and differ in size
+ * alone, which is the least of what tells them apart. The part of the spectrum
+ * a hit came from goes out with it so the flare can be coloured by it — nought
+ * at the bottom, one at the top.
+ */
+describe('saying where it was struck', () => {
+  const strike = (from: number, to: number) => {
+    const heard = hear([
+      ...runUp(only(from, to, 0.5, 0.3)),
+      only(from, to, 0.95, 0.3),
+      ...Array.from({ length: 8 }, () => only(from, to, 0.95, 0.3)),
+    ]).filter((one) => one.hit > 0);
+    return heard.at(-1);
+  };
+
+  it('reports the bottom of the spectrum for a kick', () => {
+    expect(strike(0, 6)?.tone).toBeLessThan(0.25);
+  });
+
+  it('reports the top of it for a cymbal', () => {
+    expect(strike(18, 24)?.tone).toBeGreaterThan(0.85);
+  });
+
+  it('walks up the spectrum rather than jumping from one end to the other', () => {
+    const climbing = [strike(0, 6), strike(6, 12), strike(12, 18), strike(18, 24)];
+    for (const one of climbing) expect(one).toBeDefined();
+    const tones = climbing.map((one) => one?.tone ?? 0);
+    for (let at = 1; at < tones.length; at++) {
+      expect(tones[at] ?? 0).toBeGreaterThan(tones[at - 1] ?? 0);
+    }
+  });
+
+  it('takes the colour of the hit that won, not of the last thing to make a noise', () => {
+    // A cymbal and a kick inside one cluster. The kick is what the window
+    // flares on, so the kick is what the flare should be coloured by — even
+    // though the cymbal is the later of the two to be seen.
+    const both = hear([
+      ...runUp(
+        Array.from({ length: BANDS }, (_, band) => (band < 6 ? 0.5 : band >= 18 ? 0.5 : 0.1)),
+      ),
+      Array.from({ length: BANDS }, (_, band) => (band < 6 ? 0.98 : band >= 18 ? 0.5 : 0.1)),
+      Array.from({ length: BANDS }, (_, band) => (band < 6 ? 0.98 : band >= 18 ? 0.95 : 0.1)),
+      ...Array.from({ length: 8 }, () =>
+        Array.from({ length: BANDS }, (_, band) => (band < 6 ? 0.98 : band >= 18 ? 0.95 : 0.1)),
+      ),
+    ]).filter((one) => one.hit > 0);
+
+    expect(both.length).toBe(1);
+    expect(both[0]?.tone).toBeLessThan(0.25);
   });
 });
