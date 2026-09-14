@@ -24,6 +24,14 @@ import conf from '../../src-tauri/tauri.conf.json?raw';
  * `seektables.scdn.co` — does not appear here and does not need to. It is
  * fetched from inside the SDK's own cross-origin iframe, which this policy does
  * not reach. That is why playback worked while the pictures did not.
+ *
+ * The same trap caught the record itself. Everything on a disc is a CSS
+ * gradient except the groove field, which cannot be one — a ring pattern finer
+ * than a couple of pixels has to be drawn into a canvas to be anti-aliased
+ * rather than aliased. That canvas becomes a `data:` URL and goes on as a
+ * background layer over the gradient, so with `data:` unlisted the layer was
+ * dropped and the gradient underneath carried on alone: a record that still
+ * looked like vinyl and was perfectly smooth.
  */
 
 const csp = (JSON.parse(conf) as { app: { security: { csp: Record<string, string> } } }).app
@@ -63,6 +71,15 @@ describe('what the window may load', () => {
     for (const host of COVER_HOSTS) {
       expect(allows(csp['img-src'] ?? '', host), `img-src blocks ${host}`).toBe(true);
     }
+  });
+
+  it('may show the groove field the app draws for itself', () => {
+    // A canvas turned into a `data:` URL, which is an image source like any
+    // other as far as the policy is concerned. Without this the record loses
+    // its grooves in a release build and keeps them everywhere they would be
+    // noticed — the disc goes on rendering, because what is left underneath
+    // the dropped layer is the gradient that makes it look like vinyl.
+    expect(csp['img-src']?.split(/\s+/)).toContain('data:');
   });
 
   it('names Spotify image domains rather than single hosts', () => {
