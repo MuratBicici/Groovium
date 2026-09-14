@@ -31,7 +31,7 @@
       "csp": {
         "default-src": "'self'",
         "script-src": "'self' https://sdk.scdn.co",
-        "img-src": "'self' asset: http://asset.localhost https://i.scdn.co",
+        "img-src": "'self' asset: http://asset.localhost https://*.scdn.co https://*.spotifycdn.com",
         "media-src": "'self' asset: http://asset.localhost",
         "style-src": "'self' 'unsafe-inline'",
         "connect-src": "'self' ipc: http://ipc.localhost https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
