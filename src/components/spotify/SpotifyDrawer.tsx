@@ -13,6 +13,7 @@ import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
+import { SpotlightStrip } from './SpotlightStrip';
 import { OpenCrate } from './OpenCrate';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { useT } from '@/core/i18n';
@@ -253,6 +254,7 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
                 worked is taken away to ask: search needs no scope at all, and
                 the old grant still plays music. Only the part that cannot be
                 built without permission says that it needs some. */}
+            {missing.length === 0 && <SpotlightStrip />}
             {missing.length === 0 && <SpotifyCrates />}
             {missing.length > 0 && (
               <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">

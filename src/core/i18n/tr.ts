@@ -139,6 +139,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.onDeck': 'Bu plak plakçalarda.',
   'spotify.trackCount': '{count} şarkı',
 
+  'spotlight.recent': 'Son çalanlar',
+  'spotlight.top': 'En çok dinlediklerin',
+  'spotlight.empty': 'Burada henüz bir şey yok. Bir şey çalın, burada görünür.',
+  'spotlight.failed': 'Spotify’a ulaşılamadı. Tekrar denemek için başlığa basın.',
+
   'setup.optionalLead': 'Spotify isteğe bağlı.',
   'setup.optionalRest':
     'Kendi müziğiniz bunların hiçbiri olmadan çalar — yalnızca buradan Spotify’da arama yapmak istiyorsanız kurun.',

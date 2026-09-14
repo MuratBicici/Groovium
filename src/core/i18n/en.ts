@@ -149,6 +149,11 @@ export const en = {
   'spotify.trackCount': '{count} song',
   'spotify.trackCount_plural': '{count} songs',
 
+  'spotlight.recent': 'Recently played',
+  'spotlight.top': 'On repeat',
+  'spotlight.empty': 'Nothing here yet. Play something and it will show up.',
+  'spotlight.failed': 'Could not reach Spotify. Press the heading to try again.',
+
   // Spotify setup
   'setup.optionalLead': 'Spotify is optional.',
   'setup.optionalRest':
