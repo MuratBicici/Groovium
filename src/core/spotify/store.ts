@@ -7,6 +7,7 @@ import {
   wholeCrate,
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
+import { forgetSpotlight } from '@/core/providers/spotifySpotlight';
 import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { isSpotifyAuthError } from '@/core/security/spotifyAuth';
@@ -203,9 +204,11 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     },
 
     forget() {
-      // The crates as well as the shelf. What was read belonged to the account
-      // that is going away.
+      // The crates and the spotlight as well as the shelf. What was read
+      // belonged to the account that is going away, and the spotlight is the
+      // part of it that is most plainly about a person.
       forgetCrates();
+      forgetSpotlight();
       set({
         playlists: [],
         cursor: null,
