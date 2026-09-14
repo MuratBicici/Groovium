@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { readCover } from '@/core/theme/readCover';
-import type { CoverPalette } from '@/core/theme/fromCover';
+import { useEffect, useRef, useState } from 'react';
+import { readCover, remember, type Known } from '@/core/theme/readCover';
 import { useSettingsStore } from '@/core/settings/store';
 import { usePlayerStore } from '@/core/store';
 import { useHeldTrack } from './DiscHold';
@@ -39,7 +38,31 @@ export function CoverTheme() {
    * this feels rather than for what it costs: the colours should come back as
    * the record settles, not a moment after it.
    */
-  const known = useRef<{ cover: string; palette: CoverPalette | null } | null>(null);
+  const known = useRef<Known | null>(null);
+  /** A cover this could not read, so it knows there is something to go back to. */
+  const missed = useRef<string | null>(null);
+  /** Bumped to look again. */
+  const [attempt, setAttempt] = useState(0);
+
+  /**
+   * Look again when the window comes back.
+   *
+   * Which is the other half of not keeping a failure. Most of these happen
+   * while nobody is watching — the reports were all of a track that changed
+   * with the widget behind something — and a window that is not on screen is a
+   * window whose timers are throttled and whose work is deferred. Whatever it
+   * is that goes wrong out there, the moment somebody looks at the app again is
+   * the moment it is worth another try.
+   */
+  useEffect(() => {
+    const again = () => {
+      if (document.visibilityState !== 'visible' || missed.current === null) return;
+      missed.current = null;
+      setAttempt((count) => count + 1);
+    };
+    document.addEventListener('visibilitychange', again);
+    return () => document.removeEventListener('visibilitychange', again);
+  }, []);
 
   useEffect(() => {
     // Switched off, nothing with a sleeve on the deck, or the record that was
@@ -57,17 +80,21 @@ export function CoverTheme() {
     }
 
     let alive = true;
-    void readCover(cover).then((palette) => {
+    void readCover(cover).then((seen) => {
       // The track can change while an image is loading, and the answer to the
       // last one is not an answer to this one.
       if (!alive) return;
-      known.current = { cover, palette };
-      setCoverPalette(palette);
+      known.current = remember(known.current, cover, seen);
+      // A failure falls back to the palette that was chosen rather than leaving
+      // the last record's colours on a window that is playing something else.
+      // It is only the *remembering* that a failure must not do.
+      setCoverPalette(seen.read ? seen.palette : null);
+      if (!seen.read) missed.current = cover;
     });
     return () => {
       alive = false;
     };
-  }, [on, cover, inHand, setCoverPalette]);
+  }, [on, cover, inHand, attempt, setCoverPalette]);
 
   return null;
 }

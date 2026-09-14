@@ -1,11 +1,19 @@
 import { paletteFrom, type CoverPalette } from './fromCover';
 
 /**
- * The colours in a cover, or null when there are none to be had.
+ * The colours in a cover, and whether they were ever seen.
  *
  * The half of this that touches a browser: load the image, put it on a small
  * canvas, and hand the pixels to `paletteFrom`, which is where the actual
  * thinking is and where it can be tested without one.
+ *
+ * It used to answer `null` for two different things — "there is no colour in
+ * this sleeve" and "this sleeve never arrived" — and the caller could not tell
+ * them apart, so it remembered the second as though it were the first. A cover
+ * that failed to load once was written down as colourless and never looked at
+ * again, which turned a moment's trouble into a record that kept its colours to
+ * itself for as long as it played. Two answers now, and only one of them is
+ * worth remembering.
  */
 
 /**
@@ -41,7 +49,14 @@ function load(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function readCover(url: string): Promise<CoverPalette | null> {
+/** What came of looking at a cover. */
+export type CoverRead =
+  /** The pixels were seen. `palette` is null for a sleeve with no colour in it. */
+  | { read: true; palette: CoverPalette | null }
+  /** It never arrived, or the canvas would not give its pixels back. */
+  | { read: false };
+
+export async function readCover(url: string): Promise<CoverRead> {
   try {
     const image = await load(url);
 
@@ -49,14 +64,35 @@ export async function readCover(url: string): Promise<CoverPalette | null> {
     canvas.width = READ_AT;
     canvas.height = READ_AT;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return null;
+    if (!context) return { read: false };
 
     context.drawImage(image, 0, 0, READ_AT, READ_AT);
-    return paletteFrom(context.getImageData(0, 0, READ_AT, READ_AT).data);
+    return { read: true, palette: paletteFrom(context.getImageData(0, 0, READ_AT, READ_AT).data) };
   } catch {
     // A cover that will not load, or one from a host that will not say the
     // canvas may be read, is not an error anybody needs to see: the palette
-    // the listener chose simply stands.
-    return null;
+    // the listener chose simply stands. It is worth trying again, though, which
+    // is the whole reason this is not the same answer as a grey sleeve.
+    return { read: false };
   }
+}
+
+/** A cover that has been looked at, and what looking found. */
+export interface Known {
+  cover: string;
+  palette: CoverPalette | null;
+}
+
+/**
+ * What to keep after looking at a cover.
+ *
+ * A read is an answer and is kept, including the answer that a sleeve has no
+ * colour in it — that one is as final as any other and should not cost a second
+ * look. A failure is not an answer. Keeping it is what made a cover that did
+ * not load once stay colourless for the rest of the track, and it is why this
+ * is a function with a name rather than an assignment in the middle of a
+ * `then`.
+ */
+export function remember(known: Known | null, cover: string, seen: CoverRead): Known | null {
+  return seen.read ? { cover, palette: seen.palette } : known;
 }
