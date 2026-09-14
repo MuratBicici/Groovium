@@ -213,17 +213,39 @@ describe('hearing the rest of the music', () => {
   });
 
   it('flares at a lull the way a lull deserves', () => {
-    // The same attack, the same step, at two levels. One of them is a moment
-    // and the other is a passage going quietly on, and the size of the step
-    // cannot tell them apart — which is why a soft entry in a slow stretch used
-    // to light the window like a chorus.
-    const entry = (from: number) =>
-      struckAt([...runUp(spectrum(from)), spectrum(from + 0.3)]);
+    // A lull is a quiet stretch *of this song*, so both halves are one run: the
+    // same kick, four seconds loud and then four seconds down a fifth of the
+    // meter. The step is the same size in both, so what separates them is only
+    // how far under the song's own loudest each one sits.
+    const loud = pattern(240, 30, 0.9, 0.5);
+    const quiet = pattern(240, 30, 0.7, 0.3);
+    const heard = lows([...loud, ...quiet]);
 
-    const lull = entry(0.3);
-    const chorus = entry(0.65);
-    expect(lull).toBeGreaterThan(0);
-    expect(lull).toBeLessThan(chorus * 0.75);
+    const inLoud = Math.max(...heard.slice(0, 240));
+    // The first second and a half of it, which is where a lull is a lull. Go on
+    // long enough and it stops being one and becomes the song, which is right
+    // and is the same forgetting that lets somebody turn the volume down.
+    const inLull = Math.max(...heard.slice(240, 330));
+
+    // Two-sided on purpose. Calmer, and not switched off: a lull that vanished
+    // would be the complaint this is between.
+    expect(inLull).toBeLessThan(inLoud);
+    expect(inLull).toBeGreaterThan(inLoud * 0.5);
+  });
+
+  it('flares the same for the same music played quietly', () => {
+    // What a fixed mark on the meter could not do, and the complaint it caused.
+    // Turning the volume down takes the same amount off every band — these bars
+    // are decibels, so it is a subtraction and not a halving — and somebody
+    // listening softly is not asking for a quieter window. Two runs, the second
+    // a third of the meter down, and the hits come out the same.
+    const at = (loud: number, quiet: number) =>
+      Math.max(...lows(pattern(600, 30, loud, quiet), FRAME, 0.05));
+
+    const full = at(0.9, 0.5);
+    const softly = at(0.6, 0.2);
+    expect(softly).toBeGreaterThan(0);
+    expect(Math.abs(softly - full)).toBeLessThan(0.05);
   });
 
   it('lights an even beat evenly, whichever frame each one is caught in', () => {

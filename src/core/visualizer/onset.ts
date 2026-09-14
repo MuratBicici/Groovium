@@ -59,10 +59,29 @@
  * **It flared as hard in a lull as in a chorus.** How hard a hit landed was the
  * size of the step and nothing else, so a soft attack in a quiet passage — a
  * large step, because there was nothing there before it — lit the window like a
- * drop. What was missing is how much of a moment it was: a part that is being
- * struck at a third of its range is not the same event as one being struck at
- * full, whatever the step. So the strength carries the level of the part that
- * was struck, and a lull breathes where it used to burst.
+ * drop. What was missing is how much of a moment it was. So the strength
+ * carries the level of the part that was struck, and a lull breathes where it
+ * used to burst.
+ *
+ * That was measured against a fixed mark on the meter, and a fixed mark is the
+ * wrong instrument. It cannot tell a lull from a song played quietly: turn the
+ * volume down and every band drops, every part reads as a lull, and the window
+ * stops answering music that is playing perfectly well. Somebody listening
+ * softly is not asking for less.
+ *
+ * A lull is a quiet stretch *of this song*, so that is what it is measured
+ * against: how far below the loudest the music has lately been this part is
+ * now. Two things about that are deliberate and neither is obvious.
+ *
+ * One scale for the whole mix, not one per part. Measuring each part against
+ * its own history says a quiet midrange is as important as a loud kick, which
+ * is how the chatter this was just taught to drop comes straight back.
+ *
+ * And a difference rather than a ratio, because the bars are decibels. Turning
+ * the volume down subtracts the same amount from every band; it does not halve
+ * them. A difference is unchanged by that and a ratio is not, so this is the
+ * one that actually holds still when somebody listens softly — which was the
+ * complaint.
  *
  * Which left it restless — everything the music did got a flare, and no two
  * flares on the same beat were the same size. Two more things, and both are
@@ -111,6 +130,8 @@ export interface Beat {
   weighed: number;
   /** What a hit has been worth lately, which is what a new one is judged by. */
   lately: number;
+  /** The loudest the music has lately been, which is the scale a lull is read on. */
+  fullest: number;
 }
 
 /** Nothing heard yet. Holds no regions, so it fits any number of bands. */
@@ -121,6 +142,7 @@ export const NO_BEAT: Beat = {
   weighingTone: 0,
   weighed: 0,
   lately: 0,
+  fullest: 0,
 };
 
 /**
@@ -179,13 +201,44 @@ const FAINTEST = 0.05;
 const FULL_STEP = 0.35;
 
 /**
- * The level at which a part is being struck for everything it has.
+ * How long the loudest a part has been takes to be forgotten.
  *
- * What separates a snare in a breakdown from the same snare in the chorus. Both
- * are a step of the same size; only one of them is a moment, and the difference
- * between them is on the meter rather than in the attack.
+ * The scale a hit is measured against, and the one real compromise in here.
+ *
+ * The same number governs two things that want opposite answers. A breakdown
+ * reads as quiet only for as long as the loud part before it is remembered, so
+ * that wants to be long. Turning the volume down looks exactly like a
+ * breakdown that never ends, and the flares stay damped until it is forgotten,
+ * so that wants to be short. There is no signal that separates the two — both
+ * are the same amount off every band, and the only thing that tells them apart
+ * is how long they last.
+ *
+ * Eight seconds, leaning towards the volume knob, because that is the
+ * complaint: somebody listening softly is not asking for a quieter window. It
+ * rises at once and only falls slowly, so turning the volume *up* is immediate.
  */
-const AT_FULL = 0.8;
+const FORGETS_LOUD = 8;
+
+/**
+ * How far under the loudest it has been counts as nothing of a moment.
+ *
+ * Half the meter, which over this app's sixty decibel window is thirty of them.
+ * Deliberately generous: a lull should read as calmer and not as switched off,
+ * and the narrower this is the more a passage merely being softer costs it. The
+ * pulse is kept quiet in a slow stretch mostly by the share a hit has to be
+ * worth further down — this only tilts it.
+ */
+const QUIET_BY = 0.5;
+
+/**
+ * Below this a part is not playing music, whatever it is doing relatively.
+ *
+ * Without it the scale follows the music all the way down to nothing and a
+ * room's hum reads as a chorus by the arithmetic. It is the one absolute left,
+ * and it sits where it does because it is about silence rather than about
+ * volume.
+ */
+const SOFTEST = 0.12;
 
 /**
  * How long a part's loudness is taken over.
@@ -299,29 +352,44 @@ export function listen(
   const since = beat.since + seconds;
   if (bars.length === 0) return { beat: { ...beat, since }, hit: 0, tone: 0 };
 
+
   // Exponential, so the rate is about time and not about how often this is
   // called. `1 - e^(-dt/tau)` is the share of the gap closed in this frame.
   const caught = 1 - Math.exp(-seconds / MEMORY);
   const settling = 1 - Math.exp(-seconds / CARRYING);
+
+  /** Every part's level and its history, before anything is judged against it. */
+  const seen = REGIONS.map((_, at) => {
+    const was = beat.regions[at] ?? { level: 0, usually: 0, carrying: 0 };
+    const [from, to] = edges(bars.length, at);
+    const now = peakIn(bars, from, to);
+    // How loud this part has been, not how loud this frame is. Which frame a
+    // beat is caught in is luck, and reading the moment off that one frame made
+    // an even beat light the window unevenly.
+    return { was, now, step: now - was.level, carrying: was.carrying + (now - was.carrying) * settling };
+  });
+
+  // The scale, taken across the whole mix and in one pass before any of it is
+  // read: it rises with the music at once and forgets slowly, so it is the top
+  // of this song rather than a mark on the meter.
+  const loudest = seen.reduce((most, part) => Math.max(most, part.carrying), 0);
+  const fullest = Math.max(loudest, beat.fullest * Math.exp(-seconds / FORGETS_LOUD));
+
   const regions: Region[] = [];
   let hardest = 0;
   let hardestTone = 0;
 
   for (let at = 0; at < REGIONS.length; at++) {
-    const was = beat.regions[at] ?? { level: 0, usually: 0, carrying: 0 };
-    const [from, to] = edges(bars.length, at);
-    const now = peakIn(bars, from, to);
-    const step = now - was.level;
-    // How loud this part has been, not how loud this frame is. Which frame a
-    // beat is caught in is luck, and reading the moment off that one frame made
-    // an even beat light the window unevenly.
-    const carrying = was.carrying + (now - was.carrying) * settling;
+    const part = seen[at];
+    if (!part) continue;
+    const { was, now, step, carrying } = part;
 
     if (now > TOO_QUIET && step > Math.max(was.usually, FAINTEST) * over) {
-      const worth =
-        Math.min(1, step / FULL_STEP) *
-        (REGIONS[at]?.worth ?? 1) *
-        Math.min(1, carrying / AT_FULL);
+      // How much of a moment this is: how far under the loudest the music has
+      // lately been this part is now, and an absolute word about silence.
+      const moment =
+        Math.max(0, 1 - (fullest - carrying) / QUIET_BY) * Math.min(1, carrying / SOFTEST);
+      const worth = Math.min(1, step / FULL_STEP) * (REGIONS[at]?.worth ?? 1) * moment;
       if (worth > hardest) {
         hardest = worth;
         hardestTone = REGIONS[at]?.tone ?? 0;
@@ -391,7 +459,7 @@ export function listen(
   }
 
   return {
-    beat: { regions, since: waited, weighing, weighingTone, weighed, lately },
+    beat: { regions, since: waited, weighing, weighingTone, weighed, lately, fullest },
     hit,
     tone,
   };
