@@ -325,6 +325,38 @@ function FlyingDisc({
     // own record, and it is only here from this line on.
     onAirborne(flight);
 
+    /**
+     * Keep the clone on the platter for as long as it exists.
+     *
+     * Everything here is in layer coordinates, and the layer is the shell — so
+     * the numbers mean nothing the moment the shell moves under them. Closing
+     * the drawer on the left is exactly that: the window stays where it is and
+     * the shell shrinks against its right edge, so the layer's origin travels
+     * the drawer's whole width while the deck does not move at all. A record
+     * pinned to a layer coordinate slides sideways with it, over the quarter of
+     * a second the drawer takes, which is what it looks like: a record flying
+     * off to one side instead of onto the deck.
+     *
+     * The destination was already known to move — the landing re-measured it
+     * once, for a banner or the import strip appearing mid-flight. One instant
+     * was not enough. The arc is six hundred and fifty milliseconds and the
+     * rest on the platter waiting for the track to load is up to two and a
+     * half seconds more, and the drawer can shut in any of it. So the platter
+     * is followed rather than sampled.
+     *
+     * `place` writes `left`/`top` and the animation writes `transform`, so this
+     * moves the arc's destination without touching where along the arc the
+     * record is. A destination that moves takes the whole flight with it, which
+     * on screen is the record holding still while the shell slides out from
+     * under it.
+     */
+    let tracking = 0;
+    const follow = () => {
+      tracking = requestAnimationFrame(follow);
+      place(platterCentre());
+    };
+    tracking = requestAnimationFrame(follow);
+
     // Lift scales with the throw. A fixed clamp made every row below the
     // platter arc identically — a hop straight up rather than a throw — because
     // the old formula pinned itself to the ceiling for all of them. The upper
@@ -391,10 +423,10 @@ function FlyingDisc({
       // outlive the first and fire after the flight is gone.
       if (landed) return;
       landed = true;
-      // The stage can move under a flight — an error banner or the import strip
-      // appearing shrinks it. The destination was measured 650ms ago.
-      const now = platterCentre();
-      if (Math.abs(now.x - start.x) > 1 || Math.abs(now.y - start.y) > 1) place(now);
+      // No re-measure here any more. This used to be the one moment the
+      // destination was checked again; `follow` above has been keeping it right
+      // every frame since the clone appeared, which is the same correction made
+      // continuously rather than once.
       syncSpin();
 
       if (arrived) commit();
@@ -435,6 +467,7 @@ function FlyingDisc({
     });
 
     return () => {
+      cancelAnimationFrame(tracking);
       clearTimeout(failsafe);
       clearTimeout(settleTimer);
       clearTimeout(holdTimer);
