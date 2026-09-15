@@ -290,3 +290,40 @@ export function hasStalled(watch: Watch): boolean {
 export function hasRecovered(watch: Watch, reported: number | null): boolean {
   return reported !== null && watch.seen !== null && reported !== watch.seen;
 }
+
+/**
+ * What is running, as far as watching goes.
+ *
+ * Four independent facts rather than one, because the fault they describe is
+ * exactly the case where they disagree.
+ */
+export interface Running {
+  /** The position clock is advancing, which is what turns the record. */
+  clock: boolean;
+  /** There is meant to be a watch at all — nobody has paused or given up. */
+  watching: boolean;
+  /** A check is booked for later. */
+  booked: boolean;
+  /** A check is out at Spotify now. */
+  checking: boolean;
+}
+
+/**
+ * Whether the clock is running with nothing watching it.
+ *
+ * The invariant this whole file exists to hold, written down so it can be
+ * asked rather than assumed. The watchdog books its next check from the
+ * `finally` of the last one, which is a chain: anything that stops one link
+ * stops all of them, silently, and leaves the clock — a separate timer that
+ * knows nothing about audio — filling the bar over a song nobody can hear.
+ *
+ * It happened. A request with no deadline, over a socket that was open and
+ * would never deliver, never came back; the `finally` never ran; nothing was
+ * ever booked again. The deadline in `spotifyApi` is why that particular link
+ * cannot hang any more. This is the answer to the next one: the clock ticks
+ * four times a second and can therefore notice, every quarter second, that it
+ * is running unwatched — and say so.
+ */
+export function clockUnwatched(running: Running): boolean {
+  return running.clock && running.watching && !running.booked && !running.checking;
+}

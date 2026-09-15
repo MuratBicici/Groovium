@@ -41,14 +41,41 @@ afterEach(() => {
 });
 
 /** `fetch`, recording what was asked for and answering however the test says. */
-function stubFetch(sequence: Array<() => Promise<Response>>) {
+function stubFetch(sequence: Array<(init?: RequestInit) => Promise<Response>>) {
   let at = 0;
-  vi.stubGlobal('fetch', (url: string) => {
+  // `init` is handed on because a deadline is only a deadline if whatever is
+  // standing in for the network honours the signal, the way `fetch` does.
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     calls.push(String(url));
     const next = sequence[Math.min(at, sequence.length - 1)];
     at += 1;
-    return next?.() ?? Promise.reject(new Error('no answer configured'));
+    return next?.(init) ?? Promise.reject(new Error('no answer configured'));
   });
+}
+
+/** A socket that is open and will never deliver. */
+function neverAnswers() {
+  return (init?: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+}
+
+/** Headers arrive, and then the body never does. */
+function neverFinishes() {
+  return (init?: RequestInit) => {
+    const response = new Response('{}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    Object.defineProperty(response, 'json', {
+      value: () =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    });
+    return Promise.resolve(response);
+  };
 }
 
 describe('when Spotify says slow down', () => {
@@ -326,5 +353,67 @@ describe('starting a track on a device', () => {
 
     await playOnDevice('device-1', 'spotify:track:1', -50);
     expect(sent[0]).toMatchObject({ position_ms: 0 });
+  });
+});
+
+
+/**
+ * A request that never comes back.
+ *
+ * `fetch` has no deadline of its own, and the case that matters is not a
+ * refused connection — that rejects — but a socket that is open and will never
+ * deliver. The watchdog in `SpotifyProvider` books its next check from the
+ * `finally` of the last one, so a request that never settles is a watchdog
+ * that never runs again, and a progress bar that fills over silence until
+ * somebody presses pause. It happened, in a release build, to somebody.
+ */
+describe('when Spotify goes quiet without saying so', () => {
+  it('refuses a request that never comes back', async () => {
+    const { request, REQUEST_DEADLINE_MS } = await freshApi();
+    stubFetch([neverAnswers()]);
+
+    const pending = request('/me/player');
+    const landed = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS + 1);
+    await landed;
+  });
+
+  it('refuses one whose body never arrives', async () => {
+    // The headers arriving says the socket is alive, not that the rest of the
+    // answer is coming. Two legs, two ways to hang.
+    const { request, REQUEST_DEADLINE_MS } = await freshApi();
+    stubFetch([neverFinishes()]);
+
+    const pending = request('/me/player');
+    const landed = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS + 1);
+    await landed;
+  });
+
+  it('tells the watchdog that Spotify did not answer', async () => {
+    // The whole point of the deadline. `currentPlayback` turning a hang into
+    // `answered: false` is what puts the provider into a stall, stops the
+    // clock, and stops the record — and none of that could happen while the
+    // promise was still pending.
+    const { currentPlayback, REQUEST_DEADLINE_MS } = await freshApi();
+    stubFetch([neverAnswers()]);
+
+    const pending = currentPlayback();
+    await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS + 1);
+    expect(await pending).toEqual({ answered: false });
+  });
+
+  it('leaves an answer that arrives in time alone', async () => {
+    // The deadline has to stop being a deadline once the answer is in hand,
+    // or every long-lived caller is holding a timer that fires into nothing.
+    const { request } = await freshApi();
+    stubFetch([answer(200, {}, '{"ok":true}')]);
+
+    const body = await request<{ ok: boolean }>('/me/player');
+    expect(body).toEqual({ ok: true });
+    // Counted before anything is advanced. Advancing first runs the timer and
+    // then reports none left, which is the same number for both a deadline
+    // that was cleared and one that was not.
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

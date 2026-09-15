@@ -10,6 +10,7 @@ import {
   VERIFY_ALERT_MS,
   VERIFY_CALM_MS,
   VERIFY_LOST_MS,
+  clockUnwatched,
   fallingRepeatedly,
   freshWatch,
   giveUpReason,
@@ -20,6 +21,7 @@ import {
   stayAlert,
   verifyGap,
   watchingFrom,
+  type Running,
   type Watch,
 } from './stallWatch';
 
@@ -255,5 +257,43 @@ describe('falling over again and again', () => {
       stalls = recordStall(stalls, now + at * 10 * 60_000);
     }
     expect(fallingRepeatedly(stalls)).toBe(false);
+  });
+});
+
+describe('noticing that nothing is watching the clock', () => {
+  const running = (over: Partial<Running> = {}): Running => ({
+    clock: true,
+    watching: true,
+    booked: false,
+    checking: false,
+    ...over,
+  });
+
+  it('is the clock running with nothing booked and nothing in flight', () => {
+    // The shape of the fault as it happened: a request that never came back
+    // took the chain with it, so no check was ever booked again while the bar
+    // went on filling over silence.
+    expect(clockUnwatched(running())).toBe(true);
+  });
+
+  it('is not a clock with a check booked', () => {
+    expect(clockUnwatched(running({ booked: true }))).toBe(false);
+  });
+
+  it('is not a clock with a check already out at Spotify', () => {
+    // The ordinary gap between booking and answering. Treating it as lost is
+    // how one check becomes two every quarter second.
+    expect(clockUnwatched(running({ checking: true }))).toBe(false);
+  });
+
+  it('is not a stopped clock', () => {
+    // Paused, or stalled. Nothing is claiming to play, so nothing is lying.
+    expect(clockUnwatched(running({ clock: false }))).toBe(false);
+  });
+
+  it('is not a watch that was deliberately stopped', () => {
+    // Given up on, or handed to another device. Reviving it here would restart
+    // a loop that was ended on purpose.
+    expect(clockUnwatched(running({ watching: false }))).toBe(false);
   });
 });

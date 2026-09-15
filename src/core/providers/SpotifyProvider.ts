@@ -4,6 +4,7 @@ import { clamp } from '@/core/utils/time';
 import { say } from '@/core/i18n';
 import {
   CONFIRM_CHECKS,
+  clockUnwatched,
   freshWatch,
   giveUpReason,
   recordStall,
@@ -137,6 +138,18 @@ export class SpotifyProvider extends BaseProvider {
    * `stallWatch.ts` for why nothing local can answer that.
    */
   private verifier: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Whether there is meant to be a watch at all.
+   *
+   * Apart from the timer handle, because the handle answers a different
+   * question. `verifier` is "a check is booked"; this is "somebody should be
+   * watching" — and telling a paused player from a watch that has fallen over
+   * is the whole difference between reviving it and restarting a loop that was
+   * ended on purpose.
+   */
+  private watching = false;
+  /** A check that is out at Spotify now, so the next one is not booked yet. */
+  private checking = false;
   /**
    * Whether the watchdog is on its fast cadence.
    *
@@ -542,6 +555,24 @@ export class SpotifyProvider extends BaseProvider {
       const now = Date.now();
       this.positionMs = Math.min(this.positionMs + (now - this.lastTickAt), this.durationMs);
       this.lastTickAt = now;
+
+      // The clock must never run unwatched, and this is the only thing in the
+      // app running often enough to notice that it is. The watchdog books its
+      // next check from the `finally` of the last one, so any link that does
+      // not come back ends the chain in silence — which is what happened, and
+      // what left the bar filling over a song nobody could hear until somebody
+      // pressed pause. One request with no deadline was the link; that is
+      // fixed in `spotifyApi`. This is the answer to the next one.
+      if (clockUnwatched({
+        clock: true,
+        watching: this.watching,
+        booked: this.verifier !== null,
+        checking: this.checking,
+      })) {
+        this.report('the clock was running unwatched');
+        this.scheduleVerify();
+      }
+
       this.emitProgress();
     }, PROGRESS_TICK_MS);
   }
@@ -553,7 +584,8 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   private startVerifier(): void {
-    if (this.verifier) return;
+    if (this.watching) return;
+    this.watching = true;
     this.watch = freshWatch;
     this.stalled = false;
     // Fast to begin with: the first answer is the one that establishes there
@@ -575,26 +607,52 @@ export class SpotifyProvider extends BaseProvider {
    */
   private scheduleVerify(): void {
     if (this.verifier) clearTimeout(this.verifier);
-    this.verifier = setTimeout(() => {
-      void this.verify().finally(() => {
-        if (this.verifier) this.scheduleVerify();
-      });
+    const booked = setTimeout(() => {
+      // Spent the moment it fires. Left in place, a handle that has already
+      // gone off reads as a check that is still to come — which is how one
+      // request that never came back became a player that was never watched
+      // again: nothing rescheduled, and `startVerifier` saw a live handle and
+      // declined to start one.
+      if (this.verifier === booked) this.verifier = null;
+      this.checking = true;
+      void this.verify()
+        // A check that throws must not take the chain with it. Nothing in
+        // `verify` is meant to — `currentPlayback` swallows everything — but a
+        // release build has no console, so an unhandled rejection here would be
+        // exactly the kind of silence this whole repair is about.
+        .catch((err: unknown) => {
+          this.report(`the check itself failed: ${String(err)}`);
+        })
+        .finally(() => {
+          this.checking = false;
+          // On `watching` rather than on the handle. The handle is null here
+          // by definition, and a check that came back after somebody paused
+          // must not book another.
+          if (this.watching) this.scheduleVerify();
+        });
     }, verifyGap({
       alert: this.alert,
       stalledSince: this.stalledSince,
       confirming: this.confirmsLeft > 0,
     }));
+    this.verifier = booked;
   }
 
   /** Something looked wrong: check often until it stops looking wrong. */
   private raiseAlert(): void {
     if (this.alert) return;
     this.alert = true;
-    if (this.verifier) this.scheduleVerify();
+    // Not while one is out at Spotify: that check books the next one itself
+    // when it lands, at the cadence this has just changed.
+    if (this.watching && !this.checking) this.scheduleVerify();
   }
 
   private stopVerifier(): void {
     this.alert = true;
+    // First, so a check already out at Spotify does not book another when it
+    // lands, and so the ticker does not read this as a watch to revive.
+    this.watching = false;
+    this.checking = false;
     if (this.verifier) {
       clearTimeout(this.verifier);
       this.verifier = null;
@@ -666,7 +724,9 @@ export class SpotifyProvider extends BaseProvider {
         localClock: Math.round(this.positionMs),
         watch: { ...this.watch },
         ticking: this.ticker !== null,
-        verifying: this.verifier !== null,
+        watching: this.watching,
+        booked: this.verifier !== null,
+        checking: this.checking,
         navigatorOnLine: navigator.onLine,
       }),
     });

@@ -18,6 +18,53 @@ import type { TrackMetadata } from '@/core/types';
 
 const API_BASE = 'https://api.spotify.com/v1';
 
+/**
+ * How long one leg of a request may take before Spotify counts as unanswered.
+ *
+ * `fetch` has no deadline of its own. A refused connection rejects and a dead
+ * route eventually does, but the case in between does not: a socket that is
+ * open and will never deliver — a laptop that changed network, a VPN that went
+ * away, a WiFi roam — leaves the promise pending for as long as the operating
+ * system keeps the connection, which on Windows is minutes and can be forever.
+ *
+ * `stallWatch` already says the watchdog's whole premise is that "an unanswered
+ * request stalls on its own". It did not. The watchdog books its next check
+ * from the `finally` of the last one, so one request that never came back was
+ * one watchdog that never ran again — and the clock, which is a separate timer
+ * and knows nothing about audio, went on filling the bar over silence until
+ * somebody pressed pause. That is the fault this deadline closes, and
+ * `SpotifyProvider` closes the other half of it.
+ *
+ * Ten seconds. Longer than any answer this app waits on in practice, and short
+ * enough to land inside the watchdog's own patience rather than outside it.
+ * Per leg rather than per call, so the honest wait a 429 asks for does not
+ * spend somebody else's deadline.
+ */
+export const REQUEST_DEADLINE_MS = 10_000;
+
+/**
+ * Run one network leg under the deadline.
+ *
+ * A leg is a thing that can hang on its own: the exchange that ends when the
+ * headers arrive, and then the reading of the body, which is a second wait over
+ * the same socket and can stall by itself.
+ *
+ * The abort is what makes the promise settle; the error is rewritten because
+ * "The user aborted a request" is a sentence about a user who did nothing of
+ * the kind, and it would be shown to them.
+ */
+async function within<T>(control: AbortController, leg: () => Promise<T>): Promise<T> {
+  const bell = setTimeout(() => control.abort(), REQUEST_DEADLINE_MS);
+  try {
+    return await leg();
+  } catch (err) {
+    if (control.signal.aborted) throw new SpotifyError(say('spotify.tookTooLong'), 408);
+    throw err;
+  } finally {
+    clearTimeout(bell);
+  }
+}
+
 /** Spotify caps this at 10 for Development Mode apps; it was 50 until Feb 2026. */
 export const SEARCH_LIMIT = 10;
 
@@ -129,9 +176,15 @@ function retryAfterMs(response: Response, gate: { blindWait: number }): number {
   return wait;
 }
 
-async function send(path: string, token: string, init?: RequestInit): Promise<Response> {
+async function send(
+  path: string,
+  token: string,
+  init: RequestInit | undefined,
+  signal: AbortSignal,
+): Promise<Response> {
   return fetch(`${API_BASE}${path}`, {
     ...init,
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -231,7 +284,11 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
 
   const token = await accessToken();
 
-  let response = await send(path, token, init);
+  // One controller for the whole call, armed a leg at a time. Aborting it once
+  // is enough to end whichever leg is outstanding, and there is never more
+  // than one.
+  const control = new AbortController();
+  let response = await within(control, () => send(path, token, init, control.signal));
 
   // Spotify's documented contract for 429 is to wait the number of seconds in
   // `Retry-After` and try again, so one honest retry beats surfacing an error
@@ -243,7 +300,7 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
     gate.until = Date.now() + waitMs;
     if (waitMs <= MAX_RETRY_AFTER_MS) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
-      response = await send(path, token, init);
+      response = await within(control, () => send(path, token, init, control.signal));
       // The retry decides how long the gate stays shut: refused again and the
       // window is genuinely full, answered and there was never a queue.
       gate.until = response.status === 429 ? Date.now() + retryAfterMs(response, gate) : 0;
@@ -258,7 +315,9 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
   if (response.status === 204) return null;
 
   if (!response.ok) {
-    const body = await response.text();
+    // Under the deadline as well. The headers arriving says the socket is
+    // alive, not that the rest of the answer is coming.
+    const body = await within(control, () => response.text());
 
     if (response.status === 401) {
       throw new SpotifyError('Spotify rejected the session. Sign out and connect again.', 401);
@@ -291,7 +350,7 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
     );
   }
 
-  return (await response.json()) as T;
+  return (await within(control, () => response.json())) as T;
 }
 
 /**

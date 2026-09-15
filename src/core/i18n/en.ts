@@ -147,6 +147,7 @@ export const en = {
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',
   'spotify.onDeck': 'This record is on the deck.',
+  'spotify.tookTooLong': 'Spotify did not answer in time.',
   'spotify.trackCount': '{count} song',
   'spotify.trackCount_plural': '{count} songs',
 
