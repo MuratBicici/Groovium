@@ -4,6 +4,140 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.1.1 — 2026-09-16
+
+The drawer, as it was meant to be.
+
+1.1.0 put your Spotify playlists in a drawer beside the player and left them
+there as a wall of sleeves with a search box above them. This is the same
+drawer with the room used properly. Two shelves sit above the crates now —
+what you have on repeat, and what you played last — so it opens on the music
+you are actually listening to rather than on everything you have ever made.
+The playlists are a shelf themselves rather than the thing that took whatever
+height was left over. Each of the three has a pair of arrows at its top right,
+because a row you run along is only a row you can run along if there is a wheel
+under your fingers, and a mouse has no sideways.
+
+The search moved out to make that room. It had been a box sitting in the drawer
+permanently, taking half the height from somebody who was not using it. It
+opens over the drawer instead — on the magnifier, on Ctrl+F, or on you simply
+starting to type, with the letter you typed already in the box.
+
+The rest is what a release build had been doing that a development one never
+did. Playlist covers you uploaded yourself did not appear. The records were
+rendering smooth, with no grooves on them at all. A cover that failed to load
+once was remembered as a cover with no colour in it, so the palette never
+arrived. The edge light was answering the volume knob rather than the music, so
+turning the music down turned the flares off with it. And a record in flight
+jumped sideways if the drawer closed underneath it.
+
+One more, the quietest and the worst. Very rarely the sound stopped while the
+record went on turning and the bar went on filling, and only pausing and
+playing again would fix it. There is a watchdog for exactly that, and it had a
+way of dying without saying so: it books each check from the end of the last
+one, and a single request that never came back ended the chain for as long as
+the window stayed open. Requests to Spotify have a deadline now, and the clock
+is no longer allowed to run unwatched.
+
+HIGHLIGHTS
+· Two shelves above the crates: what you have on repeat, and what you played
+  last. Press a record to play it, or carry it to the deck by hand, exactly as
+  in a crate.
+· The playlists are a shelf as well, so the drawer is three rows of the same
+  thing rather than a strip on top of a wall.
+· Every shelf has arrows at its top right. A mouse can move along one now
+  without a sideways wheel.
+· Search opens over the drawer instead of sitting inside it — on the magnifier,
+  on Ctrl+F, or on simply starting to type.
+· Playlist covers you uploaded yourself now appear. They had been blocked in
+  the installed app and nowhere else.
+· The records have their grooves back. They had been rendering smooth in a
+  release build, and only there.
+· A cover that fails to load once is no longer remembered as having no colour
+  in it, so the palette arrives when the window comes back to the front.
+· The edge light no longer answers the volume knob. Turn the music down and the
+  flares are still there.
+· A record in flight stays on its way to the deck when the drawer closes
+  underneath it.
+· The sound stopping while the record kept turning is fixed. Requests to
+  Spotify have a deadline, and the clock is never left unwatched.
+
+ALL CHANGES
+
+The shelves
+· Two new rows above the crates, from what Spotify knows you have been playing:
+  one for what is on repeat and one for what was played last.
+· The recent row is a log rather than a list — the same song three times in an
+  evening is three entries — so it is folded down to one of each, newest first.
+· Each row is one request, capped and never paged, and kept for its own length:
+  five minutes for what was played last, an hour for what is on repeat. Opening
+  and shutting the drawer costs nothing.
+· Neither row spends the quota this app actually runs out of. Searching is
+  metered apart from the rest, and these are not searches.
+· A row still being fetched is shared rather than fetched twice, which it was
+  when a drawer was shut and reopened while one was loading.
+· A row that arrives after somebody has signed out is discarded rather than
+  kept and shown to whoever signs in next.
+· The playlists are a horizontal shelf rather than a scrolling wall, and pages
+  of them arrive as the shelf is scrolled rather than as it is scrolled down.
+· All three rows are sized to fit the drawer together, measured rather than
+  estimated: 404 pixels of shelves in the 412 the drawer has.
+
+The arrows
+· A pair at the top right of each shelf, and none at all on a shelf that
+  already fits — two arrows that can never do anything are furniture.
+· An arrow goes out when there is nothing left that way.
+· One press moves almost a screenful, keeping a card and a bit in view, so
+  there is something in common between before and after.
+· An end counts as reached a pixel early. Scroll positions are fractional, and
+  an exact comparison leaves an arrow lit that does nothing when pressed.
+
+Search
+· Opens over the drawer and fills it, rather than living in it and halving it.
+· Three ways in: the magnifier in the drawer's header, Ctrl+F, and typing.
+· A letter typed at the drawer opens the search with that letter in the box and
+  the caret after it.
+· A key with a modifier on it, a named key, and the space bar are all left
+  alone, as is anything already being typed into a field.
+· Escape closes the search without also closing the drawer behind it.
+
+Covers and records
+· Playlist covers that Spotify serves from its upload and mosaic hosts now
+  appear. The policy the installed app runs under listed only one of Spotify's
+  image hosts, which is why some covers arrived and others did not, and why a
+  development build showed all of them.
+· The grooves on a record are drawn into the image the app generates, and that
+  kind of image was blocked by the same policy. Records had been smooth in
+  every installed build since the grooves were added.
+· A cover that fails to load is no longer remembered as a cover with no colour
+  in it. It is not remembered at all, and it is tried again when the window
+  comes back to the front — which is where this was usually noticed, because it
+  usually happened while the app was in the background.
+
+The edge light
+· The flares answer the music rather than how loud it is. What decides one is
+  how much the sound changed, which is a difference rather than a level, so
+  quiet music flares exactly as readily as loud music.
+· Turning the volume knob down no longer turns the lighting off with it.
+
+Playback
+· A record flying to the deck stays on its way there when the drawer closes
+  underneath it. It is tracked against the deck each frame rather than aimed
+  once at where the deck used to be.
+
+When Spotify goes quiet
+· Every request has a ten-second deadline. It had none, and a socket that is
+  open but will never deliver — a laptop that changed network, a VPN that went
+  away — left one pending for as long as Windows kept the connection.
+· That was enough to stop the watchdog for good, because it books each check
+  from the end of the last one. Nothing was booked again, and the clock, which
+  is a separate timer and knows nothing about audio, went on filling the bar
+  over silence until somebody pressed pause.
+· The clock now checks, four times a second, that something is watching it, and
+  starts the watching again if nothing is.
+· A check that fails is caught and reported rather than left to end the chain
+  silently, which in a build with no console is the same thing as nothing.
+
 ## 1.1.0 — 2026-09-09
 
 The window opens.

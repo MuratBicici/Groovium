@@ -13,6 +13,39 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.1.1 — 2026-09-16
+
+Çekmece nihayet olması gerektiği gibi.
+
+1.1.0 çalma listelerinizi oynatıcının yanındaki çekmeceye koydu. Ama orada
+öylece durdular: bir kılıf duvarı, üstünde de bir arama kutusu. Bu sürümde aynı
+çekmecenin yeri doğru kullanılıyor. Kasaların üstünde artık iki raf var. Biri
+en çok dinledikleriniz, öbürü son çaldıklarınız. Yani çekmece, vaktiyle
+yaptığınız her şeyle değil, şu sıralar dinlediğiniz müzikle açılıyor. Çalma
+listeleri de artık bir raf. Eskiden geriye ne yükseklik kalırsa onu alırdı.
+
+Üç rafın da sağ üstünde birer ok çifti var. Bir sıra boyunca ilerlemek için
+parmağınızın altında tekerlek gerekiyordu. Farede öyle bir şey yok.
+
+Arama bu yeri açmak için dışarı çıktı. Sürekli çekmecede duruyor, onu
+kullanmayan birinden yüksekliğin yarısını alıyordu. Artık çekmecenin üstünde
+açılıyor: büyütece basın, Ctrl+F yapın ya da doğrudan yazmaya başlayın.
+Yazdığınız harf kutuda hazır bekler.
+
+Gerisi, kurulu uygulamanın yaptığı ama geliştirme sürümünün hiç yapmadığı
+şeyler. Kendi yüklediğiniz çalma listesi kapakları görünmüyordu. Plaklar yivsiz
+çiziliyordu, dümdüz. Bir kez yüklenemeyen kapak "rengi olmayan kapak" diye
+hatırlanıyor, tema da hiç gelmiyordu. Kenar ışığı müziğe değil ses düğmesine
+cevap veriyordu; sesi kısınca patlamalar da gidiyordu. Havada uçan plak ise,
+altından çekmece kapanınca yana kaçıyordu.
+
+Bir tane daha var. En sessizi, en kötüsü. Çok seyrek de olsa ses kesiliyordu.
+Plak dönmeye, çubuk dolmaya devam ediyordu. Yalnızca durdurup yeniden başlatmak
+düzeltiyordu. Bunun için bir bekçi var. Ama sessizce ölebiliyormuş: her
+kontrolünü bir öncekinin sonunda ayarlıyor, hiç geri dönmeyen tek bir istek de
+zinciri bitiriyordu. Pencere açık kaldığı sürece bir daha kimse bakmıyordu.
+Artık Spotify'a giden isteklerin süre sınırı var. Saat de gözetimsiz çalışamaz.
+
 ## 1.1.0 — 2026-09-09
 
 Pencere açılıyor.
