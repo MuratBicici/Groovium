@@ -143,7 +143,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotlight.recent': 'Son çalanlar',
   'spotlight.top': 'En çok dinlediklerin',
   'spotlight.empty': 'Burada henüz bir şey yok. Bir şey çalın, burada görünür.',
-  'spotlight.failed': 'Spotify’a ulaşılamadı. Tekrar denemek için başlığa basın.',
+  'spotlight.failed': 'Spotify’a ulaşılamadı. Yeniden denemek için basın.',
+
+  'shelf.left': 'Rafta geriye',
+  'shelf.right': 'Rafta ileriye',
 
   'setup.optionalLead': 'Spotify isteğe bağlı.',
   'setup.optionalRest':

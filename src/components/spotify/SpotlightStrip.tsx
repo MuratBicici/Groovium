@@ -3,23 +3,25 @@ import { spotlight, type Lit } from '@/core/providers/spotifySpotlight';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
 import { VinylDisc } from '@/components/player/VinylDisc';
+import { Shelf } from './Shelf';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
 
 /**
- * A shelf of what you have been listening to, above the crates.
+ * A shelf of what somebody has been listening to.
  *
- * Everything else in the drawer is a playlist — something somebody made. This
- * is the other half of an account: what was actually played, and what gets
- * played most. One row rather than two, because the drawer's height is the
- * scarce thing here and two rows would cost the crates a second one; the
- * heading is the switch between them.
+ * One row per instance, and the drawer puts two of them up: what is on repeat
+ * and what was played last. They used to be one row with the heading as a
+ * switch between them, which was the right answer while the crates below were
+ * a wall — the drawer's height was the scarce thing and a second row cost the
+ * crates a whole line of sleeves. The crates are a shelf themselves now, so
+ * there is room for both, and both being up means neither has to be looked for.
  *
  * The card is the crate's card, smaller. A bare disc is not a picture of
  * anything — a row of black circles is one drawing repeated — so the cover is
  * printed at full size as the sleeve with the record lying across it, and what
- * it is goes underneath. Same cardboard, same light, same way of reading it.
+ * it is goes underneath.
  *
  * What a card does is what a crate's card does, too: pressing it flies the
  * record to the deck and starts it, and dragging takes the record out and
@@ -27,87 +29,65 @@ import type { TrackMetadata } from '@/core/types';
  */
 
 /** The record's diameter. The cell is this wide; the sleeve is square. */
-const DISC_SIZE = 84;
+const DISC_SIZE = 70;
 
 /** How far the pointer travels before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 6;
 
-/** The row starts on what was played rather than on what is played most. */
-const OPENS_ON: Lit = 'recent';
-
-export function SpotlightStrip() {
+export function SpotlightStrip({ which }: { which: Lit }) {
   const t = useT();
-  const [which, setWhich] = useState<Lit>(OPENS_ON);
   /**
-   * The row that came back, and which row it was an answer to.
+   * What came back, or nothing while it is still being asked for.
    *
-   * One piece of state rather than three, and it carries the question as well
-   * as the answer. That is what lets "still waiting" be read off it — it is
-   * the state not yet matching the row being asked for — rather than set at the
-   * top of the effect, which is a synchronous render inside an effect and a
-   * cascade waiting to happen.
+   * `undefined` is the wait. It is never set from inside the effect that starts
+   * the request — that would be a render inside an effect — so the wait is the
+   * absence of an answer rather than a flag somebody has to remember to raise.
    */
-  const [shown, setShown] = useState<{ which: Lit; tracks: TrackMetadata[]; failed: boolean }>();
+  const [shown, setShown] = useState<{ tracks: TrackMetadata[]; failed: boolean }>();
+  /** Bumped to ask again after a failure. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
     spotlight(which).then(
       (row) => {
-        if (alive) setShown({ which, tracks: row, failed: false });
+        if (alive) setShown({ tracks: row, failed: false });
       },
       () => {
         // Not remembered as an answer — `spotlight` keeps nothing from a
-        // failure — so pressing the heading and coming back tries again.
-        if (alive) setShown({ which, tracks: [], failed: true });
+        // failure — so asking again actually asks again.
+        if (alive) setShown({ tracks: [], failed: true });
       },
     );
     return () => {
       alive = false;
     };
-  }, [which]);
-
-  const answer = shown?.which === which ? shown : undefined;
-  const loading = answer === undefined;
-  const tracks = answer?.tracks ?? [];
-  const failed = answer?.failed ?? false;
+  }, [which, attempt]);
 
   const heading = which === 'recent' ? t('spotlight.recent') : t('spotlight.top');
 
   return (
-    <section className="shrink-0" aria-label={heading}>
-      {/* The heading is the switch. One control rather than a heading and a
-          segmented thing beside it: there are two rows, and the name of the one
-          you are not looking at is the whole of what the other button would
-          say. */}
-      <button
-        type="button"
-        onClick={() => setWhich((now) => (now === 'recent' ? 'top' : 'recent'))}
-        className="flex items-center gap-1 px-0.5 pb-1 text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase transition-colors hover:text-brass-300"
-      >
-        {heading}
-        <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3 w-3 fill-none stroke-current">
-          <path d="M4 6.5 8 10.5 12 6.5" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>
-
-      <div
-        className="flex gap-2.5 overflow-x-auto pb-1"
-        // A row of records is read by running along it, so it scrolls sideways
-        // and nothing wraps. The height is the card's, which is the disc plus
-        // the two lines under it.
-        style={{ scrollbarWidth: 'none' }}
-      >
-        {loading && <Waiting />}
-        {!loading && failed && (
-          <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('spotlight.failed')}</p>
-        )}
-        {!loading && !failed && tracks.length === 0 && (
-          <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('spotlight.empty')}</p>
-        )}
-        {!loading &&
-          tracks.map((track) => <Card key={track.id} track={track} />)}
-      </div>
-    </section>
+    <Shelf heading={heading}>
+      {shown === undefined && <Waiting />}
+      {shown?.failed === true && (
+        <button
+          type="button"
+          onClick={() => {
+            setShown(undefined);
+            setAttempt((n) => n + 1);
+          }}
+          className="px-0.5 py-3 text-left text-meta text-cream-400/70 transition-colors hover:text-cream-200"
+        >
+          {t('spotlight.failed')}
+        </button>
+      )}
+      {shown !== undefined && !shown.failed && shown.tracks.length === 0 && (
+        <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('spotlight.empty')}</p>
+      )}
+      {shown !== undefined &&
+        !shown.failed &&
+        shown.tracks.map((track) => <Card key={track.id} track={track} />)}
+    </Shelf>
   );
 }
 
@@ -115,7 +95,7 @@ export function SpotlightStrip() {
 function Waiting() {
   return (
     <>
-      {Array.from({ length: 7 }, (_, at) => (
+      {Array.from({ length: 8 }, (_, at) => (
         <div key={at} className="shrink-0" style={{ width: DISC_SIZE }}>
           <div
             className="groove-inset w-full rounded-md"

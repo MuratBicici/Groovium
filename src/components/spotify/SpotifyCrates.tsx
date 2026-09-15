@@ -4,10 +4,20 @@ import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { Shelf } from './Shelf';
 import { useT } from '@/core/i18n';
 
 /** How far the pointer travels before a press becomes a lift rather than a click. */
 const DRAG_THRESHOLD = 5;
+
+/**
+ * How wide one sleeve is.
+ *
+ * Smaller than it was, because the shelf is a row now rather than a wall and
+ * the drawer's height has two other rows in it. Wide enough that the artwork
+ * is still the thing being read and the name under it is still a name.
+ */
+const CRATE_SIZE = 84;
 
 /**
  * A crate in the shape the hand carries things in.
@@ -34,13 +44,18 @@ function asCargo(playlist: SpotifyPlaylist): TrackMetadata {
  * The shelf: someone's Spotify playlists, as record sleeves.
  *
  * Square, with the playlist's own artwork on the front, because that is what a
- * playlist looks like when it is a physical thing — and the drawer is wide
- * enough for a shelf of them rather than a column of rows.
+ * playlist looks like when it is a physical thing.
  *
- * Pages arrive as they are scrolled to. The trigger is a sentinel at the foot
- * of the grid rather than a scroll handler doing arithmetic: the browser
- * already knows when something has come into view, and asking it is both
- * cheaper and immune to the miscounting a hand-rolled threshold invites.
+ * A shelf rather than the wall of them it used to be. The wall was the only
+ * thing in the drawer with height to spare, so it took all of it, and the two
+ * rows above it were squeezed into whatever was left — which is backwards for
+ * a drawer where every row is the same kind of thing. One row each, all three
+ * read the same way, and the arrows on each are the way along it.
+ *
+ * Pages arrive as they are scrolled to. The trigger is a sentinel at the end of
+ * the row rather than a scroll handler doing arithmetic: the browser already
+ * knows when something has come into view, and asking it is both cheaper and
+ * immune to the miscounting a hand-rolled threshold invites.
  */
 export function SpotifyCrates() {
   const t = useT();
@@ -140,61 +155,56 @@ export function SpotifyCrates() {
     return () => observer.disconnect();
   }, [cursor, more]);
 
-  if (error) {
-    return (
-      <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
-        {error}
-      </p>
-    );
-  }
-
-  if (playlists.length === 0) {
-    return (
-      <p className="shrink-0 px-1 py-2 text-meta leading-snug text-cream-400/70">
-        {started && !loading ? t('spotify.noPlaylists') : t('spotify.loadingPlaylists')}
-      </p>
-    );
-  }
-
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <>
       {/* Above the shelf rather than instead of it: failing to play one crate
           says nothing about the others, and taking them off the screen to
           report it would be a worse answer than the one being reported. */}
       {playError && (
-        <p className="mb-2 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+        <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
           {playError}
         </p>
       )}
-      <div
-        className="grid gap-3 pt-0.5 pb-2"
-        // Sized rather than counted in columns, so the shelf keeps its
-        // proportions if the drawer is ever a different width. Smaller than it
-        // was: four sleeves across read as four pictures, and five read as a
-        // shelf — which is what this is meant to be.
-        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}
-      >
-        {playlists.map((playlist) => (
-          <Crate
-            key={playlist.id}
-            playlist={playlist}
-            starting={starting === playlist.id}
-            away={inHand === `crate:${playlist.id}`}
-            onCarry={carry}
-            // Measured at the press. By the time the layer renders, the
-            // records need somewhere to have come *from*, and that is a
-            // rectangle which existed at the moment it was pressed.
-            onOpen={(rect) => void openCrate(playlist.id, rect)}
-          />
-        ))}
-      </div>
-      <div ref={sentinel} aria-hidden="true" className="h-px" />
-      {loading && (
-        <p className="py-2 text-center text-meta text-cream-400/70">
-          {t('spotify.loadingPlaylists')}
-        </p>
-      )}
-    </div>
+      <Shelf heading={t('panel.playlists')}>
+        {error && (
+          <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+            {error}
+          </p>
+        )}
+        {!error && playlists.length === 0 && (
+          <p className="px-0.5 py-3 text-meta leading-snug text-cream-400/70">
+            {started && !loading ? t('spotify.noPlaylists') : t('spotify.loadingPlaylists')}
+          </p>
+        )}
+        {!error &&
+          playlists.map((playlist) => (
+            <Crate
+              key={playlist.id}
+              playlist={playlist}
+              starting={starting === playlist.id}
+              away={inHand === `crate:${playlist.id}`}
+              onCarry={carry}
+              // Measured at the press. By the time the layer renders, the
+              // records need somewhere to have come *from*, and that is a
+              // rectangle which existed at the moment it was pressed.
+              onOpen={(rect) => void openCrate(playlist.id, rect)}
+            />
+          ))}
+        {/* The end of the row, which is where the next page is asked for. It
+            has to be a cell of the row rather than a mark after it, or the
+            flex line would not carry it out to where the scrolling ends. */}
+        <div ref={sentinel} aria-hidden="true" className="w-px shrink-0" />
+        {loading && playlists.length > 0 && (
+          <div className="shrink-0" style={{ width: CRATE_SIZE }}>
+            <div
+              className="groove-inset w-full rounded-md"
+              style={{ height: CRATE_SIZE }}
+              aria-hidden="true"
+            />
+          </div>
+        )}
+      </Shelf>
+    </>
   );
 }
 
@@ -264,9 +274,10 @@ function Crate({
       // not carried, and taking it away in the same instant was the one thing
       // that popped; it fades instead, over about as long as the crate takes
       // to leave.
-      className={`groove-sleeve relative flex flex-col rounded-md text-left ${
+      className={`groove-sleeve relative flex shrink-0 flex-col rounded-md text-left ${
         starting ? 'animate-pulse' : ''
       }`}
+      style={{ width: CRATE_SIZE }}
     >
       <span
         ref={art}

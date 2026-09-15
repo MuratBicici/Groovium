@@ -153,7 +153,11 @@ export const en = {
   'spotlight.recent': 'Recently played',
   'spotlight.top': 'On repeat',
   'spotlight.empty': 'Nothing here yet. Play something and it will show up.',
-  'spotlight.failed': 'Could not reach Spotify. Press the heading to try again.',
+  'spotlight.failed': 'Could not reach Spotify. Press to try again.',
+
+  // The arrows on a shelf, for hands without a sideways wheel under them.
+  'shelf.left': 'Back along the shelf',
+  'shelf.right': 'On along the shelf',
 
   // Spotify setup
   'setup.optionalLead': 'Spotify is optional.',

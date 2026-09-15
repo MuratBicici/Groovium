@@ -312,16 +312,27 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         )}
 
         {stage === 'connected' && (
-          <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
-            {/* The shelf, or the reason there is not one. Nothing that already
-                worked is taken away to ask: search needs no scope at all, and
-                the old grant still plays music. Only the part that cannot be
-                built without permission says that it needs some.
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2">
+            {/* Three shelves, or the reason there are none. Nothing that
+                already worked is taken away to ask: search needs no scope at
+                all, and the old grant still plays music. Only the part that
+                cannot be built without permission says that it needs some.
+
+                All three are rows of the same shape, which is the whole of the
+                change. Two of them used to be one row with a switch on it, and
+                the third was a wall of sleeves that took whatever height was
+                left — so the drawer read as a shelf sitting on top of a
+                cupboard. Now it reads as a shelf of records three rows high.
+
+                It scrolls, though the three are sized not to need it. What
+                needs it is the row of reasons that appears above them when
+                something has gone wrong.
 
                 Search is not here any more. It was `flex-1` beside the crates,
                 which split the drawer's height evenly between a shelf somebody
                 is looking at and a box somebody is not — see `SearchLayer`. */}
-            {missing.length === 0 && <SpotlightStrip />}
+            {missing.length === 0 && <SpotlightStrip which="top" />}
+            {missing.length === 0 && <SpotlightStrip which="recent" />}
             {missing.length === 0 && <SpotifyCrates />}
             {missing.length > 0 && (
               <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">
