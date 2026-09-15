@@ -6,14 +6,21 @@ import { request, toTrackMetadata, type ApiTrack } from './spotifyApi';
  *
  * Everything else in the drawer is somebody's playlists — things they made.
  * This is the other half: what they have actually been listening to, and what
- * they listen to most. Two requests, one per row, and only ever for the row
- * that is on screen.
+ * they listen to most. One request per row, and never more than one: neither
+ * row pages, so fifty entries and thirty are one call each and that is the
+ * whole of it.
+ *
+ * Both rows are on screen at once now. They were one strip with a switch on it
+ * and this said "only ever for the row that is on screen", which was the other
+ * half of the budget and is gone — so all of it rests on how long an answer is
+ * kept, below, and on the fact that neither of these spends the quota that
+ * actually runs out. `/me` is not `/search`; the measurement behind
+ * `spotifyApi`'s per-family gates found `/search` refusing while `/me`
+ * answered in the same second.
  *
  * Which is the whole design constraint here. This app has spent a release
  * learning that an endpoint called on a hunch is an endpoint called a thousand
- * times a day, so neither of these is asked for until somebody looks at it, and
- * the answer is kept for long enough that opening and shutting the drawer costs
- * nothing at all.
+ * times a day.
  */
 
 /** Which of the two rows. */
@@ -95,7 +102,31 @@ function trackIn(item: ApiTrack | ApiEntry | null): ApiTrack | null {
   return isTrack(inner) ? inner : null;
 }
 
+/** Answers that have arrived, with when they did. */
 const lit = new Map<Lit, { at: number; tracks: TrackMetadata[] }>();
+
+/**
+ * Answers still in the air.
+ *
+ * A cache written after the response is no cache at all to a second caller who
+ * arrives before it — both miss, and both ask. Which is not hypothetical: React
+ * runs every effect twice in development, so each shelf asked twice on every
+ * open and the release build asked once, and a drawer shut and reopened while
+ * a row is still loading does the same thing in either build.
+ *
+ * So a request in flight is the answer to anyone who asks for that row while it
+ * is flying.
+ */
+const asking = new Map<Lit, Promise<TrackMetadata[]>>();
+
+/**
+ * Which account these belong to, counted rather than named.
+ *
+ * Bumped by signing out. A request already in the air when that happens comes
+ * back holding the previous person's listening history, and there is no point
+ * at which that is a thing to keep.
+ */
+let era = 0;
 
 /**
  * What to put in the spotlight, asking Spotify only when the answer has aged.
@@ -104,10 +135,23 @@ const lit = new Map<Lit, { at: number; tracks: TrackMetadata[] }>();
  * otherwise: a failure throws, so the strip can say so and try again, and an
  * account with nothing to show comes back empty and is remembered as empty.
  */
-export async function spotlight(which: Lit): Promise<TrackMetadata[]> {
+export function spotlight(which: Lit): Promise<TrackMetadata[]> {
   const known = lit.get(which);
-  if (known && Date.now() - known.at < KEEPS_FOR[which]) return known.tracks;
+  if (known && Date.now() - known.at < KEEPS_FOR[which]) return Promise.resolve(known.tracks);
 
+  const already = asking.get(which);
+  if (already) return already;
+
+  const going = ask(which, era).finally(() => {
+    // Only if it is still this one. A sign-out clears the whole map, and a
+    // blind delete here would throw away whatever the next open had started.
+    if (asking.get(which) === going) asking.delete(which);
+  });
+  asking.set(which, going);
+  return going;
+}
+
+async function ask(which: Lit, when: number): Promise<TrackMetadata[]> {
   const data = await request<ApiRow>(PATHS[which](ASK_FOR[which]));
   const tracks = oneEach(
     (data?.items ?? [])
@@ -116,7 +160,9 @@ export async function spotlight(which: Lit): Promise<TrackMetadata[]> {
       .map(toTrackMetadata),
   );
 
-  lit.set(which, { at: Date.now(), tracks });
+  // Kept only if it is still the same person's. Handed back either way — the
+  // caller that asked has its own way of having gone.
+  if (when === era) lit.set(which, { at: Date.now(), tracks });
   return tracks;
 }
 
@@ -128,4 +174,6 @@ export async function spotlight(which: Lit): Promise<TrackMetadata[]> {
  */
 export function forgetSpotlight(): void {
   lit.clear();
+  asking.clear();
+  era += 1;
 }
