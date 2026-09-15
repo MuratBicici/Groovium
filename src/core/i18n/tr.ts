@@ -124,6 +124,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.reauthorise': 'İzin Ver',
   'spotify.connect': 'Spotify Hesabını Bağla',
   'spotify.changeId': 'Başka bir Client ID kullan',
+  'spotify.searchHeading': 'Spotify’da ara',
   'spotify.searchPlaceholder': 'Spotify’da şarkı ara',
   'spotify.searching': 'Aranıyor…',
   'spotify.nothingFound': 'Bir şey bulunamadı.',

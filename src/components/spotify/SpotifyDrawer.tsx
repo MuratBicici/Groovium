@@ -11,7 +11,7 @@ import {
 import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
-import { SpotifySearch } from './SpotifySearch';
+import { SearchLayer, opensSearch } from './SearchLayer';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
 import { OpenCrate } from './OpenCrate';
@@ -43,6 +43,14 @@ interface SpotifyDrawerProps {
  */
 export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   const t = useT();
+  /**
+   * The search, which is a layer over this rather than a box inside it.
+   *
+   * Null for shut. A string for open, holding the letter that opened it — which
+   * is empty when the button was pressed and one character when somebody simply
+   * started typing.
+   */
+  const [searching, setSearching] = useState<string | null>(null);
   const signOutOfSpotify = usePlayerStore((s) => s.signOutOfSpotify);
   const [stage, setStage] = useState<Stage>('loading');
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
@@ -138,6 +146,43 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
     setStage('setup');
   }
 
+  /**
+   * Opening the search from the keyboard.
+   *
+   * Hiding something behind a press is only free if pressing is not the only
+   * way to reach it. Ctrl+F is the one everybody already knows, and a plain
+   * letter is the one nobody has to be told: type at the drawer and the search
+   * opens with what you typed already in it.
+   *
+   * Bound while the drawer is open and connected, and never while something is
+   * already being typed into — see `opensSearch`, which is where the rule about
+   * what counts as typing lives.
+   */
+  useEffect(() => {
+    if (stage !== 'connected' || searching !== null) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      const onto =
+        tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable ? 'field' : 'elsewhere';
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearching('');
+        return;
+      }
+      if (!opensSearch(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }, onto)) return;
+      // Taken rather than let through, or the letter lands somewhere else as
+      // well as in the box it is about to open.
+      e.preventDefault();
+      setSearching(e.key);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [stage, searching]);
+
   return (
     <aside
       id={id}
@@ -179,6 +224,25 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
             : t('panel.spotify')}
         </span>
         <div className="flex shrink-0 items-center gap-2">
+          {stage === 'connected' && (
+            <button
+              type="button"
+              aria-label={t('spotify.searchHeading')}
+              title={t('spotify.searchHeading')}
+              onClick={() => setSearching('')}
+              className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+            >
+              <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none">
+                <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="1.4" />
+                <path
+                  d="M7.6 7.6 10.5 10.5"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
           {stage === 'connected' && (
             <button
               type="button"
@@ -249,11 +313,14 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
 
         {stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-2">
-            <SpotifySearch />
             {/* The shelf, or the reason there is not one. Nothing that already
                 worked is taken away to ask: search needs no scope at all, and
                 the old grant still plays music. Only the part that cannot be
-                built without permission says that it needs some. */}
+                built without permission says that it needs some.
+
+                Search is not here any more. It was `flex-1` beside the crates,
+                which split the drawer's height evenly between a shelf somebody
+                is looking at and a box somebody is not — see `SearchLayer`. */}
             {missing.length === 0 && <SpotlightStrip />}
             {missing.length === 0 && <SpotifyCrates />}
             {missing.length > 0 && (
@@ -278,6 +345,12 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
         )}
       </div>
 
+      {/* Two layers over the drawer, never both: opening a crate is not
+          something that happens while a search is on screen, and the search
+          closes itself the moment a result is played. */}
+      {searching !== null && (
+        <SearchLayer opensWith={searching} onClose={() => setSearching(null)} />
+      )}
       {opened && openOrigin && (
         <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
       )}

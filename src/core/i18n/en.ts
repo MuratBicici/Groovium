@@ -134,6 +134,7 @@ export const en = {
   'spotify.reauthorise': 'Grant Access',
   'spotify.connect': 'Connect Spotify Account',
   'spotify.changeId': 'Use a different Client ID',
+  'spotify.searchHeading': 'Search Spotify',
   'spotify.searchPlaceholder': 'Search Spotify for a song',
   'spotify.searching': 'Searching…',
   'spotify.nothingFound': 'Nothing found.',

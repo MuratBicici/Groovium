@@ -33,16 +33,31 @@ const SHORTEST_QUERY = 2;
  * own client; keeping music belongs to this app's library and playlists. A
  * result plays on its own and stops — saving it to a playlist is what makes it
  * part of something that keeps going.
+ *
+ * This used to sit in the drawer permanently, sharing the height evenly with
+ * the crates because both were `flex-1`. That meant a person who was not
+ * searching gave up half the drawer to a box that said "type to find a song",
+ * and a person who *was* searching read the results through a slot half the
+ * height of the one they are read in now. It opens on request instead.
  */
 interface SpotifySearchProps {
   /** Raised when a result starts playing, so the panel can fold away and let
       the disc's flight to the platter be seen. */
   onTrackPlayed?: (() => void) | undefined;
+  /**
+   * What to start with, for a search opened by typing rather than by pressing.
+   *
+   * The letter that opened it is the first letter of the word somebody is
+   * typing, and throwing it away would make the shortcut feel like it ate
+   * something.
+   */
+  opensWith?: string | undefined;
 }
 
-export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
+export function SpotifySearch({ onTrackPlayed, opensWith }: SpotifySearchProps) {
   const t = useT();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(opensWith ?? '');
+  const box = useRef<HTMLInputElement | null>(null);
   const [results, setResults] = useState<TrackMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -81,9 +96,20 @@ export function SpotifySearch({ onTrackPlayed }: SpotifySearchProps) {
     return () => clearTimeout(timer);
   }, [query, run]);
 
+  // Opened to be typed into, whichever way it was opened. The caret goes to the
+  // end so a search that began with a letter carries on from it.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <input
+        ref={box}
         type="text"
         value={query}
         spellCheck={false}
