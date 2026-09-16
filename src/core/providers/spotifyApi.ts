@@ -117,6 +117,25 @@ const BLIND_WAIT_MS = 1_000;
 const BLIND_WAIT_CAP_MS = 60_000;
 
 /**
+ * Longest a gate stays shut, however long Spotify asked for.
+ *
+ * `MAX_RETRY_AFTER_MS` above bounds the retry *inside* one call. This bounds
+ * the refusal that outlives it, which had no bound at all: whatever number
+ * arrived in `Retry-After` became the length of the shut gate, so a single
+ * answer naming an hour put searching out of reach for an hour, and one naming
+ * a day put it out of reach for a day. Nothing cleared it and nothing could —
+ * restarting the app clears the gate and the next request re-arms it, which
+ * from the outside is a feature that has simply stopped.
+ *
+ * Five minutes. Long enough to be a real back-off rather than a token one, and
+ * short enough that a refusal which has since lapsed costs one request to find
+ * out rather than a day of silence. Overrunning what Spotify asked for is the
+ * point: the alternative is trusting a number this app cannot verify with the
+ * whole of a feature.
+ */
+export const GATE_CAP_MS = 5 * 60_000;
+
+/**
  * Which quota a path spends, as its first segment.
  *
  * `/search` is its own; everything under `/me` or `/playlists` is that one.
@@ -164,12 +183,19 @@ export class SpotifyError extends Error {
  * A second when it did not say. Spotify limits on a rolling thirty-second
  * window and usually names a number; a missing header is not permission to
  * carry straight on.
+ *
+ * Two numbers come out of this and they are not the same one. What is returned
+ * is how long to hold the gate shut, which is capped — see `GATE_CAP_MS`. What
+ * the caller compares against `MAX_RETRY_AFTER_MS` to decide whether to retry
+ * inline is the same number, and capping it there is harmless: a wait long
+ * enough to be capped is far longer than the few seconds an inline retry is
+ * ever worth.
  */
 function retryAfterMs(response: Response, gate: { blindWait: number }): number {
   const after = Number(response.headers.get('Retry-After'));
   if (Number.isFinite(after) && after > 0) {
     gate.blindWait = BLIND_WAIT_MS;
-    return after * 1000;
+    return Math.min(after * 1000, GATE_CAP_MS);
   }
   const wait = gate.blindWait;
   gate.blindWait = Math.min(gate.blindWait * 2, BLIND_WAIT_CAP_MS);

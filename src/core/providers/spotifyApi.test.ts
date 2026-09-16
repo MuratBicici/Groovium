@@ -417,3 +417,48 @@ describe('when Spotify goes quiet without saying so', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+
+/**
+ * How long one refusal may cost.
+ *
+ * The gate shuts for as long as Spotify names, and what Spotify names is not
+ * always a few seconds — a quota bucket answers with an hour, or a day. There
+ * was no bound on it at all, so one answer could put searching out of reach
+ * until tomorrow, and nothing in the app could clear it: restarting drops the
+ * gate and the next request arms it again. From the outside that is a feature
+ * that has simply stopped working.
+ */
+describe('when Spotify asks for longer than it is worth waiting', () => {
+  it('holds the gate for what it asked, when that is reasonable', async () => {
+    const { request } = await freshApi();
+    stubFetch([answer(429, { 'Retry-After': '60' }), answer(200, {}, '{"ok":true}')]);
+
+    await expect(request('/search?q=a')).rejects.toThrow();
+    // A minute is a real wait and is honoured: the next call is refused here
+    // rather than sent.
+    await expect(request('/search?q=b')).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('does not hold it for an hour because it was asked to', async () => {
+    const { request, GATE_CAP_MS } = await freshApi();
+    stubFetch([answer(429, { 'Retry-After': '3600' }), answer(200, {}, '{"ok":true}')]);
+
+    await expect(request('/search?q=a')).rejects.toThrow();
+    // Past the cap, and well short of the hour Spotify named.
+    await vi.advanceTimersByTimeAsync(GATE_CAP_MS + 1_000);
+    expect(await request<{ ok: boolean }>('/search?q=b')).toEqual({ ok: true });
+  });
+
+  it('shuts one family without shutting another', async () => {
+    // Measured on a real registration: `/search` answered 429 while `/me`
+    // answered 200 in the same second. One gate for everything would take the
+    // shelf and the transport down with the search box.
+    const { request } = await freshApi();
+    stubFetch([answer(429, { 'Retry-After': '3600' }), answer(200, {}, '{"ok":true}')]);
+
+    await expect(request('/search?q=a')).rejects.toThrow();
+    expect(await request('/me/player')).toEqual({ ok: true });
+  });
+});

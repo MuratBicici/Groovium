@@ -43,7 +43,7 @@ export type { SimilarTrack } from './lastfm';
  * spends, and twelve rather than eight because it is now shared between all
  * the seeds instead of being handed out fresh to each.
  */
-const SPOTIFY_SEARCH_BUDGET = 12;
+export const SPOTIFY_SEARCH_BUDGET = 12;
 
 /**
  * What the genre lookup costs when it runs.
@@ -63,6 +63,15 @@ const GENRE_LOOKUP_COST = 4;
  */
 export interface SearchPurse {
   left: number;
+  /**
+   * Whether a lookup in this fill was refused rather than answered.
+   *
+   * The difference between "there is nothing similar to this song" and "nobody
+   * would tell us". Both used to arrive here as an empty list, and the rest
+   * below treated them the same — which is how one refused request could put
+   * the station to sleep for half an hour.
+   */
+  refused?: boolean;
 }
 
 /**
@@ -407,7 +416,24 @@ export async function resolveViaSpotify(
     spentOn.set(artist, (spentOn.get(artist) ?? 0) + 1);
 
     purse.left--;
-    const results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
+    // One refused search does not end the tier. It used to: the rejection came
+    // straight out of this loop, and everything already resolved above went
+    // with it, because the caller's only way of hearing about a failure was an
+    // empty list. A rate limit or a timed-out request arriving on the eleventh
+    // candidate threw away the ten songs in front of it.
+    //
+    // The budget is spent either way. A refusal usually costs no request — the
+    // transport's gate refuses before the network — but treating it as free is
+    // how a shut gate turns one fill into a spin through every candidate there
+    // is, and the purse is what bounds that.
+    let results: TrackMetadata[];
+    try {
+      results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
+    } catch (err) {
+      console.warn('[station] a search was refused', err);
+      purse.refused = true;
+      continue;
+    }
 
     // Spotify's field search is fuzzy; take a result only if it really is the
     // song asked for, otherwise the station drifts somewhere unrelated.
@@ -467,11 +493,30 @@ const NOTHING: Candidates = { kind: 'names', names: [] };
  * through to Spotify. The tier is named in the warning, because "the station
  * found nothing" and "Last.fm rejected the key" look identical from outside.
  */
-async function quietly<T>(tier: string, lookup: () => Promise<T[]>): Promise<T[]> {
+/**
+ * Run a lookup, and let the fill carry on without it if it fails.
+ *
+ * Falling quiet is right: a station is a background thing, and an error banner
+ * over a lookup nobody asked for would be worse than the silence. What was
+ * wrong is that falling quiet was *all* it did. The caller got an empty list,
+ * which is also what Last.fm says about a song it has never heard of, so a
+ * refusal and an unknown song were the same event — and the rest below, which
+ * exists to stop the station hammering a pool that has nothing in it, was being
+ * armed by refusals that said nothing about the pool at all.
+ *
+ * The console line is still only a console line, and a release build has no
+ * console. The purse is what carries this out to where it is acted on.
+ */
+async function quietly<T>(
+  tier: string,
+  lookup: () => Promise<T[]>,
+  purse: SearchPurse,
+): Promise<T[]> {
   try {
     return await lookup();
   } catch (err) {
     console.warn(`[station] the ${tier} lookup failed`, err);
+    purse.refused = true;
     return [];
   }
 }
@@ -499,7 +544,7 @@ async function deeperCandidatesFor(
   purse: SearchPurse,
 ): Promise<Candidates> {
   // Last.fm knows far more artists than it knows tracks.
-  const byArtist = await quietly('artist', () => artistCandidates(seed.artist));
+  const byArtist = await quietly('artist', () => artistCandidates(seed.artist), purse);
   if (byArtist.length > 0) return { kind: 'names', names: byArtist };
 
   if (!options.spotifyAvailable) return NOTHING;
@@ -509,7 +554,7 @@ async function deeperCandidatesFor(
   if (purse.left < GENRE_LOOKUP_COST) return NOTHING;
   purse.left -= GENRE_LOOKUP_COST;
 
-  const byGenre = await quietly('genre', () => options.tracksLikeArtist(seed.artist));
+  const byGenre = await quietly('genre', () => options.tracksLikeArtist(seed.artist), purse);
   return byGenre.length > 0 ? { kind: 'tracks', tracks: byGenre } : NOTHING;
 }
 
@@ -602,6 +647,7 @@ async function pickFrom(
       limit - picked.length,
       purse,
     ),
+    purse,
   );
   return [...picked, ...fromSpotify];
 }
@@ -656,7 +702,7 @@ export async function resolveNextTracks(
   if (resting) options = { ...options, spotifyAvailable: false };
 
   for (const seed of orderSeeds(options.seeds)) {
-    const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title));
+    const bySong = await quietly('track', () => similarTracks(seed.artist, seed.title), purse);
 
     let candidates: Candidates = { kind: 'names', names: bySong };
     if (bySong.length === 0) {
@@ -678,7 +724,15 @@ export async function resolveNextTracks(
   // Only when searching is what came up empty. A fill that never reached
   // Spotify — no key, no budget spent, or already resting — has established
   // nothing about Spotify and must not put it out of reach.
-  if (!resting && purse.left < SPOTIFY_SEARCH_BUDGET) {
+  //
+  // Nor has a fill that was refused. Being rate-limited, timing out, or losing
+  // the network says nothing whatever about whether the pool has anything in
+  // it, and backing off for it is backing off twice: the transport already
+  // holds a gate per endpoint family for exactly as long as Spotify asked for.
+  // Stacking a five-minute rest on top of that — doubling to thirty — is how a
+  // moment's trouble became a feature that looked switched off, with nothing
+  // anywhere to say why.
+  if (!resting && !purse.refused && purse.left < SPOTIFY_SEARCH_BUDGET) {
     restUntil = Date.now() + restLength;
     restLength = Math.min(restLength * 2, BARREN_REST_CAP_MS);
   }
