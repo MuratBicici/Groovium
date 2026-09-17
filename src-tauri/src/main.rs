@@ -122,6 +122,7 @@ fn main() {
             spotify::cache::spotify_cache_read,
             spotify::cache::spotify_cache_write,
             spotify::cache::spotify_cache_clear,
+            spotify::cover::spotify_pick_cover_image,
             lastfm::lastfm_has_api_key,
             lastfm::lastfm_set_api_key,
             lastfm::lastfm_clear_api_key,

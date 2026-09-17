@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod cache;
+pub mod cover;
 pub mod config;
 pub mod error;
 pub mod pkce;
