@@ -51,6 +51,12 @@ similar songs. Nothing is scrobbled and no Last.fm account is involved. See
   Last.fm API key you entered are kept here too.
 - **Spotify's sign-in tokens**, in Windows Credential Manager rather than in a
   file.
+- **A copy of your Spotify playlists**, in
+  `%LOCALAPPDATA%\com.groovium.desktop\spotify-cache.json`: the list of
+  playlists you made, and the songs in the last twelve you opened or played,
+  so the drawer opens without waiting and a playlist is not read again when it
+  has not changed. It is checked against Spotify whenever it is used. Signing
+  out of Spotify deletes it.
 - **A log file**, in `%LOCALAPPDATA%\com.groovium.desktop\logs`, recording what
   went wrong so a fault can be looked into afterwards. It never leaves your
   computer unless you send it to someone. Tokens, keys, the Client ID and what

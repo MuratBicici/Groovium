@@ -135,9 +135,35 @@ export async function account(): Promise<SpotifyAccount | null> {
   return known;
 }
 
+/**
+ * Whoever keeps something about the account, told when the account changes.
+ *
+ * Called with `null` when somebody signs out or the Client ID is cleared, and
+ * with the account when somebody signs in. Signing in is on the list because
+ * it is not always preceded by signing out: a token revoked from Spotify's own
+ * settings leaves the drawer disconnected without anything here having run,
+ * and the next sign-in may be a different person.
+ *
+ * A listener rather than a call into the stores, because this module sits
+ * underneath them — they import it — and the stores are what hold things.
+ */
+type AccountListener = (who: SpotifyAccount | null) => void;
+const listeners = new Set<AccountListener>();
+
+/** Be told when the account changes. Returns a function that stops it. */
+export function onAccountChange(listener: AccountListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function announce(who: SpotifyAccount | null): void {
+  for (const listener of listeners) listener(who);
+}
+
 /** Forget who is signed in — the account has changed, or is going away. */
 export function forgetAccount(): void {
   known = null;
+  announce(null);
 }
 
 /**
@@ -149,6 +175,7 @@ export async function beginAuth(): Promise<SpotifyAccount> {
   const who = await invoke<SpotifyAccount>('spotify_begin_auth');
   // Signing in answers the question, so nobody has to ask it again.
   known = Promise.resolve(who);
+  announce(who);
   return who;
 }
 

@@ -5,6 +5,7 @@
 //! module exists to enforce — see `tokens.rs`.
 
 pub mod auth;
+pub mod cache;
 pub mod config;
 pub mod error;
 pub mod pkce;

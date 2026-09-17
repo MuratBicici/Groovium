@@ -1,5 +1,7 @@
 import type { TrackMetadata } from '@/core/types';
 import { account } from '@/core/security/spotifyAuth';
+import { crateFor, withCrate } from '@/core/spotify/cache';
+import { loadCache, updateCache } from '@/core/spotify/cacheFile';
 import {
   pickCover,
   request,
@@ -35,7 +37,7 @@ const PLAYLISTS_PER_PAGE = 50;
  * something below to scroll to, and the rest come out of the crate as it is
  * scrolled — which is what the shelf does one level up, for the same reason.
  */
-const ITEMS_PER_PAGE = 24;
+export const ITEMS_PER_PAGE = 24;
 
 /**
  * How many to ask for when the whole list is wanted rather than a screenful.
@@ -54,7 +56,7 @@ const PLAY_PER_PAGE = 50;
  * of requests because a button was pressed". Six of the larger pages. A list
  * longer than this plays its first three hundred, which is several hours.
  */
-const PLAY_CAP = 300;
+export const PLAY_CAP = 300;
 
 export interface SpotifyPlaylist {
   id: string;
@@ -286,6 +288,13 @@ export async function playlistTrackPage(
  * saying whether this is still the same crate. The age check underneath it is
  * for the shelf itself being old: a playlist edited on the phone half an hour
  * ago has a new snapshot that nobody here has seen yet.
+ *
+ * And from disk, across launches — but only with a snapshot. The caller hands
+ * one over only when Spotify confirmed it recently (see the shelf's
+ * `confirmedSnapshot`), so a crate kept yesterday is played today only if it is
+ * still the list Spotify describes today. Without one, this reads from Spotify
+ * and keeps nothing on disk, because there is nothing to check the copy
+ * against later.
  */
 export async function wholeCrate(id: string, snapshotId?: string): Promise<TrackMetadata[]> {
   const known = crates.get(id);
@@ -295,6 +304,20 @@ export async function wholeCrate(id: string, snapshotId?: string): Promise<Track
     (snapshotId === undefined || known.snapshotId === snapshotId);
   if (fresh) return known.tracks;
 
+  if (snapshotId !== undefined) {
+    const kept = crateFor(await loadCache(), id, snapshotId);
+    // Only a crate that was read to its end, or as far as the cap, can stand
+    // in for reading it now. One opened and scrolled halfway is not the
+    // playlist.
+    if (kept && (kept.cursor === null || kept.tracks.length >= PLAY_CAP)) {
+      const tracks = kept.tracks.slice(0, PLAY_CAP);
+      remember(id, snapshotId, tracks);
+      // To the front of the queue of kept crates, as the one used last.
+      updateCache((cache) => withCrate(cache, kept));
+      return tracks;
+    }
+  }
+
   const all: TrackMetadata[] = [];
   let cursor: string | null = null;
   do {
@@ -303,13 +326,23 @@ export async function wholeCrate(id: string, snapshotId?: string): Promise<Track
     cursor = page.cursor;
   } while (cursor && all.length < PLAY_CAP);
 
-  crates.set(id, { at: Date.now(), snapshotId, tracks: all });
+  remember(id, snapshotId, all);
+  if (snapshotId !== undefined) {
+    updateCache((cache) =>
+      withCrate(cache, { id, snapshotId, tracks: all, cursor, at: Date.now() }),
+    );
+  }
+  return all;
+}
+
+function remember(id: string, snapshotId: string | undefined, tracks: TrackMetadata[]): void {
+  crates.delete(id);
+  crates.set(id, { at: Date.now(), snapshotId, tracks });
   if (crates.size > CRATE_CACHE_MAX) {
     // Insertion order, so the first key is the oldest.
     const oldest = crates.keys().next().value;
     if (oldest !== undefined) crates.delete(oldest);
   }
-  return all;
 }
 
 /** Crates read in full, by playlist id. */

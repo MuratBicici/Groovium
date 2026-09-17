@@ -13,6 +13,8 @@ import {
   readableBy,
   wholeCrate,
 } from './spotifyPlaylists';
+import { withCrate } from '@/core/spotify/cache';
+import { clearCache, settled, updateCache } from '@/core/spotify/cacheFile';
 
 /**
  * The playlist reader, against a fabricated Spotify.
@@ -221,10 +223,13 @@ describe('reading what is in a playlist', () => {
 });
 
 describe('reading a whole crate to play it', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Module-level, because the crate belongs to the account rather than to a
-    // caller. One test's reading would otherwise answer the next one's.
+    // caller. One test's reading would otherwise answer the next one's. Both
+    // layers: the one in memory and the one standing in for the file.
     forgetCrates();
+    clearCache();
+    await settled();
   });
 
   const page = (uris: string[], next: string | null = null) => ({
@@ -290,12 +295,114 @@ describe('reading a whole crate to play it', () => {
   });
 
   it('forgets everything when the account goes', async () => {
+    // Both layers, which is what signing out does. The one in memory alone is
+    // not enough any more: the copy on disk would answer instead.
     answer = () => page(['spotify:track:1']);
     await wholeCrate('p1', 'snap-1');
+    await settled();
+
+    forgetCrates();
+    clearCache();
+    calls.length = 0;
+    await wholeCrate('p1', 'snap-1');
+    expect(calls).not.toHaveLength(0);
+  });
+});
+
+/**
+ * Crates kept on disk, from one launch to the next.
+ *
+ * `forgetCrates()` stands in for the app being closed: memory goes, and the
+ * copy standing in for the file stays.
+ */
+describe('a crate kept from an earlier launch', () => {
+  beforeEach(async () => {
+    forgetCrates();
+    clearCache();
+    await settled();
+  });
+
+  const page = (uris: string[], next: string | null = null) => ({
+    body: { items: uris.map((u) => ({ track: track(u) })), next },
+  });
+
+  it('plays without asking when Spotify confirms it is the same crate', async () => {
+    // A playlist played yesterday is up to six requests again today without
+    // this, for a list that has not changed.
+    answer = () => page(['spotify:track:1', 'spotify:track:2']);
+    const yesterday = await wholeCrate('p1', 'snap-1');
+    await settled();
+
+    forgetCrates();
+    calls.length = 0;
+    const today = await wholeCrate('p1', 'snap-1');
+
+    expect(today).toEqual(yesterday);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('is read again when the snapshot is not the one it was kept under', async () => {
+    answer = () => page(['spotify:track:1']);
+    await wholeCrate('p1', 'snap-1');
+    await settled();
+
+    forgetCrates();
+    answer = () => page(['spotify:track:9']);
+    calls.length = 0;
+    const today = await wholeCrate('p1', 'snap-2');
+
+    expect(today.map((t) => t.id)).toEqual(['spotify:track:9']);
+    expect(calls).not.toHaveLength(0);
+  });
+
+  it('is not kept at all without a snapshot to check it against later', async () => {
+    // No snapshot means nobody confirmed which version of the playlist this
+    // was, so there is nothing a later launch could compare the copy with.
+    answer = () => page(['spotify:track:1']);
+    await wholeCrate('p1');
+    await settled();
 
     forgetCrates();
     calls.length = 0;
     await wholeCrate('p1', 'snap-1');
+    expect(calls).not.toHaveLength(0);
+  });
+
+  it('does not replace a good kept copy with one read against no snapshot', async () => {
+    // Played while the shelf could not be checked: the crate is read from
+    // Spotify, and the copy kept under a confirmed snapshot stays as it was.
+    answer = () => page(['spotify:track:1']);
+    await wholeCrate('p1', 'snap-1');
+    await settled();
+
+    forgetCrates();
+    await wholeCrate('p1');
+    await settled();
+
+    forgetCrates();
+    calls.length = 0;
+    await wholeCrate('p1', 'snap-1');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('is not played from a copy that was only read part of the way', async () => {
+    // Opening a crate and scrolling halfway keeps what was seen, with the place
+    // to carry on from. That is enough to show, and it is not the playlist.
+    updateCache((cache) =>
+      withCrate(cache, {
+        id: 'p1',
+        snapshotId: 'snap-1',
+        tracks: [{ id: 'spotify:track:1', title: 'Song', artist: 'Artist', album: 'Album', duration: 1000, source: 'spotify' }],
+        cursor: '24',
+        at: Date.now(),
+      }),
+    );
+    await settled();
+
+    answer = () => page(['spotify:track:1', 'spotify:track:2']);
+    const played = await wholeCrate('p1', 'snap-1');
+
+    expect(played).toHaveLength(2);
     expect(calls).not.toHaveLength(0);
   });
 });
