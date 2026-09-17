@@ -8,6 +8,9 @@ collection can hold both. Built with Tauri, React and Rust.
 Windows only. Spotify playback needs Widevine, and of the webviews Tauri can
 use, only WebView2 has it.
 
+Groovium collects nothing about the people who use it — [PRIVACY.md](PRIVACY.md)
+lists every service it contacts and when.
+
 ---
 
 ## What works
@@ -519,7 +522,9 @@ The options that exist for this project, as of September 2026:
   off in that build. Planned for once the app is mostly in bugfix mode.
 - **SignPath Foundation.** Free signing for OSI-licensed open source built on
   GitHub-hosted runners, with a manual approval per release. The publisher shown
-  is SignPath Foundation. Its signature changes the installer's bytes, so the
+  is SignPath Foundation. Its application asks for evidence that a project is
+  widely used, so it waits alongside the Store; a draft code signing policy is
+  kept on the local `signpath-application` branch. Its signature changes the installer's bytes, so the
   updater's minisign signature and `latest.json` have to be produced after it,
   not by `tauri-action` before it.
 - **An OV certificate from a CA.** Roughly $150–300 a year, private key on a
