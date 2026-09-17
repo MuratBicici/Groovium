@@ -1,5 +1,6 @@
 import { accessToken } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
+import { log } from '@/platform/log';
 import type { TrackMetadata } from '@/core/types';
 
 /**
@@ -58,7 +59,10 @@ async function within<T>(control: AbortController, leg: () => Promise<T>): Promi
   try {
     return await leg();
   } catch (err) {
-    if (control.signal.aborted) throw new SpotifyError(say('spotify.tookTooLong'), 408);
+    if (control.signal.aborted) {
+      log('warn', 'spotify', `no answer within ${REQUEST_DEADLINE_MS / 1000}s`);
+      throw new SpotifyError(say('spotify.tookTooLong'), 408);
+    }
     throw err;
   } finally {
     clearTimeout(bell);
@@ -324,6 +328,13 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
   if (response.status === 429) {
     const waitMs = retryAfterMs(response, gate);
     gate.until = Date.now() + waitMs;
+    // The family rather than the path. The path of a search is what somebody
+    // searched for, and the family is all that says which gate shut.
+    log(
+      'warn',
+      'spotify',
+      `429 on ${family(path)}; Retry-After ${response.headers.get('Retry-After') ?? 'absent'}, gate shut for ${Math.round(waitMs / 1000)}s`,
+    );
     if (waitMs <= MAX_RETRY_AFTER_MS) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
       response = await within(control, () => send(path, token, init, control.signal));
@@ -341,6 +352,7 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
   if (response.status === 204) return null;
 
   if (!response.ok) {
+    log('warn', 'spotify', `${response.status} on ${family(path)}`);
     // Under the deadline as well. The headers arriving says the socket is
     // alive, not that the rest of the answer is coming.
     const body = await within(control, () => response.text());

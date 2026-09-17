@@ -52,6 +52,7 @@ import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
+import { log } from '@/platform/log';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
@@ -521,7 +522,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // playback with an error banner over a background lookup. But a failure
       // must not pin the seed either: leaving it set meant one network blip
       // silenced the station for that song for the rest of the session.
-      console.warn('[station] could not find a next track', err);
+      log('warn', 'station', 'could not find a next track', err);
       if (prefetchSeedKey === seedKey) prefetchSeedKey = null;
     } finally {
       // Only tidy up after ourselves. A newer lookup may already own these —

@@ -1,5 +1,6 @@
 import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
+import { log } from '@/platform/log';
 
 /**
  * Preferences that survive a restart.
@@ -206,7 +207,7 @@ export async function loadSettings(): Promise<Settings> {
     }
     return settings;
   } catch (err) {
-    console.warn('[settings] could not load settings', err);
+    log('warn', 'settings', 'could not load settings', err);
     return DEFAULT_SETTINGS;
   }
 }
@@ -225,7 +226,7 @@ export async function saveSettings(settings: Settings): Promise<boolean> {
     await invoke('save_settings', { settings });
     return true;
   } catch (err) {
-    console.warn('[settings] could not save settings', err);
+    log('warn', 'settings', 'could not save settings', err);
     return false;
   }
 }

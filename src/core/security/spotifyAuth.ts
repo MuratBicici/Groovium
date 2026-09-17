@@ -1,4 +1,5 @@
 import { isTauri } from '@/core/utils/env';
+import { log } from '@/platform/log';
 
 /**
  * The entire Spotify authentication surface available to the frontend.
@@ -51,7 +52,7 @@ export async function missingScopes(): Promise<string[]> {
     // fine. But it is not nothing either — if the command is not there, the
     // binary predates it, and the prompt that should be showing never will.
     // Silence here cost an afternoon once; it says so now.
-    console.warn('[spotifyAuth] could not read the granted scopes', err);
+    log('warn', 'spotifyAuth', 'could not read the granted scopes', err);
     return [];
   }
 }

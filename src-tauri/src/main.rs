@@ -7,6 +7,7 @@ mod config;
 mod keyring;
 mod lastfm;
 mod library;
+mod logging;
 mod media;
 mod metadata;
 mod playlists;
@@ -20,6 +21,8 @@ mod visualizer;
 use tauri::{Manager, WindowEvent};
 
 fn main() {
+    logging::record_panics();
+
     tauri::Builder::default()
         // Must be registered first so a second launch is intercepted before it
         // does any other setup work.
@@ -39,6 +42,10 @@ fn main() {
                 .with_filename(shell::PLACE_FILE)
                 .build(),
         )
+        // Early, so what the other plugins say while starting has somewhere to
+        // go. After single-instance: a second launch that is turned away
+        // should not write a line saying it started.
+        .plugin(logging::plugin())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -56,6 +63,7 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 shell::undress(&window.as_ref().window());
             }
+            log::info!("Groovium {} started", app.package_info().version);
             shell::forget_old_place(app.handle());
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.

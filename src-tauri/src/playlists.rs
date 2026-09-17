@@ -85,7 +85,7 @@ fn read_all(path: &Path) -> Vec<Playlist> {
         Ok(file) if file.version == PLAYLISTS_VERSION => file.playlists,
         Ok(_) => Vec::new(),
         Err(e) => {
-            eprintln!("[playlists] ignoring unreadable playlists file: {e}");
+            log::warn!("[playlists] ignoring unreadable playlists file: {e}");
             Vec::new()
         }
     }

@@ -16,6 +16,7 @@ import {
   watchingFrom,
   type Watch,
 } from './stallWatch';
+import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
 import { currentPlayback, playOnDevice } from './spotifyApi';
 
@@ -570,6 +571,10 @@ export class SpotifyProvider extends BaseProvider {
         checking: this.checking,
       })) {
         this.report('the clock was running unwatched');
+        // The one line in this file that should never be written. If it
+        // turns up in somebody's log, a link in the watchdog's chain broke
+        // somewhere nobody has found yet.
+        log('error', 'playback', 'the clock was running unwatched; watching again');
         this.scheduleVerify();
       }
 
@@ -622,6 +627,7 @@ export class SpotifyProvider extends BaseProvider {
         // exactly the kind of silence this whole repair is about.
         .catch((err: unknown) => {
           this.report(`the check itself failed: ${String(err)}`);
+          log('error', 'playback', 'the stall check threw', err);
         })
         .finally(() => {
           this.checking = false;
@@ -678,6 +684,7 @@ export class SpotifyProvider extends BaseProvider {
    */
   private giveUp(why: string): void {
     this.report(`gave up: ${why}`);
+    log('warn', 'playback', `gave up: ${why}`);
     // Pressing play is a fresh start, not a seventh attempt at this one.
     this.stalls = [];
     this.stopTicker();
@@ -840,6 +847,7 @@ export class SpotifyProvider extends BaseProvider {
     this.startTicker();
     this.emitProgress();
     this.report(`resumed: ${why}`);
+    log('info', 'playback', `resumed after a stall: ${why}`);
   }
 
   /**
@@ -902,6 +910,7 @@ export class SpotifyProvider extends BaseProvider {
 
     this.setState('LOADING');
     this.report(`stalled: ${why}`);
+    log('warn', 'playback', `stalled: ${why}`);
   }
 
   private emitProgress(): void {

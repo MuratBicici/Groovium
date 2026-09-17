@@ -1,4 +1,5 @@
 import { isTauri } from '@/core/utils/env';
+import { log } from '@/platform/log';
 
 /**
  * Window operations, kept out of `src/core`.
@@ -125,7 +126,7 @@ export async function setClickArea(
     clickable = 'unknown';
     // The window still shows what it should. The cost is clicks landing on a
     // transparent edge, which is worth a warning and not an interruption.
-    console.warn('[window] could not set the clickable area', err);
+    log('warn', 'window', 'could not set the clickable area', err);
   }
 }
 
@@ -168,7 +169,7 @@ export async function setWindowSize(width: number, height: number, dx = 0): Prom
     } catch (err) {
       // Falling through to the plain resize. A window at the right size in the
       // wrong place beats one at neither.
-      console.warn('[window] could not move and resize', err);
+      log('warn', 'window', 'could not move and resize', err);
     }
   }
 
@@ -189,7 +190,7 @@ export async function setWindowSize(width: number, height: number, dx = 0): Prom
       await window.setResizable(false);
     }
   } catch (err) {
-    console.warn('[window] could not resize', err);
+    log('warn', 'window', 'could not resize', err);
   }
 }
 

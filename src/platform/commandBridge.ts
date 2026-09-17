@@ -1,5 +1,6 @@
 import { usePlayerStore } from '@/core/store';
 import { isTauri } from '@/core/utils/env';
+import { log } from '@/platform/log';
 
 /**
  * Routes playback commands from the tray and the global media keys into the
@@ -45,7 +46,7 @@ export function startCommandBridge(): () => void {
       // Losing this takes the tray menu and all three media keys with it, and
       // nothing about the window would look any different — so it is said out
       // loud rather than left in the console.
-      console.warn('[commandBridge] could not subscribe to media commands', err);
+      log('warn', 'commandBridge', 'could not subscribe to media commands', err);
       usePlayerStore.setState({
         error: 'Media keys and the tray menu are not responding. Restarting the app usually fixes it.',
       });
@@ -73,6 +74,6 @@ async function dispatch(command: MediaCommand): Promise<void> {
       await previous();
       break;
     default:
-      console.warn('[commandBridge] unknown media command', command);
+      log('warn', 'commandBridge', 'unknown media command', command);
   }
 }

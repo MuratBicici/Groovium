@@ -33,7 +33,7 @@ pub fn register(app: &tauri::AppHandle) {
         });
 
         if let Err(e) = result {
-            eprintln!(
+            log::warn!(
                 "[shortcuts] could not register {code:?} ({}): {e} — another application probably holds this key",
                 command.as_str()
             );

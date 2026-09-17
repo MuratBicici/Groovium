@@ -2,6 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { recordUncaught } from './platform/log';
+
+// First, so an exception while starting up is written down too. A release
+// build has no console, and an error with nowhere to go is an error nobody
+// can ask about afterwards.
+recordUncaught();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root element #root not found in index.html');

@@ -1,4 +1,5 @@
 import { isTauri } from '@/core/utils/env';
+import { log } from '@/platform/log';
 
 /**
  * Playback settings that survive a restart.
@@ -29,7 +30,7 @@ export async function loadSession(): Promise<PersistedSession | null> {
     const { invoke } = await import('@tauri-apps/api/core');
     return await invoke<PersistedSession>('load_session');
   } catch (err) {
-    console.warn('[session] could not load previous session', err);
+    log('warn', 'session', 'could not load previous session', err);
     return null;
   }
 }
@@ -49,7 +50,7 @@ export async function saveSession(session: Omit<PersistedSession, 'version'>): P
     await invoke('save_session', { state: { version: 2, ...session } });
     return true;
   } catch (err) {
-    console.warn('[session] could not save session', err);
+    log('warn', 'session', 'could not save session', err);
     return false;
   }
 }

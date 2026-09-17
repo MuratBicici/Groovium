@@ -1,6 +1,7 @@
 import type { TrackMetadata } from '@/core/types';
 import { isTauri } from '@/core/utils/env';
 import { joinPath } from '@/core/utils/paths';
+import { log } from '@/platform/log';
 
 /**
  * Bridge to the managed library and the app's playlists.
@@ -162,7 +163,7 @@ export function onImportProgress(
     } catch (err) {
       // Losing progress updates degrades the import rather than breaking it,
       // so this reports and carries on rather than throwing.
-      console.warn('[library] could not subscribe to import progress', err);
+      log('warn', 'library', 'could not subscribe to import progress', err);
       onFailure?.('Import progress cannot be shown. The copy is still running.');
     }
   })();

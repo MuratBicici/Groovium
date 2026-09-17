@@ -110,7 +110,7 @@ pub fn visualizer_start(app: AppHandle, running: tauri::State<'_, Running>) {
     }
     std::thread::spawn(move || {
         if let Err(err) = run(&app, &flag) {
-            eprintln!("[visualizer] {err}");
+            log::warn!("[visualizer] {err}");
         }
         flag.store(false, Ordering::SeqCst);
         // One last frame of nothing, so whatever was on screen falls away

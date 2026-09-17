@@ -1,5 +1,6 @@
 import { say } from '@/core/i18n';
 import { isTauri } from '@/core/utils/env';
+import { log } from '@/platform/log';
 
 /**
  * The tray menu's text.
@@ -29,6 +30,6 @@ export async function syncTrayLabels(): Promise<void> {
   } catch (err) {
     // The menu keeps its previous labels, which is a cosmetic problem in one
     // corner of the screen and not worth surfacing over the music.
-    console.warn('[tray] could not update the menu labels', err);
+    log('warn', 'tray', 'could not update the menu labels', err);
   }
 }

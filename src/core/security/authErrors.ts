@@ -1,4 +1,5 @@
 import { isSpotifyAuthError } from './spotifyAuth';
+import { log } from '@/platform/log';
 
 /**
  * Turns Rust's error codes into something a user can act on.
@@ -47,13 +48,13 @@ export const HANDLED_CODES = Object.keys(MESSAGES);
  */
 export function describeAuthError(error: unknown): string {
   if (!isSpotifyAuthError(error)) {
-    console.warn('[spotifyAuth] unrecognised failure', error);
+    log('warn', 'spotifyAuth', 'unrecognised failure', error);
     return FALLBACK;
   }
 
   const message = MESSAGES[error.code];
   if (!message) {
-    console.warn(`[spotifyAuth] no message for code "${error.code}"`, error.detail);
+    log('warn', 'spotifyAuth', `no message for code "${error.code}"`, error.detail);
     return FALLBACK;
   }
 

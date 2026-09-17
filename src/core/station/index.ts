@@ -3,6 +3,7 @@ import { libraryTrackToMetadata } from '@/core/library';
 import type { TrackMetadata } from '@/core/types';
 import { artistCandidates, similarTracks, type SimilarTrack } from './lastfm';
 import { drawWeighted, orderSeeds, similarityWeight, weightedShuffle } from './sampling';
+import { log } from '@/platform/log';
 
 export { hasApiKey, setApiKey, clearApiKey, openAccountPage } from './lastfm';
 export type { SimilarTrack } from './lastfm';
@@ -430,7 +431,7 @@ export async function resolveViaSpotify(
     try {
       results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
     } catch (err) {
-      console.warn('[station] a search was refused', err);
+      log('warn', 'station', 'a search was refused', err);
       purse.refused = true;
       continue;
     }
@@ -504,8 +505,8 @@ const NOTHING: Candidates = { kind: 'names', names: [] };
  * exists to stop the station hammering a pool that has nothing in it, was being
  * armed by refusals that said nothing about the pool at all.
  *
- * The console line is still only a console line, and a release build has no
- * console. The purse is what carries this out to where it is acted on.
+ * The failure goes to the log file as well, since a release build has no
+ * console. The purse is what carries it out to where it is acted on.
  */
 async function quietly<T>(
   tier: string,
@@ -515,7 +516,7 @@ async function quietly<T>(
   try {
     return await lookup();
   } catch (err) {
-    console.warn(`[station] the ${tier} lookup failed`, err);
+    log('warn', 'station', `the ${tier} lookup failed`, err);
     purse.refused = true;
     return [];
   }

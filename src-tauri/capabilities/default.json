@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the Groovium widget window. Deliberately narrow: only what the custom titlebar and the collapse need. The file picker is not here on purpose — it runs in Rust (src/library.rs), so the webview has no dialog permission at all. set-size and set-resizable are for compact mode, which shrinks the window to its controls; without them the resize is denied and the bar is drawn inside a full-height window. The updater checks and downloads; restart is the only thing `process` is here for, since an installer that has replaced the running binary needs the app started again.",
+  "description": "Permissions for the Groovium widget window. Deliberately narrow: only what the custom titlebar and the collapse need. The file picker is not here on purpose — it runs in Rust (src/library.rs), so the webview has no dialog permission at all. set-size and set-resizable are for compact mode, which shrinks the window to its controls; without them the resize is denied and the bar is drawn inside a full-height window. The updater checks and downloads; restart is the only thing `process` is here for, since an installer that has replaced the running binary needs the app started again. `log` writes to the log file and nothing else — a release build has no console, and the file is the only place a warning from the webview can be read afterwards.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -15,6 +15,7 @@
     "core:window:allow-scale-factor",
     "core:window:allow-set-resizable",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "log:default"
   ]
 }

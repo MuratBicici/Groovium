@@ -107,7 +107,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             "next" => media::emit(app, MediaCommand::Next),
             "previous" => media::emit(app, MediaCommand::Previous),
             "quit" => app.exit(0),
-            other => eprintln!("[tray] unhandled menu item: {other}"),
+            other => log::warn!("[tray] unhandled menu item: {other}"),
         })
         .on_tray_icon_event(|tray, event| {
             // Only act on button release, or the window toggles twice per click.

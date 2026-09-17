@@ -257,7 +257,7 @@ fn read_library(path: &Path) -> Vec<LibraryTrack> {
         Ok(file) if file.version == LIBRARY_VERSION => file.tracks,
         Ok(_) => Vec::new(),
         Err(e) => {
-            eprintln!("[library] ignoring unreadable library file: {e}");
+            log::warn!("[library] ignoring unreadable library file: {e}");
             Vec::new()
         }
     }
@@ -502,7 +502,7 @@ pub fn library_import(
             Ok(name) => name,
             Err(e) => {
                 // One unreadable file should not abandon the rest of the import.
-                eprintln!("[library] skipping {raw_path}: {e}");
+                log::warn!("[library] skipping {raw_path}: {e}");
                 continue;
             }
         };
@@ -544,7 +544,7 @@ pub fn library_import(
         // otherwise working, and the final write below reports it properly.
         if added.len() % IMPORT_FLUSH_EVERY == 0 {
             if let Err(e) = write_library(&library_path, &tracks) {
-                eprintln!("[library] could not checkpoint the library: {e}");
+                log::warn!("[library] could not checkpoint the library: {e}");
             }
         }
     }
@@ -585,7 +585,7 @@ pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
         // Best effort: an orphaned cover image wastes a few KB; it does not
         // justify failing the removal the user asked for.
         if let Err(e) = store.discard(cover) {
-            eprintln!("[library] {e}");
+            log::warn!("[library] {e}");
         }
     }
     write_library(&library_path, &tracks)?;

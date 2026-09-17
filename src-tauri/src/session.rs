@@ -74,7 +74,7 @@ pub fn load_session(app: AppHandle) -> SessionState {
         return SessionState::default();
     };
     let Ok(mut state) = serde_json::from_str::<SessionState>(&contents) else {
-        eprintln!("[session] ignoring unreadable session file at {}", path.display());
+        log::warn!("[session] ignoring unreadable session file at {}", path.display());
         return SessionState::default();
     };
 

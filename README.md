@@ -387,6 +387,33 @@ which is the quickest check when a local file will not play.
 A provider instance survives HMR. Changing provider code and saving does not
 replace the one that is running — restart `tauri dev` to test it.
 
+### The log file
+
+An installed build has no console, so warnings from both halves of the app go
+to a file instead:
+
+```
+%LOCALAPPDATA%\com.groovium.desktop\logs\groovium.log
+```
+
+Paste that into Win+R to open it. It rotates at about a megabyte and keeps the
+file before. There is nothing in the window about it on purpose.
+
+What it records is what explains a fault after the fact: Spotify refusals with
+their status and which endpoint family refused, request timeouts, the playback
+watchdog stalling, resuming and giving up, the station's failed lookups,
+anything thrown that nothing caught, and Rust panics. `tauri dev` writes the
+same file and prints to the terminal as well.
+
+What it does not record is anything that would matter if the file were pasted
+into a public issue. Every line from the webview goes through `redact` in
+`src/platform/log.ts` — bearer tokens, `api_key`, `access_token`,
+`refresh_token`, `client_id`, the OAuth `code` and verifier, bare 32-character
+hex strings (the shape of both a Client ID and a Last.fm key), and `q`, which is
+not a secret but is what somebody searched for. Spotify refusals are logged by
+endpoint family (`search`, `me`) rather than by path for the same reason. The
+Rust side logs no URLs, and the HTTP libraries under it are held at warnings.
+
 ---
 
 ## Releasing
@@ -475,12 +502,34 @@ signs the *update manifest*, and it is generated with a command. Authenticode
 signs the *installer*, is what SmartScreen looks at, and cannot be generated at
 all.
 
-Fixing the warning needs an Authenticode certificate — an OV certificate
-involves identity verification and an annual fee, and reputation still builds
-over downloads; an EV certificate on a hardware token clears SmartScreen
-immediately and costs more. Either way it is a purchase and an identity check,
-so it cannot be done from inside this repository. When there is one, it is
-configured under `bundle.windows` rather than through the updater's variables.
+Signing does not make the warning go away on the first download either.
+SmartScreen weighs the file's own reputation and the signing certificate's, and
+a new signature starts with none; what signing buys is that the reputation
+carries from one release to the next instead of starting from zero every time,
+which for an app that ships often is the whole difference. An EV certificate
+used to skip the wait. It stopped doing so in 2024 and is now treated exactly
+like an OV one, so paying the EV premium for SmartScreen is no longer worth it
+([Microsoft](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)).
+
+The options that exist for this project, as of September 2026:
+
+- **Microsoft Store (MSIX).** The Store re-signs the package and Store installs
+  never see the warning. Free, including for individuals. Tauri does not emit
+  MSIX, so it needs Microsoft's `winapp` CLI, and the in-app updater has to be
+  off in that build. Planned for once the app is mostly in bugfix mode.
+- **SignPath Foundation.** Free signing for OSI-licensed open source built on
+  GitHub-hosted runners, with a manual approval per release. The publisher shown
+  is SignPath Foundation. Its signature changes the installer's bytes, so the
+  updater's minisign signature and `latest.json` have to be produced after it,
+  not by `tauri-action` before it.
+- **An OV certificate from a CA.** Roughly $150–300 a year, private key on a
+  hardware token or cloud HSM since 2023, identity verification.
+- **Azure Artifact Signing** (formerly Trusted Signing) is not available here:
+  individuals must be in the USA or Canada.
+
+Whichever it is, it is a purchase or an application and an identity check, so
+it cannot be done from inside this repository. A certificate is configured under
+`bundle.windows` rather than through the updater's variables.
 
 Until then, say so on the release page rather than letting people meet the
 warning cold.

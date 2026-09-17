@@ -40,7 +40,7 @@ impl MediaCommand {
 /// since the tray can be clicked while the window is hidden.
 pub fn emit(app: &AppHandle, command: MediaCommand) {
     if let Err(e) = app.emit(MEDIA_COMMAND_EVENT, command) {
-        eprintln!("[media] could not emit {}: {e}", command.as_str());
+        log::warn!("[media] could not emit {}: {e}", command.as_str());
     }
 }
 

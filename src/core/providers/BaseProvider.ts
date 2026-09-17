@@ -7,6 +7,7 @@ import type {
   SourceType,
   TrackMetadata,
 } from '@/core/types';
+import { log } from '@/platform/log';
 
 /**
  * Shared listener plumbing and state bookkeeping for providers.
@@ -57,7 +58,7 @@ export abstract class BaseProvider implements AudioProvider {
       try {
         listener(event);
       } catch (err) {
-        console.error(`[${this.id}] provider listener threw`, err);
+        log('error', this.id, `provider listener threw`, err);
       }
     }
   }
@@ -76,6 +77,7 @@ export abstract class BaseProvider implements AudioProvider {
 
   /** Move to ERROR and report the reason. */
   protected fail(error: string): void {
+    log('warn', this.id, `failed: ${error}`);
     this.state = 'ERROR';
     this.emit({ type: 'state', state: 'ERROR' });
     this.emit({ type: 'error', error });
