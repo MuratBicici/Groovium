@@ -6,11 +6,22 @@ vi.mock('@/core/security/spotifyAuth', () => ({
 }));
 
 import {
+  addItems,
+  changeDetails,
+  COVER_MAX_BYTES,
+  coverOf,
+  createPlaylist,
   forgetCrates,
+  moveItems,
   offsetFromNext,
+  plainText,
+  playlistEntryPage,
   playlistPage,
   playlistTrackPage,
   readableBy,
+  removeFromLibrary,
+  removeItems,
+  uploadCover,
   wholeCrate,
 } from './spotifyPlaylists';
 import { withCrate } from '@/core/spotify/cache';
@@ -26,13 +37,23 @@ import { clearCache, settled, updateCache } from '@/core/spotify/cacheFile';
  */
 
 const calls: string[] = [];
+/** Everything about each request, for the writes, where the method and body are the point. */
+const sent: { url: string; method: string; body: unknown; contentType: string | undefined }[] = [];
 let answer: (url: string) => { status?: number; body?: unknown };
 
 beforeEach(() => {
   calls.length = 0;
+  sent.length = 0;
   answer = () => ({ body: { items: [] } });
-  vi.stubGlobal('fetch', async (url: string) => {
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     calls.push(url);
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    sent.push({
+      url,
+      method: init?.method ?? 'GET',
+      body: typeof init?.body === 'string' && init.body.startsWith('{') ? JSON.parse(init.body) : init?.body,
+      contentType: headers['Content-Type'],
+    });
     const { status = 200, body = {} } = answer(url);
     return {
       ok: status >= 200 && status < 300,
@@ -406,3 +427,136 @@ describe('a crate kept from an earlier launch', () => {
     expect(calls).not.toHaveLength(0);
   });
 });
+
+describe('what a playlist says about itself', () => {
+  it('reads its description as plain text and whether it is public', async () => {
+    answer = () => ({
+      body: {
+        items: [
+          playlist('p1', 'me', { description: 'Rock &amp; roll &#x27;n&#x27; more', public: true }),
+          playlist('p2', 'me', { description: null, public: null }),
+        ],
+        next: null,
+      },
+    });
+    const page = await playlistPage();
+
+    expect(page.items[0]?.description).toBe("Rock & roll 'n' more");
+    expect(page.items[0]?.isPublic).toBe(true);
+    // Not said is not public: showing private for a public list is the smaller surprise.
+    expect(page.items[1]?.description).toBe('');
+    expect(page.items[1]?.isPublic).toBe(false);
+  });
+
+  it('unescapes the ampersand last, so an escaped entity stays an entity', () => {
+    expect(plainText('&amp;lt;b&amp;gt;')).toBe('&lt;b&gt;');
+  });
+});
+
+describe('where each record sits in the playlist', () => {
+  it('numbers entries before the ones that cannot play are left out', async () => {
+    // Moving a song is asked for by its place in the playlist. The fifth record
+    // on screen can be the seventh in the list, and moving by screen position
+    // moves the wrong song.
+    answer = () => ({
+      body: {
+        items: [{ item: track('spotify:track:a') }, { item: null }, { item: track('spotify:track:c') }],
+        next: null,
+      },
+    });
+    const page = await playlistEntryPage('p1', '24');
+
+    expect(page.items.map((entry) => [entry.track.id, entry.position])).toEqual([
+      ['spotify:track:a', 24],
+      ['spotify:track:c', 26],
+    ]);
+  });
+});
+
+describe('writing to a playlist', () => {
+  it('creates a private playlist through /me/playlists', async () => {
+    // `/users/{id}/playlists` answers 403 since February 2026. And Spotify's
+    // own default is public, which a list somebody has just named should not be.
+    answer = () => ({ status: 201, body: playlist('new', 'me', { name: 'Late', public: false }) });
+    const created = await createPlaylist('Late');
+
+    expect(sent[0]).toMatchObject({ method: 'POST', body: { name: 'Late', public: false } });
+    expect(sent[0]?.url).toMatch(/\/v1\/me\/playlists$/);
+    expect(created.id).toBe('new');
+    expect(created.isPublic).toBe(false);
+  });
+
+  it('adds songs and hands back the new snapshot', async () => {
+    answer = () => ({ status: 201, body: { snapshot_id: 'snap-after' } });
+    const snapshot = await addItems('p1', ['spotify:track:a'], 3);
+
+    expect(sent[0]).toMatchObject({ method: 'POST', body: { uris: ['spotify:track:a'], position: 3 } });
+    expect(sent[0]?.url).toMatch(/\/playlists\/p1\/items$/);
+    expect(snapshot).toBe('snap-after');
+  });
+
+  it('removes songs by URI, aimed at the snapshot it was shown', async () => {
+    answer = () => ({ body: { snapshot_id: 'snap-after' } });
+    const snapshot = await removeItems('p1', ['spotify:track:a'], 'snap-before');
+
+    expect(sent[0]).toMatchObject({
+      method: 'DELETE',
+      body: { items: [{ uri: 'spotify:track:a' }], snapshot_id: 'snap-before' },
+    });
+    expect(snapshot).toBe('snap-after');
+  });
+
+  it('moves one song by its place in the playlist', async () => {
+    answer = () => ({ body: { snapshot_id: 'snap-after' } });
+    await moveItems('p1', 0, 5, 'snap-before');
+
+    expect(sent[0]).toMatchObject({
+      method: 'PUT',
+      body: { range_start: 0, insert_before: 5, range_length: 1, snapshot_id: 'snap-before' },
+    });
+  });
+
+  it('changes only the details it was given, and survives an empty answer', async () => {
+    // Spotify answers a details change with 200 and no body. Reading that as
+    // JSON threw, which reported a rename that had worked as a failure.
+    answer = () => ({ body: undefined });
+    await changeDetails('p1', { name: 'Renamed', isPublic: true });
+
+    expect(sent[0]).toMatchObject({ method: 'PUT', body: { name: 'Renamed', public: true } });
+    expect(sent[0]?.body).not.toHaveProperty('description');
+    expect(sent[0]?.url).toMatch(/\/playlists\/p1$/);
+  });
+
+  it('uploads a cover as JPEG text rather than JSON', async () => {
+    answer = () => ({ status: 202, body: undefined });
+    await uploadCover('p1', 'AAAA');
+
+    expect(sent[0]).toMatchObject({ method: 'PUT', body: 'AAAA', contentType: 'image/jpeg' });
+    expect(sent[0]?.url).toMatch(/\/playlists\/p1\/images$/);
+  });
+
+  it('refuses a cover larger than Spotify takes without asking', async () => {
+    await expect(uploadCover('p1', 'A'.repeat(COVER_MAX_BYTES + 1))).rejects.toThrow();
+    expect(sent).toHaveLength(0);
+  });
+
+  it('reads back the cover Spotify settled on', async () => {
+    answer = () => ({ body: [{ url: 'https://i.scdn.co/image/new', width: 640 }] });
+    expect(await coverOf('p1')).toBe('https://i.scdn.co/image/new');
+  });
+
+  it('removes a playlist from the library by its URI', async () => {
+    // The `/followers` route went in February 2026.
+    answer = () => ({ body: undefined });
+    await removeFromLibrary('p1');
+
+    expect(sent[0]?.method).toBe('DELETE');
+    expect(sent[0]?.url).toMatch(/\/me\/library\?uris=spotify%3Aplaylist%3Ap1$/);
+  });
+
+  it('lets a refusal through to the caller', async () => {
+    answer = () => ({ status: 403, body: { error: { status: 403, message: 'Not allowed' } } });
+    await expect(addItems('p1', ['spotify:track:a'])).rejects.toThrow(/Not allowed/);
+  });
+});
+

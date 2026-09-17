@@ -68,12 +68,14 @@ function neverFinishes() {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-    Object.defineProperty(response, 'json', {
-      value: () =>
-        new Promise((_, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
-        }),
-    });
+    // Both ways a body can be read. The request reads it as text now, so a
+    // body that hangs has to hang there.
+    const hang = () =>
+      new Promise((_, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    Object.defineProperty(response, 'json', { value: hang });
+    Object.defineProperty(response, 'text', { value: hang });
     return Promise.resolve(response);
   };
 }
@@ -462,3 +464,25 @@ describe('when Spotify asks for longer than it is worth waiting', () => {
     expect(await request('/me/player')).toEqual({ ok: true });
   });
 });
+
+/**
+ * A write that succeeds with nothing to say.
+ *
+ * Changing a playlist's details answers 200 with an empty body and uploading
+ * its cover answers 202 with one. Read as JSON, both threw — a change Spotify
+ * had made came back to the caller as a failure.
+ */
+describe('when Spotify succeeds without a body', () => {
+  it('answers null for a 200 with nothing in it', async () => {
+    const { request } = await freshApi();
+    stubFetch([answer(200, {}, '')]);
+    await expect(request('/playlists/p1', { method: 'PUT', body: '{}' })).resolves.toBeNull();
+  });
+
+  it('answers null for a 202 with nothing in it', async () => {
+    const { request } = await freshApi();
+    stubFetch([answer(202, {}, '')]);
+    await expect(request('/playlists/p1/images', { method: 'PUT', body: 'AAAA' })).resolves.toBeNull();
+  });
+});
+

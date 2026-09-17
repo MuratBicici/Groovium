@@ -388,7 +388,12 @@ async function perform<T>(path: string, init?: RequestInit): Promise<T | null> {
     );
   }
 
-  return (await within(control, () => response.json())) as T;
+  // Read as text first. Most answers are JSON, but a write can succeed with
+  // nothing to say: changing a playlist's details answers 200 with an empty
+  // body, and uploading its cover answers 202 with one. `response.json()` on
+  // those throws, which reported a change Spotify had made as a failure.
+  const text = await within(control, () => response.text());
+  return text ? (JSON.parse(text) as T) : null;
 }
 
 /**

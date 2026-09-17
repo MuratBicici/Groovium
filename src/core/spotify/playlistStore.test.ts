@@ -61,6 +61,8 @@ const shelf = (...ids: string[]): SpotifyPlaylist[] =>
   ids.map((id) => ({
     id,
     name: `Playlist ${id}`,
+    description: '',
+    isPublic: false,
     snapshotId: `snap-${id}`,
     trackCount: 1,
     ownerId: 'me',

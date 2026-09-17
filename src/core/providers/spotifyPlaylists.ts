@@ -18,8 +18,15 @@ import {
  * playback and the request machinery, and this is a different subject that
  * happens to speak the same protocol.
  *
- * Everything here reads. Writing — adding, removing, reordering — comes later
- * and will need the `snapshotId` this already carries.
+ * Reading, and since the playlists became editable, writing: adding and
+ * removing songs, moving them, creating, renaming, the cover, and removing a
+ * playlist from the library. Every write that changes the list of songs answers
+ * with a new `snapshot_id`, and each one here hands it back, because the caller
+ * has to know which version of the playlist it is now looking at.
+ *
+ * The shapes are the ones after Spotify's February 2026 change: `/items`
+ * rather than `/tracks`, `POST /me/playlists` rather than
+ * `/users/{id}/playlists`, and `/me/library` rather than `/followers`.
  */
 
 /** Spotify's own page size cap for playlists. */
@@ -61,6 +68,10 @@ export const PLAY_CAP = 300;
 export interface SpotifyPlaylist {
   id: string;
   name: string;
+  /** As plain text. Spotify sends it with HTML entities escaped. */
+  description: string;
+  /** Whether it shows on the account's profile. */
+  isPublic: boolean;
   /**
    * Spotify's cheap answer to "has this changed".
    *
@@ -95,6 +106,8 @@ interface ApiOwner {
 interface ApiPlaylist {
   id: string;
   name: string;
+  description?: string | null;
+  public?: boolean | null;
   snapshot_id: string;
   owner: ApiOwner;
   images?: ApiImage[] | null;
@@ -150,11 +163,34 @@ async function currentUserId(): Promise<string | null> {
   }
 }
 
+/**
+ * A description as it should be shown and edited.
+ *
+ * Spotify escapes what it stores — an apostrophe comes back as `&#x27;` — and
+ * sending that back unchanged through the details sheet would escape it again
+ * on every save. Only the entities Spotify is seen to produce.
+ */
+export function plainText(escaped: string | null | undefined): string {
+  if (!escaped) return '';
+  return escaped
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x2F;|&#47;/g, '/')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    // Last, or `&amp;lt;` would come out as `<` rather than `&lt;`.
+    .replace(/&amp;/g, '&');
+}
+
 function toPlaylist(raw: ApiPlaylist): SpotifyPlaylist {
   const cover = pickCover(raw.images);
   const playlist: SpotifyPlaylist = {
     id: raw.id,
     name: raw.name,
+    description: plainText(raw.description),
+    // A playlist Spotify does not say is public is treated as not: showing
+    // "private" for one that is not is a smaller surprise than the other way.
+    isPublic: raw.public === true,
     snapshotId: raw.snapshot_id,
     // `tracks.total` until February 2026, `items.total` after. Whichever this
     // registration is answered by, the count means the same thing.
@@ -228,12 +264,36 @@ async function itemsPageOn(
   return request<ApiPage<ApiItemEntry>>(`/playlists/${encodeURIComponent(id)}/${route}?${params}`);
 }
 
+/**
+ * A record in a crate, and where it actually sits in the playlist.
+ *
+ * The two are not the same number. Entries Spotify cannot play — a removed
+ * track, a local file it only knows the name of — are left out of what the
+ * crate shows, so the fifth record on screen can be the seventh in the
+ * playlist. Moving a song is asked for by position in the playlist, and asked
+ * for by position on screen it moves the wrong one.
+ */
+export interface CrateEntry {
+  track: TrackMetadata;
+  position: number;
+}
+
 /** One page of a playlist's tracks, already playable. */
 export async function playlistTrackPage(
   id: string,
   cursor?: string | null,
   perPage = ITEMS_PER_PAGE,
 ): Promise<Page<TrackMetadata>> {
+  const page = await playlistEntryPage(id, cursor, perPage);
+  return { items: page.items.map((entry) => entry.track), cursor: page.cursor };
+}
+
+/** One page of a playlist's playable entries, with their positions. */
+export async function playlistEntryPage(
+  id: string,
+  cursor?: string | null,
+  perPage = ITEMS_PER_PAGE,
+): Promise<Page<CrateEntry>> {
   const params = new URLSearchParams({ limit: String(perPage) });
   if (cursor) params.set('offset', cursor);
 
@@ -255,12 +315,15 @@ export async function playlistTrackPage(
     }
   }
 
+  // Numbered before anything is left out, so each entry keeps its place in the
+  // playlist rather than its place in what is shown.
+  const offset = Number(cursor ?? 0) || 0;
   const items = (data?.items ?? [])
-    .map((entry) => entry?.item ?? entry?.track ?? null)
+    .map((entry, at) => ({ raw: entry?.item ?? entry?.track ?? null, position: offset + at }))
     // A playlist can hold a track that is gone, or a local file Spotify only
     // knows the name of. Neither has a URI to play.
-    .filter((track): track is ApiTrack => track !== null && !!track.uri)
-    .map(toTrackMetadata);
+    .filter((entry): entry is { raw: ApiTrack; position: number } => entry.raw !== null && !!entry.raw.uri)
+    .map(({ raw, position }) => ({ track: toTrackMetadata(raw), position }));
 
   return { items, cursor: offsetFromNext(data?.next) };
 }
@@ -368,3 +431,169 @@ export function forgetCrates(id?: string): void {
   if (id === undefined) crates.clear();
   else crates.delete(id);
 }
+
+// --- Writing ---------------------------------------------------------------
+
+interface ApiSnapshot {
+  snapshot_id?: string | null;
+}
+
+/**
+ * The version a write left the playlist at.
+ *
+ * Null when Spotify did not say, which it always does in practice. The caller
+ * treats that as a playlist it no longer knows the version of, and asks again
+ * rather than guessing.
+ */
+function snapshotOf(data: ApiSnapshot | null): string | null {
+  return data?.snapshot_id ?? null;
+}
+
+const playlistPath = (id: string) => `/playlists/${encodeURIComponent(id)}`;
+
+/** Spotify's cap on songs added or removed in one request. */
+export const ITEMS_PER_WRITE = 100;
+
+/**
+ * The most a cover may be, as the base64 text that is sent.
+ *
+ * Spotify's limit, measured on the payload rather than the image: 256 KB.
+ * Checked here as well as where the image is made, so a picture that slipped
+ * past the encoder is refused with a reason instead of a 413.
+ */
+export const COVER_MAX_BYTES = 256 * 1024;
+
+/**
+ * Make a playlist.
+ *
+ * Private. Spotify's default is public — on the profile the moment it exists —
+ * and a list somebody has just named is not yet a list they have decided to
+ * show anyone. Making it public is one switch in its details.
+ */
+export async function createPlaylist(name: string): Promise<SpotifyPlaylist> {
+  const created = await request<ApiPlaylist>('/me/playlists', {
+    method: 'POST',
+    body: JSON.stringify({ name, public: false }),
+  });
+  if (!created?.id) throw new SpotifyError('Spotify did not return the new playlist.', 502);
+  return toPlaylist(created);
+}
+
+/**
+ * Put songs into a playlist, at the end or at `position`.
+ *
+ * No snapshot is sent: adding is the one change Spotify applies to whatever
+ * the playlist is by then, since appending cannot be aimed at the wrong song.
+ */
+export async function addItems(
+  id: string,
+  uris: string[],
+  position?: number,
+): Promise<string | null> {
+  const body: Record<string, unknown> = { uris: uris.slice(0, ITEMS_PER_WRITE) };
+  if (position !== undefined) body.position = position;
+  const data = await request<ApiSnapshot>(`${playlistPath(id)}/items`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return snapshotOf(data);
+}
+
+/**
+ * Take songs out of a playlist.
+ *
+ * By URI, which is all the endpoint accepts — so a song that is in the
+ * playlist twice comes out twice. Aimed at `snapshotId`, so Spotify refuses a
+ * removal meant for a version of the list that has since changed rather than
+ * applying it to whatever is there now.
+ */
+export async function removeItems(
+  id: string,
+  uris: string[],
+  snapshotId: string,
+): Promise<string | null> {
+  const data = await request<ApiSnapshot>(`${playlistPath(id)}/items`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      items: uris.slice(0, ITEMS_PER_WRITE).map((uri) => ({ uri })),
+      snapshot_id: snapshotId,
+    }),
+  });
+  return snapshotOf(data);
+}
+
+/**
+ * Move one song.
+ *
+ * `from` and `to` are positions in the playlist, not on screen — see
+ * `CrateEntry`. `to` is where it goes *before*, which is Spotify's meaning:
+ * moving the first song to the end is `from: 0, to: length`.
+ */
+export async function moveItems(
+  id: string,
+  from: number,
+  to: number,
+  snapshotId: string,
+): Promise<string | null> {
+  const data = await request<ApiSnapshot>(`${playlistPath(id)}/items`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      range_start: from,
+      insert_before: to,
+      range_length: 1,
+      snapshot_id: snapshotId,
+    }),
+  });
+  return snapshotOf(data);
+}
+
+export interface PlaylistDetails {
+  name?: string;
+  description?: string;
+  isPublic?: boolean;
+}
+
+/** Rename a playlist, or change its description or who can see it. */
+export async function changeDetails(id: string, details: PlaylistDetails): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (details.name !== undefined) body.name = details.name;
+  if (details.description !== undefined) body.description = details.description;
+  if (details.isPublic !== undefined) body.public = details.isPublic;
+  await request(playlistPath(id), { method: 'PUT', body: JSON.stringify(body) });
+}
+
+/**
+ * Give a playlist a new cover.
+ *
+ * The body is the JPEG as base64 text, not JSON. Spotify answers 202 and puts
+ * the image in place a little later, which is why `coverOf` exists.
+ */
+export async function uploadCover(id: string, base64Jpeg: string): Promise<void> {
+  if (base64Jpeg.length > COVER_MAX_BYTES) {
+    throw new SpotifyError('That cover is larger than Spotify accepts.', 413);
+  }
+  await request(`${playlistPath(id)}/images`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: base64Jpeg,
+  });
+}
+
+/** The cover Spotify has for a playlist now, for after an upload has settled. */
+export async function coverOf(id: string): Promise<string | undefined> {
+  const images = await request<ApiImage[]>(`${playlistPath(id)}/images`);
+  return pickCover(images);
+}
+
+/**
+ * Remove a playlist from the library.
+ *
+ * Spotify has no delete. This is what its own apps do when somebody deletes a
+ * playlist they made, and it is restorable for ninety days from the account
+ * page — which is what the confirmation says.
+ */
+export async function removeFromLibrary(id: string): Promise<void> {
+  const uris = encodeURIComponent(`spotify:playlist:${id}`);
+  await request(`/me/library?uris=${uris}`, { method: 'DELETE' });
+}
+

@@ -20,6 +20,8 @@ import { clearCache, loadCache, settled, updateCache } from './cacheFile';
 const playlist = (id: string): SpotifyPlaylist => ({
   id,
   name: `Playlist ${id}`,
+  description: '',
+  isPublic: false,
   snapshotId: `snap-${id}`,
   trackCount: 1,
   ownerId: 'me',

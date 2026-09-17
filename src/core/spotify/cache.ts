@@ -23,8 +23,12 @@ import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
  * finished writing.
  */
 
-/** Bumped whenever the shape changes. A different version is an empty cache. */
-export const CACHE_VERSION = 1;
+/**
+ * Bumped whenever the shape changes. A different version is an empty cache.
+ *
+ * 2: playlists carry their description and whether they are public.
+ */
+export const CACHE_VERSION = 2;
 
 /**
  * How long something Spotify said is believed without asking again.
@@ -98,6 +102,8 @@ function isPlaylist(value: unknown): value is SpotifyPlaylist {
     isString(value.id) &&
     value.id.length > 0 &&
     isString(value.name) &&
+    isString(value.description) &&
+    typeof value.isPublic === 'boolean' &&
     isString(value.snapshotId) &&
     typeof value.trackCount === 'number' &&
     isString(value.ownerId) &&

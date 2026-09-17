@@ -30,6 +30,8 @@ const NOW = 1_800_000_000_000;
 const playlist = (id: string, snapshotId = `snap-${id}`): SpotifyPlaylist => ({
   id,
   name: `Playlist ${id}`,
+  description: '',
+  isPublic: false,
   snapshotId,
   trackCount: 2,
   ownerId: 'me',
