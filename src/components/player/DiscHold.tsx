@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
@@ -95,6 +95,32 @@ const JUST_THREW_MS = 400;
  */
 const JUST_SEATED_MS = 3000;
 
+/**
+ * How much bigger than the sleeve's own record a record held over a crate is
+ * drawn.
+ *
+ * It eases towards the size it will be inside while it is over the crate, so the
+ * drop is the last small step of a change that has already been seen happening
+ * rather than a shrink at the moment of letting go. Not all the way down: a
+ * record the size of the sleeve's is hidden by the hand holding it.
+ */
+const OFFERED_ENLARGE = 1.3;
+
+/** A record in a sleeve is this much of the sleeve's width — the pocket's `w-[92%]`. */
+const SLEEVE_RECORD = 0.92;
+
+/** How quickly the held record eases to that size, per frame. */
+const OFFERED_EASE = 0.18;
+
+/**
+ * How high the record arcs on its way back from a crate to the deck.
+ *
+ * The seat's own hop is for a record dropped from just above the spindle; coming
+ * back across the window from the drawer wants an arc, or it slides flat across
+ * everything in between.
+ */
+const RETURN_ARC = 70;
+
 /** A keyboard eject is thrown for the user, up and to the right. */
 const EJECT_VELOCITY: Vector = { x: 760, y: -420 };
 /** Where the record lifts to before a keyboard eject flings it. */
@@ -161,6 +187,37 @@ interface Visiting {
    * start from exactly there.
    */
   onReturned?: (offset: Vector) => void;
+}
+
+/**
+ * Somewhere other than the deck that a record can be put.
+ *
+ * A crate, today: a record held over one and let go goes into it, and comes back
+ * out to wherever it came from. The hold does the travelling; the receiver does
+ * what only it can, which is to draw the record passing behind its own printed
+ * face on the way in and out — the same handover a sleeve in an open crate
+ * already does for a record being put back.
+ */
+export interface Receiver {
+  /** Where the record goes: its centre is where the record rests inside. */
+  el: HTMLElement;
+  /** Whether this record may go in. A song from this computer, say, may not. */
+  accepts: (track: TrackMetadata) => boolean;
+  /** The record is over it and would go in, would be refused, or has moved off. */
+  onHover: (state: 'accept' | 'refuse' | null) => void;
+  /** It was let go over this and refused. */
+  refuse: () => void;
+  /** The approach's control point, relative to the receiver's centre. */
+  approach: Vector;
+  /** How far right of the centre the hand lets go and the receiver takes over. */
+  handOverAt: number;
+  /**
+   * Take the record in from `from`, relative to the centre, and hand it back out.
+   *
+   * `handBack` is called with where the record is when the receiver lets go of
+   * it again, and the hold carries it home from exactly there.
+   */
+  takeIn: (track: TrackMetadata, from: Vector, handBack: (outAt: Vector) => void) => void;
 }
 
 interface Grab {
@@ -248,6 +305,14 @@ interface DiscHoldActions {
    * not the current one until the provider has actually started it.
    */
   didJustSeat: (trackId: string) => boolean;
+  /** Offer somewhere a record can be put. Returns the way to withdraw it. */
+  registerReceiver: (receiver: Receiver) => () => void;
+  /**
+   * Be told where the hand is while something is carried, in client
+   * coordinates, and null when it is put down. For a shelf to scroll when a
+   * record is held against its edge.
+   */
+  subscribeCarry: (listener: (point: Vector | null) => void) => () => void;
 }
 
 const ActionsContext = createContext<DiscHoldActions>({
@@ -260,6 +325,8 @@ const ActionsContext = createContext<DiscHoldActions>({
   eject: () => {},
   didJustThrow: () => false,
   didJustSeat: () => false,
+  registerReceiver: () => () => {},
+  subscribeCarry: () => () => {},
 });
 
 /** The track whose record is off the deck, so the platter can look empty. */
@@ -293,6 +360,12 @@ interface Motion {
   phase: Phase;
   /** Whose record this is, so a throw can be reported against it. */
   track: TrackMetadata;
+  /** What is in the hand. Only a record can go into a crate. */
+  look: 'record' | 'sleeve';
+  /** The size the carry is easing towards: the hand's, or the offered size over a crate. */
+  carryScale: number;
+  /** The crate this seat is taking the record into, rather than home or the deck. */
+  receiving: Receiver | null;
   /** Where the record settles, in layer coordinates. Home, or the deck. */
   origin: Vector;
   homeEl: HTMLElement;
@@ -396,6 +469,9 @@ function advance(m: Motion, now: number): Outcome {
       // Straight onto the pointer, with no lag of its own: the record is being
       // held, and a held thing does not trail behind the hand.
       m.pos = { x: m.pointer.x, y: m.pointer.y };
+      // The size does ease, towards what it is being offered to. Snapping it
+      // would make every pass over a crate flicker.
+      m.scale = lerp(m.scale, m.carryScale, OFFERED_EASE);
       break;
 
     case 'seat': {
@@ -418,7 +494,8 @@ function advance(m: Motion, now: number): Outcome {
         m.origin,
         m.approach,
         e,
-        m.visiting ? undefined : { height: SEAT_ARC, at: t },
+        // Nor into a crate: it is going in through a mouth, not onto a spindle.
+        m.visiting || m.receiving ? undefined : { height: SEAT_ARC, at: t },
       );
       // Sized before it is lined up, when a handover is coming: the record has
       // to already be the size it will be inside before the hand can let go.
@@ -494,6 +571,11 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   const thrownAt = useRef(new Map<string, number>());
   /** trackId → when it was set down on the deck by hand, for `didJustSeat`. */
   const seatedAt = useRef(new Map<string, number>());
+  /** Everywhere a record can be put besides the deck. */
+  const receivers = useRef(new Set<Receiver>());
+  /** The one the held record is over now. */
+  const offeredTo = useRef<Receiver | null>(null);
+  const carryListeners = useRef(new Set<(point: Vector | null) => void>());
 
   /** Put the record's current pose on the screen. */
   const paint = useCallback(() => {
@@ -507,16 +589,42 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       `rotate(${m.spin.toFixed(2)}deg) scale(${m.scale.toFixed(4)})`;
   }, []);
 
+  /** Nothing is over a crate any more, and nothing is being carried near a shelf. */
+  const letGoOfOffers = useCallback(() => {
+    offeredTo.current?.onHover(null);
+    offeredTo.current = null;
+    for (const listener of carryListeners.current) listener(null);
+  }, []);
+
   /** Stop the loop and take the clone away. */
   const clear = useCallback(() => {
     cancelAnimationFrame(frame.current);
     motion.current = null;
+    letGoOfOffers();
     setHeld(null);
-  }, []);
+  }, [letGoOfOffers]);
+
+  /** Carry the record home from where a crate let go of it. Assigned below. */
+  const comeBackRef = useRef<(receiver: Receiver, outAt: Vector) => void>(() => {});
 
   const finishSeat = useCallback(() => {
     // Read before `clear`, which is what takes the motion away.
     const m = motion.current;
+
+    // Into a crate: the hand stops at the mouth and the crate takes it from
+    // there. The clone is hidden rather than cleared — the hold is not over, the
+    // record is coming back out.
+    if (m?.receiving) {
+      const receiver = m.receiving;
+      m.receiving = null;
+      const from = { x: m.pos.x - m.homeCentre.x, y: m.pos.y - m.homeCentre.y };
+      m.opacity = 0;
+      const el = discRef.current;
+      if (el) el.style.opacity = '0';
+      receiver.takeIn(m.track, from, (outAt) => comeBackRef.current(receiver, outAt));
+      return;
+    }
+
     const visiting = m?.visiting ?? null;
     const delivered = m?.delivering === true ? m.track : null;
     // Exactly where the hand let go, so the last leg starts from there rather
@@ -621,6 +729,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       motion.current = {
         phase: 'pickup',
         track: grab.track,
+        look: grab.look ?? 'record',
+        carryScale: HELD_SCALE,
+        receiving: null,
         origin,
         homeEl: grab.homeEl,
         homeScale,
@@ -697,6 +808,33 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     // sensible report rate, and the rest would only grow for the length of
     // the drag.
     if (m.samples.length > 12) m.samples.shift();
+
+    for (const listener of carryListeners.current) listener({ x, y });
+    if (m.look !== 'record') return;
+
+    // What the record is over. By rectangle, and then by what is actually on
+    // top at that point: a crate on the shelf is still where it was when an
+    // opened crate or the search covers it, and a covered crate must not take
+    // a record through the thing covering it. The hand's own layer ignores the
+    // pointer, so it is never what is found.
+    let over: Receiver | null = null;
+    const top = document.elementFromPoint(x, y);
+    for (const receiver of receivers.current) {
+      const box = receiver.el.getBoundingClientRect();
+      if (x < box.left || x > box.right || y < box.top || y > box.bottom) continue;
+      if (!top || !(receiver.el.contains(top) || top.contains(receiver.el))) continue;
+      over = receiver;
+      break;
+    }
+    if (over !== offeredTo.current) {
+      offeredTo.current?.onHover(null);
+      offeredTo.current = over;
+      over?.onHover(over.accepts(m.track) ? 'accept' : 'refuse');
+    }
+    m.carryScale =
+      over && over.accepts(m.track)
+        ? ((over.el.getBoundingClientRect().width * SLEEVE_RECORD) / DISC_SIZE) * OFFERED_ENLARGE
+        : HELD_SCALE;
   }, []);
 
   /** Begin setting the record down on `onto`, at `scale`. */
@@ -739,11 +877,65 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     [finishSeat, measure, paint],
   );
 
+  /**
+   * From the mouth of a crate back to where the record came from.
+   *
+   * The deck's own record flies back over an arc and lands with the seat it
+   * always lands with, and the music resumes as it lands. A borrowed record goes
+   * home the way it would have if it had been let go anywhere else.
+   */
+  const comeBack = useCallback((receiver: Receiver, outAt: Vector) => {
+    const m = motion.current;
+    if (!m) return;
+    const { origin: centre, layer } = measure(receiver.el);
+    m.layer = layer;
+    m.pos = { x: centre.x + outAt.x, y: centre.y + outAt.y };
+    m.opacity = 1;
+    const now = performance.now();
+    if (m.visiting) {
+      beginSeat(m, m.homeEl, m.homeScale, now, m.visiting);
+    } else {
+      beginSeat(m, m.homeEl, m.homeScale, now);
+      if (motion.current !== m) return;
+      const home = m.origin;
+      m.seatMs = reachMs(Math.hypot(home.x - m.pos.x, home.y - m.pos.y), SEAT_MS, 560);
+      m.approach = { x: (m.pos.x + home.x) / 2, y: Math.min(m.pos.y, home.y) - RETURN_ARC };
+    }
+    if (motion.current !== m) return;
+    paint();
+    runLoop(motion, frame, paint, finishSeat, finishThrow);
+  }, [beginSeat, finishSeat, finishThrow, measure, paint]);
+
+  // Handed to `finishSeat` through a ref, because the two need each other: the
+  // seat that ends in a crate calls this, and this starts the seat home.
+  useLayoutEffect(() => {
+    comeBackRef.current = comeBack;
+  }, [comeBack]);
+
   const release = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
 
     const now = performance.now();
+
+    // Over a crate. Checked before the deck and before throwing: letting go of a
+    // record over a crate means that crate, whatever the hand's speed was.
+    const offered = offeredTo.current;
+    letGoOfOffers();
+    if (offered && m.look === 'record') {
+      if (offered.accepts(m.track)) {
+        m.receiving = offered;
+        const size = offered.el.getBoundingClientRect().width * SLEEVE_RECORD;
+        beginSeat(m, offered.el, size / DISC_SIZE, now, {
+          deckEl: null,
+          onDelivered: () => {},
+          homeApproach: offered.approach,
+          handOverAt: offered.handOverAt,
+        });
+        return;
+      }
+      offered.refuse();
+    }
 
     // A visiting record has two endings and neither is a throw: it is put down
     // on the deck, or it goes back in its sleeve. Where the pointer is decides,
@@ -782,14 +974,28 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     beginThrow(m, launchVelocity(verdict, pointerVelocity), now);
-  }, [beginSeat, finishThrow]);
+  }, [beginSeat, finishThrow, letGoOfOffers]);
 
   /** A cancelled gesture is not a decision: the record goes back. */
   const cancel = useCallback(() => {
     const m = motion.current;
     if (!m || m.phase === 'seat' || m.phase === 'throw') return;
+    letGoOfOffers();
     beginSeat(m, m.homeEl, m.homeScale, performance.now(), m.visiting ?? undefined);
-  }, [beginSeat]);
+  }, [beginSeat, letGoOfOffers]);
+
+  const registerReceiver = useCallback((receiver: Receiver) => {
+    receivers.current.add(receiver);
+    return () => {
+      receivers.current.delete(receiver);
+      if (offeredTo.current === receiver) offeredTo.current = null;
+    };
+  }, []);
+
+  const subscribeCarry = useCallback((listener: (point: Vector | null) => void) => {
+    carryListeners.current.add(listener);
+    return () => carryListeners.current.delete(listener);
+  }, []);
 
   /**
    * The loop starts from the callback ref rather than an effect, so the first
@@ -815,8 +1021,18 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
   );
 
   const actions = useMemo(
-    () => ({ grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat }),
-    [grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat],
+    () => ({
+      grab,
+      moveTo,
+      release,
+      cancel,
+      eject,
+      didJustThrow,
+      didJustSeat,
+      registerReceiver,
+      subscribeCarry,
+    }),
+    [grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat, registerReceiver, subscribeCarry],
   );
 
   return (

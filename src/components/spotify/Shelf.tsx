@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { canGo, nextStop, scrolls, type Reach, type Way } from './shelfScroll';
+import { canGo, edgeWay, nextStop, scrolls, type Reach, type Way } from './shelfScroll';
+import { useDiscHold } from '@/components/player/DiscHold';
 import { useT } from '@/core/i18n';
 
 /**
@@ -17,6 +18,10 @@ import { useT } from '@/core/i18n';
  * its window and go out at each end, which is the arrows telling the truth
  * about what is left — see `shelfScroll`.
  */
+/** How long a record is held at an end before the shelf moves, and between moves. */
+const EDGE_WAIT_MS = 400;
+const EDGE_REPEAT_MS = 650;
+
 export function Shelf({
   heading,
   children,
@@ -58,12 +63,48 @@ export function Shelf({
    * a smooth scroll that is still running would otherwise step from where the
    * shelf was when it started, and land short or long.
    */
-  const go = (way: Way) => {
+  const go = useCallback((way: Way) => {
     const el = rail.current;
     if (!el) return;
     const now = { at: el.scrollLeft, width: el.scrollWidth, visible: el.clientWidth };
     el.scrollTo({ left: nextStop(now, way), behavior: 'smooth' });
-  };
+  }, []);
+
+  /**
+   * The way along with a record in the hand.
+   *
+   * Held against either end for a moment, the shelf moves one step, and again
+   * for as long as it stays there. A moment rather than at once, so a record
+   * swept across the drawer on its way to the deck does not scroll every shelf
+   * it passes.
+   */
+  const { subscribeCarry } = useDiscHold();
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let asking: Way | null = null;
+    const stop = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      asking = null;
+    };
+    const unsubscribe = subscribeCarry((point) => {
+      const el = rail.current;
+      const way = point && el ? edgeWay(point, el.getBoundingClientRect()) : null;
+      if (way === asking) return;
+      stop();
+      if (!way) return;
+      asking = way;
+      const step = () => {
+        go(way);
+        timer = setTimeout(step, EDGE_REPEAT_MS);
+      };
+      timer = setTimeout(step, EDGE_WAIT_MS);
+    });
+    return () => {
+      stop();
+      unsubscribe();
+    };
+  }, [go, subscribeCarry]);
 
   return (
     <section className="flex shrink-0 flex-col" aria-label={heading}>

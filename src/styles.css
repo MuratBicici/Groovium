@@ -570,6 +570,42 @@ body {
   transform: translateX(12px);
 }
 
+/*
+ * A crate a record is being offered to. Lifted a step more than hovering, its
+ * own record drawn out further as if the mouth were being held open, and a
+ * brass edge saying where the record will go.
+ */
+.groove-sleeve.groove-offered {
+  z-index: 2;
+  transform: translateY(-3px);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--color-brass-400) 70%, transparent),
+    0 12px 22px -8px rgb(0 0 0 / calc(0.8 * var(--shade)));
+}
+.groove-sleeve.groove-offered .groove-sleeve-disc {
+  transform: translateX(18px);
+}
+
+/* One that will not take it: dimmed, and nothing opens. */
+.groove-sleeve.groove-refused {
+  opacity: 0.5;
+  filter: saturate(0.4);
+}
+
+/* Taking a record: above its neighbours, so the record coming back out of the
+   mouth is not cut off by the next sleeve along. */
+.groove-sleeve.groove-taking {
+  z-index: 3;
+}
+
+.groove-rim {
+  pointer-events: none;
+  opacity: 0;
+  box-shadow:
+    0 0 0 2px var(--color-brass-400),
+    0 0 16px 2px color-mix(in srgb, var(--color-brass-400) 45%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .groove-sleeve,
   .groove-sleeve-disc {
@@ -578,7 +614,11 @@ body {
   .groove-sleeve:hover {
     transform: none;
   }
-  .groove-sleeve:hover .groove-sleeve-disc {
+  .groove-sleeve:hover .groove-sleeve-disc,
+  .groove-sleeve.groove-offered .groove-sleeve-disc {
+    transform: none;
+  }
+  .groove-sleeve.groove-offered {
     transform: none;
   }
 }

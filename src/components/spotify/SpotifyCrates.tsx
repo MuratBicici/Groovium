@@ -4,6 +4,8 @@ import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { VinylDisc } from '@/components/player/VinylDisc';
+import type { Vector } from '@/components/player/discPhysics';
 import { Shelf } from './Shelf';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
@@ -19,6 +21,57 @@ const DRAG_THRESHOLD = 5;
  * is still the thing being read and the name under it is still a name.
  */
 const CRATE_SIZE = 84;
+
+/**
+ * Putting a record into a crate on the shelf.
+ *
+ * The one gesture in the drawer that interrupts music — lifting the playing
+ * record off the deck pauses it — so it is built to be worth the pause. The
+ * record eases down to the sleeve's size as it is offered, goes in through the
+ * mouth behind the printed face, the sleeve takes it with a squash and a flash
+ * of brass while the count ticks up, and the record comes back out and flies
+ * home. Starting points, tuned by eye.
+ */
+
+/** The record in a sleeve, as the pocket draws it: `w-[92%]`. */
+const SLEEVE_RECORD = Math.round(CRATE_SIZE * 0.92);
+
+/** Half the sleeve plus half its record, and a little: the record is clear of the print. */
+const MOUTH_CLEAR = Math.ceil(CRATE_SIZE / 2 + SLEEVE_RECORD / 2) + 2;
+
+/** The approach curves out beyond the mouth and turns in, as a hand putting a record away does. */
+const MOUTH_APPROACH: Vector = { x: 140, y: -14 };
+
+/** Behind the face and home. Picks up the hand's speed and settles. */
+const SLIDE_IN_MS = 170;
+const SLIDE_IN_EASING = 'cubic-bezier(0.15, 0.75, 0.35, 1)';
+
+/** The sleeve taking it: down, past where it started, and back. */
+const STAMP_MS = 240;
+
+/** The brass rim, which outlasts the squash a little so it is seen. */
+const RIM_MS = 420;
+
+/** Back out of the mouth, linear so it is still moving when the hand takes it. */
+const PULL_OUT_MS = 110;
+
+/** How long "already here" stays on the sleeve. */
+const SAID_MS = 1400;
+
+/** A sleeve saying no: a short shake, on `translate` so a lift on `transform` keeps. */
+function shake(el: HTMLElement | null): void {
+  if (!el || prefersReducedMotion()) return;
+  el.animate(
+    [
+      { translate: '0px' },
+      { translate: '-5px' },
+      { translate: '4px' },
+      { translate: '-2px' },
+      { translate: '0px' },
+    ],
+    { duration: 320, easing: 'ease-out' },
+  );
+}
 
 /**
  * A crate in the shape the hand carries things in.
@@ -364,6 +417,146 @@ function Crate({
   /** Whether the press being finished turned into a lift. */
   const lifted = useRef(false);
 
+  const { registerReceiver } = useDiscHold();
+  /** A record is held over this sleeve, and would go in or be refused. */
+  const [offered, setOffered] = useState<'accept' | 'refuse' | null>(null);
+  /** The record going in, drawn in the pocket behind the print while it does. */
+  const [incoming, setIncoming] = useState<{ track: TrackMetadata; key: number } | null>(null);
+  const takeInJob = useRef<{
+    track: TrackMetadata;
+    from: Vector;
+    handBack: (outAt: Vector) => void;
+  } | null>(null);
+  const incomingEl = useRef<HTMLSpanElement | null>(null);
+  const rim = useRef<HTMLSpanElement | null>(null);
+  const countEl = useRef<HTMLSpanElement | null>(null);
+  const shownCount = useRef(playlist.trackCount);
+  const [said, setSaid] = useState<string | null>(null);
+
+  // Somewhere a record can be put. Only a Spotify song: a file on this computer
+  // has nothing to add, and a crate is not a record.
+  useEffect(() => {
+    const el = art.current;
+    if (!el) return;
+    let key = 0;
+    return registerReceiver({
+      el,
+      accepts: (track) => track.source === 'spotify' && !track.id.startsWith('crate:'),
+      onHover: setOffered,
+      refuse: () => shake(card.current),
+      approach: MOUTH_APPROACH,
+      handOverAt: MOUTH_CLEAR,
+      takeIn: (track, from, handBack) => {
+        takeInJob.current = { track, from, handBack };
+        key += 1;
+        setIncoming({ track, key });
+      },
+    });
+  }, [registerReceiver]);
+
+  /**
+   * In, taken, and back out.
+   *
+   * Runs once the record is drawn in the pocket. The song is added at the moment
+   * the sleeve takes it, and the hand never waits for Spotify: the record goes
+   * home and the music resumes whatever Spotify says. If it says the song is
+   * already there, the sleeve says so; if it refuses, the sleeve shakes and the
+   * change has been undone on the shelf.
+   *
+   * The record is always handed back, even if this sleeve is unmounted part way
+   * — the drawer closing, say. A hold that never got its record back would leave
+   * the deck's record hidden in mid-air.
+   */
+  useLayoutEffect(() => {
+    const job = takeInJob.current;
+    const disc = incomingEl.current;
+    const sleeve = card.current;
+    if (!incoming || !job || !disc || !sleeve) return;
+    takeInJob.current = null;
+
+    let handedBack = false;
+    const handBack = () => {
+      if (handedBack) return;
+      handedBack = true;
+      job.handBack({ x: MOUTH_CLEAR, y: 0 });
+      setIncoming(null);
+    };
+    const add = () => {
+      void useSpotifyPlaylistsStore
+        .getState()
+        .addToCrate(playlist.id, job.track)
+        .then((outcome) => {
+          if (outcome === 'already') {
+            setSaid(t('spotify.alreadyHere'));
+            setTimeout(() => setSaid(null), SAID_MS);
+          } else if (outcome !== 'added') {
+            shake(card.current);
+          }
+        });
+    };
+    const flash = () =>
+      rim.current?.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], {
+        duration: RIM_MS,
+        easing: 'ease-out',
+      });
+
+    if (prefersReducedMotion()) {
+      add();
+      flash();
+      handBack();
+      return;
+    }
+
+    sleeve.classList.add('groove-taking');
+    disc
+      .animate([{ transform: `translate(${job.from.x}px, ${job.from.y}px)` }, { transform: 'none' }], {
+        duration: SLIDE_IN_MS,
+        easing: SLIDE_IN_EASING,
+        fill: 'forwards',
+      })
+      .finished.then(() => {
+        add();
+        flash();
+        // `scale`, not `transform`: a lift on the sleeve's transform keeps.
+        return sleeve.animate(
+          [
+            { scale: '1' },
+            { scale: '0.95', offset: 0.3 },
+            { scale: '1.03', offset: 0.68 },
+            { scale: '1' },
+          ],
+          { duration: STAMP_MS, easing: 'ease-out' },
+        ).finished;
+      })
+      .then(
+        () =>
+          disc.animate([{ transform: 'none' }, { transform: `translateX(${MOUTH_CLEAR}px)` }], {
+            duration: PULL_OUT_MS,
+            easing: 'linear',
+            fill: 'forwards',
+          }).finished,
+      )
+      .catch(() => undefined)
+      .finally(() => {
+        sleeve.classList.remove('groove-taking');
+        handBack();
+      });
+
+    return () => handBack();
+  }, [incoming, playlist.id, t]);
+
+  /** The count ticks over when it changes, rather than simply being a different number. */
+  useLayoutEffect(() => {
+    const el = countEl.current;
+    if (el && shownCount.current !== playlist.trackCount && !prefersReducedMotion()) {
+      el.animate([{ transform: 'translateY(70%)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
+        duration: 260,
+        easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      });
+    }
+    shownCount.current = playlist.trackCount;
+  }, [playlist.trackCount]);
+
   /**
    * A crate that has just been made settles onto the shelf.
    *
@@ -420,9 +613,11 @@ function Crate({
       // to leave.
       className={`groove-sleeve relative flex shrink-0 flex-col rounded-md text-left ${
         starting ? 'animate-pulse' : ''
-      }`}
+      } ${offered === 'accept' ? 'groove-offered' : ''} ${offered === 'refuse' ? 'groove-refused' : ''}`}
       style={{ width: CRATE_SIZE }}
     >
+      {/* The brass the sleeve lights with as it takes a record. */}
+      <span ref={rim} aria-hidden="true" className="groove-rim absolute inset-0 rounded-md" />
       <span
         ref={art}
         className={`relative aspect-square w-full ${away ? 'invisible' : ''}`}
@@ -436,6 +631,19 @@ function Crate({
           aria-hidden="true"
           className="groove-sleeve-disc pointer-events-none absolute top-[4%] right-0 aspect-square w-[92%] rounded-full"
         />
+        {/* The record being put in, in the pocket with the sleeve's own, and so
+            behind the print on its way through the mouth. */}
+        {incoming && (
+          <span
+            key={incoming.key}
+            ref={incomingEl}
+            aria-hidden="true"
+            className="pointer-events-none absolute top-[4%] right-0"
+            style={{ width: SLEEVE_RECORD, height: SLEEVE_RECORD }}
+          >
+            <VinylDisc size={SLEEVE_RECORD} coverArtUrl={incoming.track.coverArtUrl} />
+          </span>
+        )}
         <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900">
           {playlist.coverArtUrl ? (
             <img
@@ -457,6 +665,11 @@ function Crate({
           )}
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
+        {said && (
+          <span className="pointer-events-none absolute inset-x-1 bottom-1 rounded bg-shell-900/90 px-1 py-0.5 text-center text-label text-brass-400">
+            {said}
+          </span>
+        )}
       </span>
       <span
         className={`relative flex min-w-0 flex-col px-1.5 py-1 text-center transition-opacity duration-150 ${
@@ -466,7 +679,7 @@ function Crate({
         <span className="truncate text-meta text-cream-100" title={playlist.name}>
           {playlist.name}
         </span>
-        <span className="truncate text-label text-cream-400">
+        <span ref={countEl} className="truncate text-label text-cream-400">
           {t('spotify.trackCount', { count: playlist.trackCount })}
         </span>
       </span>

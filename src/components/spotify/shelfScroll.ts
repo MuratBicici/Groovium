@@ -60,3 +60,30 @@ export function nextStop(reach: Reach, way: Way): number {
   const furthest = Math.max(reach.width - reach.visible, 0);
   return Math.min(Math.max(to, 0), furthest);
 }
+
+/**
+ * How near a shelf's end a carried record has to be to scroll it.
+ *
+ * A crate off the side of the shelf cannot be reached with a record in the hand:
+ * the arrows need the hand, and the hand is holding something. Holding the record
+ * against the edge is the way along instead.
+ */
+export const EDGE_ZONE_PX = 28;
+
+/**
+ * Which way a record held at `point` asks the shelf to go, if any.
+ *
+ * Only inside the shelf's own band, top to bottom: a record passing the edge of
+ * the drawer on its way somewhere else is not asking this shelf for anything.
+ */
+export function edgeWay(
+  point: { x: number; y: number },
+  box: { left: number; right: number; top: number; bottom: number },
+): Way | null {
+  if (point.y < box.top || point.y > box.bottom) return null;
+  if (point.x < box.left || point.x > box.right) return null;
+  if (point.x < box.left + EDGE_ZONE_PX) return 'left';
+  if (point.x > box.right - EDGE_ZONE_PX) return 'right';
+  return null;
+}
+

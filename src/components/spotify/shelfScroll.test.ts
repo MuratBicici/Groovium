@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canGo, nextStop, scrolls, type Reach } from './shelfScroll';
+import { canGo, EDGE_ZONE_PX, edgeWay, nextStop, scrolls, type Reach } from './shelfScroll';
 
 /**
  * The arrows on a shelf.
@@ -60,3 +60,23 @@ describe('where a press lands', () => {
     expect(nextStop(narrow, 'right')).toBe(30);
   });
 });
+
+describe('holding a record against the end of a shelf', () => {
+  const box = { left: 100, right: 700, top: 50, bottom: 180 };
+
+  it('goes the way of the end it is held at', () => {
+    expect(edgeWay({ x: 100 + EDGE_ZONE_PX - 1, y: 100 }, box)).toBe('left');
+    expect(edgeWay({ x: 700 - EDGE_ZONE_PX + 1, y: 100 }, box)).toBe('right');
+  });
+
+  it('does nothing in the middle', () => {
+    expect(edgeWay({ x: 400, y: 100 }, box)).toBeNull();
+  });
+
+  it('does nothing for a record passing above, below or beside the shelf', () => {
+    expect(edgeWay({ x: 105, y: 20 }, box)).toBeNull();
+    expect(edgeWay({ x: 695, y: 300 }, box)).toBeNull();
+    expect(edgeWay({ x: 40, y: 100 }, box)).toBeNull();
+  });
+});
+
