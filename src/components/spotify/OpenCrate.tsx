@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
@@ -8,6 +8,8 @@ import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
+import { CrateMenu, DetailsSheet, RemoveSheet } from './CrateSheets';
+import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /**
  * A crate, opened: its records out of the sleeves and laid on the shelf.
@@ -134,6 +136,19 @@ const SLIDE_OUT_EASING = 'cubic-bezier(0.32, 0.72, 0.35, 1)';
 /** An empty sleeve saying so. */
 const SHAKE_MS = 360;
 
+/** The gap between cards, which is `gap-3`. Measured grids need it as a number. */
+const GRID_GAP = 12;
+
+/** Records making room for one being moved, and settling after a removal. */
+const MAKE_ROOM_MS = 200;
+
+/** A record leaving when it is taken out of the playlist. */
+const REMOVE_MS = 150;
+
+/** How close to the top or bottom of the crate a held record scrolls it, and how fast. */
+const EDGE_PX = 40;
+const EDGE_STEP_PX = 10;
+
 /**
  * A sleeve refusing, because the record it would give you is on the deck.
  *
@@ -185,6 +200,41 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const cursor = useSpotifyPlaylistsStore((s) => s.tracksCursor);
   const error = useSpotifyPlaylistsStore((s) => s.tracksError);
   const moreTracks = useSpotifyPlaylistsStore((s) => s.moreTracks);
+  const editing = useSpotifyPlaylistsStore((s) => s.editing);
+  const editCapped = useSpotifyPlaylistsStore((s) => s.editCapped);
+  const setEditing = useSpotifyPlaylistsStore((s) => s.setEditing);
+  const removeFromCrate = useSpotifyPlaylistsStore((s) => s.removeFromCrate);
+  const moveInCrate = useSpotifyPlaylistsStore((s) => s.moveInCrate);
+  const setCrateDetails = useSpotifyPlaylistsStore((s) => s.setCrateDetails);
+  const deleteCrate = useSpotifyPlaylistsStore((s) => s.deleteCrate);
+  const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
+  const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
+
+  /** The ⋯ menu, or one of the sheets it opens. One at a time. */
+  const [surface, setSurface] = useState<'menu' | 'details' | 'remove' | null>(null);
+  /** The name as it is being typed in edit mode. */
+  const [nameDraft, setNameDraft] = useState(playlist.name);
+  const nameField = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * The order shown while a record is held, as indices into `tracks`.
+   *
+   * Null when nothing is held. The store is only told once the record is let
+   * go — one move, not one per slot it passed over on the way.
+   */
+  const [order, setOrder] = useState<number[] | null>(null);
+  /** The record being held, by key, which the settling animation leaves alone. */
+  const held = useRef<string | null>(null);
+  /** Where each record was laid out last time, by key, for the settling animation. */
+  const laidOut = useRef(new Map<string, { x: number; y: number }>());
+  const gridInnerRef = useRef<HTMLDivElement | null>(null);
+
+  const keys = useMemo(() => recordKeys(tracks.map((track) => track.id)), [tracks]);
+  const copies = useMemo(() => {
+    const counted = new Map<string, number>();
+    for (const track of tracks) counted.set(track.id, (counted.get(track.id) ?? 0) + 1);
+    return counted;
+  }, [tracks]);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
   /**
@@ -351,14 +401,18 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
    * knows. And it never blocks the close: if there is nothing to animate, or
    * motion is turned down, the layer goes immediately.
    */
-  const requestClose = useCallback(() => {
+  const requestClose = useCallback((after?: () => void) => {
     if (shutting.current) return;
     shutting.current = true;
+    const finish = () => {
+      onClose();
+      after?.();
+    };
 
     const grid = gridRef.current;
     const layer = layerRef.current;
     if (!grid || !layer || prefersReducedMotion()) {
-      onClose();
+      finish();
       return;
     }
 
@@ -399,8 +453,21 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       fill: 'forwards',
     });
     // Either way — finished or cancelled by an unmount — the crate closes.
-    fade.finished.then(onClose, onClose);
+    fade.finished.then(finish, finish);
   }, [onClose, origin]);
+
+  /**
+   * Edit mode off, saving the name if it was changed.
+   *
+   * Saved here and on Enter rather than on every keystroke: a rename is one
+   * change to the playlist, not one per letter.
+   */
+  const finishEditing = useCallback(async () => {
+    const name = nameDraft.trim();
+    if (name && name !== playlist.name) void setCrateDetails(playlist.id, { name });
+    else setNameDraft(playlist.name);
+    await setEditing(false);
+  }, [nameDraft, playlist.id, playlist.name, setCrateDetails, setEditing]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -409,11 +476,29 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // does: the shell listens on `window` too, and only this stops the one
       // press closing two things.
       e.stopImmediatePropagation();
+      // The topmost thing, one press at a time: a sheet, then the menu, then a
+      // name being typed, then edit mode, and only then the crate. The sheets
+      // do not listen themselves — registered after this one, they would never
+      // hear the key.
+      if (surface) {
+        setSurface(null);
+        return;
+      }
+      if (document.activeElement === nameField.current && nameField.current) {
+        setNameDraft(playlist.name);
+        nameField.current.blur();
+        return;
+      }
+      if (editing) {
+        setNameDraft(playlist.name);
+        void setEditing(false);
+        return;
+      }
       requestClose();
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [requestClose]);
+  }, [requestClose, surface, editing, playlist.name, setEditing]);
 
   // The unpacking. A layout effect so the first frame is never the finished
   // grid — by the time anything is painted the records are already back at the
@@ -427,6 +512,10 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     // must not send the first page back into the crate to come out again.
     const arriving = discs.slice(unpacked.current);
     unpacked.current = discs.length;
+    // Not while editing. Edit mode reads the rest of the crate at once, and up
+    // to three hundred records flying out of a sleeve together is not an
+    // unpacking, it is the window stopping.
+    if (editing) return;
 
     for (const [i, el] of arriving.entries()) {
       const from = ontoCrate(el, origin);
@@ -444,7 +533,143 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         },
       );
     }
-  }, [tracks, origin]);
+  }, [tracks, origin, editing]);
+
+  /**
+   * Records sliding to where they now are, in edit mode.
+   *
+   * After a move, a removal, or a record held over a new slot, every record
+   * whose place changed animates there from where it was. Positions are taken
+   * from `offsetLeft`/`offsetTop`, which are the layout and ignore both the
+   * animation's own transforms and the crate's scroll.
+   */
+  useLayoutEffect(() => {
+    const inner = gridInnerRef.current;
+    if (!inner || !editing) {
+      laidOut.current.clear();
+      return;
+    }
+    const reduced = prefersReducedMotion();
+    for (const el of inner.querySelectorAll<HTMLElement>('[data-key]')) {
+      const key = el.dataset.key ?? '';
+      const now = { x: el.offsetLeft, y: el.offsetTop };
+      const was = laidOut.current.get(key);
+      laidOut.current.set(key, now);
+      if (key === held.current || !was || reduced) continue;
+      if (was.x === now.x && was.y === now.y) continue;
+      el.animate(
+        [{ transform: `translate(${was.x - now.x}px, ${was.y - now.y}px)` }, { transform: 'none' }],
+        { duration: MAKE_ROOM_MS, easing: EASING },
+      );
+    }
+  });
+
+  /**
+   * Hold a record in edit mode and move it to a new place.
+   *
+   * The card follows the pointer from where it was grabbed, the others make
+   * room as it passes over their slots, and letting go sends one move. Near the
+   * top or bottom of the crate it scrolls, so a record can be taken past what
+   * is on screen. Nothing happens until the pointer has travelled, so a press
+   * that does not move is only a press.
+   */
+  const reorder = useCallback(
+    (down: React.PointerEvent, from: number, key: string, card: HTMLElement) => {
+      const inner = gridInnerRef.current;
+      const scroller = gridRef.current;
+      if (down.button !== 0 || !inner || !scroller || loading) return;
+
+      const count = tracks.length;
+      const start = { x: down.clientX, y: down.clientY };
+      const grabbedAt = {
+        x: down.clientX - card.getBoundingClientRect().left,
+        y: down.clientY - card.getBoundingClientRect().top,
+      };
+      const geometry = gridGeometry(
+        { width: card.offsetWidth, height: card.offsetHeight },
+        inner.clientWidth,
+        GRID_GAP,
+      );
+      let pointer = start;
+      let dragging = false;
+      let to = from;
+      let frame = 0;
+
+      /** Where the card is drawn, relative to its slot, and the scroll near the edges. */
+      const follow = () => {
+        frame = requestAnimationFrame(follow);
+        const edges = scroller.getBoundingClientRect();
+        if (pointer.y < edges.top + EDGE_PX) scroller.scrollTop -= EDGE_STEP_PX;
+        else if (pointer.y > edges.bottom - EDGE_PX) scroller.scrollTop += EDGE_STEP_PX;
+
+        const box = inner.getBoundingClientRect();
+        const inGrid = { x: pointer.x - box.left, y: pointer.y - box.top };
+        const next = slotAt(inGrid, geometry, count);
+        if (next !== to) {
+          to = next;
+          setOrder(previewOrder(count, from, to));
+        }
+        const dx = inGrid.x - grabbedAt.x - card.offsetLeft;
+        const dy = inGrid.y - grabbedAt.y - card.offsetTop;
+        card.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
+      };
+
+      const move = (e: PointerEvent) => {
+        pointer = { x: e.clientX, y: e.clientY };
+        if (dragging || Math.hypot(pointer.x - start.x, pointer.y - start.y) < DRAG_THRESHOLD) return;
+        dragging = true;
+        held.current = key;
+        card.classList.add('groove-held');
+        frame = requestAnimationFrame(follow);
+      };
+
+      const end = (commit: boolean) => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', cancelled);
+        cancelAnimationFrame(frame);
+        if (!dragging) return;
+
+        // Settle from where it was let go of, not from its old slot: the card
+        // is drawn at its slot plus the drag, so that is where it starts from.
+        const match = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(card.style.transform);
+        const offset = match ? { x: Number(match[1]), y: Number(match[2]) } : { x: 0, y: 0 };
+        laidOut.current.set(key, { x: card.offsetLeft + offset.x, y: card.offsetTop + offset.y });
+        card.style.transform = '';
+        card.classList.remove('groove-held');
+        held.current = null;
+
+        setOrder(null);
+        if (commit && to !== from) void moveInCrate(playlist.id, from, to);
+      };
+      const up = () => end(true);
+      const cancelled = () => end(false);
+
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', cancelled);
+    },
+    [loading, moveInCrate, playlist.id, tracks.length],
+  );
+
+  /** Take a record out of the playlist: it leaves, then the others close up. */
+  const takeOut = useCallback(
+    async (track: TrackMetadata, card: HTMLElement | null) => {
+      if (card && !prefersReducedMotion()) {
+        await card
+          .animate(
+            [
+              { opacity: 1, transform: 'scale(1)' },
+              { opacity: 0, transform: 'scale(0.85)' },
+            ],
+            { duration: REMOVE_MS, easing: 'ease-in', fill: 'forwards' },
+          )
+          .finished.catch(() => undefined);
+      }
+      void removeFromCrate(playlist.id, track.id);
+    },
+    [playlist.id, removeFromCrate],
+  );
 
   const sentinel = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -486,53 +711,138 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         closing ? 'pointer-events-none' : ''
       }`}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-        <button
-          type="button"
-          onClick={requestClose}
-          // The heading is the way back, not just the cross in the corner.
-          // This is a place you went into, so the way out is where you came in.
-          className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-cream-50"
-        >
-          <svg
-            viewBox="0 0 10 10"
-            className="h-2.5 w-2.5 shrink-0 text-cream-400"
-            aria-hidden="true"
-          >
-            <path
-              d="M6.5 1L2.5 5l4 4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      <div className="relative flex shrink-0 items-center justify-between gap-2 px-3 py-2">
+        {editing ? (
+          <>
+            <button
+              type="button"
+              aria-label={t('common.back')}
+              title={t('common.back')}
+              onClick={() => requestClose()}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+            >
+              <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+                <path
+                  d="M6.5 1L2.5 5l4 4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            {/* The name, edited where it is shown. In edit mode only: outside it
+                the heading is the way back, and one press cannot mean both. */}
+            <input
+              ref={nameField}
+              type="text"
+              value={nameDraft}
+              aria-label={t('spotify.playlistName')}
+              maxLength={100}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const name = nameDraft.trim();
+                  if (name && name !== playlist.name) void setCrateDetails(playlist.id, { name });
+                  e.currentTarget.blur();
+                }
+              }}
+              className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
             />
-          </svg>
-          <span className="min-w-0">
-            <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-              {playlist.name}
-            </span>
-            <span className="block truncate text-meta text-cream-400">
-              {t('spotify.trackCount', { count: playlist.trackCount })}
-            </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-label={t('common.close')}
-          title={t('common.close')}
-          onClick={requestClose}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-        >
-          <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-            <path
-              d="M1 1l8 8M9 1l-8 8"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+            <button
+              type="button"
+              onClick={() => void finishEditing()}
+              className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
+            >
+              {t('spotify.done')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => requestClose()}
+              // The heading is the way back, not just the cross in the corner.
+              // This is a place you went into, so the way out is where you came in.
+              className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-cream-50"
+            >
+              <svg
+                viewBox="0 0 10 10"
+                className="h-2.5 w-2.5 shrink-0 text-cream-400"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6.5 1L2.5 5l4 4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="min-w-0">
+                <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+                  {playlist.name}
+                </span>
+                <span className="block truncate text-meta text-cream-400">
+                  {t('spotify.trackCount', { count: playlist.trackCount })}
+                </span>
+              </span>
+            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  clearWriteError();
+                  setNameDraft(playlist.name);
+                  void setEditing(true);
+                }}
+                className="rounded-full px-2 py-0.5 text-label tracking-wide text-cream-400 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
+              >
+                {t('spotify.edit')}
+              </button>
+              <button
+                type="button"
+                aria-label={t('spotify.more')}
+                title={t('spotify.more')}
+                aria-haspopup="menu"
+                aria-expanded={surface === 'menu'}
+                onClick={() => setSurface(surface === 'menu' ? null : 'menu')}
+                className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+              >
+                <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="currentColor">
+                  <circle cx="2.5" cy="6" r="1.1" />
+                  <circle cx="6" cy="6" r="1.1" />
+                  <circle cx="9.5" cy="6" r="1.1" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                onClick={() => requestClose()}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+              >
+                <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+                  <path
+                    d="M1 1l8 8M9 1l-8 8"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
+        {surface === 'menu' && (
+          <CrateMenu
+            onDetails={() => setSurface('details')}
+            onRemove={() => setSurface('remove')}
+            onClose={() => setSurface(null)}
+          />
+        )}
       </div>
 
       {error && (
@@ -540,31 +850,67 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           {error}
         </p>
       )}
+      {/* Why the last change did not happen. It has already been undone on
+          screen; this says so, and goes when dismissed or when editing starts
+          again. */}
+      {writeError && (
+        <div className="mx-3 mb-1 flex shrink-0 items-start gap-2 rounded bg-red-950/70 px-2 py-1.5">
+          <p className="min-w-0 flex-1 text-meta leading-snug text-red-200">{writeError}</p>
+          <button
+            type="button"
+            aria-label={t('common.dismiss')}
+            onClick={clearWriteError}
+            className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
+          >
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {editing && editCapped && (
+        <p className="mx-3 mb-1 shrink-0 text-meta leading-snug text-cream-400">
+          {t('spotify.editCapped')}
+        </p>
+      )}
 
       <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 groove-scroll-fade">
         <div
-          className="grid gap-3 pt-0.5"
+          ref={gridInnerRef}
+          // Positioned, so each card's `offsetLeft` and `offsetTop` are measured
+          // from here — the grid's content, which scrolls with the cards.
+          className="relative grid gap-3 pt-0.5"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))' }}
         >
-          {tracks.map((track, index) => (
-            <Record
-              key={`${track.id}:${index}`}
-              track={track}
-              // Two questions, not one. Whether the sleeve is empty, and
-              // whether it is empty *because the record is on the deck* —
-              // only the second earns the slide back in, because the first is
-              // also true of a record in somebody's hand, which the hand is
-              // already putting back itself.
-              absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
-              onDeck={track.id === onDeck || track.id === handedOver}
-              returning={returning?.id === track.id ? returning : null}
-              onCarry={carry}
-              onPlay={(disc) => {
-                flyToPlatter(disc, track);
-                deliver(track);
-              }}
-            />
-          ))}
+          {(order ?? tracks.map((_, at) => at)).map((index) => {
+            const track = tracks[index];
+            const key = keys[index];
+            if (!track || !key) return null;
+            return (
+              <Record
+                key={key}
+                recordKey={key}
+                track={track}
+                editing={editing}
+                copies={copies.get(track.id) ?? 1}
+                onReorder={(down, card) => reorder(down, index, key, card)}
+                onTakeOut={(card) => void takeOut(track, card)}
+                // Two questions, not one. Whether the sleeve is empty, and
+                // whether it is empty *because the record is on the deck* —
+                // only the second earns the slide back in, because the first is
+                // also true of a record in somebody's hand, which the hand is
+                // already putting back itself.
+                absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
+                onDeck={track.id === onDeck || track.id === handedOver}
+                returning={returning?.id === track.id ? returning : null}
+                onCarry={carry}
+                onPlay={(disc) => {
+                  flyToPlatter(disc, track);
+                  deliver(track);
+                }}
+              />
+            );
+          })}
         </div>
         <div ref={sentinel} aria-hidden="true" className="h-px" />
         {loading && (
@@ -573,6 +919,30 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           </p>
         )}
       </div>
+
+      {surface === 'details' && (
+        <DetailsSheet
+          playlist={playlist}
+          onClose={() => setSurface(null)}
+          onSave={(details) => {
+            setSurface(null);
+            void setCrateDetails(playlist.id, details);
+          }}
+        />
+      )}
+      {surface === 'remove' && (
+        <RemoveSheet
+          playlist={playlist}
+          onClose={() => setSurface(null)}
+          onRemove={() => {
+            setSurface(null);
+            // The records go back into the crate first, and only then does the
+            // crate leave the shelf. Removing it at once would unmount this
+            // layer mid-thought, with nothing to show where it went.
+            requestClose(() => void deleteCrate(playlist.id));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -593,6 +963,11 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
  */
 function Record({
   track,
+  recordKey,
+  editing,
+  copies,
+  onReorder,
+  onTakeOut,
   absent,
   onDeck,
   returning,
@@ -600,6 +975,14 @@ function Record({
   onPlay,
 }: {
   track: TrackMetadata;
+  /** Stable across moves, so the card is not remounted by one. */
+  recordKey: string;
+  /** Edit mode: a press moves the record, and it can be taken out. */
+  editing: boolean;
+  /** How many times this song is in the playlist — all of which taking it out removes. */
+  copies: number;
+  onReorder: (down: React.PointerEvent, card: HTMLElement) => void;
+  onTakeOut: (card: HTMLElement | null) => void;
   /** The record is not in the sleeve — on the deck, or in somebody's hand. */
   absent: boolean;
   /** It is on the deck, which is the only way out that ends in a way back. */
@@ -743,9 +1126,14 @@ function Record({
       // Not `disabled`. An empty sleeve is still worth pressing — pressing it
       // is how you find out it is empty — and a disabled button receives no
       // pointer events at all, so it could not answer.
-      aria-disabled={absent}
-      title={absent ? t('spotify.onDeck') : undefined}
+      data-key={recordKey}
+      aria-disabled={absent && !editing}
+      title={absent && !editing ? t('spotify.onDeck') : undefined}
       onPointerDown={(e) => {
+        if (editing) {
+          onReorder(e, e.currentTarget);
+          return;
+        }
         if (absent) {
           refuse(e.currentTarget);
           return;
@@ -764,12 +1152,41 @@ function Record({
         // Answered on the press already, and once is enough. A press that
         // became a lift has had its say too — the record went where it was
         // dropped, and the `click` that follows it must not send it again.
-        if (absent || lifted.current) return;
+        // In edit mode a press is for moving, never for playing.
+        if (editing || absent || lifted.current) return;
         const el = disc.current;
         if (el) pullOut(() => onPlay(el), false);
       }}
-      className="groove-record groove-sleeve relative flex flex-col rounded-md text-left"
+      className={`groove-record groove-sleeve relative flex flex-col rounded-md text-left ${
+        editing ? 'cursor-grab' : ''
+      }`}
     >
+      {editing && (
+        // Its own control, and it keeps the press to itself: a press here that
+        // also started a move would take the record out from under the hand.
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong')}
+          title={copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong')}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTakeOut(button.current);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            onTakeOut(button.current);
+          }}
+          className="absolute top-1.5 left-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/85 text-cream-200 shadow ring-1 ring-[var(--color-edge)] transition-colors hover:bg-red-800 hover:text-white"
+        >
+          <svg viewBox="0 0 10 10" className="h-2 w-2" aria-hidden="true">
+            <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </span>
+      )}
       <span className="relative aspect-square w-full">
         {/* In the sleeve, not on it. Drawn before the print and therefore under
             it, so the only part of it anyone sees is the crescent in the

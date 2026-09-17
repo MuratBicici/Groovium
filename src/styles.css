@@ -618,8 +618,22 @@ body {
  * which is the whole reason it is here.
  */
 .groove-record:hover,
-.groove-record.groove-sliding {
+.groove-record.groove-sliding,
+.groove-record.groove-held {
   content-visibility: visible;
+}
+
+/*
+ * A record held in edit mode. Above the cards it passes over, lifted by a
+ * shadow rather than a size change the grid would have to make room for, and
+ * with no transition of its own: its transform is set every frame to follow
+ * the pointer, and easing that would make it lag the hand.
+ */
+.groove-record.groove-held {
+  z-index: 20;
+  cursor: grabbing;
+  transition: none;
+  box-shadow: 0 14px 28px rgb(0 0 0 / 0.45);
 }
 
 /*
