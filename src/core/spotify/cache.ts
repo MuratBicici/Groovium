@@ -27,8 +27,9 @@ import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
  * Bumped whenever the shape changes. A different version is an empty cache.
  *
  * 2: playlists carry their description and whether they are public.
+ * 3: crates carry each record's position in the playlist.
  */
-export const CACHE_VERSION = 2;
+export const CACHE_VERSION = 3;
 
 /**
  * How long something Spotify said is believed without asking again.
@@ -67,6 +68,14 @@ export interface CachedCrate {
   id: string;
   snapshotId: string;
   tracks: TrackMetadata[];
+  /**
+   * Where each record sits in the playlist, one per track.
+   *
+   * Kept because the edit screen needs them and they cannot be worked out from
+   * the tracks: entries Spotify cannot play are not kept, and still take up
+   * positions.
+   */
+  positions: number[];
   cursor: string | null;
   /** When it was read. */
   at: number;
@@ -136,12 +145,15 @@ function isSpotifyTrack(value: unknown): value is TrackMetadata {
  */
 function readCrate(value: unknown, now: number): CachedCrate | null {
   if (!isObject(value)) return null;
-  const { id, snapshotId, tracks, cursor, at } = value;
+  const { id, snapshotId, tracks, positions, cursor, at } = value;
   if (!isString(id) || !isString(snapshotId) || !Array.isArray(tracks)) return null;
   if (!(cursor === null || isString(cursor))) return null;
   if (typeof at !== 'number' || now - at > CRATE_KEPT_FOR_MS) return null;
   if (!tracks.every(isSpotifyTrack)) return null;
-  return { id, snapshotId, tracks, cursor, at };
+  // One position per record, or the edit screen would move the wrong songs.
+  if (!Array.isArray(positions) || positions.length !== tracks.length) return null;
+  if (!positions.every((position) => Number.isInteger(position) && position >= 0)) return null;
+  return { id, snapshotId, tracks, positions, cursor, at };
 }
 
 /**
@@ -203,6 +215,11 @@ export function withAccount(cache: SpotifyCache, who: string | null): SpotifyCac
 export function withCrate(cache: SpotifyCache, crate: CachedCrate): SpotifyCache {
   const others = cache.crates.filter((entry) => entry.id !== crate.id);
   return { ...cache, crates: [crate, ...others].slice(0, CRATES_KEPT) };
+}
+
+/** Forget a crate — it has been removed from the library, or rewritten beyond keeping. */
+export function withoutCrate(cache: SpotifyCache, id: string): SpotifyCache {
+  return { ...cache, crates: cache.crates.filter((entry) => entry.id !== id) };
 }
 
 /**

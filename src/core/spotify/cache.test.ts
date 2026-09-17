@@ -13,6 +13,7 @@ import {
   withAccount,
   withCrate,
   withShelf,
+  withoutCrate,
   type CachedCrate,
 } from './cache';
 
@@ -51,6 +52,7 @@ const crate = (id: string, over: Partial<CachedCrate> = {}): CachedCrate => ({
   id,
   snapshotId: `snap-${id}`,
   tracks: [song('1'), song('2')],
+  positions: [0, 1],
   cursor: null,
   at: NOW,
   ...over,
@@ -90,6 +92,13 @@ describe('reading the file back', () => {
     expect(read?.crates.map((c) => c.id)).toEqual(['b']);
   });
 
+  it('drops a crate whose positions do not match its records', () => {
+    // A position short, and the edit screen moves the wrong song.
+    const short = crate('a', { positions: [0] });
+    const bad = crate('b', { positions: [0, -1] });
+    expect(readCache(file({ crates: [short, bad, crate('c')] }), NOW)?.crates.map((c) => c.id)).toEqual(['c']);
+  });
+
   it('drops a crate nobody has touched for longer than it is kept', () => {
     const old = crate('a', { at: NOW - CRATE_KEPT_FOR_MS - 1 });
     expect(readCache(file({ crates: [old] }), NOW)?.crates).toEqual([]);
@@ -113,6 +122,11 @@ describe('keeping crates', () => {
       crate('a', { snapshotId: 'new' }),
     );
     expect(cache.crates.map((c) => c.snapshotId)).toEqual(['new']);
+  });
+
+  it('forgets one crate and keeps the rest', () => {
+    const cache = withoutCrate(withCrate(withCrate(emptyCache(), crate('a')), crate('b')), 'a');
+    expect(cache.crates.map((c) => c.id)).toEqual(['b']);
   });
 
   it('lets the oldest go once there are too many', () => {

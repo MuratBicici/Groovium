@@ -103,7 +103,20 @@ export function clearCache(): void {
     });
 }
 
-/** Every queued write done. For tests, and for nothing else. */
+/** Every queued write done. */
 export function settled(): Promise<void> {
   return writes;
+}
+
+/**
+ * The cache, once every change already asked for has been applied to it.
+ *
+ * For reading back what this session has just written. A playlist created a
+ * moment ago queues its empty crate to be kept, and opening it straight away
+ * read the cache from before that write — found nothing, and asked Spotify for
+ * a crate it already knew was empty.
+ */
+export async function loadCacheAfterWrites(): Promise<SpotifyCache> {
+  await writes;
+  return loadCache();
 }

@@ -407,13 +407,14 @@ describe('a crate kept from an earlier launch', () => {
   });
 
   it('is not played from a copy that was only read part of the way', async () => {
-    // Opening a crate and scrolling halfway keeps what was seen, with the place
-    // to carry on from. That is enough to show, and it is not the playlist.
+    // A copy that stops short of both its end and the play cap is not the
+    // playlist, however it came to be written.
     updateCache((cache) =>
       withCrate(cache, {
         id: 'p1',
         snapshotId: 'snap-1',
         tracks: [{ id: 'spotify:track:1', title: 'Song', artist: 'Artist', album: 'Album', duration: 1000, source: 'spotify' }],
+        positions: [0],
         cursor: '24',
         at: Date.now(),
       }),

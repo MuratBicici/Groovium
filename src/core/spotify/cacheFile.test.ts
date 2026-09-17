@@ -70,6 +70,7 @@ describe('writing the cache', () => {
         id: 'theirs',
         snapshotId: 'snap-theirs',
         tracks: [],
+        positions: [],
         cursor: null,
         at: Date.now(),
       }),

@@ -1,12 +1,24 @@
 import { create } from 'zustand';
 import type { TrackMetadata } from '@/core/types';
 import {
+  addItems,
+  changeDetails,
+  coverOf,
+  createPlaylist as createOnSpotify,
+  currentSnapshot,
   forgetCrates,
   ITEMS_PER_PAGE,
+  keepCrate,
+  moveItems,
   PLAY_CAP,
+  playlistEntryPage,
   playlistPage,
-  playlistTrackPage,
+  removeFromLibrary,
+  removeItems,
+  uploadCover,
   wholeCrate,
+  type CrateEntry,
+  type PlaylistDetails,
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
 import { forgetSpotlight } from '@/core/providers/spotifySpotlight';
@@ -14,17 +26,20 @@ import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { account, isSpotifyAuthError, onAccountChange } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
+import { log } from '@/platform/log';
 import {
   belongsToSomeoneElse,
   crateFor,
   SHELF_FRESH_MS,
   shelfWhileChecking,
   withCrate,
+  withoutCrate,
   withShelf,
   type CachedCrate,
   type SpotifyCache,
 } from './cache';
-import { clearCache, loadCache, updateCache } from './cacheFile';
+import { clearCache, loadCache, loadCacheAfterWrites, updateCache } from './cacheFile';
+import { copiesOf, moveRequest, withMove, withoutSong, withSongAdded } from './crateEdits';
 
 /**
  * What to put on screen when a request did not happen.
@@ -51,21 +66,44 @@ function describe(err: unknown): string {
 const KEPT = 'kept';
 
 /**
+ * How many records to ask for at once when a crate is opened for editing.
+ *
+ * Editing needs the whole crate, not a screenful, so it asks in Spotify's
+ * larger pages: three hundred records is six requests instead of thirteen.
+ */
+const EDIT_PAGE = 50;
+
+/**
+ * How long after a cover upload to look for the cover Spotify made of it.
+ *
+ * Spotify answers the upload with 202 and puts the image in place a little
+ * later. Until then the crate shows the picture that was sent.
+ */
+const COVER_LOOKS_MS = [2_000, 5_000, 10_000];
+
+/** How adding a song to a crate went. */
+export type AddOutcome = 'added' | 'already' | 'refused' | 'failed';
+
+/**
  * Someone's Spotify playlists, as the drawer has them so far.
  *
  * Its own store for the reason `updates` has one: this has nothing to do with
  * what is playing. It is also not component state, because the playlist picker
- * will need the same list to offer, and two components fetching the same pages
+ * needs the same list to offer, and two components fetching the same pages
  * independently is how a rate limit is found.
  *
  * Paged rather than fetched whole. Someone with three hundred playlists would
  * otherwise wait for six round trips before seeing the first crate, and pay
  * for five of them to look at the top of the shelf.
  *
- * And kept between launches — see `cache.ts` for what is believed and when.
- * The shelf opens on the copy from last time and is checked against Spotify
- * as it does; crates whose snapshot Spotify has just confirmed open and play
- * from the copy without asking.
+ * Kept between launches — see `cache.ts` for what is believed and when.
+ *
+ * And editable. Every change shows at once and is sent afterwards, one at a
+ * time per playlist, so a second edit is always aimed at the version the first
+ * one produced. Spotify's answer is carried everywhere the crate is known — the
+ * shelf, what Spotify has vouched for, the crate in memory and the one on disk —
+ * so nothing has to be read again to learn what was just written. A change
+ * Spotify refuses is undone on screen, along with anything queued behind it.
  */
 
 interface SpotifyPlaylistsState {
@@ -109,9 +147,23 @@ interface SpotifyPlaylistsState {
    */
   openOrigin: { x: number; y: number; width: number; height: number } | null;
   tracks: TrackMetadata[];
+  /**
+   * Where each of `tracks` sits in the playlist, one per track.
+   *
+   * Not its index: entries Spotify cannot play are left out of `tracks` and
+   * still take up positions. Moving a song is aimed at these.
+   */
+  positions: number[];
   tracksCursor: string | null;
   tracksLoading: boolean;
   tracksError: string | null;
+
+  /** The open crate is being edited: dragging moves records, and each can be taken out. */
+  editing: boolean;
+  /** Edit mode stopped at the play cap, so only the first records can be edited. */
+  editCapped: boolean;
+  /** Why the last change to a playlist did not happen. */
+  writeError: string | null;
 
   /**
    * The crate being fetched so it can be played, if any.
@@ -138,6 +190,23 @@ interface SpotifyPlaylistsState {
   openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
   closeCrate: () => void;
   moreTracks: () => Promise<void>;
+
+  /** Turn editing on or off for the open crate. On reads the whole crate first. */
+  setEditing: (on: boolean) => Promise<void>;
+  /** Make a private playlist. Null when it could not be made. */
+  createPlaylist: (name: string) => Promise<SpotifyPlaylist | null>;
+  /** Put a song at the end of a playlist, unless it is already there. */
+  addToCrate: (id: string, track: TrackMetadata) => Promise<AddOutcome>;
+  /** Take every copy of a song out of the open crate. */
+  removeFromCrate: (id: string, uri: string) => Promise<boolean>;
+  /** Move the record at screen index `from` to screen index `to` in the open crate. */
+  moveInCrate: (id: string, from: number, to: number) => Promise<boolean>;
+  setCrateDetails: (id: string, details: PlaylistDetails) => Promise<boolean>;
+  /** Upload a cover, showing `preview` until Spotify has made its own. */
+  setCrateCover: (id: string, base64Jpeg: string, preview: string) => Promise<boolean>;
+  /** Remove a playlist from the library. */
+  deleteCrate: (id: string) => Promise<boolean>;
+  clearWriteError: () => void;
 }
 
 export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get) => {
@@ -167,6 +236,24 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
   /** The kept copy of the crate that is open, while it is being shown from it. */
   let shelved: CachedCrate | null = null;
 
+  /** The last change queued for each playlist, which the next one waits behind. */
+  const queues = new Map<string, Promise<unknown>>();
+  /**
+   * Counted up for a playlist when a change to it is refused.
+   *
+   * Everything queued behind a refused change was shown on top of it. Undoing
+   * the refused one undoes those too, so they must not be sent.
+   */
+  const epochs = new Map<string, number>();
+
+  /**
+   * Covers Spotify had before an upload that has not settled yet.
+   *
+   * What goes to disk instead of the picture being shown: that is a data URL of
+   * a quarter of a megabyte, and it is Spotify's cover that should be kept.
+   */
+  const coverBeforeUpload = new Map<string, string | undefined>();
+
   /**
    * The snapshot Spotify gave for a playlist, if it gave it recently.
    *
@@ -180,6 +267,56 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     if (at === undefined || Date.now() - at >= SHELF_FRESH_MS) return undefined;
     return get().playlists.find((playlist) => playlist.id === id)?.snapshotId;
   }
+
+  const findPlaylist = (id: string) => get().playlists.find((playlist) => playlist.id === id);
+
+  /** Change one playlist wherever the shelf holds it. */
+  function patchPlaylist(id: string, change: Partial<SpotifyPlaylist>): void {
+    const apply = (list: SpotifyPlaylist[]) =>
+      list.map((playlist) => (playlist.id === id ? { ...playlist, ...change } : playlist));
+    fresh = apply(fresh);
+    kept = apply(kept);
+    set({ playlists: apply(get().playlists) });
+  }
+
+  /**
+   * Put one playlist back exactly as it was — not merged over what is there.
+   *
+   * Merging cannot take a field away: undoing a cover on a playlist that had
+   * none would leave the preview behind.
+   */
+  function replacePlaylist(id: string, playlist: SpotifyPlaylist): void {
+    const apply = (list: SpotifyPlaylist[]) => list.map((entry) => (entry.id === id ? playlist : entry));
+    fresh = apply(fresh);
+    kept = apply(kept);
+    set({ playlists: apply(get().playlists) });
+  }
+
+  /** The shelf as it goes to disk: Spotify's covers, never a preview. */
+  function keepShelf(): void {
+    const shelf = get().playlists.map((playlist) => {
+      if (!coverBeforeUpload.has(playlist.id)) return playlist;
+      const { coverArtUrl: _preview, ...rest } = playlist;
+      const spotifys = coverBeforeUpload.get(playlist.id);
+      return spotifys === undefined ? rest : { ...rest, coverArtUrl: spotifys };
+    });
+    updateCache((cache) => withShelf(cache, shelf));
+  }
+
+  const openEntries = (): CrateEntry[] => {
+    const { tracks, positions } = get();
+    return tracks.map((track, at) => ({ track, position: positions[at] ?? at }));
+  };
+
+  function showEntries(entries: CrateEntry[]): void {
+    set({
+      tracks: entries.map((entry) => entry.track),
+      positions: entries.map((entry) => entry.position),
+    });
+  }
+
+  /** Whether the open crate is this one and holds all of it. */
+  const openAndWhole = (id: string) => get().openId === id && get().tracksCursor === null;
 
   /**
    * One fetch at a time, guarded here rather than by the caller.
@@ -210,7 +347,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         loading: false,
         ...(cursor === null ? { checkedAt: now } : {}),
       });
-      updateCache((cache) => withShelf(cache, shelf));
+      keepShelf();
     } catch (err) {
       if (asked !== era) return;
       set({ loading: false, error: describe(err) });
@@ -245,14 +382,18 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
    * open. Open a crate, change your mind, open another: the first request is
    * still in flight, and without this it lands in the second crate.
    */
-  async function fetchTracks(id: string, cursor: string | null): Promise<void> {
+  async function fetchTracks(id: string, cursor: string | null, perPage?: number): Promise<void> {
     if (get().tracksLoading) return;
     set({ tracksLoading: true, tracksError: null });
     try {
-      const page = await playlistTrackPage(id, cursor);
+      const page =
+        perPage === undefined
+          ? await playlistEntryPage(id, cursor)
+          : await playlistEntryPage(id, cursor, perPage);
       if (get().openId !== id) return;
       set((state) => ({
-        tracks: [...state.tracks, ...page.items],
+        tracks: [...state.tracks, ...page.items.map((entry) => entry.track)],
+        positions: [...state.positions, ...page.items.map((entry) => entry.position)],
         tracksCursor: page.cursor,
         tracksLoading: false,
       }));
@@ -260,10 +401,10 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       // Read to the end, from the top: that is the whole crate, and worth
       // keeping — against the snapshot Spotify vouched for, or not at all.
       const snapshotId = confirmedSnapshot(id);
-      const all = get().tracks;
-      if (page.cursor === null && snapshotId !== undefined && all.length <= PLAY_CAP) {
+      const { tracks, positions } = get();
+      if (page.cursor === null && snapshotId !== undefined && tracks.length <= PLAY_CAP) {
         updateCache((cache) =>
-          withCrate(cache, { id, snapshotId, tracks: all, cursor: null, at: Date.now() }),
+          withCrate(cache, { id, snapshotId, tracks, positions, cursor: null, at: Date.now() }),
         );
       }
     } catch (err) {
@@ -280,8 +421,190 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     const upTo = from + ITEMS_PER_PAGE;
     set((state) => ({
       tracks: [...state.tracks, ...crate.tracks.slice(from, upTo)],
+      positions: [...state.positions, ...crate.positions.slice(from, upTo)],
       tracksCursor: upTo < crate.tracks.length || crate.cursor !== null ? KEPT : null,
     }));
+  }
+
+  // --- Changing playlists ---------------------------------------------------
+
+  /** How the shelf and the open crate looked before a change, to put back if it is refused. */
+  function snapshotOfScreen(id: string) {
+    const playlist = findPlaylist(id);
+    const index = get().playlists.findIndex((entry) => entry.id === id);
+    const crate = get().openId === id ? { tracks: get().tracks, positions: get().positions } : null;
+    return () => {
+      // The snapshot is left as it is now, not as it was: a change queued ahead
+      // of the refused one may have succeeded since, and its snapshot is the
+      // true one.
+      const now = findPlaylist(id);
+      if (playlist) {
+        if (now) replacePlaylist(id, { ...playlist, snapshotId: now.snapshotId });
+        else {
+          const list = [...get().playlists];
+          list.splice(Math.min(index, list.length), 0, playlist);
+          set({ playlists: list });
+          fresh = mergeById(fresh, [playlist]);
+        }
+      }
+      if (crate && get().openId === id) set(crate);
+    };
+  }
+
+  /**
+   * Send a change after the ones already queued for the same playlist.
+   *
+   * Resolves true once Spotify has taken it. A refusal undoes what was shown,
+   * cancels whatever was queued behind it — it was shown on top of this one —
+   * and says why.
+   */
+  function enqueue(
+    id: string,
+    undo: () => void,
+    send: (asked: number) => Promise<void>,
+  ): Promise<boolean> {
+    const asked = era;
+    const epoch = epochs.get(id) ?? 0;
+    const run = (queues.get(id) ?? Promise.resolve()).then(async () => {
+      if (asked !== era || (epochs.get(id) ?? 0) !== epoch) return false;
+      try {
+        await send(asked);
+        return true;
+      } catch (err) {
+        if (asked !== era) return false;
+        epochs.set(id, epoch + 1);
+        undo();
+        // What was believed about this crate may no longer be what Spotify
+        // holds, so nothing kept about it is trusted until it is read again.
+        confirmed.delete(id);
+        forgetCrates(id);
+        updateCache((cache) => withoutCrate(cache, id));
+        set({ writeError: say('spotify.writeFailed', { reason: describe(err) }) });
+        log('warn', 'spotify', 'a change to a playlist was refused', err);
+        return false;
+      }
+    });
+    queues.set(id, run);
+    return run;
+  }
+
+  /**
+   * Carry a change Spotify has accepted to everywhere the crate is known.
+   *
+   * `edit` is the same change, as it applies to a list of records. The open
+   * crate already shows it; a kept copy under the snapshot the change was aimed
+   * at has it applied, so the copy stays whole under the new one. A crate that
+   * is not known whole anywhere is forgotten, since nothing true can be kept
+   * about it.
+   */
+  async function settle(
+    id: string,
+    before: string | undefined,
+    after: string | null,
+    edit: (entries: CrateEntry[]) => CrateEntry[],
+    asked: number,
+  ): Promise<void> {
+    // The era the change was queued under. Taken here instead, an answer that
+    // arrived after signing out would be checked against the new era and pass.
+    if (asked !== era) return;
+    if (after === null) {
+      confirmed.delete(id);
+      forgetCrates(id);
+      updateCache((cache) => withoutCrate(cache, id));
+      return;
+    }
+
+    let whole: CrateEntry[] | null = null;
+    if (openAndWhole(id)) whole = openEntries();
+    else if (before !== undefined) {
+      const found = crateFor(await loadCacheAfterWrites(), id, before);
+      if (asked !== era) return;
+      if (found && found.cursor === null) {
+        whole = edit(found.tracks.map((track, at) => ({ track, position: found.positions[at] ?? at })));
+      }
+    }
+
+    patchPlaylist(id, { snapshotId: after });
+    confirmed.set(id, Date.now());
+    keepShelf();
+
+    if (!whole) {
+      forgetCrates(id);
+      updateCache((cache) => withoutCrate(cache, id));
+      return;
+    }
+    const tracks = whole.map((entry) => entry.track);
+    const positions = whole.map((entry) => entry.position);
+    const crate: CachedCrate = { id, snapshotId: after, tracks, positions, cursor: null, at: Date.now() };
+    keepCrate(id, after, tracks);
+    updateCache((cache) => withCrate(cache, crate));
+    if (shelved?.id === id) shelved = crate;
+  }
+
+  /**
+   * What a playlist holds, as far as it can be known without guessing.
+   *
+   * The open crate if it is all there, the kept copy under a snapshot Spotify
+   * vouched for, or the crate read now. Null only when it cannot be read, and
+   * then an add goes ahead: refusing to add because the list could not be
+   * checked is worse than the duplicate it might allow.
+   */
+  async function contentsOf(id: string): Promise<TrackMetadata[] | null> {
+    if (openAndWhole(id)) return get().tracks;
+    const snapshotId = confirmedSnapshot(id);
+    if (snapshotId !== undefined) {
+      const found = crateFor(await loadCacheAfterWrites(), id, snapshotId);
+      if (found && found.cursor === null) return found.tracks;
+    }
+    try {
+      return await wholeCrate(id, snapshotId);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Learn the snapshot after a change that does not answer with one.
+   *
+   * A rename or a new cover may move it, and the next removal or move is aimed
+   * at it. The records have not changed, so the crate is carried over as it is.
+   */
+  async function refreshSnapshot(id: string, asked: number): Promise<void> {
+    const before = findPlaylist(id)?.snapshotId;
+    const after = await currentSnapshot(id);
+    if (after === before) return;
+    await settle(id, before, after, (entries) => entries, asked);
+  }
+
+  /** Look for the cover Spotify made of an upload, a few times, and keep it. */
+  function awaitCover(id: string, asked: number): void {
+    const before = coverBeforeUpload.get(id);
+    let look = 0;
+    const next = () => {
+      const delay = COVER_LOOKS_MS[look];
+      if (delay === undefined) {
+        // Never changed. The preview stays on screen for the session, and the
+        // disk goes on holding the cover Spotify had.
+        return;
+      }
+      look += 1;
+      setTimeout(() => {
+        if (asked !== era) return;
+        void coverOf(id)
+          .then((url) => {
+            if (asked !== era) return;
+            if (!url || url === before) {
+              next();
+              return;
+            }
+            coverBeforeUpload.delete(id);
+            patchPlaylist(id, { coverArtUrl: url });
+            keepShelf();
+          })
+          .catch(() => next());
+      }, delay);
+    };
+    next();
   }
 
   return {
@@ -293,6 +616,9 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     error: null,
     starting: null,
     playError: null,
+    editing: false,
+    editCapped: false,
+    writeError: null,
 
     async playCrate(id, shuffled) {
       // One at a time. The whole crate is several requests, and a second press
@@ -349,6 +675,9 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       kept = [];
       confirmed.clear();
       shelved = null;
+      queues.clear();
+      epochs.clear();
+      coverBeforeUpload.clear();
       // The crates and the spotlight as well as the shelf, on disk as well as
       // in memory. What was read belonged to the account that is going away,
       // and the spotlight is the part of it that is most plainly about a person.
@@ -365,9 +694,13 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         openId: null,
         openOrigin: null,
         tracks: [],
+        positions: [],
         tracksCursor: null,
         tracksLoading: false,
         tracksError: null,
+        editing: false,
+        editCapped: false,
+        writeError: null,
         // Including the attempt to play one. Signing out is the end of every
         // question this store was in the middle of asking.
         starting: null,
@@ -378,6 +711,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
     openId: null,
     openOrigin: null,
     tracks: [],
+    positions: [],
     tracksCursor: null,
     tracksLoading: false,
     tracksError: null,
@@ -386,11 +720,20 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       // Cleared before anything is looked up, not after. Opening a second crate
       // must not show the first one's records for the length of a request.
       shelved = null;
-      set({ openId: id, openOrigin: origin, tracks: [], tracksCursor: null, tracksError: null });
+      set({
+        openId: id,
+        openOrigin: origin,
+        tracks: [],
+        positions: [],
+        tracksCursor: null,
+        tracksError: null,
+        editing: false,
+        editCapped: false,
+      });
 
       const snapshotId = confirmedSnapshot(id);
       if (snapshotId !== undefined) {
-        const found = crateFor(await loadCache(), id, snapshotId);
+        const found = crateFor(await loadCacheAfterWrites(), id, snapshotId);
         if (get().openId !== id) return;
         if (found) {
           shelved = found;
@@ -403,7 +746,16 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
 
     closeCrate() {
       shelved = null;
-      set({ openId: null, openOrigin: null, tracks: [], tracksCursor: null, tracksError: null });
+      set({
+        openId: null,
+        openOrigin: null,
+        tracks: [],
+        positions: [],
+        tracksCursor: null,
+        tracksError: null,
+        editing: false,
+        editCapped: false,
+      });
     },
 
     async moreTracks() {
@@ -425,6 +777,197 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       }
 
       await fetchTracks(openId, tracksCursor);
+    },
+
+    async setEditing(on) {
+      const { openId } = get();
+      if (!openId) return;
+      if (!on) {
+        set({ editing: false, editCapped: false });
+        return;
+      }
+      set({ editing: true, editCapped: false });
+
+      // The whole crate, up to the cap. Moving a record to the end of a list
+      // that has only been read halfway is moving it to the middle.
+      while (get().openId === openId && get().editing) {
+        const { tracksCursor, tracks } = get();
+        if (tracksCursor === null || tracks.length >= PLAY_CAP) break;
+        const before = tracks.length;
+        if (tracksCursor === KEPT) await get().moreTracks();
+        else await fetchTracks(openId, tracksCursor, EDIT_PAGE);
+        // A page that brought nothing and left a cursor is a failure; the error
+        // is already on screen, and trying again at once would only repeat it.
+        if (get().tracks.length === before && get().tracksCursor !== null) break;
+      }
+      if (get().openId === openId) set({ editCapped: get().tracksCursor !== null });
+    },
+
+    async createPlaylist(name) {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const asked = era;
+      try {
+        const created = await createOnSpotify(trimmed);
+        if (asked !== era) return null;
+        // First, as Spotify lists a new playlist.
+        fresh = [created, ...fresh.filter((playlist) => playlist.id !== created.id)];
+        set({ playlists: [created, ...get().playlists.filter((p) => p.id !== created.id)] });
+        confirmed.set(created.id, Date.now());
+        // An empty crate is a whole crate. Opening it needs no request.
+        keepCrate(created.id, created.snapshotId, []);
+        updateCache((cache) =>
+          withCrate(cache, {
+            id: created.id,
+            snapshotId: created.snapshotId,
+            tracks: [],
+            positions: [],
+            cursor: null,
+            at: Date.now(),
+          }),
+        );
+        keepShelf();
+        return created;
+      } catch (err) {
+        if (asked !== era) return null;
+        set({ writeError: say('spotify.writeFailed', { reason: describe(err) }) });
+        log('warn', 'spotify', 'could not create a playlist', err);
+        return null;
+      }
+    },
+
+    async addToCrate(id, track) {
+      // A file on this computer has no Spotify URI to add.
+      if (track.source !== 'spotify') return 'refused';
+      if (!findPlaylist(id)) return 'failed';
+
+      const asked = era;
+      const contents = await contentsOf(id);
+      if (asked !== era) return 'failed';
+      if (contents?.some((entry) => entry.id === track.id)) return 'already';
+
+      const playlist = findPlaylist(id);
+      if (!playlist) return 'failed';
+      const countBefore = playlist.trackCount;
+      const undo = snapshotOfScreen(id);
+      const add = (entries: CrateEntry[]) => withSongAdded(entries, { track }, countBefore);
+
+      patchPlaylist(id, { trackCount: countBefore + 1 });
+      if (openAndWhole(id)) showEntries(add(openEntries()));
+
+      const ok = await enqueue(id, undo, async (asked) => {
+        const before = findPlaylist(id)?.snapshotId;
+        const after = await addItems(id, [track.id]);
+        await settle(id, before, after, add, asked);
+      });
+      return ok ? 'added' : 'failed';
+    },
+
+    async removeFromCrate(id, uri) {
+      if (get().openId !== id) return false;
+      const entries = openEntries();
+      const copies = copiesOf(entries, uri);
+      if (copies === 0) return true;
+      const playlist = findPlaylist(id);
+      if (!playlist) return false;
+
+      const undo = snapshotOfScreen(id);
+      const remove = (list: CrateEntry[]) => withoutSong(list, uri);
+      showEntries(remove(entries));
+      patchPlaylist(id, { trackCount: Math.max(0, playlist.trackCount - copies) });
+
+      return enqueue(id, undo, async (asked) => {
+        const before = findPlaylist(id)?.snapshotId;
+        const after = await removeItems(id, [uri], before ?? playlist.snapshotId);
+        await settle(id, before, after, remove, asked);
+      });
+    },
+
+    async moveInCrate(id, from, to) {
+      if (get().openId !== id) return false;
+      const entries = openEntries();
+      const request = moveRequest(entries, from, to);
+      if (!request) return true;
+
+      const undo = snapshotOfScreen(id);
+      const move = (list: CrateEntry[]) => withMove(list, from, to);
+      showEntries(move(entries));
+
+      return enqueue(id, undo, async (asked) => {
+        const before = findPlaylist(id)?.snapshotId;
+        const after = await moveItems(
+          id,
+          request.rangeStart,
+          request.insertBefore,
+          before ?? '',
+        );
+        await settle(id, before, after, move, asked);
+      });
+    },
+
+    async setCrateDetails(id, details) {
+      if (!findPlaylist(id)) return false;
+      const undo = snapshotOfScreen(id);
+      const change: Partial<SpotifyPlaylist> = {};
+      if (details.name !== undefined) change.name = details.name.trim();
+      if (details.description !== undefined) change.description = details.description;
+      if (details.isPublic !== undefined) change.isPublic = details.isPublic;
+      if (change.name === '') return false;
+      patchPlaylist(id, change);
+
+      return enqueue(id, undo, async (asked) => {
+        await changeDetails(id, { ...details, ...(change.name ? { name: change.name } : {}) });
+        if (asked !== era) return;
+        keepShelf();
+        await refreshSnapshot(id, asked);
+      });
+    },
+
+    async setCrateCover(id, base64Jpeg, preview) {
+      const playlist = findPlaylist(id);
+      if (!playlist) return false;
+      const asked = era;
+      const undo = snapshotOfScreen(id);
+      if (!coverBeforeUpload.has(id)) coverBeforeUpload.set(id, playlist.coverArtUrl);
+      patchPlaylist(id, { coverArtUrl: preview });
+
+      const ok = await enqueue(
+        id,
+        () => {
+          undo();
+          coverBeforeUpload.delete(id);
+        },
+        async (queued) => {
+          await uploadCover(id, base64Jpeg);
+          await refreshSnapshot(id, queued);
+        },
+      );
+      if (ok) awaitCover(id, asked);
+      return ok;
+    },
+
+    async deleteCrate(id) {
+      if (!findPlaylist(id)) return false;
+      const undo = snapshotOfScreen(id);
+      const without = (list: SpotifyPlaylist[]) => list.filter((playlist) => playlist.id !== id);
+      fresh = without(fresh);
+      kept = without(kept);
+      set({ playlists: without(get().playlists) });
+      if (get().openId === id) get().closeCrate();
+
+      return enqueue(id, undo, async (asked) => {
+        await removeFromLibrary(id);
+        if (asked !== era) return;
+        confirmed.delete(id);
+        coverBeforeUpload.delete(id);
+        forgetCrates(id);
+        updateCache((cache) => withoutCrate(cache, id));
+        keepShelf();
+      });
+    },
+
+    clearWriteError() {
+      set({ writeError: null });
     },
   };
 });

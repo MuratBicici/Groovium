@@ -374,7 +374,7 @@ export async function wholeCrate(id: string, snapshotId?: string): Promise<Track
     // playlist.
     if (kept && (kept.cursor === null || kept.tracks.length >= PLAY_CAP)) {
       const tracks = kept.tracks.slice(0, PLAY_CAP);
-      remember(id, snapshotId, tracks);
+      keepCrate(id, snapshotId, tracks);
       // To the front of the queue of kept crates, as the one used last.
       updateCache((cache) => withCrate(cache, kept));
       return tracks;
@@ -382,23 +382,39 @@ export async function wholeCrate(id: string, snapshotId?: string): Promise<Track
   }
 
   const all: TrackMetadata[] = [];
+  const positions: number[] = [];
   let cursor: string | null = null;
   do {
-    const page: Page<TrackMetadata> = await playlistTrackPage(id, cursor, PLAY_PER_PAGE);
-    all.push(...page.items);
+    const page: Page<CrateEntry> = await playlistEntryPage(id, cursor, PLAY_PER_PAGE);
+    for (const entry of page.items) {
+      all.push(entry.track);
+      positions.push(entry.position);
+    }
     cursor = page.cursor;
   } while (cursor && all.length < PLAY_CAP);
 
-  remember(id, snapshotId, all);
+  keepCrate(id, snapshotId, all);
   if (snapshotId !== undefined) {
     updateCache((cache) =>
-      withCrate(cache, { id, snapshotId, tracks: all, cursor, at: Date.now() }),
+      withCrate(cache, { id, snapshotId, tracks: all, positions, cursor, at: Date.now() }),
     );
   }
   return all;
 }
 
-function remember(id: string, snapshotId: string | undefined, tracks: TrackMetadata[]): void {
+/**
+ * Hold a crate's records in memory under a snapshot.
+ *
+ * Exported for the edits: a change the store has just made is a crate it
+ * already knows the whole of, under the snapshot Spotify handed back, and
+ * reading it again to learn what was just written would be a request for
+ * nothing.
+ */
+export function keepCrate(
+  id: string,
+  snapshotId: string | undefined,
+  tracks: TrackMetadata[],
+): void {
   crates.delete(id);
   crates.set(id, { at: Date.now(), snapshotId, tracks });
   if (crates.size > CRATE_CACHE_MAX) {
@@ -577,6 +593,19 @@ export async function uploadCover(id: string, base64Jpeg: string): Promise<void>
     headers: { 'Content-Type': 'image/jpeg' },
     body: base64Jpeg,
   });
+}
+
+/**
+ * The version a playlist is at now.
+ *
+ * For after a change that does not answer with one. Renaming a playlist or
+ * giving it a cover may move its snapshot, and the next removal or move is
+ * aimed at a snapshot — so rather than find out by being refused, this asks for
+ * the one field and nothing else.
+ */
+export async function currentSnapshot(id: string): Promise<string | null> {
+  const data = await request<ApiSnapshot>(`${playlistPath(id)}?fields=snapshot_id`);
+  return snapshotOf(data);
 }
 
 /** The cover Spotify has for a playlist now, for after an upload has settled. */

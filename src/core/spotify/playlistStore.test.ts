@@ -6,9 +6,19 @@ vi.mock('@/core/providers/spotifyPlaylists', () => ({
   ITEMS_PER_PAGE: 24,
   PLAY_CAP: 300,
   playlistPage: vi.fn(),
-  playlistTrackPage: vi.fn(),
+  playlistEntryPage: vi.fn(),
   wholeCrate: vi.fn(),
   forgetCrates: vi.fn(),
+  keepCrate: vi.fn(),
+  addItems: vi.fn(),
+  removeItems: vi.fn(),
+  moveItems: vi.fn(),
+  changeDetails: vi.fn(),
+  uploadCover: vi.fn(),
+  coverOf: vi.fn(),
+  currentSnapshot: vi.fn(),
+  removeFromLibrary: vi.fn(),
+  createPlaylist: vi.fn(),
 }));
 
 // The deck, stubbed to the one thing this store asks of it.
@@ -33,8 +43,17 @@ vi.mock('@/core/security/spotifyAuth', async (importOriginal) => ({
 }));
 
 import {
+  addItems,
+  changeDetails,
+  coverOf,
+  createPlaylist,
+  currentSnapshot,
+  moveItems,
+  removeFromLibrary,
+  removeItems,
+  uploadCover,
   playlistPage,
-  playlistTrackPage,
+  playlistEntryPage,
   wholeCrate,
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
@@ -44,8 +63,18 @@ import { SHELF_FRESH_MS, withCrate, withShelf } from './cache';
 import { loadCache, settled, updateCache } from './cacheFile';
 
 const fetchPage = vi.mocked(playlistPage);
-const fetchTracks = vi.mocked(playlistTrackPage);
+const fetchTracks = vi.mocked(playlistEntryPage);
 const fetchWhole = vi.mocked(wholeCrate);
+const sendAdd = vi.mocked(addItems);
+const sendRemove = vi.mocked(removeItems);
+const sendMove = vi.mocked(moveItems);
+const sendDetails = vi.mocked(changeDetails);
+const sendCover = vi.mocked(uploadCover);
+const askCover = vi.mocked(coverOf);
+const askSnapshot = vi.mocked(currentSnapshot);
+const sendDelete = vi.mocked(removeFromLibrary);
+const sendCreate = vi.mocked(createPlaylist);
+const writes = [sendAdd, sendRemove, sendMove, sendDetails, sendCover, askCover, askSnapshot, sendDelete, sendCreate];
 
 const records = (...ids: string[]): TrackMetadata[] =>
   ids.map((id) => ({
@@ -56,6 +85,10 @@ const records = (...ids: string[]): TrackMetadata[] =>
     duration: 1000,
     source: 'spotify' as const,
   }));
+
+/** Records as a page of the crate hands them over: each with its place in the playlist. */
+const entries = (tracks: TrackMetadata[], from = 0) =>
+  tracks.map((track, at) => ({ track, position: from + at }));
 
 const shelf = (...ids: string[]): SpotifyPlaylist[] =>
   ids.map((id) => ({
@@ -85,6 +118,7 @@ beforeEach(async () => {
   fetchPage.mockReset();
   fetchTracks.mockReset();
   fetchWhole.mockReset();
+  for (const write of writes) write.mockReset();
   played.mockReset();
   auth.who = null;
   useSpotifyPlaylistsStore.getState().forget();
@@ -217,7 +251,7 @@ describe('when Spotify will not answer', () => {
 
 describe('opening a crate', () => {
   it('shows what is in it', async () => {
-    fetchTracks.mockResolvedValueOnce({ items: records('1', '2'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1', '2')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     const state = useSpotifyPlaylistsStore.getState();
@@ -226,16 +260,16 @@ describe('opening a crate', () => {
   });
 
   it('does not show the last crate’s records while the next one loads', async () => {
-    fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
-    const pending = deferred<{ items: TrackMetadata[]; cursor: string | null }>();
+    const pending = deferred<{ items: ReturnType<typeof entries>; cursor: string | null }>();
     fetchTracks.mockReturnValueOnce(pending.promise);
     const second = useSpotifyPlaylistsStore.getState().openCrate('p2', sleeve);
 
     // The moment the second crate opens, the first one's records are gone.
     expect(useSpotifyPlaylistsStore.getState().tracks).toEqual([]);
-    pending.resolve({ items: records('9'), cursor: null });
+    pending.resolve({ items: entries(records('9')), cursor: null });
     await second;
     expect(useSpotifyPlaylistsStore.getState().tracks.map((tr) => tr.title)).toEqual(['Song 9']);
   });
@@ -244,12 +278,12 @@ describe('opening a crate', () => {
     // Open one, change your mind, open another. The first request is still in
     // flight and lands after the second — without the check on the way back it
     // lands *in* the second.
-    const slow = deferred<{ items: TrackMetadata[]; cursor: string | null }>();
+    const slow = deferred<{ items: ReturnType<typeof entries>; cursor: string | null }>();
     fetchTracks.mockReturnValueOnce(slow.promise);
     const first = useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
     useSpotifyPlaylistsStore.getState().closeCrate();
-    slow.resolve({ items: records('stale'), cursor: null });
+    slow.resolve({ items: entries(records('stale')), cursor: null });
     await first;
 
     expect(useSpotifyPlaylistsStore.getState().openId).toBeNull();
@@ -257,10 +291,10 @@ describe('opening a crate', () => {
   });
 
   it('appends the next page of records', async () => {
-    fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: '100' });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: '100' });
     await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
 
-    fetchTracks.mockResolvedValueOnce({ items: records('2'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('2')), cursor: null });
     await useSpotifyPlaylistsStore.getState().moreTracks();
 
     expect(fetchTracks).toHaveBeenLastCalledWith('p1', '100');
@@ -271,7 +305,7 @@ describe('opening a crate', () => {
   });
 
   it('stops at the end of a crate', async () => {
-    fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('p1', sleeve);
     await useSpotifyPlaylistsStore.getState().moreTracks();
     expect(fetchTracks).toHaveBeenCalledTimes(1);
@@ -368,6 +402,7 @@ const kept = (id: string, snapshotId: string, tracks: TrackMetadata[], cursor: s
   id,
   snapshotId,
   tracks,
+  positions: tracks.map((_, at) => at),
   cursor,
   at: Date.now(),
 });
@@ -457,7 +492,7 @@ describe('opening a crate that was kept', () => {
     fetchPage.mockResolvedValueOnce({ items: shelf('a'), cursor: null });
     await useSpotifyPlaylistsStore.getState().open();
 
-    fetchTracks.mockResolvedValueOnce({ items: records('new'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('new')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
 
     expect(fetchTracks).toHaveBeenCalled();
@@ -473,7 +508,7 @@ describe('opening a crate that was kept', () => {
     await useSpotifyPlaylistsStore.getState().open();
     expect(useSpotifyPlaylistsStore.getState().playlists.map((p) => p.id)).toEqual(['a']);
 
-    fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
     expect(fetchTracks).toHaveBeenCalled();
   });
@@ -488,7 +523,7 @@ describe('opening a crate that was kept', () => {
       await useSpotifyPlaylistsStore.getState().open();
 
       vi.setSystemTime(Date.now() + SHELF_FRESH_MS + 1);
-      fetchTracks.mockResolvedValueOnce({ items: records('1'), cursor: null });
+      fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: null });
       await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
 
       expect(fetchTracks).toHaveBeenCalled();
@@ -504,7 +539,7 @@ describe('opening a crate that was kept', () => {
     fetchPage.mockRejectedValueOnce(new Error('offline'));
     await useSpotifyPlaylistsStore.getState().open();
 
-    fetchTracks.mockResolvedValueOnce({ items: records('1', '2'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1', '2')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
     await landed();
 
@@ -521,7 +556,7 @@ describe('opening a crate that was kept', () => {
     await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
     expect(useSpotifyPlaylistsStore.getState().tracksCursor).not.toBeNull();
 
-    fetchTracks.mockResolvedValueOnce({ items: records('301'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('301')), cursor: null });
     await useSpotifyPlaylistsStore.getState().moreTracks();
 
     expect(fetchTracks).toHaveBeenCalledWith('a', '300');
@@ -536,7 +571,7 @@ describe('opening a crate that was kept', () => {
     fetchPage.mockResolvedValueOnce({ items: shelf('a'), cursor: null });
     await useSpotifyPlaylistsStore.getState().open();
 
-    fetchTracks.mockResolvedValueOnce({ items: records('1', '2'), cursor: null });
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1', '2')), cursor: null });
     await useSpotifyPlaylistsStore.getState().openCrate('a', sleeve);
     await landed();
 
@@ -622,3 +657,349 @@ describe('when the account changes', () => {
     expect((await loadCache()).shelf.map((p) => p.id)).toEqual(['mine']);
   });
 });
+
+/**
+ * Changing playlists.
+ *
+ * Every change shows at once and is sent afterwards. What these hold is that
+ * the screen and Spotify end up agreeing: the version Spotify hands back
+ * reaches everywhere the crate is known, a refused change is undone along with
+ * whatever was queued behind it, and a second change is aimed at the version
+ * the first one produced.
+ */
+
+const store = () => useSpotifyPlaylistsStore.getState();
+
+/** The shelf, as Spotify just answered for it, so every snapshot on it is vouched for. */
+async function onShelf(...playlists: SpotifyPlaylist[]) {
+  fetchPage.mockResolvedValueOnce({ items: playlists, cursor: null });
+  await store().open();
+}
+
+/** A crate opened and read to the end. */
+async function opened(id: string, list: ReturnType<typeof entries>) {
+  fetchTracks.mockResolvedValueOnce({ items: list, cursor: null });
+  await store().openCrate(id, sleeve);
+}
+
+const song = (id: string) => records(id)[0]!;
+const titles = () => store().tracks.map((track) => track.id);
+
+describe('adding a song to a crate', () => {
+  it('shows it at once, sends it, and carries the new version to the shelf', async () => {
+    await onShelf({ ...shelf('a')[0]!, trackCount: 2 });
+    await opened('a', entries(records('1', '2')));
+    sendAdd.mockResolvedValueOnce('snap-after');
+
+    const adding = store().addToCrate('a', song('3'));
+    // On screen before Spotify has answered.
+    await vi.waitFor(() => expect(titles()).toEqual(['spotify:track:1', 'spotify:track:2', 'spotify:track:3']));
+    expect(await adding).toBe('added');
+
+    expect(sendAdd).toHaveBeenCalledWith('a', ['spotify:track:3']);
+    const playlist = store().playlists[0]!;
+    expect(playlist.trackCount).toBe(3);
+    expect(playlist.snapshotId).toBe('snap-after');
+    // At the position after everything the playlist held.
+    expect(store().positions).toEqual([0, 1, 2]);
+  });
+
+  it('keeps the crate on disk under the new version, so it is not read again', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1')));
+    sendAdd.mockResolvedValueOnce('snap-after');
+    await store().addToCrate('a', song('2'));
+    await landed();
+
+    const crate = (await loadCache()).crates.find((entry) => entry.id === 'a');
+    expect(crate?.snapshotId).toBe('snap-after');
+    expect(crate?.tracks.map((track) => track.id)).toEqual(['spotify:track:1', 'spotify:track:2']);
+  });
+
+  it('refuses a song from this computer without asking Spotify', async () => {
+    await onShelf(shelf('a')[0]!);
+    const local = { ...song('x'), source: 'local' as const };
+    expect(await store().addToCrate('a', local)).toBe('refused');
+    expect(sendAdd).not.toHaveBeenCalled();
+  });
+
+  it('says it is already there when the open crate holds it', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1')));
+    expect(await store().addToCrate('a', song('1'))).toBe('already');
+    expect(sendAdd).not.toHaveBeenCalled();
+  });
+
+  it('checks a kept crate without reading it again', async () => {
+    await lastLaunchLeft(shelf('a'), [kept('a', 'snap-a', records('1'))]);
+    await onShelf(shelf('a')[0]!);
+
+    expect(await store().addToCrate('a', song('1'))).toBe('already');
+    expect(fetchWhole).not.toHaveBeenCalled();
+  });
+
+  it('reads the crate once to check it when nothing is known about it', async () => {
+    await onShelf(shelf('a')[0]!);
+    fetchWhole.mockResolvedValueOnce(records('1'));
+    sendAdd.mockResolvedValueOnce('snap-after');
+
+    expect(await store().addToCrate('a', song('2'))).toBe('added');
+    expect(fetchWhole).toHaveBeenCalledWith('a', 'snap-a');
+  });
+
+  it('undoes it and says why when Spotify refuses', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1')));
+    sendAdd.mockRejectedValueOnce(new Error('Not allowed.'));
+
+    expect(await store().addToCrate('a', song('2'))).toBe('failed');
+    expect(titles()).toEqual(['spotify:track:1']);
+    expect(store().playlists[0]?.trackCount).toBe(1);
+    expect(store().writeError).toContain('Not allowed.');
+  });
+});
+
+describe('taking a song out of a crate', () => {
+  it('takes every copy off the screen and aims the removal at the version shown', async () => {
+    await onShelf({ ...shelf('a')[0]!, trackCount: 5 });
+    await opened('a', [
+      { track: song('x'), position: 0 },
+      { track: song('1'), position: 1 },
+      { track: song('x'), position: 3 },
+      { track: song('2'), position: 4 },
+    ]);
+    sendRemove.mockResolvedValueOnce('snap-after');
+
+    expect(await store().removeFromCrate('a', 'spotify:track:x')).toBe(true);
+    expect(titles()).toEqual(['spotify:track:1', 'spotify:track:2']);
+    expect(store().positions).toEqual([0, 2]);
+    expect(store().playlists[0]?.trackCount).toBe(3);
+    expect(sendRemove).toHaveBeenCalledWith('a', ['spotify:track:x'], 'snap-a');
+  });
+
+  it('puts it back when Spotify refuses', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1', '2')));
+    sendRemove.mockRejectedValueOnce(new Error('No.'));
+
+    expect(await store().removeFromCrate('a', 'spotify:track:1')).toBe(false);
+    expect(titles()).toEqual(['spotify:track:1', 'spotify:track:2']);
+    expect(store().positions).toEqual([0, 1]);
+  });
+});
+
+describe('moving a song in a crate', () => {
+  it('moves it on screen and asks by position in the playlist', async () => {
+    // Position 1 cannot play and is not on screen. Moving the first record to
+    // the end is asked for as before position 4, not before screen index 3.
+    await onShelf(shelf('a')[0]!);
+    await opened('a', [
+      { track: song('1'), position: 0 },
+      { track: song('2'), position: 2 },
+      { track: song('3'), position: 3 },
+    ]);
+    sendMove.mockResolvedValueOnce('snap-after');
+
+    expect(await store().moveInCrate('a', 0, 2)).toBe(true);
+    expect(titles()).toEqual(['spotify:track:2', 'spotify:track:3', 'spotify:track:1']);
+    expect(sendMove).toHaveBeenCalledWith('a', 0, 4, 'snap-a');
+  });
+
+  it('sends a second move after the first, aimed at the version the first produced', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1', '2', '3')));
+    const first = deferred<string | null>();
+    sendMove.mockReturnValueOnce(first.promise);
+    sendMove.mockResolvedValueOnce('snap-second');
+
+    const one = store().moveInCrate('a', 0, 2);
+    const two = store().moveInCrate('a', 0, 1);
+    await Promise.resolve();
+    expect(sendMove).toHaveBeenCalledTimes(1);
+
+    first.resolve('snap-first');
+    await Promise.all([one, two]);
+    expect(sendMove).toHaveBeenCalledTimes(2);
+    expect(sendMove.mock.calls[1]?.[3]).toBe('snap-first');
+  });
+
+  it('does not send what was queued behind a refused move, and undoes both', async () => {
+    // The second move was shown on top of the first. Undoing the first
+    // without cancelling the second would send a move for a list that is not
+    // on screen.
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1', '2', '3')));
+    sendMove.mockRejectedValueOnce(new Error('Refused.'));
+
+    const one = store().moveInCrate('a', 0, 2);
+    const two = store().moveInCrate('a', 0, 1);
+    expect(await one).toBe(false);
+    expect(await two).toBe(false);
+
+    expect(sendMove).toHaveBeenCalledTimes(1);
+    expect(titles()).toEqual(['spotify:track:1', 'spotify:track:2', 'spotify:track:3']);
+  });
+});
+
+describe('the details of a playlist', () => {
+  it('renames at once, sends it, and asks for the version afterwards', async () => {
+    await onShelf(shelf('a')[0]!);
+    askSnapshot.mockResolvedValueOnce('snap-renamed');
+
+    expect(await store().setCrateDetails('a', { name: '  Late  ' })).toBe(true);
+    expect(store().playlists[0]?.name).toBe('Late');
+    expect(sendDetails).toHaveBeenCalledWith('a', { name: 'Late' });
+    expect(store().playlists[0]?.snapshotId).toBe('snap-renamed');
+  });
+
+  it('will not rename a playlist to nothing', async () => {
+    await onShelf(shelf('a')[0]!);
+    expect(await store().setCrateDetails('a', { name: '   ' })).toBe(false);
+    expect(sendDetails).not.toHaveBeenCalled();
+  });
+
+  it('puts the old name back when Spotify refuses', async () => {
+    await onShelf(shelf('a')[0]!);
+    sendDetails.mockRejectedValueOnce(new Error('No.'));
+    await store().setCrateDetails('a', { name: 'Late', isPublic: true });
+
+    expect(store().playlists[0]?.name).toBe('Playlist a');
+    expect(store().playlists[0]?.isPublic).toBe(false);
+  });
+});
+
+describe('removing a playlist from the library', () => {
+  it('takes it off the shelf at once and closes it if it was open', async () => {
+    await onShelf(shelf('a')[0]!, shelf('b')[0]!);
+    await opened('a', entries(records('1')));
+
+    expect(await store().deleteCrate('a')).toBe(true);
+    expect(store().playlists.map((p) => p.id)).toEqual(['b']);
+    expect(store().openId).toBeNull();
+    expect(sendDelete).toHaveBeenCalledWith('a');
+  });
+
+  it('puts it back where it was when Spotify refuses', async () => {
+    await onShelf(shelf('a')[0]!, shelf('b')[0]!, shelf('c')[0]!);
+    sendDelete.mockRejectedValueOnce(new Error('No.'));
+
+    expect(await store().deleteCrate('b')).toBe(false);
+    expect(store().playlists.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('making a playlist', () => {
+  it('puts it first on the shelf, and opening it asks nothing', async () => {
+    await onShelf(shelf('a')[0]!);
+    sendCreate.mockResolvedValueOnce({ ...shelf('new')[0]!, trackCount: 0 });
+
+    const created = await store().createPlaylist('  New  ');
+    expect(sendCreate).toHaveBeenCalledWith('New');
+    expect(created?.id).toBe('new');
+    expect(store().playlists.map((p) => p.id)).toEqual(['new', 'a']);
+
+    await store().openCrate('new', sleeve);
+    expect(fetchTracks).not.toHaveBeenCalled();
+    expect(store().tracks).toEqual([]);
+  });
+
+  it('makes nothing from a blank name', async () => {
+    expect(await store().createPlaylist('   ')).toBeNull();
+    expect(sendCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('a new cover', () => {
+  it('shows the picture at once and keeps Spotify’s cover on disk until Spotify has its own', async () => {
+    await onShelf({ ...shelf('a')[0]!, coverArtUrl: 'https://i.scdn.co/old' });
+    // A new version after the upload, so the shelf is written to disk while the
+    // picture is still what is on screen.
+    askSnapshot.mockResolvedValue('snap-after-cover');
+
+    expect(await store().setCrateCover('a', 'AAAA', 'data:image/jpeg;base64,AAAA')).toBe(true);
+    expect(store().playlists[0]?.coverArtUrl).toBe('data:image/jpeg;base64,AAAA');
+    await landed();
+    expect((await loadCache()).shelf[0]?.coverArtUrl).toBe('https://i.scdn.co/old');
+  });
+
+  it('takes the picture away again when the upload is refused, from a playlist that had none', async () => {
+    // Undoing by merging the old playlist over the new one could not remove a
+    // field it never had, and the preview stayed.
+    await onShelf(shelf('a')[0]!);
+    sendCover.mockRejectedValueOnce(new Error('Too big.'));
+
+    expect(await store().setCrateCover('a', 'AAAA', 'data:image/jpeg;base64,AAAA')).toBe(false);
+    expect(store().playlists[0]?.coverArtUrl).toBeUndefined();
+  });
+
+  it('swaps in the cover Spotify made once it appears', async () => {
+    vi.useFakeTimers();
+    try {
+      await onShelf({ ...shelf('a')[0]!, coverArtUrl: 'https://i.scdn.co/old' });
+      askSnapshot.mockResolvedValue('snap-a');
+      askCover.mockResolvedValueOnce('https://i.scdn.co/old').mockResolvedValueOnce('https://i.scdn.co/new');
+
+      await store().setCrateCover('a', 'AAAA', 'data:image/jpeg;base64,AAAA');
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(store().playlists[0]?.coverArtUrl).toBe('data:image/jpeg;base64,AAAA');
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(store().playlists[0]?.coverArtUrl).toBe('https://i.scdn.co/new');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('editing a crate', () => {
+  it('reads the rest of the crate first, in the larger pages', async () => {
+    await onShelf(shelf('a')[0]!);
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('1')), cursor: '24' });
+    await store().openCrate('a', sleeve);
+
+    fetchTracks.mockResolvedValueOnce({ items: entries(records('2'), 24), cursor: null });
+    await store().setEditing(true);
+
+    expect(fetchTracks).toHaveBeenLastCalledWith('a', '24', 50);
+    expect(titles()).toEqual(['spotify:track:1', 'spotify:track:2']);
+    expect(store().editing).toBe(true);
+    expect(store().editCapped).toBe(false);
+  });
+});
+
+describe('a change queued behind another when somebody signs out', () => {
+  it('is never sent', async () => {
+    await onShelf(shelf('a')[0]!);
+    await opened('a', entries(records('1', '2', '3')));
+    const first = deferred<string | null>();
+    sendMove.mockReturnValueOnce(first.promise);
+
+    void store().moveInCrate('a', 0, 2);
+    const second = store().moveInCrate('a', 0, 1);
+    await vi.waitFor(() => expect(sendMove).toHaveBeenCalledTimes(1));
+
+    auth.announce(null);
+    first.resolve('snap-first');
+    expect(await second).toBe(false);
+    expect(sendMove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a change that lands after signing out', () => {
+  it('changes nothing', async () => {
+    await onShelf(shelf('a')[0]!);
+    const answer = deferred<string | null>();
+    fetchWhole.mockResolvedValueOnce([]);
+    sendAdd.mockReturnValueOnce(answer.promise);
+
+    const adding = store().addToCrate('a', song('1'));
+    await vi.waitFor(() => expect(sendAdd).toHaveBeenCalled());
+    auth.announce(null);
+    answer.resolve('snap-after');
+    await adding;
+    await landed();
+
+    expect(store().playlists).toEqual([]);
+    expect((await loadCache()).shelf).toEqual([]);
+  });
+});
+

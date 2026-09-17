@@ -139,6 +139,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.throttled': 'Spotify bu uygulamadan yavaşlamasını istiyor. {seconds} sn kaldı.',
   'spotify.onDeck': 'Bu plak plakçalarda.',
   'spotify.tookTooLong': 'Spotify zamanında yanıt vermedi.',
+  'spotify.writeFailed': 'Spotify bu değişikliği kaydetmedi. {reason}',
   'spotify.trackCount': '{count} şarkı',
 
   'spotlight.recent': 'Son çalanlar',
