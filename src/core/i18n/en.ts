@@ -116,6 +116,14 @@ export const en = {
   'playlists.addNamed': 'Add {title} to a playlist',
   'playlists.pickerNone': 'No playlists yet — name one below.',
   'playlists.added': 'Added',
+  'playlists.addedTo': 'Added to {name}',
+  'playlists.alreadyIn': 'Already in {name}',
+  'playlists.couldNotAdd': 'Could not add to {name}',
+  'playlists.couldNotCreate': 'Could not make that playlist.',
+  'playlists.sectionGroovium': 'In Groovium',
+  'playlists.sectionSpotify': 'On Spotify',
+  'playlists.newSpotify': 'New Spotify playlist',
+  'playlists.localNotOnSpotify': 'Songs from this computer can’t go into Spotify playlists.',
 
   // Spotify
   'spotify.heading': 'Spotify · {name}',

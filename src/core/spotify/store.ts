@@ -197,6 +197,11 @@ interface SpotifyPlaylistsState {
   createPlaylist: (name: string) => Promise<SpotifyPlaylist | null>;
   /** Put a song at the end of a playlist, unless it is already there. */
   addToCrate: (id: string, track: TrackMetadata) => Promise<AddOutcome>;
+  /**
+   * Whether a playlist holds a song, from what is already known — never by
+   * asking. Null when it is not known: the answer then waits for the add.
+   */
+  knownToHold: (id: string, trackId: string) => Promise<boolean | null>;
   /** Take every copy of a song out of the open crate. */
   removeFromCrate: (id: string, uri: string) => Promise<boolean>;
   /** Move the record at screen index `from` to screen index `to` in the open crate. */
@@ -861,6 +866,15 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         await settle(id, before, after, add, asked);
       });
       return ok ? 'added' : 'failed';
+    },
+
+    async knownToHold(id, trackId) {
+      if (openAndWhole(id)) return get().tracks.some((track) => track.id === trackId);
+      const snapshotId = confirmedSnapshot(id);
+      if (snapshotId === undefined) return null;
+      const found = crateFor(await loadCacheAfterWrites(), id, snapshotId);
+      if (!found || found.cursor !== null) return null;
+      return found.tracks.some((track) => track.id === trackId);
     },
 
     async removeFromCrate(id, uri) {

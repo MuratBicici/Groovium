@@ -1003,3 +1003,18 @@ describe('a change that lands after signing out', () => {
   });
 });
 
+describe('knowing whether a playlist holds a song without asking', () => {
+  it('answers from the open crate and from a kept one, and says it does not know otherwise', async () => {
+    await lastLaunchLeft(shelf('a', 'b', 'c'), [kept('b', 'snap-b', records('2'))]);
+    await onShelf(shelf('a')[0]!, shelf('b')[0]!, shelf('c')[0]!);
+    await opened('a', entries(records('1')));
+
+    expect(await store().knownToHold('a', 'spotify:track:1')).toBe(true);
+    expect(await store().knownToHold('b', 'spotify:track:2')).toBe(true);
+    expect(await store().knownToHold('b', 'spotify:track:9')).toBe(false);
+    expect(await store().knownToHold('c', 'spotify:track:1')).toBeNull();
+    // And never by reading a crate to find out.
+    expect(fetchWhole).not.toHaveBeenCalled();
+  });
+});
+
