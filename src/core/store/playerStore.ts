@@ -40,6 +40,7 @@ import { loadSession, saveSession } from '@/core/session';
 import {
   isAuthenticated as spotifyIsAuthenticated,
   signOut as spotifySignOut,
+  clearClientId as spotifyClearClientId,
 } from '@/core/security/spotifyAuth';
 import {
   artistKey,
@@ -244,6 +245,15 @@ export interface PlayerActions {
   toggleStation: () => Promise<boolean>;
   /** Sign out, and stop anything that was playing because of that account. */
   signOutOfSpotify: () => Promise<void>;
+  /**
+   * Sign out, and forget the Client ID as well.
+   *
+   * One action rather than two calls at each place that offers it, because the
+   * order matters and both places got it wrong: Settings and the drawer's
+   * "change Client ID" cleared the ID and nothing else, so the tokens stayed,
+   * a Spotify track went on playing, and the station went on searching.
+   */
+  forgetSpotify: () => Promise<void>;
 
   /** Take the record off the deck: the music stops while it is off. */
   liftRecord: () => Promise<void>;
@@ -1023,6 +1033,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         shuffle,
         shuffleOrder: shuffle ? shuffledIndices(playback.tracks.length, playback.index) : [],
       });
+    },
+
+    async forgetSpotify() {
+      await get().signOutOfSpotify();
+      await spotifyClearClientId();
     },
 
     async signOutOfSpotify() {

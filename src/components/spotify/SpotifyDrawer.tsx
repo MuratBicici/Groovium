@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   account as fetchAccount,
   beginAuth,
-  clearClientId,
   hasClientId,
   isAuthenticated,
   missingScopes,
+  onAccountChange,
   type SpotifyAccount,
 } from '@/core/security/spotifyAuth';
 import { usePlayerStore } from '@/core/store';
@@ -52,6 +52,7 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
    */
   const [searching, setSearching] = useState<string | null>(null);
   const signOutOfSpotify = usePlayerStore((s) => s.signOutOfSpotify);
+  const forgetSpotify = usePlayerStore((s) => s.forgetSpotify);
   const [stage, setStage] = useState<Stage>('loading');
   const [account, setAccount] = useState<SpotifyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,10 +142,43 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
   }
 
   async function changeClientId() {
-    await clearClientId();
+    // Signing out first. The tokens belonged to the old registration, and
+    // clearing only the ID left them behind — see `forgetSpotify`.
+    await forgetSpotify();
     setAccount(null);
     setStage('setup');
   }
+
+  /**
+   * Hearing that the account has gone, from wherever it went.
+   *
+   * The stage is this component's own state, so it only ever changed when this
+   * component changed it. Forgetting Spotify from Settings emptied the shelf
+   * underneath — the store listens — and left the drawer saying it was
+   * connected, with the two spotlight rows still showing what they had fetched,
+   * until it was closed and opened again.
+   *
+   * So the stage is asked for again, rather than assumed: signing out leaves a
+   * Client ID and is `disconnected`, forgetting Spotify leaves none and is
+   * `setup`. Only the latest answer is taken — Settings does both in a row, and
+   * the two questions can come back in either order.
+   *
+   * Signing in is not handled here. The only place that happens is `connect`,
+   * which sets everything it needs itself.
+   */
+  useEffect(() => {
+    let asked = 0;
+    return onAccountChange((who) => {
+      if (who !== null) return;
+      const mine = ++asked;
+      setAccount(null);
+      setMissing([]);
+      setSearching(null);
+      void stageFor().then((next) => {
+        if (mine === asked) setStage(next);
+      });
+    });
+  }, [stageFor]);
 
   /**
    * Opening the search from the keyboard.

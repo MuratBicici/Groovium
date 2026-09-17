@@ -90,7 +90,17 @@ pub fn spotify_set_client_id(app: AppHandle, client_id: String) -> Result<(), Au
 }
 
 #[tauri::command]
-pub fn spotify_clear_client_id(app: AppHandle) -> Result<(), AuthError> {
+pub fn spotify_clear_client_id(
+    app: AppHandle,
+    cache: State<'_, AccessTokenCache>,
+) -> Result<(), AuthError> {
+    // The tokens first. They were issued to this Client ID and cannot be
+    // refreshed under any other, and left behind they kept `is_authenticated`
+    // saying yes: the station went on searching Spotify with no registration
+    // to search under, and the drawer went on showing an account that was no
+    // longer set up.
+    cache.clear();
+    tokens::forget()?;
     config::clear_client_id(&app).map_err(|e| AuthError::new("keyring_failed", e))
 }
 

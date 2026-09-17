@@ -72,8 +72,16 @@ export async function clearClientId(): Promise<void> {
   if (!isTauri()) return;
   // A different registration is a different set of authorised users, so who
   // was signed in under the old one is no longer the answer.
-  forgetAccount();
-  await invoke('spotify_clear_client_id');
+  //
+  // Announced after the change rather than before it. Whoever hears about it
+  // asks what the state is now — the drawer does, to decide what to show —
+  // and asked first, the answer was still the old one: a Client ID on disk,
+  // and a drawer that went on saying it was connected.
+  try {
+    await invoke('spotify_clear_client_id');
+  } finally {
+    forgetAccount();
+  }
 }
 
 /**
@@ -181,8 +189,13 @@ export async function beginAuth(): Promise<SpotifyAccount> {
 
 export async function signOut(): Promise<void> {
   if (!isTauri()) return;
-  forgetAccount();
-  await invoke('spotify_sign_out');
+  // After, for the same reason as `clearClientId`: a listener asking whether
+  // there is still a token must not be answered before it has been deleted.
+  try {
+    await invoke('spotify_sign_out');
+  } finally {
+    forgetAccount();
+  }
 }
 
 /** Short-lived token for the Web Playback SDK. Rust refreshes it as needed. */

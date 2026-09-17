@@ -77,7 +77,10 @@ export abstract class BaseProvider implements AudioProvider {
 
   /** Move to ERROR and report the reason. */
   protected fail(error: string): void {
-    log('warn', this.id, `failed: ${error}`);
+    // As the detail rather than inside the message. What arrives here is meant
+    // to be a sentence and is sometimes the `{ code, detail }` a Tauri command
+    // rejects with, which in a template string is "[object Object]".
+    log('warn', this.id, 'failed', error);
     this.state = 'ERROR';
     this.emit({ type: 'state', state: 'ERROR' });
     this.emit({ type: 'error', error });

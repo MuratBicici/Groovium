@@ -52,6 +52,14 @@ group('keeping secrets out of the log', () => {
     expect(out).toContain('grant_type=authorization_code');
   });
 
+  it('keeps the code of an error, which is not the OAuth code', () => {
+    // `code` is a secret in a query string and the name of what went wrong in
+    // JSON. Hiding the second hid the useful half of the line.
+    const out = redact('{"code":"not_configured","detail":"No Spotify Client ID configured."}');
+    expect(out).toContain('"code":"not_configured"');
+    expect(redact('https://x/callback?code=AQBsecret&state=xyz')).not.toContain('AQBsecret');
+  });
+
   it('hides a Client ID or key that arrives with no name in front of it', () => {
     expect(redact(`That key is ${KEY}, which is not a Last.fm key.`)).not.toContain(KEY);
   });

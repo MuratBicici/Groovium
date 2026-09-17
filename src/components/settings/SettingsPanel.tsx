@@ -4,7 +4,8 @@ import { useSettingsStore } from '@/core/settings/store';
 import { NOTCHES } from '@/core/visualizer';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
-import { clearClientId, hasClientId } from '@/core/security/spotifyAuth';
+import { hasClientId } from '@/core/security/spotifyAuth';
+import { usePlayerStore } from '@/core/store';
 import { derivePalette } from '@/core/utils/contrast';
 import { isTauri } from '@/core/utils/env';
 import { useUpdateStore } from '@/core/updates/store';
@@ -372,7 +373,9 @@ export function SettingsPanel({
               ready={spotifyReady}
               onSetUp={onSetUpSpotify}
               onForget={async () => {
-                await clearClientId();
+                // Signing out as well as forgetting the ID, so the tokens, a
+                // Spotify track on the deck and the drawer all go with it.
+                await usePlayerStore.getState().forgetSpotify();
                 await refresh();
               }}
             />

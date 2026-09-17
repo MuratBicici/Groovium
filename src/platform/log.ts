@@ -35,6 +35,15 @@ const SECRET_NAMES = [
   'q',
 ];
 
+/**
+ * The names that are only a secret in a URL or a form body.
+ *
+ * OAuth's `code` and `state` travel as query parameters. In JSON, `code` is the
+ * stable name of an error — `{"code":"not_configured"}` — and hiding it hid the
+ * one part of the line that said what had gone wrong.
+ */
+const ONLY_IN_URLS = new Set(['code', 'state', 'q']);
+
 const HIDDEN = '[redacted]';
 
 /** Take anything that should not be in a shared file out of a line. */
@@ -48,6 +57,7 @@ export function redact(text: string): string {
     // In a URL or a form body: `name=value`, up to the next separator.
     out = out.replace(new RegExp(`([?&\\s]${name}=)[^&\\s"')]+`, 'g'), `$1${HIDDEN}`);
     // In JSON: `"name": "value"`.
+    if (ONLY_IN_URLS.has(name)) continue;
     out = out.replace(new RegExp(`("${name}"\\s*:\\s*")[^"]*(")`, 'g'), `$1${HIDDEN}$2`);
   }
 

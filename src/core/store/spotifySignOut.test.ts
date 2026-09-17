@@ -10,9 +10,15 @@ import type {
 
 // Signing out talks to Rust, which is not here. Everything else in the action
 // is what this is about.
+const steps = vi.hoisted(() => [] as string[]);
 vi.mock('@/core/security/spotifyAuth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/core/security/spotifyAuth')>()),
-  signOut: vi.fn(async () => {}),
+  signOut: vi.fn(async () => {
+    steps.push('signed out');
+  }),
+  clearClientId: vi.fn(async () => {
+    steps.push('client id cleared');
+  }),
   isAuthenticated: vi.fn(async () => false),
 }));
 
@@ -155,5 +161,29 @@ describe('signing out of Spotify', () => {
 
     expect(usePlayerStore.getState().error).toMatch(/Connect your account/);
     expect(usePlayerStore.getState().playbackState).toBe('IDLE');
+  });
+});
+
+describe('forgetting Spotify altogether', () => {
+  beforeEach(() => {
+    steps.length = 0;
+    registerProvider(new FakeProvider('local'));
+    registerProvider(new FakeProvider('spotify'));
+  });
+
+  it('signs out before it forgets the Client ID', async () => {
+    // Clearing the ID alone left the tokens, which were issued to it and
+    // cannot be refreshed under any other.
+    await usePlayerStore.getState().forgetSpotify();
+    expect(steps).toEqual(['signed out', 'client id cleared']);
+  });
+
+  it('takes a Spotify track off the deck, as signing out does', async () => {
+    nowPlaying('spotify');
+    await usePlayerStore.getState().forgetSpotify();
+
+    const state = usePlayerStore.getState();
+    expect(state.playbackState).toBe('IDLE');
+    expect(state.stationQueue).toEqual([]);
   });
 });
