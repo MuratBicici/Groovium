@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
 import { Shelf } from './Shelf';
+import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 
 /** How far the pointer travels before a press becomes a lift rather than a click. */
@@ -69,6 +70,14 @@ export function SpotifyCrates() {
   const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
   const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
   const starting = useSpotifyPlaylistsStore((s) => s.starting);
+  const createPlaylist = useSpotifyPlaylistsStore((s) => s.createPlaylist);
+  const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
+  const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
+  /** A crate made a moment ago, which arrives on the shelf rather than just being there. */
+  const [justMade, setJustMade] = useState<string | null>(null);
+  // Stable, because the arriving crate's animation depends on it: a new function
+  // on every render would restart the arrival each time the shelf re-rendered.
+  const arrived = useCallback(() => setJustMade(null), []);
   const playError = useSpotifyPlaylistsStore((s) => s.playError);
 
   const { platterEl } = useDiscFlight();
@@ -165,7 +174,33 @@ export function SpotifyCrates() {
           {playError}
         </p>
       )}
+      {/* A change to a playlist that Spotify refused, from here or from the sheet.
+          The crate has its own place to say so when it is open. */}
+      {writeError && (
+        <div className="flex shrink-0 items-start gap-2 rounded bg-red-950/70 px-2 py-1.5">
+          <p className="min-w-0 flex-1 text-meta leading-snug text-red-200">{writeError}</p>
+          <button
+            type="button"
+            aria-label={t('common.dismiss')}
+            onClick={clearWriteError}
+            className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
+          >
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
       <Shelf heading={t('panel.playlists')}>
+        {!error && (
+          <NewCrate
+            onCreate={async (name) => {
+              const created = await createPlaylist(name);
+              if (created) setJustMade(created.id);
+              return created !== null;
+            }}
+          />
+        )}
         {error && (
           <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
             {error}
@@ -181,6 +216,8 @@ export function SpotifyCrates() {
             <Crate
               key={playlist.id}
               playlist={playlist}
+              arriving={justMade === playlist.id}
+              onArrived={arrived}
               starting={starting === playlist.id}
               away={inHand === `crate:${playlist.id}`}
               onCarry={carry}
@@ -222,14 +259,93 @@ export function SpotifyCrates() {
  * little way out of the sleeve. It is what says this is a thing you take out
  * rather than a picture you click, before anything has been clicked.
  */
+/**
+ * An empty sleeve at the start of the shelf, for making a playlist.
+ *
+ * On the shelf rather than behind a button somewhere else, because a new
+ * playlist is a new crate and this is where crates are. Pressing it turns its
+ * label into a name field; Enter makes the playlist, private, and the new crate
+ * arrives beside it. Escape puts the label back — and keeps the key to itself,
+ * or the shell would close the whole drawer with it.
+ */
+function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
+  const t = useT();
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [working, setWorking] = useState(false);
+
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed || working) return;
+    setWorking(true);
+    const made = await onCreate(trimmed);
+    setWorking(false);
+    if (made) {
+      setName('');
+      setNaming(false);
+    }
+  }
+
+  return (
+    <div
+      className={`relative flex shrink-0 flex-col rounded-md ${working ? 'animate-pulse' : ''}`}
+      style={{ width: CRATE_SIZE }}
+    >
+      <button
+        type="button"
+        aria-label={t('spotify.newPlaylist')}
+        title={t('spotify.newPlaylist')}
+        onClick={() => setNaming(true)}
+        className="flex aspect-square w-full items-center justify-center rounded-md border border-dashed border-cream-400/40 text-cream-400 transition-colors hover:border-brass-400 hover:text-brass-400"
+      >
+        <svg viewBox="0 0 16 16" className="h-6 w-6" aria-hidden="true">
+          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+      <span className="flex min-w-0 flex-col px-0.5 py-1 text-center">
+        {naming ? (
+          <input
+            type="text"
+            value={name}
+            autoFocus
+            maxLength={100}
+            placeholder={t('spotify.newPlaylist')}
+            aria-label={t('spotify.playlistName')}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => {
+              if (!name.trim() && !working) setNaming(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void create();
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                setName('');
+                setNaming(false);
+              }
+            }}
+            className="w-full groove-inset rounded px-1 py-0.5 text-center text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+          />
+        ) : (
+          <span className="truncate text-meta text-cream-400">{t('spotify.newPlaylist')}</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function Crate({
   playlist,
+  arriving,
+  onArrived,
   starting,
   away,
   onCarry,
   onOpen,
 }: {
   playlist: SpotifyPlaylist;
+  /** Just made: it arrives on the shelf instead of simply appearing. */
+  arriving: boolean;
+  onArrived: () => void;
   /** This crate's records are being fetched so the whole thing can play. */
   starting: boolean;
   /** It is in somebody's hand, so its place on the shelf is empty. */
@@ -244,10 +360,38 @@ function Crate({
 }) {
   const t = useT();
   const art = useRef<HTMLSpanElement | null>(null);
+  const card = useRef<HTMLButtonElement | null>(null);
   /** Whether the press being finished turned into a lift. */
   const lifted = useRef(false);
+
+  /**
+   * A crate that has just been made settles onto the shelf.
+   *
+   * From a little smaller and further left — out of the empty sleeve that made
+   * it — to its place, with a slight overshoot so it lands rather than stops.
+   */
+  useLayoutEffect(() => {
+    const el = card.current;
+    if (!arriving || !el) return;
+    const done = () => onArrived();
+    if (prefersReducedMotion()) {
+      done();
+      return;
+    }
+    const run = el.animate(
+      [
+        { transform: 'translateX(-40px) scale(0.7)', opacity: 0 },
+        { transform: 'translateX(4px) scale(1.03)', opacity: 1, offset: 0.7 },
+        { transform: 'none', opacity: 1 },
+      ],
+      { duration: 360, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+    run.finished.then(done, done);
+  }, [arriving, onArrived]);
+
   return (
     <button
+      ref={card}
       type="button"
       onPointerDown={(e) => {
         lifted.current = false;

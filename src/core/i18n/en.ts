@@ -156,6 +156,7 @@ export const en = {
   'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',
   'spotify.onDeck': 'This record is on the deck.',
   'spotify.edit': 'Edit',
+  'spotify.newPlaylist': 'New playlist',
   'spotify.done': 'Done',
   'spotify.more': 'More',
   'spotify.playlistName': 'Playlist name',

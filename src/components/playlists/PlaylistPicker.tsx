@@ -119,6 +119,11 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
     if (!track) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // A name being typed gets the key first: it closes the field, not the
+        // sheet. This listener is in the capture phase and runs before the
+        // field's own, so it has to step aside rather than rely on the field
+        // stopping it.
+        if (e.target instanceof HTMLInputElement && e.target.closest('[role="dialog"]')) return;
         // The shell listens for Escape on `window` too. `stopPropagation` would
         // not help — it does not stop other listeners on the same target — so
         // this has to be the immediate variant, in the capture phase, to close
@@ -415,8 +420,10 @@ function NewRow({
         onKeyDown={(e) => {
           if (e.key === 'Enter') void create();
           if (e.key === 'Escape') {
-            // Closing the field, not the sheet.
+            // Closing the field, not the sheet — and not letting the key on to
+            // the shell, which would close whatever the sheet sits over.
             e.stopPropagation();
+            setName('');
             setOpen(false);
           }
         }}
