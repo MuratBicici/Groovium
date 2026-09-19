@@ -16,6 +16,7 @@ import {
   type Size,
 } from '@/core/spotify/cover';
 import { useT } from '@/core/i18n';
+import { Toggle } from '@/components/controls/Toggle';
 
 /**
  * The menu and the sheets an open crate offers about the playlist itself.
@@ -214,18 +215,13 @@ export function DetailsSheet({
         </label>
       </div>
 
-      <label className="flex cursor-pointer items-start gap-2">
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-          className="mt-0.5 accent-[var(--color-brass-500)]"
-        />
-        <span className="flex flex-col">
-          <span className="text-meta text-cream-100">{t('spotify.public')}</span>
-          <span className="text-label leading-snug text-cream-400">{t('spotify.publicHint')}</span>
-        </span>
-      </label>
+      <Toggle
+        label={t('spotify.public')}
+        hint={t('spotify.publicHint')}
+        on={isPublic}
+        onChange={setIsPublic}
+        size="meta"
+      />
       {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
 
       <div className="mt-1 flex items-center gap-2">

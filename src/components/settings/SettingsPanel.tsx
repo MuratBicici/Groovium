@@ -10,6 +10,7 @@ import { derivePalette } from '@/core/utils/contrast';
 import { isTauri } from '@/core/utils/env';
 import { useUpdateStore } from '@/core/updates/store';
 import { APP_VERSION, AUTHOR } from '@/core/version';
+import { Toggle } from '@/components/controls/Toggle';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -640,45 +641,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="text-label font-medium tracking-[0.16em] text-cream-400 uppercase">{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Toggle({
-  label,
-  hint,
-  on,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  on: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-shell-700/60"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-body text-cream-200">{label}</span>
-        <span className="block text-meta leading-snug text-cream-400">{hint}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-          on ? 'bg-brass-600' : 'bg-shell-600'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-3 w-3 rounded-full bg-cream-50 transition-all ${
-            on ? 'left-3.5' : 'left-0.5'
-          }`}
-        />
-      </span>
-    </button>
   );
 }
 
