@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { prefersReducedMotion } from '@/core/utils/motion';
 import {
   COVER_MAX_BYTES,
   type PlaylistDetails,
@@ -32,6 +33,103 @@ import { Toggle } from '@/components/controls/Toggle';
  * whichever is on top — a second capture listener on `window` registered later
  * than the crate's would never hear the key.
  */
+
+/**
+ * Opening: the backdrop fades in and the sheet rises into place while it
+ * fades in, easing out — quick at first and settling, which is how something
+ * arriving should move. `cubic-bezier(0.22, 1, 0.36, 1)`, an ease-out quint.
+ */
+const SHEET_IN_MS = 220;
+const SHEET_IN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+/**
+ * Closing: shorter, and easing in — slow to start and gone at speed, which is
+ * how something leaving should. `cubic-bezier(0.4, 0, 1, 1)`, an ease-in.
+ * Shorter because nobody waits to watch a thing go.
+ */
+const SHEET_OUT_MS = 150;
+const SHEET_OUT_EASING = 'cubic-bezier(0.4, 0, 1, 1)';
+/** Where the sheet comes up from and goes back down to. */
+const SHEET_AWAY = 'translateY(8px) scale(0.97)';
+
+/**
+ * Keeps a sheet on screen long enough to animate it in and out.
+ *
+ * The crate decides whether a sheet is shown, and the moment it says no the
+ * sheet's element would be gone — with nothing left to fade. So this holds on
+ * to the last thing it was given while `show` was true, plays the way out on
+ * it, and only then lets it go. Shown again part-way out, it turns round.
+ *
+ * It finds the parts to move by what they are, the backdrop and the dialog,
+ * so every sheet here gets the same entrance without each saying so.
+ */
+export function SheetPresence({ show, children }: { show: boolean; children: React.ReactNode }) {
+  const [present, setPresent] = useState(show);
+  const [held, setHeld] = useState<React.ReactNode>(show ? children : null);
+  // Derived from props during render, which React allows for the component's
+  // own state: what to keep showing once `show` goes false.
+  if (show && held !== children) setHeld(children);
+  if (show && !present) setPresent(true);
+  const box = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const root = box.current?.firstElementChild as HTMLElement | null | undefined;
+    if (!root) return;
+    const backdrop = root.querySelector<HTMLElement>('.groove-sheet-backdrop');
+    const dialog = root.querySelector<HTMLElement>('[role="dialog"]');
+    const parts = [backdrop, dialog].filter((el): el is HTMLElement => el !== null);
+    for (const el of parts) for (const a of el.getAnimations()) a.cancel();
+    const reduced = prefersReducedMotion();
+
+    if (show) {
+      root.style.pointerEvents = '';
+      if (reduced) return;
+      backdrop?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: SHEET_IN_MS,
+        easing: SHEET_IN_EASING,
+      });
+      dialog?.animate(
+        [
+          { opacity: 0, transform: SHEET_AWAY },
+          { opacity: 1, transform: 'none' },
+        ],
+        { duration: SHEET_IN_MS, easing: SHEET_IN_EASING },
+      );
+      return;
+    }
+
+    // On its way out it is no longer there to be pressed: a click meant for
+    // what is underneath goes there.
+    root.style.pointerEvents = 'none';
+    if (reduced || !dialog) {
+      setPresent(false);
+      return;
+    }
+    backdrop?.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: SHEET_OUT_MS,
+      easing: SHEET_OUT_EASING,
+      fill: 'forwards',
+    });
+    const out = dialog.animate(
+      [
+        { opacity: 1, transform: 'none' },
+        { opacity: 0, transform: SHEET_AWAY },
+      ],
+      { duration: SHEET_OUT_MS, easing: SHEET_OUT_EASING, fill: 'forwards' },
+    );
+    // Cancelled means it was shown again on the way out, and stays.
+    out.finished.then(
+      () => setPresent(false),
+      () => {},
+    );
+  }, [show, present]);
+
+  if (!present) return null;
+  return (
+    <div ref={box} className="contents">
+      {show ? children : held}
+    </div>
+  );
+}
 
 /** A sheet over the crate, with a dimmed backdrop that closes it. */
 function Sheet({

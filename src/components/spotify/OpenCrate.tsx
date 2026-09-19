@@ -10,7 +10,7 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
-import { CoverCrop, DetailsSheet, RemoveSheet } from './CrateSheets';
+import { CoverCrop, DetailsSheet, RemoveSheet, SheetPresence } from './CrateSheets';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
@@ -798,52 +798,58 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
 
       {/* Under the removal question too, so Cancel there comes back to it
           with nothing lost. */}
-      {surface && (
-        <DetailsSheet
-          playlist={playlist}
-          onRemove={() => setSurface('remove')}
-          {...(isTauri() && { onCover: chooseCover })}
-          coverProblem={coverNotice}
-          onClose={() => {
-            setSurface(null);
-            setCoverNotice(null);
-          }}
-          onSave={(details) => {
-            setSurface(null);
-            setCoverNotice(null);
-            void setCrateDetails(playlist.id, details);
-          }}
-        />
-      )}
+      <SheetPresence show={surface !== null}>
+        {surface && (
+          <DetailsSheet
+            playlist={playlist}
+            onRemove={() => setSurface('remove')}
+            {...(isTauri() && { onCover: chooseCover })}
+            coverProblem={coverNotice}
+            onClose={() => {
+              setSurface(null);
+              setCoverNotice(null);
+            }}
+            onSave={(details) => {
+              setSurface(null);
+              setCoverNotice(null);
+              void setCrateDetails(playlist.id, details);
+            }}
+          />
+        )}
+      </SheetPresence>
       {/* Over the details sheet, and back to it: the new cover shows there at
           once, beside whatever else is being changed. */}
-      {surface === 'details' && coverImage && (
-        <CoverCrop
-          image={coverImage}
-          onClose={() => setCoverImage(null)}
-          onFailed={(message) => {
-            setCoverImage(null);
-            setCoverNotice(message);
-          }}
-          onUpload={(base64, preview) => {
-            setCoverImage(null);
-            void setCrateCover(playlist.id, base64, preview);
-          }}
-        />
-      )}
-      {surface === 'remove' && (
-        <RemoveSheet
-          playlist={playlist}
-          onClose={() => setSurface('details')}
-          onRemove={() => {
-            setSurface(null);
-            // The records go back into the crate first, and only then does the
-            // crate leave the shelf. Removing it at once would unmount this
-            // layer mid-thought, with nothing to show where it went.
-            requestClose(() => void deleteCrate(playlist.id));
-          }}
-        />
-      )}
+      <SheetPresence show={surface === 'details' && coverImage !== null}>
+        {surface === 'details' && coverImage && (
+          <CoverCrop
+            image={coverImage}
+            onClose={() => setCoverImage(null)}
+            onFailed={(message) => {
+              setCoverImage(null);
+              setCoverNotice(message);
+            }}
+            onUpload={(base64, preview) => {
+              setCoverImage(null);
+              void setCrateCover(playlist.id, base64, preview);
+            }}
+          />
+        )}
+      </SheetPresence>
+      <SheetPresence show={surface === 'remove'}>
+        {surface === 'remove' && (
+          <RemoveSheet
+            playlist={playlist}
+            onClose={() => setSurface('details')}
+            onRemove={() => {
+              setSurface(null);
+              // The records go back into the crate first, and only then does the
+              // crate leave the shelf. Removing it at once would unmount this
+              // layer mid-thought, with nothing to show where it went.
+              requestClose(() => void deleteCrate(playlist.id));
+            }}
+          />
+        )}
+      </SheetPresence>
     </div>
   );
 }
