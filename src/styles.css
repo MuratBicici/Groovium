@@ -723,6 +723,48 @@ body {
 }
 
 /*
+ * A syllable of a lyric line. On the line being sung the ones not yet reached
+ * are dimmed, and each lights as it is sung — quickly, and settling, so a run
+ * of short syllables reads as the line filling in rather than blinking.
+ */
+.lyric-syllable {
+  transition: opacity 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lyric-syllable.lyric-unsung {
+  opacity: 0.38;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyric-syllable {
+    transition: none;
+  }
+}
+:root[data-motion='off'] .lyric-syllable {
+  transition: none;
+}
+
+/*
+ * The line being sung, on the lyric wheel: a soft light in the accent colour,
+ * which is the cover's own when the palette follows the record.
+ */
+.lyric-glow {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-brass-400) 55%, transparent));
+}
+
+/*
+ * The wheel's lines, thinning to nothing at the drawer's top and bottom rather
+ * than being cut off there.
+ */
+.lyric-edge-fade {
+  mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+}
+
+/* Words to read, fading at either end of the scroll. */
+.lyric-scroll-fade {
+  mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 90%, transparent);
+}
+
+/*
  * A soft fade at the bottom of a list that scrolls, present only while there
  * is more of it to see.
  *

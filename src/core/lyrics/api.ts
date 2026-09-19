@@ -26,7 +26,12 @@ export interface LyricsLookup {
 
 /** The lyrics for a track, from Rust, which asks LRCLIB and keeps the answer. */
 export async function getLyrics(track: TrackMetadata): Promise<LyricsLookup | null> {
-  if (!isTauri()) return null;
+  if (!isTauri()) {
+    // The lookup lives in Rust. A development build in a browser gets made-up
+    // lyrics instead, so the views can be seen without the app around them.
+    if (import.meta.env.DEV) return (await import('./fixture')).fixtureFor(track);
+    return null;
+  }
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke<LyricsLookup>('get_lyrics', {
     trackId: track.id,

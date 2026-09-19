@@ -44,6 +44,17 @@ export const en = {
   'panel.spotify': 'Spotify',
   'panel.settings': 'Settings',
   'panel.lyrics': 'Lyrics',
+  'lyrics.title': 'Lyrics',
+  'lyrics.loading': 'Looking for the lyrics…',
+  'lyrics.notFound': 'No lyrics found for this song.',
+  'lyrics.instrumental': 'Instrumental',
+  'lyrics.plainOnly': 'Words only — no timings for this one',
+  'lyrics.error': 'The lyrics could not be loaded.',
+  'lyrics.retry': 'Try again',
+  'lyrics.nothingPlaying': 'Play something to see its lyrics.',
+  'lyrics.source': 'from {source}',
+  'lyrics.expand': 'Open in the drawer',
+  'lyrics.toCompact': 'Move to the player',
 
   // Transport
   'transport.shuffle': 'Shuffle',

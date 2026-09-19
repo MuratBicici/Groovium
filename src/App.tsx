@@ -13,7 +13,21 @@ import { WindowGlow } from '@/components/player/WindowGlow';
 import { CoverTheme } from '@/components/player/CoverTheme';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
-import { LyricsPanel } from '@/components/lyrics/LyricsPanel';
+import { LyricsDrawer } from '@/components/lyrics/LyricsDrawer';
+import { CompactLyrics } from '@/components/lyrics/CompactLyrics';
+import { usePresence } from '@/components/lyrics/usePresence';
+import {
+  closeDrawer,
+  compactShown,
+  expand,
+  fullShown,
+  pressLyrics,
+  pressSpotify,
+  showSpotify,
+  toCompact,
+} from '@/core/lyrics/layout';
+import { useLyricsStore } from '@/core/lyrics/store';
+import { followPlayer } from '@/core/lyrics/playhead';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -47,7 +61,6 @@ const PANEL_IDS = {
   library: 'groovium-library',
   playlists: 'groovium-playlists',
   settings: 'groovium-settings',
-  lyrics: 'groovium-lyrics',
 } as const;
 
 /**
@@ -59,6 +72,7 @@ const PANEL_IDS = {
  * remembered — on disk, next to `compact`.
  */
 const DRAWER_ID = 'groovium-spotify';
+const LYRICS_ID = 'groovium-lyrics';
 
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
 type Overlay = 'none' | keyof typeof PANEL_IDS;
@@ -131,7 +145,12 @@ export default function App() {
    */
   const [drawerSide, setDrawerSide] = useState(chosenSide);
   const [swapping, setSwapping] = useState(false);
-  const setDrawerOpen = useSettingsStore((s) => s.setDrawerOpen);
+  const lyricsOn = useSettingsStore((s) => s.lyricsOn);
+  const lyricsPlace = useSettingsStore((s) => s.lyricsPlace);
+  const setLyricsLayout = useSettingsStore((s) => s.setLyricsLayout);
+  /** The drawer and the lyrics together — see `src/core/lyrics/layout.ts`. */
+  const layout = { drawerOpen, lyricsOn, lyricsPlace };
+  const lyricsInDrawer = fullShown(layout);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const visualizer = useSettingsStore((s) => s.visualizer);
@@ -217,6 +236,16 @@ export default function App() {
   // open is still open when the player is opened back up, which is the same
   // answer any window gives after being minimised.
   const shown: Overlay = compact ? 'none' : overlay;
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const wantLyrics = useLyricsStore((s) => s.want);
+  // Only while lyrics are on does anything about the song go to a lyrics
+  // service, and only then does the clock need feeding.
+  useEffect(() => {
+    if (lyricsOn) wantLyrics(currentTrack);
+  }, [lyricsOn, currentTrack, wantLyrics]);
+  useEffect(() => (lyricsOn ? followPlayer() : undefined), [lyricsOn]);
+  /** Lyrics under the deck: on, not in the drawer, and a deck to be under. */
+  const lyricsOnDeck = compactShown(layout) && !compact;
   // Not an `Overlay`: it is raised by the transport row rather than a panel
   // button, and it may sit over whichever panel happens to be open.
   const [stationSetup, setStationSetup] = useState(false);
@@ -434,7 +463,15 @@ export default function App() {
             <DiskPlatter stowed={compact} />
           </div>
           <div ref={trackRef}>
-            <TrackDisplay compact={compact} />
+            {/* Faded rather than removed while lyrics are on the deck: the
+                collapse animation measures this box, and the title glides up
+                out of it into the lyrics' small line. */}
+            <div
+              className="transition-opacity duration-300 ease-out"
+              style={{ opacity: lyricsOnDeck ? 0 : 1 }}
+            >
+              <TrackDisplay compact={compact} />
+            </div>
           </div>
 
           <LibraryPanel
@@ -451,19 +488,17 @@ export default function App() {
             id={PANEL_IDS.settings}
             open={shown === 'settings'}
             onClose={() => setOverlay('none')}
-            onSetUpSpotify={() => setDrawerOpen(true)}
+            onSetUpSpotify={() => setLyricsLayout(showSpotify(layout))}
             onSetUpStation={() => setStationSetup(true)}
             onPickColour={setPickingColour}
             onShowWhatsNew={summary ? () => setReopened(true) : undefined}
           />
-          {/* A test bench for synced lyrics. Development builds only. */}
-          {import.meta.env.DEV && (
-            <LyricsPanel
-              id={PANEL_IDS.lyrics}
-              open={shown === 'lyrics'}
-              onClose={() => setOverlay('none')}
-            />
-          )}
+          <CompactLyrics
+            show={lyricsOnDeck}
+            stageRef={stageRef}
+            trackRef={trackRef}
+            onExpand={() => setLyricsLayout(expand(layout))}
+          />
         </div>
 
         {/* Always reachable, including while an overlay is open. */}
@@ -496,17 +531,19 @@ export default function App() {
             {isTauri() && (
               <PanelButton
                 panel="spotify"
-                open={drawerOpen}
-                onToggle={() => setDrawerOpen(!drawerOpen)}
+                open={drawerOpen && !lyricsInDrawer}
+                onToggle={() => setLyricsLayout(pressSpotify(layout))}
                 controls={DRAWER_ID}
               />
             )}
-            {import.meta.env.DEV && isTauri() && (
+            {/* The lookup is Rust's, so like Spotify this is the app's alone —
+                apart from a development build, which has made-up lyrics. */}
+            {(isTauri() || import.meta.env.DEV) && (
               <PanelButton
                 panel="lyrics"
-                open={shown === 'lyrics'}
-                onToggle={() => toggle('lyrics')}
-                controls={PANEL_IDS.lyrics}
+                open={lyricsOn}
+                onToggle={() => setLyricsLayout(pressLyrics(layout))}
+                controls={LYRICS_ID}
               />
             )}
             <PanelButton
@@ -520,7 +557,22 @@ export default function App() {
         </div>
       </main>
 
-      {drawerPresent && <SpotifyDrawer id={DRAWER_ID} onClose={() => setDrawerOpen(false)} />}
+      {drawerPresent && (
+        <DrawerSlot
+          lyrics={lyricsInDrawer}
+          spotify={
+            <SpotifyDrawer id={DRAWER_ID} onClose={() => setLyricsLayout(closeDrawer(layout))} />
+          }
+          lyricsView={
+            <LyricsDrawer
+              id={LYRICS_ID}
+              side={drawerSide}
+              onClose={() => setLyricsLayout(closeDrawer(layout))}
+              onCompact={() => setLyricsLayout(toCompact(layout))}
+            />
+          }
+        />
+      )}
       </div>
 
       {/* Out here rather than inside the settings panel, for the reason the
@@ -605,6 +657,42 @@ export default function App() {
       </DiscHoldProvider>
       </DiscFlightProvider>
       </PlaylistPickerProvider>
+    </div>
+  );
+}
+
+/**
+ * The drawer's one slot, and the two things it can hold.
+ *
+ * Spotify stays mounted underneath while lyrics are over it — faded out and
+ * unreachable, but with its shelves, scroll and search where they were — so
+ * switching back is a crossfade rather than a reload. Lyrics come and go over
+ * it. The slot's width never changes, so the window does not move.
+ */
+function DrawerSlot({
+  lyrics,
+  spotify,
+  lyricsView,
+}: {
+  lyrics: boolean;
+  spotify: React.ReactNode;
+  lyricsView: React.ReactNode;
+}) {
+  const { present, ref } = usePresence(lyrics);
+  return (
+    <div className="relative flex shrink-0">
+      <div
+        inert={lyrics}
+        className="flex transition-opacity duration-300 ease-out"
+        style={{ opacity: lyrics ? 0 : 1 }}
+      >
+        {spotify}
+      </div>
+      {present && (
+        <div ref={ref} className="absolute inset-0 flex">
+          {lyricsView}
+        </div>
+      )}
     </div>
   );
 }
