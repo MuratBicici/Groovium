@@ -2,7 +2,17 @@ import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from 'rea
 import type { DrawerSide } from '@/core/settings';
 import type { LyricLine } from '@/core/lyrics/activeLine';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { CENTER_INSET, TEXT_RADIUS, lineAngle, lineLook, visibleRange } from './arc';
+import {
+  CENTER_INSET,
+  LINE_FONT_PX,
+  LINE_ROOM,
+  SUNG_MAX_SCALE,
+  SUNG_MIN_SCALE,
+  TEXT_RADIUS,
+  lineAngle,
+  lineLook,
+  visibleRange,
+} from './arc';
 import type { Move } from './browse';
 import { LineText } from './LineText';
 import { ARRIVE_EASING, LOOK_MS, TURN_EASING, TURN_MS } from './motion';
@@ -36,6 +46,12 @@ export function turnTransition(move: Move): string {
  * The line shown on the level is usually the one being sung, but a scroll
  * can take the view elsewhere; the line being sung keeps its light wherever
  * it is.
+ *
+ * Every line is drawn at one type size and scaled from there, so growing and
+ * shrinking is a transform that can be animated rather than a size that
+ * changes in a step. Each line's own scale — `--fit` — is measured once from
+ * the room it has: a long line is shrunk to stay one line, and a short one on
+ * the level is let grow into the space it has. Nothing ever wraps.
  */
 export function LyricWheel({
   lines,
@@ -61,6 +77,17 @@ export function LyricWheel({
   const layer = useRef<HTMLDivElement | null>(null);
   const range = visibleRange(view, lines.length);
   const left = side === 'left';
+
+  // What each line may be scaled to, from the room it has. Measured once a
+  // song, off the text laid out at its own size — `scrollWidth` ignores the
+  // transform, which is the whole reason the size is a transform.
+  useLayoutEffect(() => {
+    const els = layer.current?.querySelectorAll<HTMLElement>('[data-line]') ?? [];
+    for (const el of els) {
+      const natural = el.scrollWidth;
+      el.style.setProperty('--fit', natural > 0 ? String(LINE_ROOM / natural) : '1');
+    }
+  }, [lines]);
 
   // A cut fades the lines in where they now are, instead of turning to them.
   useLayoutEffect(() => {
@@ -108,16 +135,18 @@ export function LyricWheel({
                 tabIndex={-1}
                 data-line={index}
                 onClick={() => onPick(line)}
-                className={`block w-max max-w-[400px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
+                className={`block w-max cursor-pointer rounded-md px-2 py-1 leading-snug whitespace-nowrap transition-[opacity,transform,color] hover:!opacity-80 ${
                   left ? 'text-left' : 'text-right'
-                } ${
-                  singing
-                    ? 'text-[22px] font-semibold text-cream-50 lyric-glow'
-                    : 'text-[17px] text-cream-200'
-                }`}
+                } ${singing ? 'font-semibold text-cream-50 lyric-glow' : 'text-cream-200'}`}
                 style={{
+                  fontSize: LINE_FONT_PX,
                   opacity: near ? look.opacity : 0,
-                  transform: `scale(${look.scale})`,
+                  // The line being sung takes the room it has, between a size
+                  // that still reads and one that is still a line among lines;
+                  // the rest keep their own size or less, dimmed by distance.
+                  transform: singing
+                    ? `scale(clamp(${SUNG_MIN_SCALE}, var(--fit, 1), ${SUNG_MAX_SCALE}))`
+                    : `scale(calc(min(1, var(--fit, 1)) * ${look.scale}))`,
                   transformOrigin: left ? 'left center' : 'right center',
                   transitionDuration: `${LOOK_MS}ms`,
                   transitionTimingFunction: ARRIVE_EASING,

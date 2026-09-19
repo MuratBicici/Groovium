@@ -50,6 +50,26 @@ export const LABEL_RATIO = 0.21;
 /** Where a line's inner end sits, measured from the centre: just past the label. */
 export const TEXT_RADIUS = Math.round(DISC_RADIUS * LABEL_RATIO) + 22;
 
+/**
+ * The room a line has, from where it starts to the drawer's other edge.
+ *
+ * A line is never allowed to wrap: two lines of one lyric on a wheel is a
+ * knot rather than a line. It is fitted to this instead — shrunk if it is
+ * long, and let grow if it is short, which is what gives a short line on the
+ * level its size.
+ */
+export const LINE_ROOM = 498;
+
+/** The size every line is drawn at before it is fitted. */
+export const LINE_FONT_PX = 17;
+
+/**
+ * How far the line being sung may be scaled: never so small it is unreadable,
+ * never so large it stops being one of a set of lines.
+ */
+export const SUNG_MIN_SCALE = 0.75;
+export const SUNG_MAX_SCALE = 1.55;
+
 /** Which way round the angles run: +1 on the left, −1 on the mirrored right. */
 function sign(side: DrawerSide): 1 | -1 {
   return side === 'left' ? 1 : -1;
