@@ -20,6 +20,7 @@ import { palettePeek } from '@/core/theme/palette';
 import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
+import type { LyricsLayout } from '@/core/lyrics/layout';
 
 /**
  * Preferences, in their own store.
@@ -45,6 +46,8 @@ interface SettingsStore extends Settings {
   setAlwaysOnTop: (onTop: boolean) => void;
   setCompact: (compact: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
+  /** Drawer and lyrics together, as `src/core/lyrics/layout.ts` works them out. */
+  setLyricsLayout: (layout: LyricsLayout) => void;
   setDrawerSide: (side: DrawerSide) => void;
   setCustomColour: (which: 'primary' | 'secondary', colour: string) => void;
   setBoostContrast: (boost: boolean) => void;
@@ -308,7 +311,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare } = get();
-    const { lastSeenVersion, declinedVersion } = get();
+    const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
     // stops being saved.
@@ -334,6 +337,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       glowFlare,
       lastSeenVersion,
       declinedVersion,
+      lyricsOn,
+      lyricsPlace,
     };
     return settings;
   };
@@ -374,6 +379,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     // from collapsed straight back to open-with-drawer.
     setCompact: (compact) => commit({ compact }),
     setDrawerOpen: (drawerOpen) => commit({ drawerOpen }),
+    setLyricsLayout: ({ drawerOpen, lyricsOn, lyricsPlace }) =>
+      commit({ drawerOpen, lyricsOn, lyricsPlace }),
     setDrawerSide: (drawerSide) => commit({ drawerSide }),
     setCustomColour: (which, colour) =>
       commit(

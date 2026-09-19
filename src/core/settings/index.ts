@@ -1,6 +1,7 @@
 import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
 import { log } from '@/platform/log';
+import type { LyricsPlace } from '@/core/lyrics/layout';
 
 /**
  * Preferences that survive a restart.
@@ -146,6 +147,15 @@ export interface Settings {
    * the question being asked again about the same version.
    */
   declinedVersion: string | null;
+  /**
+   * Lyrics are showing — in the player, or in the drawer.
+   *
+   * Off unless turned on: showing them asks lyrics services about the song
+   * that is playing, and nothing is sent anywhere until somebody asks.
+   */
+  lyricsOn: boolean;
+  /** Where lyrics show while the drawer is out; see `src/core/lyrics/layout.ts`. */
+  lyricsPlace: LyricsPlace;
 }
 
 export type DrawerSide = 'left' | 'right';
@@ -183,6 +193,8 @@ export const DEFAULT_SETTINGS: Settings = {
   glowFlare: 0,
   lastSeenVersion: null,
   declinedVersion: null,
+  lyricsOn: false,
+  lyricsPlace: 'compact',
 };
 
 export async function loadSettings(): Promise<Settings> {
@@ -199,6 +211,8 @@ export async function loadSettings(): Promise<Settings> {
     // narrower than its type. `drawerSide` decides which way the window grows;
     // a word nobody recognises would leave it growing in neither.
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
+    if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
+    settings.lyricsOn = settings.lyricsOn === true;
     // And the sliders, which are numbers somebody could put anything in — a
     // fraction among them, since these were fractions for one afternoon.
     for (const knob of GLOW_KNOBS) {

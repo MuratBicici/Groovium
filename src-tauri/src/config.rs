@@ -143,6 +143,14 @@ pub struct Settings {
     /// has been turned down, which is the state every install starts in.
     #[serde(default)]
     pub declined_version: Option<String>,
+    /// Lyrics are showing. Off unless turned on: they send the playing song's
+    /// name to lyrics services, which nobody should find happening by surprise.
+    #[serde(default)]
+    pub lyrics_on: bool,
+    /// Where lyrics show: `"compact"` in the player, `"full"` in the drawer.
+    /// Anything unrecognised reads as compact on the way in.
+    #[serde(default = "compact_place")]
+    pub lyrics_place: String,
 }
 
 /// What a fresh installation is, spelled out.
@@ -176,6 +184,8 @@ impl Default for Settings {
             glow_flare: 0,
             last_seen_version: None,
             declined_version: None,
+            lyrics_on: false,
+            lyrics_place: compact_place(),
         }
     }
 }
@@ -207,6 +217,10 @@ where
 
 fn right_side() -> String {
     "right".to_owned()
+}
+
+fn compact_place() -> String {
+    "compact".to_owned()
 }
 
 fn on_unless_turned_off() -> bool {
@@ -345,6 +359,8 @@ mod tests {
             glow_flare: 2,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
+            lyrics_on: true,
+            lyrics_place: "full".into(),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");

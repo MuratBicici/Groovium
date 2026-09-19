@@ -50,6 +50,8 @@ describe('remembering that a version has been shown', () => {
       glowFlash: -1,
       glowFlare: 2,
       declinedVersion: '2.0.0',
+      lyricsOn: true,
+      lyricsPlace: 'full',
     });
 
     useSettingsStore.getState().markVersionSeen();
@@ -76,6 +78,8 @@ describe('remembering that a version has been shown', () => {
       glowFlare: 2,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
+      lyricsOn: true,
+      lyricsPlace: 'full',
     });
   });
 
