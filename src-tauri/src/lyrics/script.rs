@@ -215,7 +215,9 @@ mod tests {
 
     #[test]
     fn reads_long_vowels_as_vowels() {
-        let long = "Sōdayo mō teokure Teikōshinaide anata no make ".repeat(4);
+        // Split at the macron, "shōnen" would be "sh" and "nen", and "sh" is
+        // no syllable — enough of those and it would not count as romaji.
+        let long = "shōnen kyōkai jōshiki shūmatsu ".repeat(6);
         assert!(looks_romanized(&long));
     }
 
