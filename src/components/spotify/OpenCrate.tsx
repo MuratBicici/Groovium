@@ -41,7 +41,8 @@ const COVER_FAILURES = {
  * place while it fades in, and back down as it fades out. It grows from the
  * crate that was pressed, and the records come out of that crate one after
  * another into their places, so what you see is a crate emptying rather than
- * a grid appearing.
+ * a grid appearing. Closing, they go back in the same way before the page
+ * goes.
  */
 
 /** How long one record takes to reach its place. */
@@ -56,6 +57,19 @@ const STAGGER_MS = 26;
  * rather than the end of the same one.
  */
 const STAGGERED = 14;
+
+/**
+ * Going back in is quicker than coming out, and from fewer of them.
+ *
+ * Unpacking is the thing worth watching; packing is what happens on the way to
+ * somewhere else, and a close that takes as long as an open feels like the app
+ * arguing about it. Ten staggered is still plainly a sequence.
+ */
+const RETURN_MS = 260;
+const RETURN_STAGGER_MS = 18;
+const RETURN_STAGGERED = 10;
+/** Into the crate: gathering speed rather than easing off, which is a drop. */
+const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 
 const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
@@ -305,11 +319,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const [closing, setClosing] = useState(false);
 
   /**
-   * Close the page, then let the drawer take the layer away.
+   * Put the records back in the crate, then let the page go.
    *
-   * The state is only here to stop anything being pressed while it runs. It
-   * never blocks the close: with motion turned down, or nothing to animate,
-   * the layer goes immediately.
+   * The records fly back one after another, and as the last of them reaches
+   * the crate the page goes down into it and fades. The state is only here to
+   * stop anything being pressed while it runs. It never blocks the close: with
+   * motion turned down the layer goes immediately.
    */
   const requestClose = useCallback((after?: () => void) => {
     if (shutting.current) return;
@@ -319,20 +334,58 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       after?.();
     };
 
+    const grid = gridRef.current;
     const layer = layerRef.current;
-    if (!layer || prefersReducedMotion()) {
+    if (!grid || !layer || prefersReducedMotion()) {
       finish();
       return;
     }
+
+    // Only what can be seen. Below the fold a record may not have been laid out
+    // at all — `content-visibility` is allowed to skip it — and animating a
+    // hundred of them off screen is work nobody watches.
+    const view = grid.getBoundingClientRect();
+    const going = [...grid.querySelectorAll<HTMLElement>('[data-record]')].filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.bottom > view.top && box.top < view.bottom;
+    });
+
     setClosing(true);
+    // A close straight after opening turns the page round rather than letting
+    // its entrance finish on top of the exit.
     for (const a of layer.getAnimations()) a.cancel();
+    for (const [i, el] of going.entries()) {
+      const to = ontoCrate(el, origin);
+      if (!to) continue;
+      el.animate(
+        [
+          { transform: 'none', opacity: 1 },
+          { transform: to, opacity: 0 },
+        ],
+        {
+          duration: RETURN_MS,
+          delay: Math.min(i, RETURN_STAGGERED) * RETURN_STAGGER_MS,
+          easing: RETURN_EASING,
+          fill: 'forwards',
+        },
+      );
+    }
+
+    // The page waits for the last record and then goes. Going any earlier
+    // would take the flight with it, and the flight is the whole point.
+    const last = Math.min(going.length, RETURN_STAGGERED) * RETURN_STAGGER_MS + RETURN_MS;
     layer.style.transformOrigin = growsFrom(layer, origin);
     const out = layer.animate(
       [
         { opacity: 1, transform: 'none' },
         { opacity: 0, transform: SHEET_AWAY },
       ],
-      { duration: SHEET_OUT_MS, easing: SHEET_OUT_EASING, fill: 'forwards' },
+      {
+        duration: SHEET_OUT_MS,
+        delay: Math.max(0, last - SHEET_OUT_MS),
+        easing: SHEET_OUT_EASING,
+        fill: 'forwards',
+      },
     );
     // Either way — finished or cancelled by an unmount — the crate closes.
     out.finished.then(finish, finish);
