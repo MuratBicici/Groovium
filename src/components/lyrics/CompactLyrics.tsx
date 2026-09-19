@@ -8,31 +8,44 @@ import type { LyricLine } from '@/core/lyrics/activeLine';
 import { LineText } from './LineText';
 import { ARRIVE_EASING, ARRIVE_MS, LEAVE_EASING, LEAVE_MS } from './motion';
 import { useLyricFrame } from './useLyricFrame';
+import type { Move } from './browse';
+import { useBrowse } from './useBrowse';
 
 /**
  * Lyrics in the player: the compact view.
  *
  * Nothing on the deck moves to make room. The record stays exactly where it
- * is, and the lyrics take the places around it that are already empty or
- * already words: the song's title and artist slide up into one small line in
- * the gap above the record, the line being sung takes the title's old place
- * below it, and the line to come sits in the gap under that. Laid over the
- * stage rather than into it, so the stage's own layout — and the collapse
- * animation that measures it — never sees a difference.
+ * is, and the lyrics take the places under it that are already empty or
+ * already words: the line being sung takes the title's old place, the line
+ * to come sits under it, and the song's title and artist move down to the
+ * foot of the stage, just over the progress bar — the title small on the
+ * left, the artist small on the right, both gliding there from where they
+ * were. Laid over the stage rather than into it, so the stage's own layout —
+ * and the collapse animation that measures it — never sees a difference.
  *
  * Lines move along the record's rim: the one sung rises and tips away, the
  * next rises into its place and grows, and the one after comes up from below.
  * The letters stay level — at this radius curved text is not readable — only
  * the motion follows the curve. A seek crossfades instead.
+ *
+ * The lines can be scrolled with the wheel, up or down the song. They stay
+ * where they were left for five seconds after the last scroll, then come back
+ * to the line being sung — see `browse.ts`.
  */
 
 /** Where things sit, measured off the stage. */
 interface Geometry {
-  titleTop: number;
   activeTop: number;
   activeHeight: number;
   nextTop: number;
+  /** The title and artist's row, at the foot of the stage. */
+  metaTop: number;
 }
+
+/** Two lines of the sung line's largest size, and a little air. */
+const ACTIVE_HEIGHT = 44;
+const NEXT_HEIGHT = 18;
+const META_HEIGHT = 14;
 
 /** The line to come's size against the line being sung's, for the move between them. */
 const NEXT_TO_SUNG = 12 / 16;
@@ -63,13 +76,15 @@ export function CompactLyrics({
 
   const [geo, setGeo] = useState<Geometry | null>(null);
   const titleText = useRef<HTMLSpanElement | null>(null);
+  const artistText = useRef<HTMLSpanElement | null>(null);
   const expandButton = useRef<HTMLButtonElement | null>(null);
   const lineLayer = useRef<HTMLDivElement | null>(null);
   const activeEl = useRef<HTMLButtonElement | null>(null);
 
   const result = status === 'done' ? lookup?.result : undefined;
   const lines = result?.status === 'Synced' ? result.data : null;
-  const { active, jumped } = useLyricFrame(present ? lines : null, activeEl);
+  const { active: sung } = useLyricFrame(present ? lines : null, activeEl);
+  const browse = useBrowse(lines?.length ?? 0, sung, track?.id);
 
   // Measure the stage: the gap above the record, and the title's place.
   useLayoutEffect(() => {
@@ -78,14 +93,15 @@ export function CompactLyrics({
     if (!present || !stage || !trackBox) return;
     const measure = () => {
       const base = stage.getBoundingClientRect();
-      const deck = stage.querySelector('[data-morph]')?.getBoundingClientRect();
       const text = trackBox.getBoundingClientRect();
-      const deckTop = (deck?.top ?? text.top - 168) - base.top;
+      // From the top of the title's old place down to the foot of the stage:
+      // the line sung, the line to come, and the title and artist's row.
+      const activeTop = text.top - base.top - 2;
       setGeo({
-        titleTop: Math.max(2, deckTop / 2 - 8),
-        activeTop: text.top - base.top,
-        activeHeight: text.height,
-        nextTop: text.bottom - base.top + 2,
+        activeTop,
+        activeHeight: ACTIVE_HEIGHT,
+        nextTop: activeTop + ACTIVE_HEIGHT + 2,
+        metaTop: base.height - META_HEIGHT - 1,
       });
     };
     measure();
@@ -94,44 +110,50 @@ export function CompactLyrics({
     return () => watch.disconnect();
   }, [present, stageRef, trackRef]);
 
-  // Coming and going: the title glides between its place on the deck and the
-  // small line above the record, growing or shrinking by the ratio of the two
-  // type sizes, while the deck's own title crossfades under it. Movement and
-  // fade run on separate animations: movement settles on the arrive curve,
-  // the fade runs evenly, so the words are still visible for the whole of the
-  // journey instead of gone by the middle of it.
+  // Coming and going: the title and the artist each glide between their place
+  // on the deck and their corner at the foot of the stage, shrinking or
+  // growing by the ratio of the two type sizes, while the deck's own words
+  // crossfade under them. Movement and fade run on separate animations:
+  // movement settles on the arrive curve, the fade runs evenly, so the words
+  // are visible for the whole of the journey instead of gone by the middle.
   useLayoutEffect(() => {
-    const text = titleText.current;
-    const expander = expandButton.current;
     const layer = lineLayer.current;
-    const source = trackRef.current?.querySelector('h1');
-    if (!text || !layer || !geo || prefersReducedMotion()) {
+    const expander = expandButton.current;
+    const deck = trackRef.current;
+    const pairs = [
+      [titleText.current, deck?.querySelector<HTMLElement>('h1')],
+      [artistText.current, deck?.querySelector<HTMLElement>('[data-morph="artist"]')],
+    ] as const;
+    if (!layer || !geo || prefersReducedMotion()) {
       if (!show) setTimeout(() => setPresent(false), 0);
       return;
     }
-    const from = source?.getBoundingClientRect();
-    const to = text.getBoundingClientRect();
-    const grow = source
-      ? parseFloat(getComputedStyle(source).fontSize) / parseFloat(getComputedStyle(text).fontSize)
-      : 1;
-    const onDeck =
-      from && to.width > 0
-        ? `translate(${from.left + from.width / 2 - (to.left + to.width / 2)}px, ${
-            from.top + from.height / 2 - (to.top + to.height / 2)
-          }px) scale(${grow})`
-        : 'translateY(40px)';
-    const moving = [text, expander, layer].filter((el): el is HTMLElement => el !== null);
+    const moving = [layer, expander, ...pairs.map(([el]) => el)].filter(
+      (el): el is HTMLElement => !!el,
+    );
     for (const el of moving) for (const a of el.getAnimations()) a.cancel();
 
-    if (show) {
-      text.animate([{ transform: onDeck }, { transform: 'none' }], {
-        duration: ARRIVE_MS + 80,
+    let last: Animation | null = null;
+    for (const [el, source] of pairs) {
+      if (!el) continue;
+      const onDeck = travelFrom(el, source);
+      const move = show
+        ? [{ transform: onDeck }, { transform: 'none' }]
+        : [{ transform: 'none' }, { transform: onDeck }];
+      const fade = show ? [{ opacity: 0.3 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }];
+      last = el.animate(move, {
+        duration: ARRIVE_MS + 60,
         easing: ARRIVE_EASING,
+        fill: show ? 'none' : 'forwards',
       });
-      text.animate([{ opacity: 0.35 }, { opacity: 1 }], {
-        duration: ARRIVE_MS,
+      el.animate(fade, {
+        duration: ARRIVE_MS + 40,
         easing: 'linear',
+        fill: show ? 'none' : 'forwards',
       });
+    }
+
+    if (show) {
       // From nothing to whatever its own style says, which is dimmer than full
       // until it is pointed at.
       expander?.animate([{ opacity: 0 }], {
@@ -157,18 +179,11 @@ export function CompactLyrics({
       easing: LEAVE_EASING,
       fill: 'forwards',
     });
-    const back = text.animate([{ transform: 'none' }, { transform: onDeck }], {
-      duration: ARRIVE_MS + 40,
-      easing: ARRIVE_EASING,
-      fill: 'forwards',
-    });
-    // Handed back to the deck's own title, which fades in over the same span.
-    text.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: ARRIVE_MS + 40,
-      easing: 'linear',
-      fill: 'forwards',
-    });
-    back.finished.then(
+    if (!last) {
+      setTimeout(() => setPresent(false), LEAVE_MS);
+      return;
+    }
+    last.finished.then(
       () => setPresent(false),
       () => {},
     );
@@ -181,40 +196,68 @@ export function CompactLyrics({
     <div className="pointer-events-none absolute inset-0 z-[5]">
       {geo && (
         <>
-          <div
-            className="absolute inset-x-0 flex items-center justify-center gap-1.5 px-8"
-            style={{ top: geo.titleTop }}
+          <button
+            ref={expandButton}
+            type="button"
+            aria-label={t('lyrics.expand')}
+            title={t('lyrics.expand')}
+            onClick={onExpand}
+            className="pointer-events-auto absolute top-1.5 right-3 flex h-5 w-5 items-center justify-center rounded-full text-cream-400 opacity-60 transition-[opacity,color,background-color] hover:bg-shell-600 hover:text-cream-50 hover:opacity-100 focus-visible:opacity-100"
           >
-            <span
-              ref={titleText}
-              className="min-w-0 truncate text-[12px] font-medium text-cream-200"
+            <svg
+              viewBox="0 0 12 12"
+              className="h-3 w-3"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
+              <path d="M7 2.5h2.5V5M9.5 2.5 6.5 5.5M5 9.5H2.5V7M2.5 9.5l3-3" />
+            </svg>
+          </button>
+
+          {/* Title left, artist right, small, just over the progress bar. */}
+          <div
+            className="absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px] leading-none"
+            style={{ top: geo.metaTop, height: META_HEIGHT }}
+          >
+            <span ref={titleText} className="min-w-0 truncate font-medium text-cream-300">
               {track?.title}
-              {track?.artist && <span className="text-cream-400"> • {track.artist}</span>}
             </span>
-            <button
-              ref={expandButton}
-              type="button"
-              aria-label={t('lyrics.expand')}
-              title={t('lyrics.expand')}
-              onClick={onExpand}
-              className="pointer-events-auto absolute right-3 flex h-5 w-5 items-center justify-center rounded-full text-cream-400 opacity-60 transition-[opacity,color,background-color] hover:bg-shell-600 hover:text-cream-50 hover:opacity-100 focus-visible:opacity-100"
-            >
-              <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7 2.5h2.5V5M9.5 2.5 6.5 5.5M5 9.5H2.5V7M2.5 9.5l3-3" />
-              </svg>
-            </button>
+            <span ref={artistText} className="max-w-[45%] shrink-0 truncate text-cream-400">
+              {track?.artist}
+            </span>
           </div>
 
-          <div ref={lineLayer} className="absolute inset-0">
+          <div
+            ref={lineLayer}
+            className="absolute inset-0"
+            onWheel={lines ? (e) => browse.onWheel(e.deltaY) : undefined}
+          >
             {lines ? (
-              <SungLines
-                lines={lines}
-                active={active}
-                jumped={jumped}
-                geo={geo}
-                activeEl={activeEl}
-              />
+              <>
+                {/* Something for the wheel to land on between and around the
+                    lines, which are the only other parts of this layer that
+                    take the pointer. */}
+                <div
+                  className="pointer-events-auto absolute inset-x-0"
+                  style={{ top: geo.activeTop, height: geo.nextTop + NEXT_HEIGHT - geo.activeTop }}
+                />
+                <SungLines
+                  lines={lines}
+                  view={browse.view}
+                  sung={sung}
+                  move={browse.move}
+                  geo={geo}
+                  sungEl={activeEl}
+                  onPick={(line) => {
+                    browse.release();
+                    seekLyrics(line.timeMs);
+                  }}
+                />
+              </>
             ) : (
               <Quiet geo={geo}>
                 <QuietState
@@ -232,30 +275,59 @@ export function CompactLyrics({
   );
 }
 
+/** A line on its way out, kept long enough to be seen going. */
+interface Leaving {
+  index: number;
+  slot: 'main' | 'next';
+  /** Up and away, down and away, or simply fading. */
+  how: 'up' | 'down' | 'fade';
+}
+
 /**
- * The line being sung and the one after, each keyed by its place in the song
- * so a line moving up from one slot to the other stays the same element and
- * can be animated from where it was.
+ * The line on show and the one after, each keyed by its place in the song so
+ * a line moving from one slot to the other stays the same element and can be
+ * animated from where it was.
+ *
+ * The line on show is usually the one being sung. Scrolled away, it is not,
+ * and it is drawn as an ordinary line; the singing keeps its light only on
+ * the line actually being sung.
  */
 function SungLines({
   lines,
-  active,
-  jumped,
+  view,
+  sung,
+  move,
   geo,
-  activeEl,
+  sungEl,
+  onPick,
 }: {
   lines: LyricLine[];
-  active: number;
-  jumped: boolean;
+  view: number;
+  sung: number;
+  move: Move;
   geo: Geometry;
-  activeEl: RefObject<HTMLButtonElement | null>;
+  sungEl: RefObject<HTMLButtonElement | null>;
+  onPick: (line: LyricLine) => void;
 }) {
-  // The line that was being sung, kept on screen long enough to leave.
-  const [shown, setShown] = useState(active);
-  const [leaving, setLeaving] = useState<{ index: number; jumped: boolean } | null>(null);
-  if (active !== shown) {
-    setShown(active);
-    setLeaving(shown >= 0 ? { index: shown, jumped } : null);
+  // What was on show, kept long enough to leave — which way depends on which
+  // way the view went.
+  const [shown, setShown] = useState(view);
+  const [leaving, setLeaving] = useState<Leaving[]>([]);
+  const [way, setWay] = useState<'down' | 'up' | 'cut'>('cut');
+  if (view !== shown) {
+    const step = view - shown;
+    const slide = move.kind === 'turn' && Math.abs(step) === 1;
+    const next: 'down' | 'up' | 'cut' = !slide ? 'cut' : step > 0 ? 'down' : 'up';
+    const out: Leaving[] = [];
+    if (next === 'down' && shown >= 0) out.push({ index: shown, slot: 'main', how: 'up' });
+    if (next === 'up' && lines[shown + 1]) out.push({ index: shown + 1, slot: 'next', how: 'down' });
+    if (next === 'cut') {
+      if (shown >= 0) out.push({ index: shown, slot: 'main', how: 'fade' });
+      if (lines[shown + 1]) out.push({ index: shown + 1, slot: 'next', how: 'fade' });
+    }
+    setShown(view);
+    setWay(next);
+    setLeaving(out);
   }
 
   const box = useRef<HTMLDivElement | null>(null);
@@ -279,96 +351,125 @@ function SungLines({
         const now = seen.get(key);
         const was = tops.current.get(key);
         for (const a of el.getAnimations()) a.cancel();
-        if (key.startsWith('leave')) {
-          const fly = leaving?.jumped
-            ? [{ opacity: 1 }, { opacity: 0 }]
-            : [
-                { transform: 'none', opacity: 1 },
-                { transform: 'translateY(-70%) rotate(-5deg)', opacity: 0 },
-              ];
-          el.animate(fly, { duration: LEAVE_MS + 40, easing: LEAVE_EASING, fill: 'forwards' });
+        const going = leaving.find((l) => `leave-${l.index}` === key);
+        if (going) {
+          const away =
+            going.how === 'up'
+              ? [
+                  { transform: 'none', opacity: 1 },
+                  { transform: 'translateY(-70%) rotate(-5deg)', opacity: 0 },
+                ]
+              : going.how === 'down'
+                ? [
+                    { transform: 'none', opacity: 1 },
+                    { transform: 'translateY(70%) rotate(4deg)', opacity: 0 },
+                  ]
+                : [{ opacity: 1 }, { opacity: 0 }];
+          el.animate(away, { duration: LEAVE_MS + 40, easing: LEAVE_EASING, fill: 'forwards' });
         } else if (was && now && was.top !== now.top) {
-          // Up a slot: from the middle of where it was, at the size the line
-          // to come is drawn, into the place and the size of the one sung.
-          const rise = was.top + was.height / 2 - (now.top + now.height / 2);
+          // Into the other slot: from the middle of where it was, at the size
+          // it was drawn there, into its new place and size.
+          const shift = was.top + was.height / 2 - (now.top + now.height / 2);
+          const size = was.top > now.top ? NEXT_TO_SUNG : 1 / NEXT_TO_SUNG;
           el.animate(
             [
-              { transform: `translateY(${rise}px) scale(${NEXT_TO_SUNG})`, opacity: 0.55 },
+              { transform: `translateY(${shift}px) scale(${size})`, opacity: 0.55 },
               { transform: 'none', opacity: 1 },
             ],
             { duration: ARRIVE_MS, easing: ARRIVE_EASING },
           );
         } else if (!was) {
-          el.animate(
-            jumped
-              ? [{ opacity: 0 }, { opacity: 1 }]
-              : [
-                  { transform: 'translateY(60%) rotate(4deg)', opacity: 0 },
-                  { transform: 'none', opacity: 1 },
-                ],
-            { duration: ARRIVE_MS, delay: jumped ? 60 : 80, easing: ARRIVE_EASING, fill: 'backwards' },
-          );
+          const from =
+            way === 'down'
+              ? { transform: 'translateY(60%) rotate(4deg)', opacity: 0 }
+              : way === 'up'
+                ? { transform: 'translateY(-60%) rotate(-5deg)', opacity: 0 }
+                : { opacity: 0 };
+          el.animate([from, { transform: 'none', opacity: 1 }], {
+            duration: ARRIVE_MS,
+            delay: way === 'cut' ? 60 : 80,
+            easing: ARRIVE_EASING,
+            fill: 'backwards',
+          });
         }
       }
     }
     tops.current = seen;
-    // The line, and nothing else: the leaving line being dropped afterwards
-    // is not a move.
+    // The line on show, and nothing else: the leaving lines being dropped
+    // afterwards is not a move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [view]);
 
-  // Fit the line being sung: largest size first, down to the smallest, before
-  // it is allowed to wrap onto a second line — and never a third.
+  // Fit the line on show: largest size first, down to the smallest, before it
+  // is allowed to wrap onto a second line — and never a third.
   useLayoutEffect(() => {
-    const el = box.current?.querySelector<HTMLElement>('[data-line]');
+    const el = box.current?.querySelector<HTMLElement>('[data-main]');
     if (!el) return;
     for (const size of FIT_SIZES) {
       el.style.fontSize = `${size}px`;
       if (el.scrollHeight <= size * 1.3 * 2 + 2 && el.scrollWidth <= el.clientWidth + 1) break;
     }
-  }, [active]);
+  }, [view]);
 
-  // Drop the line that has finished leaving.
+  // Drop the lines that have finished leaving.
   useLayoutEffect(() => {
-    if (!leaving) return;
-    const timer = setTimeout(() => setLeaving(null), LEAVE_MS + 80);
+    if (leaving.length === 0) return;
+    const timer = setTimeout(() => setLeaving([]), LEAVE_MS + 80);
     return () => clearTimeout(timer);
   }, [leaving]);
 
-  const current = active >= 0 ? lines[active] : undefined;
-  const next = lines[active + 1];
-  const gone = leaving ? lines[leaving.index] : undefined;
+  const current = view >= 0 ? lines[view] : undefined;
+  const next = lines[view + 1];
+  const singing = view === sung;
 
   return (
     <div ref={box} className="absolute inset-0">
-      {gone && leaving && (
-        <div
-          key={`leave-${leaving.index}`}
-          data-key={`leave-${leaving.index}`}
-          aria-hidden="true"
-          className="absolute inset-x-0 flex items-center justify-center px-6 text-center"
-          style={{ top: geo.activeTop, height: geo.activeHeight }}
-        >
-          <span className="line-clamp-2 text-[15px] leading-[1.3] font-semibold text-cream-50">
-            {gone.text || '♪'}
-          </span>
-        </div>
-      )}
+      {leaving.map((l) => {
+        const line = lines[l.index];
+        if (!line) return null;
+        const main = l.slot === 'main';
+        return (
+          <div
+            key={`leave-${l.index}`}
+            data-key={`leave-${l.index}`}
+            aria-hidden="true"
+            className="absolute inset-x-0 flex items-center justify-center px-6 text-center"
+            style={
+              main
+                ? { top: geo.activeTop, height: geo.activeHeight }
+                : { top: geo.nextTop, height: NEXT_HEIGHT }
+            }
+          >
+            <span
+              className={
+                main
+                  ? 'line-clamp-2 text-[15px] leading-[1.3] font-semibold text-cream-50'
+                  : 'truncate text-[12px] text-cream-400'
+              }
+            >
+              {line.text || '♪'}
+            </span>
+          </div>
+        );
+      })}
       <div
-        key={current ? `line-${active}` : 'waiting'}
-        data-key={current ? `line-${active}` : 'waiting'}
+        key={current ? `line-${view}` : 'waiting'}
+        data-key={current ? `line-${view}` : 'waiting'}
         className="absolute inset-x-0 flex items-center justify-center px-6"
         style={{ top: geo.activeTop, height: geo.activeHeight }}
       >
         {current ? (
           <button
-            ref={activeEl}
+            ref={singing ? sungEl : undefined}
             type="button"
-            data-line={active}
-            onClick={() => seekLyrics(current.timeMs)}
-            className="pointer-events-auto line-clamp-2 max-w-full text-center leading-[1.3] font-semibold text-cream-50 lyric-glow"
+            data-main
+            data-line={view}
+            onClick={() => onPick(current)}
+            className={`pointer-events-auto line-clamp-2 max-w-full text-center leading-[1.3] ${
+              singing ? 'font-semibold text-cream-50 lyric-glow' : 'font-medium text-cream-200'
+            }`}
           >
-            <LineText line={current} singing />
+            <LineText line={current} singing={singing} />
           </button>
         ) : (
           <span className="text-[15px] text-cream-400">♪</span>
@@ -376,14 +477,14 @@ function SungLines({
       </div>
       {next && (
         <div
-          key={`line-${active + 1}`}
-          data-key={`line-${active + 1}`}
+          key={`line-${view + 1}`}
+          data-key={`line-${view + 1}`}
           className="absolute inset-x-0 flex items-center justify-center px-8"
-          style={{ top: geo.nextTop, height: 18 }}
+          style={{ top: geo.nextTop, height: NEXT_HEIGHT }}
         >
           <button
             type="button"
-            onClick={() => seekLyrics(next.timeMs)}
+            onClick={() => onPick(next)}
             className="pointer-events-auto max-w-full truncate text-[12px] text-cream-400 transition-colors hover:text-cream-200"
           >
             {next.text || '♪'}
@@ -438,4 +539,23 @@ function QuietState({
   if (kind === 'Instrumental') return <p className="text-[14px] text-cream-300">{t('lyrics.instrumental')}</p>;
   if (kind === 'Plain') return <p className="text-[13px] text-cream-400">{t('lyrics.plainOnly')}</p>;
   return <p className="text-[13px] text-cream-400">{t('lyrics.notFound')}</p>;
+}
+
+/**
+ * The transform that puts `el` where `source` is: centre on centre, and scaled
+ * by the ratio of their type sizes, so a word that shrinks on the way is the
+ * same word at every step rather than a different one fading in.
+ */
+function travelFrom(el: HTMLElement, source: HTMLElement | null | undefined): string {
+  if (!source) return 'translateY(24px)';
+  const from = source.getBoundingClientRect();
+  const to = el.getBoundingClientRect();
+  if (to.width === 0) return 'translateY(24px)';
+  const grow =
+    parseFloat(getComputedStyle(source).fontSize) / parseFloat(getComputedStyle(el).fontSize);
+  // Truncated text is centred by its own box, not by the words in it; for a
+  // line narrower than its box that is close enough, and the fade covers it.
+  return `translate(${from.left + from.width / 2 - (to.left + to.width / 2)}px, ${
+    from.top + from.height / 2 - (to.top + to.height / 2)
+  }px) scale(${grow})`;
 }
