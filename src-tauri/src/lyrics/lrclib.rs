@@ -108,19 +108,6 @@ async fn search_records(q: &Query) -> Result<Vec<Record>, String> {
     run_search(&[("q", &format!("{artist} {}", q.clean_title))]).await
 }
 
-/// Syllable timings for lines found elsewhere — LRCLIB's exact match or
-/// NetEase — from LRCLIB's search. Costs one request, and anything that goes
-/// wrong leaves the lines as they came.
-pub async fn syllables_for(q: &Query, lines: Vec<LyricLine>) -> Vec<LyricLine> {
-    match search_records(q).await {
-        Ok(records) => add_syllables(lines, &records, q),
-        Err(e) => {
-            log::warn!("no syllable timings: {e}");
-            lines
-        }
-    }
-}
-
 /// The lines with each syllable timed, from the first syllable-at-a-time
 /// record of this song — nearest in length first — that lines up with them.
 /// Lines that already have their pieces, or are in pieces themselves, are

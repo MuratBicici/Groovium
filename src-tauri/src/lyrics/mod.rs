@@ -190,32 +190,25 @@ pub async fn get_lyrics(
 async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
     let mut w = Waterfall::default();
     if let Some(done) = w.offer(lrclib::exact(q, &q.title, "lrclib:get").await) {
-        return Ok((with_syllables(q, done).await, true));
+        return Ok((done, true));
     }
     if q.clean_title != q.title {
         if let Some(done) = w.offer(lrclib::exact(q, &q.clean_title, "lrclib:get-clean").await) {
-            return Ok((with_syllables(q, done).await, true));
+            return Ok((done, true));
         }
     }
-    // Already given its syllables from the results it chose among.
+    // Given its syllables from the results it chose among, where some record
+    // there times them. Nothing else is asked for them: another request on
+    // every song for the rare one that has them is not worth the wait.
     if let Some(done) = w.offer(lrclib::search(q).await) {
         return Ok((done, true));
     }
     if NETEASE_ENABLED {
         if let Some(done) = w.offer(netease::find(q).await) {
-            return Ok((with_syllables(q, done).await, true));
+            return Ok((done, true));
         }
     }
     w.finish()
-}
-
-/// Synced lines found without their syllables' timings, given them from
-/// LRCLIB's search when a syllable-at-a-time record of the song lines up.
-async fn with_syllables(q: &Query, mut lookup: LyricsLookup) -> LyricsLookup {
-    if let LyricsResult::Synced(lines) = lookup.result {
-        lookup.result = LyricsResult::Synced(lrclib::syllables_for(q, lines).await);
-    }
-    lookup
 }
 
 /// The search so far: the best answers that did not end it, and whether a
