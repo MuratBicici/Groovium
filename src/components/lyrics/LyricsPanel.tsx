@@ -47,18 +47,28 @@ export function LyricsPanel({
   const counter = useRef<HTMLSpanElement | null>(null);
   const list = useRef<HTMLOListElement | null>(null);
 
+  /**
+   * Counted up by every request. An answer for a song that has since been
+   * skipped arrives late and is dropped, rather than put up under the next
+   * song's title.
+   */
+  const asked = useRef(0);
+
   const fetchLyrics = useCallback(async () => {
     if (!track) return;
+    const ask = ++asked.current;
     setStatus({ kind: 'loading' });
     const started = performance.now();
     try {
       const lookup = await getLyrics(track);
+      if (ask !== asked.current) return;
       if (!lookup) {
         setStatus({ kind: 'error', message: 'Only in the app, not in a browser.' });
         return;
       }
       setStatus({ kind: 'done', lookup, tookMs: Math.round(performance.now() - started) });
     } catch (err) {
+      if (ask !== asked.current) return;
       setStatus({ kind: 'error', message: String(err) });
     }
   }, [track]);
