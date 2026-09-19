@@ -29,6 +29,7 @@ mod clean;
 mod lrc;
 mod lrclib;
 mod netease;
+mod script;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -193,9 +194,14 @@ async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
     w.finish()
 }
 
-/// The search so far: the best words-only answer, and whether a source failed.
+/// The search so far: the best answers that did not end it, and whether a
+/// source failed.
 #[derive(Default)]
 struct Waterfall {
+    /// Synced lyrics that look like a romanization of the song — see
+    /// `script.rs`. Kept, and used if no place has them in the song's own
+    /// script.
+    romanized: Option<Found>,
     plain: Option<Found>,
     failed: Option<String>,
 }
@@ -205,7 +211,13 @@ impl Waterfall {
     /// or a piece known to have no words.
     fn offer(&mut self, answer: Result<Option<Found>, String>) -> Option<LyricsLookup> {
         match answer {
-            Ok(Some(found)) => match found.result {
+            Ok(Some(found)) => match &found.result {
+                LyricsResult::Synced(lines) if script::lines_romanized(lines) => {
+                    if self.romanized.is_none() {
+                        self.romanized = Some(found);
+                    }
+                    None
+                }
                 LyricsResult::Synced(_) | LyricsResult::Instrumental => Some(found.into()),
                 LyricsResult::Plain(_) => {
                     if self.plain.is_none() {
@@ -224,11 +236,12 @@ impl Waterfall {
         }
     }
 
-    /// Nothing synced anywhere: the words if some place had them, and whether
-    /// the answer may be kept.
+    /// Nothing synced in the song's own script anywhere: a romanization if
+    /// there was one, else the words if some place had them, and whether the
+    /// answer may be kept.
     fn finish(self) -> Result<(LyricsLookup, bool), String> {
         let settled = self.failed.is_none();
-        match (self.plain, self.failed) {
+        match (self.romanized.or(self.plain), self.failed) {
             (Some(plain), _) => Ok((plain.into(), settled)),
             (None, Some(e)) => Err(e),
             (None, None) => Ok((
@@ -256,13 +269,13 @@ where
 /// The candidate nearest in length, within `PLAIN_GAP_MS`.
 ///
 /// Those close enough for their timings to hold come first, and among them
-/// ones with synced lyrics; after them, those that are only close enough to
-/// read. Within each, the nearest.
+/// the best by `rank` — lower is better; after them, those that are only close
+/// enough to read. Within each, the nearest.
 pub fn pick_nearest<'a, T>(
     items: &[&'a T],
     duration_ms: u32,
     length: impl Fn(&T) -> u32,
-    synced: impl Fn(&T) -> bool,
+    rank: impl Fn(&T) -> u8,
 ) -> Option<&'a T> {
     items
         .iter()
@@ -270,7 +283,7 @@ pub fn pick_nearest<'a, T>(
         .filter(|item| length(item).abs_diff(duration_ms) <= PLAIN_GAP_MS)
         .min_by_key(|item| {
             let gap = length(item).abs_diff(duration_ms);
-            (gap > SYNCED_GAP_MS, !synced(item), gap)
+            (gap > SYNCED_GAP_MS, rank(item), gap)
         })
 }
 
@@ -359,6 +372,46 @@ mod tests {
         assert_eq!(done.matched.map(|m| m.via), Some("netease"));
     }
 
+    fn romaji(via: &'static str) -> Found {
+        let text = "kimi no koe ga kikoeru zutto mae kara shitteita sora no iro mo kaze no oto mo subete ga kagayaite ita namida wo fuite";
+        found(
+            LyricsResult::Synced(vec![LyricLine {
+                time_ms: 0,
+                text: text.into(),
+            }]),
+            via,
+        )
+    }
+
+    #[test]
+    fn a_romanization_waits_for_the_song_s_own_script() {
+        let mut w = Waterfall::default();
+        assert!(w.offer(Ok(Some(romaji("lrclib:get")))).is_none());
+        let native = found(
+            LyricsResult::Synced(vec![LyricLine {
+                time_ms: 0,
+                text: "君の声が聞こえる".into(),
+            }]),
+            "netease",
+        );
+        let done = w
+            .offer(Ok(Some(native)))
+            .expect("its own script settles it");
+        assert_eq!(done.matched.map(|m| m.via), Some("netease"));
+    }
+
+    #[test]
+    fn a_romanization_is_still_better_than_no_timings() {
+        let mut w = Waterfall::default();
+        w.offer(Ok(Some(found(
+            LyricsResult::Plain("words".into()),
+            "lrclib:get",
+        ))));
+        w.offer(Ok(Some(romaji("lrclib:search"))));
+        let (lookup, _) = w.finish().unwrap();
+        assert!(matches!(lookup.result, LyricsResult::Synced(_)));
+    }
+
     #[test]
     fn keeps_the_first_words_while_it_looks_for_timings() {
         let mut w = Waterfall::default();
@@ -419,7 +472,7 @@ mod tests {
             (191_000, true),
         ];
         let items: Vec<&(u32, bool)> = lengths.iter().collect();
-        let pick = |d| pick_nearest(&items, d, |i| i.0, |i| i.1).map(|i| i.0);
+        let pick = |d| pick_nearest(&items, d, |i| i.0, |i| u8::from(!i.1)).map(|i| i.0);
         // In step and synced beats in step and nearer but unsynced.
         assert_eq!(pick(180_000), Some(183_000));
         // In step without timings beats timings from another take, which
@@ -427,7 +480,7 @@ mod tests {
         let other = [(180_000u32, false), (186_000, true)];
         let other: Vec<&(u32, bool)> = other.iter().collect();
         assert_eq!(
-            pick_nearest(&other, 180_000, |i| i.0, |i| i.1).map(|i| i.0),
+            pick_nearest(&other, 180_000, |i| i.0, |i| u8::from(!i.1)).map(|i| i.0),
             Some(180_000)
         );
         // Nothing in step: the nearest readable one.

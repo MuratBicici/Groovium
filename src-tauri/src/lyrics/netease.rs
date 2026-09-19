@@ -137,7 +137,7 @@ pub fn choose<'a>(songs: &'a [Song], q: &Query) -> Option<&'a Song> {
         .iter()
         .filter(|s| same_song(&q.title, &q.artist, &s.name, &s.artists()))
         .collect();
-    pick_nearest(&same, q.duration_ms, |s| s.dt, |_| true)
+    pick_nearest(&same, q.duration_ms, |s| s.dt, |_| 0)
 }
 
 /// NetEase's marker for a piece with no words: "pure music, please enjoy".

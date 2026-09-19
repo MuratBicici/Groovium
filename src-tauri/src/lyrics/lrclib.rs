@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
 use super::lrc::{parse_lrc, words_of};
+use super::script;
 use super::{fetch, or_default, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
 
 const API_ROOT: &str = "https://lrclib.net/api";
@@ -27,10 +28,25 @@ pub struct Record {
 }
 
 impl Record {
+    #[cfg(test)]
     pub fn has_synced(&self) -> bool {
         self.synced_lyrics
             .as_deref()
             .is_some_and(|s| !s.trim().is_empty())
+    }
+
+    /// How good a pick this is, lower better: synced in the song's own
+    /// script, synced but romanized, then words alone.
+    pub fn rank(&self) -> u8 {
+        match self
+            .synced_lyrics
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
+            Some(synced) if script::lines_romanized(&parse_lrc(synced)) => 1,
+            Some(_) => 0,
+            None => 2,
+        }
     }
 
     pub fn duration_ms(&self) -> u32 {
@@ -90,12 +106,7 @@ pub fn choose<'a>(records: &'a [Record], q: &Query) -> Option<&'a Record> {
         .iter()
         .filter(|r| same_song(&q.title, &q.artist, &r.track_name, &r.artist_name))
         .collect();
-    pick_nearest(
-        &same,
-        q.duration_ms,
-        Record::duration_ms,
-        Record::has_synced,
-    )
+    pick_nearest(&same, q.duration_ms, Record::duration_ms, Record::rank)
 }
 
 fn found(record: &Record, q: &Query, via: &'static str) -> Found {
@@ -183,6 +194,24 @@ mod tests {
             record("Song", "Band", 182.0, true),
         ];
         assert!(choose(&found, &q).is_some_and(Record::has_synced));
+    }
+
+    #[test]
+    fn prefers_the_song_s_own_script_to_a_romanization() {
+        let q = query("Song", "Band", 180_000);
+        let mut romanized = record("Song", "Band", 180.0, true);
+        romanized.synced_lyrics = Some(
+            "[00:01.00]kimi no koe ga kikoeru
+[00:02.00]zutto mae kara shitteita
+[00:03.00]sora no iro mo kaze no oto mo
+[00:04.00]subete ga kagayaite ita
+[00:05.00]namida wo fuite aruite yuku"
+                .into(),
+        );
+        let mut native = record("Song", "Band", 181.0, true);
+        native.synced_lyrics = Some("[00:01.00]君の声が聞こえる".into());
+        let found = [romanized, native];
+        assert_eq!(choose(&found, &q).map(|r| r.duration), Some(181.0));
     }
 
     #[test]
