@@ -155,11 +155,10 @@ export const en = {
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',
   'spotify.onDeck': 'This record is on the deck.',
-  'spotify.edit': 'Edit',
+  'spotify.editSongs': 'Edit songs',
   'spotify.alreadyHere': 'Already here',
   'spotify.newPlaylist': 'New playlist',
   'spotify.done': 'Done',
-  'spotify.more': 'More',
   'spotify.playlistName': 'Playlist name',
   'spotify.changeCover': 'Change cover',
   'spotify.coverTitle': 'New cover',

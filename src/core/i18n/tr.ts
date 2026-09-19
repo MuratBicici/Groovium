@@ -146,11 +146,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify bu uygulamadan yavaşlamasını istiyor. {seconds} sn kaldı.',
   'spotify.onDeck': 'Bu plak plakçalarda.',
-  'spotify.edit': 'Düzenle',
+  'spotify.editSongs': 'Şarkıları düzenle',
   'spotify.alreadyHere': 'Zaten var',
   'spotify.newPlaylist': 'Yeni liste',
   'spotify.done': 'Bitti',
-  'spotify.more': 'Diğer',
   'spotify.playlistName': 'Liste adı',
   'spotify.changeCover': 'Kapağı değiştir',
   'spotify.coverTitle': 'Yeni kapak',

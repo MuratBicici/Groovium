@@ -10,7 +10,7 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
-import { CoverCrop, CrateMenu, DetailsSheet, RemoveSheet } from './CrateSheets';
+import { CoverCrop, DetailsSheet, RemoveSheet } from './CrateSheets';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
@@ -221,7 +221,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
 
   /** The ⋯ menu, or one of the sheets it opens. One at a time. */
-  const [surface, setSurface] = useState<'menu' | 'details' | 'remove' | null>(null);
+  const [surface, setSurface] = useState<'details' | 'remove' | null>(null);
   /**
    * The picture chosen for a new cover, while its square is being chosen.
    *
@@ -232,8 +232,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   /** Why a picture could not be used, said in the details sheet. Nothing was sent. */
   const [coverNotice, setCoverNotice] = useState<string | null>(null);
   /** The name as it is being typed in edit mode. */
-  const [nameDraft, setNameDraft] = useState(playlist.name);
-  const nameField = useRef<HTMLInputElement | null>(null);
 
   /**
    * The order shown while a record is held, as indices into `tracks`.
@@ -476,19 +474,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   }, [onClose, origin]);
 
   /**
-   * Edit mode off, saving the name if it was changed.
-   *
-   * Saved here and on Enter rather than on every keystroke: a rename is one
-   * change to the playlist, not one per letter.
-   */
-  const finishEditing = useCallback(async () => {
-    const name = nameDraft.trim();
-    if (name && name !== playlist.name) void setCrateDetails(playlist.id, { name });
-    else setNameDraft(playlist.name);
-    await setEditing(false);
-  }, [nameDraft, playlist.id, playlist.name, setCrateDetails, setEditing]);
-
-  /**
    * The details sheet's "Change cover": the file dialog, then the crop.
    */
   const chooseCover = useCallback(() => {
@@ -508,12 +493,16 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // does: the shell listens on `window` too, and only this stops the one
       // press closing two things.
       e.stopImmediatePropagation();
-      // The topmost thing, one press at a time: a sheet, then the menu, then a
-      // name being typed, then edit mode, and only then the crate. The sheets
-      // do not listen themselves — registered after this one, they would never
-      // hear the key.
+      // The topmost thing, one press at a time: the crop or the removal
+      // question, then the details under them, then edit mode, and only then
+      // the crate. The sheets do not listen themselves — registered after this
+      // one, they would never hear the key.
       if (coverImage) {
         setCoverImage(null);
+        return;
+      }
+      if (surface === 'remove') {
+        setSurface('details');
         return;
       }
       if (surface) {
@@ -521,13 +510,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         setCoverNotice(null);
         return;
       }
-      if (document.activeElement === nameField.current && nameField.current) {
-        setNameDraft(playlist.name);
-        nameField.current.blur();
-        return;
-      }
       if (editing) {
-        setNameDraft(playlist.name);
         void setEditing(false);
         return;
       }
@@ -535,7 +518,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [requestClose, surface, coverImage, editing, playlist.name, setEditing]);
+  }, [requestClose, surface, coverImage, editing, setEditing]);
 
   // The unpacking. A layout effect so the first frame is never the finished
   // grid — by the time anything is painted the records are already back at the
@@ -769,27 +752,17 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
                 />
               </svg>
             </button>
-            {/* The name, edited where it is shown. In edit mode only: outside it
-                the heading is the way back, and one press cannot mean both. */}
-            <input
-              ref={nameField}
-              type="text"
-              value={nameDraft}
-              aria-label={t('spotify.playlistName')}
-              maxLength={100}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const name = nameDraft.trim();
-                  if (name && name !== playlist.name) void setCrateDetails(playlist.id, { name });
-                  e.currentTarget.blur();
-                }
-              }}
-              className="min-w-0 flex-1 groove-inset rounded px-2 py-1 text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
-            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+                {playlist.name}
+              </span>
+              <span className="block truncate text-meta text-cream-400">
+                {t('spotify.editSongs')}
+              </span>
+            </span>
             <button
               type="button"
-              onClick={() => void finishEditing()}
+              onClick={() => void setEditing(false)}
               className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
             >
               {t('spotify.done')}
@@ -828,32 +801,22 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
               </span>
             </button>
             <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
+              <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
+                {/* A pencil: the playlist itself — name, cover, description. */}
+                <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
+                <path d="M7.5 3l1.5 1.5" />
+              </HeaderIcon>
+              <HeaderIcon
+                label={t('spotify.editSongs')}
+                onPress={() => {
                   clearWriteError();
-                  setNameDraft(playlist.name);
                   void setEditing(true);
                 }}
-                className="rounded-full px-2 py-0.5 text-label tracking-wide text-cream-400 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
               >
-                {t('spotify.edit')}
-              </button>
-              <button
-                type="button"
-                aria-label={t('spotify.more')}
-                title={t('spotify.more')}
-                aria-haspopup="menu"
-                aria-expanded={surface === 'menu'}
-                onClick={() => setSurface(surface === 'menu' ? null : 'menu')}
-                className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-              >
-                <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="currentColor">
-                  <circle cx="2.5" cy="6" r="1.1" />
-                  <circle cx="6" cy="6" r="1.1" />
-                  <circle cx="9.5" cy="6" r="1.1" />
-                </svg>
-              </button>
+                {/* A list with arrows: the songs in it, moved and taken out. */}
+                <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
+                <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
+              </HeaderIcon>
               <button
                 type="button"
                 aria-label={t('common.close')}
@@ -872,13 +835,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
               </button>
             </div>
           </>
-        )}
-        {surface === 'menu' && (
-          <CrateMenu
-            onDetails={() => setSurface('details')}
-            onRemove={() => setSurface('remove')}
-            onClose={() => setSurface(null)}
-          />
         )}
       </div>
 
@@ -957,9 +913,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         )}
       </div>
 
-      {surface === 'details' && (
+      {/* Under the removal question too, so Cancel there comes back to it
+          with nothing lost. */}
+      {surface && (
         <DetailsSheet
           playlist={playlist}
+          onRemove={() => setSurface('remove')}
           {...(isTauri() && { onCover: chooseCover })}
           coverProblem={coverNotice}
           onClose={() => {
@@ -992,7 +951,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       {surface === 'remove' && (
         <RemoveSheet
           playlist={playlist}
-          onClose={() => setSurface(null)}
+          onClose={() => setSurface('details')}
           onRemove={() => {
             setSurface(null);
             // The records go back into the crate first, and only then does the
@@ -1003,6 +962,40 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         />
       )}
     </div>
+  );
+}
+
+/** A small round button in the crate's header, drawn with a 12px stroke icon. */
+function HeaderIcon({
+  label,
+  onPress,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onPress}
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
+    >
+      <svg
+        viewBox="0 0 12 12"
+        className="h-3 w-3"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
+    </button>
   );
 }
 

@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { COVER_MAX_BYTES, type SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
+import {
+  COVER_MAX_BYTES,
+  type PlaylistDetails,
+  type SpotifyPlaylist,
+} from '@/core/providers/spotifyPlaylists';
 import {
   centredPan,
   clampPan,
@@ -27,62 +31,6 @@ import { useT } from '@/core/i18n';
  * whichever is on top — a second capture listener on `window` registered later
  * than the crate's would never hear the key.
  */
-
-/** What the ⋯ button opens. */
-export function CrateMenu({
-  onDetails,
-  onRemove,
-  onClose,
-}: {
-  onDetails: () => void;
-  onRemove: () => void;
-  onClose: () => void;
-}) {
-  const t = useT();
-  return (
-    <>
-      {/* A catch for a press anywhere else, invisible: the menu is small and
-          nothing behind it needs dimming to be understood. */}
-      <button
-        type="button"
-        aria-label={t('common.close')}
-        tabIndex={-1}
-        onClick={onClose}
-        className="fixed inset-0 z-20 cursor-default"
-      />
-      <div
-        role="menu"
-        className="absolute top-9 right-3 z-30 min-w-[160px] overflow-hidden rounded-md groove-surface py-1 shadow-lg ring-1 ring-[var(--color-edge)]"
-      >
-        <MenuItem label={t('spotify.details')} onPress={onDetails} />
-        <MenuItem label={t('spotify.removeFromLibrary')} onPress={onRemove} danger />
-      </div>
-    </>
-  );
-}
-
-function MenuItem({
-  label,
-  onPress,
-  danger = false,
-}: {
-  label: string;
-  onPress: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onPress}
-      className={`block w-full px-3 py-1.5 text-left text-meta transition-colors hover:bg-shell-700 ${
-        danger ? 'text-red-300 hover:text-red-200' : 'text-cream-200 hover:text-cream-50'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
 
 /** A sheet over the crate, with a dimmed backdrop that closes it. */
 function Sheet({
@@ -178,15 +126,18 @@ function CoverThumb({
 
 /** Spotify's limit on a playlist description. */
 const DESCRIPTION_MAX = 300;
+/** The longest name taken here, as the new-playlist sleeve takes. */
+const NAME_MAX = 100;
 
 /**
- * A playlist's cover, description, and whether it is on the profile.
+ * Everything about a playlist that is not its songs: name, cover, description,
+ * whether it is on the profile, and removing it from the library.
  *
- * The name is not here: it is edited in place in the crate's header, where it
- * already is. Description and visibility are saved together, since a change to
- * either is one decision about how the playlist presents itself. The cover is
- * not part of that save: choosing one is its own step, with its own screen,
- * and it is sent when that screen's Upload is pressed.
+ * The pencil in the crate's header opens it. Name, description and visibility
+ * are saved together, as one decision about how the playlist presents itself,
+ * and only what changed is sent. The cover is not part of that save: choosing
+ * one is its own step, with its own screen, sent when that screen's Upload is
+ * pressed. Removing asks first, over this sheet, and Cancel comes back here.
  *
  * `onCover` is optional: outside the app there is no file dialog to choose a
  * picture with, and the button is left out rather than shown doing nothing.
@@ -195,27 +146,51 @@ export function DetailsSheet({
   playlist,
   onSave,
   onCover,
+  onRemove,
   coverProblem,
   onClose,
 }: {
   playlist: SpotifyPlaylist;
-  onSave: (details: { description: string; isPublic: boolean }) => void;
+  onSave: (details: PlaylistDetails) => void;
   onCover?: () => void;
+  onRemove: () => void;
   /** Why the last picture chosen could not be used. */
   coverProblem?: string | null;
   onClose: () => void;
 }) {
   const t = useT();
+  const [name, setName] = useState(playlist.name);
   const [description, setDescription] = useState(playlist.description);
   const [isPublic, setIsPublic] = useState(playlist.isPublic);
-  const changed = description !== playlist.description || isPublic !== playlist.isPublic;
+
+  // Only what differs from what Spotify has. A name of nothing but spaces is
+  // not a name, and Spotify would refuse it; Save waits for a real one.
+  const trimmed = name.trim();
+  const changes: PlaylistDetails = {
+    ...(trimmed !== playlist.name && { name: trimmed }),
+    ...(description !== playlist.description && { description }),
+    ...(isPublic !== playlist.isPublic && { isPublic }),
+  };
+  const canSave = trimmed !== '' && Object.keys(changes).length > 0;
 
   return (
     <Sheet label={t('spotify.detailsTitle')} onClose={onClose}>
       <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
         {t('spotify.detailsTitle')}
       </p>
-      <p className="truncate text-body text-cream-100">{playlist.name}</p>
+      <label className="flex flex-col gap-1">
+        <span className="text-meta text-cream-400">{t('spotify.playlistName')}</span>
+        <input
+          type="text"
+          value={name}
+          maxLength={NAME_MAX}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canSave) onSave(changes);
+          }}
+          className="groove-inset rounded px-2 py-1 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+        />
+      </label>
 
       {/* The cover on the left, large, and the description beside it at the
           same height — the two things that say what the playlist is. Whether
@@ -253,7 +228,16 @@ export function DetailsSheet({
       </label>
       {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
 
-      <div className="mt-1 flex justify-end gap-2">
+      <div className="mt-1 flex items-center gap-2">
+        {/* Apart from Save and on the far side of it, in red and without a
+            fill: the one thing here that takes the playlist away. */}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="mr-auto rounded-full px-2 py-1 text-label tracking-wide text-red-300 uppercase transition-colors hover:bg-red-950/60 hover:text-red-200"
+        >
+          {t('spotify.removeFromLibrary')}
+        </button>
         <button
           type="button"
           onClick={onClose}
@@ -263,8 +247,8 @@ export function DetailsSheet({
         </button>
         <button
           type="button"
-          disabled={!changed}
-          onClick={() => onSave({ description, isPublic })}
+          disabled={!canSave}
+          onClick={() => onSave(changes)}
           className="rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
         >
           {t('common.save')}
