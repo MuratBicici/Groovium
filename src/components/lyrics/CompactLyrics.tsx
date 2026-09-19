@@ -16,11 +16,11 @@ import { useBrowse } from './useBrowse';
  *
  * Nothing on the deck moves to make room. The record stays exactly where it
  * is, and the lyrics take the places under it that are already empty or
- * already words: the line being sung takes the title's old place, the line
- * to come sits under it, and the song's title and artist move down to the
- * foot of the stage, just over the progress bar — the title small on the
- * left, the artist small on the right, both gliding there from where they
- * were. Laid over the stage rather than into it, so the stage's own layout —
+ * already words: the line being sung and the line to come sit in the room
+ * between the record and the foot of the stage, and the song's title and
+ * artist move down to that foot, just over the progress bar — the title
+ * small on the left, the artist small on the right, both gliding there from
+ * where they were. Laid over the stage rather than into it, so the stage's own layout —
  * and the collapse animation that measures it — never sees a difference.
  *
  * Lines move along the record's rim: the one sung rises and tips away, the
@@ -65,7 +65,20 @@ const META_DROP = 6;
 const NEXT_TO_SUNG = 12 / 16;
 
 /** The sizes the line being sung is fitted between, largest first. */
-const FIT_SIZES = [16, 15, 14, 13];
+const SUNG_SIZE = 16;
+const FIT_SIZES = [SUNG_SIZE, 15, 14, 13];
+
+/**
+ * A line of each, at the size each is drawn at — the type's own line, not the
+ * box it sits in.
+ *
+ * The room is shared out by the words rather than by their boxes. The line
+ * being sung has a box two lines tall so a long line has somewhere to go; with
+ * one line in it the empty half above would otherwise be read as part of the
+ * gap under the record, and the words would sit low in their room. They did.
+ */
+const SUNG_LINE = SUNG_SIZE * 1.3;
+const NEXT_LINE = 12 * 1.3;
 
 export function CompactLyrics({
   show,
@@ -108,14 +121,26 @@ export function CompactLyrics({
     const measure = () => {
       const base = stage.getBoundingClientRect();
       const text = trackBox.getBoundingClientRect();
-      // From the top of the title's old place down to the foot of the stage:
-      // the line sung, the line to come, and the title and artist's row.
-      const activeTop = text.top - base.top - 2;
+      const metaTop = base.height - META_HEIGHT + META_DROP;
+      // The room the words have: under the record — its own box, which is
+      // what the eye measures from and, unlike the spinning one inside it,
+      // stays the same size at every angle — down to the title's row.
+      const disc = stage.querySelector('[data-morph="disc"]')?.getBoundingClientRect();
+      const roomTop = disc ? disc.bottom - base.top : text.top - base.top - 2;
+      const airAbove = (ACTIVE_HEIGHT - SUNG_LINE) / 2;
+      const words = ACTIVE_HEIGHT + 2 + NEXT_HEIGHT - airAbove - (NEXT_HEIGHT - NEXT_LINE) / 2;
+      // Centred in that room by the words, then back up by the air over them —
+      // but never up over the record itself. In a short window the room is
+      // smaller than the boxes, and a box over the record's lower edge is a
+      // record that cannot be picked up there, air in it or not.
+      const activeTop = disc
+        ? Math.max(roomTop, roomTop + (metaTop - roomTop - words) / 2 - airAbove)
+        : roomTop;
       setGeo({
         activeTop,
         activeHeight: ACTIVE_HEIGHT,
         nextTop: activeTop + ACTIVE_HEIGHT + 2,
-        metaTop: base.height - META_HEIGHT + META_DROP,
+        metaTop,
       });
     };
     measure();
