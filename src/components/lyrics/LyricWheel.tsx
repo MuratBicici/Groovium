@@ -81,12 +81,23 @@ export function LyricWheel({
   // What each line may be scaled to, from the room it has. Measured once a
   // song, off the text laid out at its own size — `scrollWidth` ignores the
   // transform, which is the whole reason the size is a transform.
+  //
+  // Measured in the weight the line being sung is drawn in, which is a few
+  // per cent wider than the rest: it is the line being sung that grows into
+  // the room, so it is the one that has to fit. The whole layer is set to that
+  // weight for the measurement and put back, so it costs one reflow rather
+  // than one a line.
   useLayoutEffect(() => {
-    const els = layer.current?.querySelectorAll<HTMLElement>('[data-line]') ?? [];
-    for (const el of els) {
-      const natural = el.scrollWidth;
+    const box = layer.current;
+    if (!box) return;
+    const els = [...box.querySelectorAll<HTMLElement>('[data-line]')];
+    box.classList.add('font-semibold');
+    const widths = els.map((el) => el.scrollWidth);
+    box.classList.remove('font-semibold');
+    els.forEach((el, index) => {
+      const natural = widths[index] ?? 0;
       el.style.setProperty('--fit', natural > 0 ? String(LINE_ROOM / natural) : '1');
-    }
+    });
   }, [lines]);
 
   // A cut fades the lines in where they now are, instead of turning to them.

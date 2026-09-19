@@ -51,14 +51,19 @@ export const LABEL_RATIO = 0.21;
 export const TEXT_RADIUS = Math.round(DISC_RADIUS * LABEL_RATIO) + 22;
 
 /**
- * The room a line has, from where it starts to the drawer's other edge.
+ * The room a line has, from where it starts.
  *
  * A line is never allowed to wrap: two lines of one lyric on a wheel is a
  * knot rather than a line. It is fitted to this instead — shrunk if it is
  * long, and let grow if it is short, which is what gives a short line on the
  * level its size.
+ *
+ * Not all the way to the drawer's other edge, which is what it was: a long
+ * line then ran right up against the player, with nothing between the last
+ * word and the edge. Sixty pixels short of it leaves the line somewhere to
+ * end.
  */
-export const LINE_ROOM = 498;
+export const LINE_ROOM = 456;
 
 /** The size every line is drawn at before it is fitted. */
 export const LINE_FONT_PX = 17;
