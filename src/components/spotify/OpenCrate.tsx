@@ -10,7 +10,17 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
-import { CoverCrop, DetailsSheet, RemoveSheet, SheetPresence } from './CrateSheets';
+import {
+  CoverCrop,
+  DetailsSheet,
+  RemoveSheet,
+  SHEET_AWAY,
+  SHEET_IN_EASING,
+  SHEET_IN_MS,
+  SHEET_OUT_EASING,
+  SHEET_OUT_MS,
+  SheetPresence,
+} from './CrateSheets';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
@@ -27,41 +37,12 @@ const COVER_FAILURES = {
  * preference — a record is meant to be draggable from here onto the deck, and
  * the deck has to be visible for there to be anywhere to drag it to.
  *
- * The records come out of the crate and, when it is shut, go back into it.
- * Each one starts at the sleeve's own position and size and travels to its
- * place in the grid, a little after the one before it, so what you see is a
- * crate emptying rather than a grid appearing.
+ * It opens and closes as one page, the way the sheets over it do: rising into
+ * place while it fades in, and back down as it fades out. It grows from the
+ * crate that was pressed, so it is still plain where it came from.
  */
-
-/** How long one record takes to reach its place. */
-const FLIGHT_MS = 340;
-/** The gap between one record leaving and the next. */
-const STAGGER_MS = 26;
-/**
- * How many records are staggered before the rest arrive together.
- *
- * A playlist of two hundred would otherwise take five seconds to finish
- * unpacking, and the last record would be a separate event from the first
- * rather than the end of the same one.
- */
-const STAGGERED = 14;
-
-/**
- * Going back in is quicker than coming out, and from fewer of them.
- *
- * Unpacking is the thing worth watching; packing is what happens on the way to
- * somewhere else, and a close that takes as long as an open feels like the app
- * arguing about it. Ten staggered is still plainly a sequence.
- */
-const RETURN_MS = 260;
-const RETURN_STAGGER_MS = 18;
-const RETURN_STAGGERED = 10;
-/** The layer goes once the records are nearly home, not before. */
-const LAYER_FADE_MS = 180;
 
 const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
-/** Into the crate: gathering speed rather than easing off, which is a drop. */
-const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 
 /**
  * The narrowest a card may be, and so the smallest a record in the grid is.
@@ -115,23 +96,22 @@ function refuse(card: HTMLElement | null): void {
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
-  /** Where the sleeve was on screen, so the records can come out of it. */
+  /** Where the crate was on screen, so the page can grow out of it. */
   origin: { x: number; y: number; width: number; height: number };
   onClose: () => void;
 }
 
-/** The transform that takes this element's box onto the crate's. */
-function ontoCrate(
-  el: HTMLElement,
-  origin: { x: number; y: number; width: number; height: number },
-): string | null {
-  const box = el.getBoundingClientRect();
-  if (box.width === 0) return null;
-  // The crate is square and so is a record, so one ratio covers both axes.
-  const scale = origin.width / box.width;
-  const dx = origin.x + origin.width / 2 - (box.left + box.width / 2);
-  const dy = origin.y + origin.height / 2 - (box.top + box.height / 2);
-  return `translate(${dx}px, ${dy}px) scale(${scale})`;
+/**
+ * Where on the layer the page grows from and shrinks back to: the middle of
+ * the crate that was opened, kept inside the layer so a crate at the very edge
+ * of the shelf still reads as the source rather than as a corner.
+ */
+function growsFrom(layer: HTMLElement, origin: OpenCrateProps['origin']): string {
+  const box = layer.getBoundingClientRect();
+  const clamp = (v: number, max: number) => Math.min(max, Math.max(0, v));
+  const x = clamp(origin.x + origin.width / 2 - box.left, box.width);
+  const y = clamp(origin.y + origin.height / 2 - box.top, box.height);
+  return `${x}px ${y}px`;
 }
 
 export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
@@ -292,20 +272,16 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
 
   const layerRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  /** How many records have already been played in; the rest are new. */
-  const unpacked = useRef(0);
   /** Latched, so a second Escape or a double click cannot start a second close. */
   const shutting = useRef(false);
   const [closing, setClosing] = useState(false);
 
   /**
-   * Put the records back in the crate, then let the drawer take the layer away.
+   * Close the page, then let the drawer take the layer away.
    *
-   * The state is only here to stop anything being pressed while it runs; the
-   * animation is driven straight off the elements, because the thing that has
-   * to be measured — where each record is *now* — is not something React
-   * knows. And it never blocks the close: if there is nothing to animate, or
-   * motion is turned down, the layer goes immediately.
+   * The state is only here to stop anything being pressed while it runs. It
+   * never blocks the close: with motion turned down, or nothing to animate,
+   * the layer goes immediately.
    */
   const requestClose = useCallback((after?: () => void) => {
     if (shutting.current) return;
@@ -315,51 +291,23 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       after?.();
     };
 
-    const grid = gridRef.current;
     const layer = layerRef.current;
-    if (!grid || !layer || prefersReducedMotion()) {
+    if (!layer || prefersReducedMotion()) {
       finish();
       return;
     }
-
-    // Only what can be seen. Below the fold a record may not have been laid out
-    // at all — `content-visibility` is allowed to skip it — and animating a
-    // hundred of them off screen is work nobody watches.
-    const view = grid.getBoundingClientRect();
-    const going = [...grid.querySelectorAll<HTMLElement>('[data-record]')].filter((el) => {
-      const box = el.getBoundingClientRect();
-      return box.bottom > view.top && box.top < view.bottom;
-    });
-
     setClosing(true);
-    for (const [i, el] of going.entries()) {
-      const to = ontoCrate(el, origin);
-      if (!to) continue;
-      el.animate(
-        [
-          { transform: 'none', opacity: 1 },
-          { transform: to, opacity: 0 },
-        ],
-        {
-          duration: RETURN_MS,
-          delay: Math.min(i, RETURN_STAGGERED) * RETURN_STAGGER_MS,
-          easing: RETURN_EASING,
-          fill: 'forwards',
-        },
-      );
-    }
-
-    // The layer waits for the last record and then goes. Fading it any earlier
-    // would take the flight with it, and the flight is the whole point.
-    const last = Math.min(going.length, RETURN_STAGGERED) * RETURN_STAGGER_MS + RETURN_MS;
-    const fade = layer.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: LAYER_FADE_MS,
-      delay: Math.max(0, last - LAYER_FADE_MS),
-      easing: 'ease-in',
-      fill: 'forwards',
-    });
+    for (const a of layer.getAnimations()) a.cancel();
+    layer.style.transformOrigin = growsFrom(layer, origin);
+    const out = layer.animate(
+      [
+        { opacity: 1, transform: 'none' },
+        { opacity: 0, transform: SHEET_AWAY },
+      ],
+      { duration: SHEET_OUT_MS, easing: SHEET_OUT_EASING, fill: 'forwards' },
+    );
     // Either way — finished or cancelled by an unmount — the crate closes.
-    fade.finished.then(finish, finish);
+    out.finished.then(finish, finish);
   }, [onClose, origin]);
 
   /**
@@ -409,40 +357,23 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [requestClose, surface, coverImage, editing, setEditing]);
 
-  // The unpacking. A layout effect so the first frame is never the finished
-  // grid — by the time anything is painted the records are already back at the
-  // crate, waiting to leave it.
+  // Opening. A layout effect so the first frame painted is already the start
+  // of it, never the finished page followed by a jump back.
   useLayoutEffect(() => {
-    const grid = gridRef.current;
-    if (!grid || prefersReducedMotion() || shutting.current) return;
-
-    const discs = [...grid.querySelectorAll<HTMLElement>('[data-record]')];
-    // Only the ones that have just arrived. A second page appended to the grid
-    // must not send the first page back into the crate to come out again.
-    const arriving = discs.slice(unpacked.current);
-    unpacked.current = discs.length;
-    // Not while editing. Edit mode reads the rest of the crate at once, and up
-    // to three hundred records flying out of a sleeve together is not an
-    // unpacking, it is the window stopping.
-    if (editing) return;
-
-    for (const [i, el] of arriving.entries()) {
-      const from = ontoCrate(el, origin);
-      if (!from) continue;
-      el.animate(
-        [
-          { transform: from, opacity: 0 },
-          { transform: 'none', opacity: 1 },
-        ],
-        {
-          duration: FLIGHT_MS,
-          delay: Math.min(i, STAGGERED) * STAGGER_MS,
-          easing: EASING,
-          fill: 'backwards',
-        },
-      );
-    }
-  }, [tracks, origin, editing]);
+    const layer = layerRef.current;
+    if (!layer || prefersReducedMotion()) return;
+    layer.style.transformOrigin = growsFrom(layer, origin);
+    layer.animate(
+      [
+        { opacity: 0, transform: SHEET_AWAY },
+        { opacity: 1, transform: 'none' },
+      ],
+      { duration: SHEET_IN_MS, easing: SHEET_IN_EASING },
+    );
+    // Once, for the page arriving. The crate it came from does not move while
+    // it is open, and a later page of records is not the page arriving.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Records sliding to where they now are, in edit mode.

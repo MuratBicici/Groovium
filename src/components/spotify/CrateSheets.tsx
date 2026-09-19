@@ -39,17 +39,17 @@ import { Toggle } from '@/components/controls/Toggle';
  * fades in, easing out — quick at first and settling, which is how something
  * arriving should move. `cubic-bezier(0.22, 1, 0.36, 1)`, an ease-out quint.
  */
-const SHEET_IN_MS = 220;
-const SHEET_IN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+export const SHEET_IN_MS = 220;
+export const SHEET_IN_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 /**
  * Closing: shorter, and easing in — slow to start and gone at speed, which is
  * how something leaving should. `cubic-bezier(0.4, 0, 1, 1)`, an ease-in.
  * Shorter because nobody waits to watch a thing go.
  */
-const SHEET_OUT_MS = 150;
-const SHEET_OUT_EASING = 'cubic-bezier(0.4, 0, 1, 1)';
+export const SHEET_OUT_MS = 150;
+export const SHEET_OUT_EASING = 'cubic-bezier(0.4, 0, 1, 1)';
 /** Where the sheet comes up from and goes back down to. */
-const SHEET_AWAY = 'translateY(8px) scale(0.97)';
+export const SHEET_AWAY = 'translateY(8px) scale(0.97)';
 
 /**
  * Keeps a sheet on screen long enough to animate it in and out.
