@@ -221,10 +221,15 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
 
   /** The ⋯ menu, or one of the sheets it opens. One at a time. */
-  const [surface, setSurface] = useState<'menu' | 'details' | 'remove' | 'cover' | null>(null);
-  /** The picture chosen for a new cover, while its square is being chosen. */
+  const [surface, setSurface] = useState<'menu' | 'details' | 'remove' | null>(null);
+  /**
+   * The picture chosen for a new cover, while its square is being chosen.
+   *
+   * Not a `surface`: the crop opens over the details sheet, which stays open
+   * underneath with whatever was typed in it, and is where it returns to.
+   */
   const [coverImage, setCoverImage] = useState<string | null>(null);
-  /** Why a picture could not be used. Nothing was sent, so nothing was undone. */
+  /** Why a picture could not be used, said in the details sheet. Nothing was sent. */
   const [coverNotice, setCoverNotice] = useState<string | null>(null);
   /** The name as it is being typed in edit mode. */
   const [nameDraft, setNameDraft] = useState(playlist.name);
@@ -484,19 +489,13 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   }, [nameDraft, playlist.id, playlist.name, setCrateDetails, setEditing]);
 
   /**
-   * The ⋯ menu's "Change cover": the file dialog, then the crop.
-   *
-   * The dialog is the system's and takes as long as somebody takes. The menu is
-   * closed first so it is not left open behind it.
+   * The details sheet's "Change cover": the file dialog, then the crop.
    */
   const chooseCover = useCallback(() => {
-    setSurface(null);
     setCoverNotice(null);
     pickCoverImage().then(
       (picked) => {
-        if (!picked) return;
-        setCoverImage(picked);
-        setSurface('cover');
+        if (picked) setCoverImage(picked);
       },
       (failure: CoverPickFailure) => setCoverNotice(t(COVER_FAILURES[failure])),
     );
@@ -513,8 +512,13 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       // name being typed, then edit mode, and only then the crate. The sheets
       // do not listen themselves — registered after this one, they would never
       // hear the key.
+      if (coverImage) {
+        setCoverImage(null);
+        return;
+      }
       if (surface) {
         setSurface(null);
+        setCoverNotice(null);
         return;
       }
       if (document.activeElement === nameField.current && nameField.current) {
@@ -531,7 +535,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [requestClose, surface, editing, playlist.name, setEditing]);
+  }, [requestClose, surface, coverImage, editing, playlist.name, setEditing]);
 
   // The unpacking. A layout effect so the first frame is never the finished
   // grid — by the time anything is painted the records are already back at the
@@ -871,7 +875,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         )}
         {surface === 'menu' && (
           <CrateMenu
-            {...(isTauri() && { onCover: chooseCover })}
             onDetails={() => setSurface('details')}
             onRemove={() => setSurface('remove')}
             onClose={() => setSurface(null)}
@@ -894,21 +897,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             type="button"
             aria-label={t('common.dismiss')}
             onClick={clearWriteError}
-            className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
-          >
-            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      )}
-      {coverNotice && (
-        <div className="mx-3 mb-1 flex shrink-0 items-start gap-2 rounded bg-red-950/70 px-2 py-1.5">
-          <p className="min-w-0 flex-1 text-meta leading-snug text-red-200">{coverNotice}</p>
-          <button
-            type="button"
-            aria-label={t('common.dismiss')}
-            onClick={() => setCoverNotice(null)}
             className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
           >
             <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
@@ -972,23 +960,31 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       {surface === 'details' && (
         <DetailsSheet
           playlist={playlist}
-          onClose={() => setSurface(null)}
+          {...(isTauri() && { onCover: chooseCover })}
+          coverProblem={coverNotice}
+          onClose={() => {
+            setSurface(null);
+            setCoverNotice(null);
+          }}
           onSave={(details) => {
             setSurface(null);
+            setCoverNotice(null);
             void setCrateDetails(playlist.id, details);
           }}
         />
       )}
-      {surface === 'cover' && coverImage && (
+      {/* Over the details sheet, and back to it: the new cover shows there at
+          once, beside whatever else is being changed. */}
+      {surface === 'details' && coverImage && (
         <CoverCrop
           image={coverImage}
-          onClose={() => setSurface(null)}
+          onClose={() => setCoverImage(null)}
           onFailed={(message) => {
-            setSurface(null);
+            setCoverImage(null);
             setCoverNotice(message);
           }}
           onUpload={(base64, preview) => {
-            setSurface(null);
+            setCoverImage(null);
             void setCrateCover(playlist.id, base64, preview);
           }}
         />

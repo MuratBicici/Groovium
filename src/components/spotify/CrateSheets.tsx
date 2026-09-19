@@ -28,22 +28,14 @@ import { useT } from '@/core/i18n';
  * than the crate's would never hear the key.
  */
 
-/**
- * What the ⋯ button opens.
- *
- * `onCover` is optional: outside the app there is no file dialog to choose a
- * picture with, and the menu leaves the item out rather than show one that
- * does nothing.
- */
+/** What the ⋯ button opens. */
 export function CrateMenu({
   onDetails,
   onRemove,
-  onCover,
   onClose,
 }: {
   onDetails: () => void;
   onRemove: () => void;
-  onCover?: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -62,7 +54,6 @@ export function CrateMenu({
         role="menu"
         className="absolute top-9 right-3 z-30 min-w-[160px] overflow-hidden rounded-md groove-surface py-1 shadow-lg ring-1 ring-[var(--color-edge)]"
       >
-        {onCover && <MenuItem label={t('spotify.changeCover')} onPress={onCover} />}
         <MenuItem label={t('spotify.details')} onPress={onDetails} />
         <MenuItem label={t('spotify.removeFromLibrary')} onPress={onRemove} danger />
       </div>
@@ -127,19 +118,29 @@ function Sheet({
 const DESCRIPTION_MAX = 300;
 
 /**
- * A playlist's description, and whether it is on the profile.
+ * A playlist's cover, description, and whether it is on the profile.
  *
  * The name is not here: it is edited in place in the crate's header, where it
- * already is. Saved together, since a change to either is one decision about
- * how the playlist presents itself.
+ * already is. Description and visibility are saved together, since a change to
+ * either is one decision about how the playlist presents itself. The cover is
+ * not part of that save: choosing one is its own step, with its own screen,
+ * and it is sent when that screen's Upload is pressed.
+ *
+ * `onCover` is optional: outside the app there is no file dialog to choose a
+ * picture with, and the button is left out rather than shown doing nothing.
  */
 export function DetailsSheet({
   playlist,
   onSave,
+  onCover,
+  coverProblem,
   onClose,
 }: {
   playlist: SpotifyPlaylist;
   onSave: (details: { description: string; isPublic: boolean }) => void;
+  onCover?: () => void;
+  /** Why the last picture chosen could not be used. */
+  coverProblem?: string | null;
   onClose: () => void;
 }) {
   const t = useT();
@@ -152,7 +153,26 @@ export function DetailsSheet({
       <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
         {t('spotify.detailsTitle')}
       </p>
-      <p className="truncate text-body text-cream-100">{playlist.name}</p>
+      <div className="flex items-center gap-3">
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-shell-900 shadow-md ring-1 ring-[var(--color-edge)]">
+          {playlist.coverArtUrl && (
+            <img src={playlist.coverArtUrl} alt="" draggable={false} className="h-full w-full object-cover" />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <p className="max-w-full truncate text-body text-cream-100">{playlist.name}</p>
+          {onCover && (
+            <button
+              type="button"
+              onClick={onCover}
+              className="rounded-full px-2 py-0.5 text-label tracking-wide text-brass-300 uppercase ring-1 ring-[var(--color-edge)] transition-colors hover:text-brass-200"
+            >
+              {t('spotify.changeCover')}
+            </button>
+          )}
+        </div>
+      </div>
+      {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
 
       <label className="flex flex-col gap-1">
         <span className="text-meta text-cream-400">{t('spotify.description')}</span>
