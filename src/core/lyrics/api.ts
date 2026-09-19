@@ -15,7 +15,8 @@ export interface LyricsMatch {
   artistName: string;
   albumName: string;
   durationS: number;
-  via: 'get' | 'search';
+  /** Which source and step: `lrclib:get`, `lrclib:get-clean`, `lrclib:search` or `netease`. */
+  via: string;
 }
 
 export interface LyricsLookup {
