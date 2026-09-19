@@ -35,7 +35,9 @@ export function WindowChrome() {
   return (
     <header
       data-tauri-drag-region
-      className="flex h-8 shrink-0 items-center justify-between px-3"
+      // Raised over the lyrics record, which carries on up under the bar; still
+      // under a record in the air (`z-10`).
+      className="relative z-[5] flex h-8 shrink-0 items-center justify-between px-3"
     >
       {/* `lang` because uppercasing is language-sensitive and this is a name,
           not a word. In a Turkish document a lowercase i capitalises to İ, so

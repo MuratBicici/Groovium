@@ -84,6 +84,7 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * | Layer  | What                                            |
  * | ------ | ----------------------------------------------- |
  * | (auto) | The stage: platter, tonearm, track display      |
+ * | z-[5]  | The title bar, over the lyrics record under it  |
  * | z-10   | Disc motion: the flight layer and the ghost     |
  * | z-20   | Panels: Library, Playlists, Spotify             |
  * | z-30   | Modal sheets: playlist picker, station setup    |

@@ -8,7 +8,7 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { DiscLight } from '@/components/player/DiscLight';
 import { DRAWER_WIDTH } from '@/platform/window';
-import { CENTER_INSET, DISC_RADIUS, TEXT_RADIUS, wheelAngle } from './arc';
+import { CENTER_INSET, DISC_RADIUS, LABEL_RATIO, TEXT_RADIUS, wheelAngle } from './arc';
 import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
@@ -96,8 +96,14 @@ export function LyricsDrawer({
   return (
     <div
       id={id}
-      className="relative isolate flex h-full shrink-0 flex-col overflow-hidden border-l border-[var(--color-edge)]"
-      style={{ width: `${DRAWER_WIDTH}px` }}
+      className="relative isolate flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
+      style={{
+        width: `${DRAWER_WIDTH}px`,
+        // Cut off at the drawer's sides and foot, but not at its head: the
+        // record goes on up under the window's title bar, which is drawn over
+        // it, instead of stopping in a straight line where the bar begins.
+        clipPath: `inset(-${TITLE_BAR_HEIGHT}px 0 0 0)`,
+      }}
     >
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
@@ -144,7 +150,11 @@ export function LyricsDrawer({
           }}
         >
           <div className="h-full w-full" style={{ transform: `rotate(${angle}deg)`, transition: turn }}>
-            <VinylDisc size={DISC_RADIUS * 2} coverArtUrl={track?.coverArtUrl} />
+            <VinylDisc
+              size={DISC_RADIUS * 2}
+              coverArtUrl={track?.coverArtUrl}
+              labelRatio={LABEL_RATIO}
+            />
           </div>
           <DiscLight size={DISC_RADIUS * 2} />
           {/* A shade over the grooves, where the lines lie, so they stay
@@ -153,7 +163,7 @@ export function LyricsDrawer({
             className="absolute inset-0 rounded-full"
             style={{
               background:
-                'radial-gradient(circle closest-side, transparent 37%, rgb(0 0 0 / 0.38) 42%, rgb(0 0 0 / 0.5) 100%)',
+                `radial-gradient(circle closest-side, transparent ${LABEL_RATIO * 100}%, rgb(0 0 0 / 0.38) ${LABEL_RATIO * 100 + 5}%, rgb(0 0 0 / 0.5) 100%)`,
             }}
           />
         </div>
@@ -227,6 +237,9 @@ export function LyricsDrawer({
     </div>
   );
 }
+
+/** The window's title bar, which the record carries on under. `h-8` in `WindowChrome`. */
+const TITLE_BAR_HEIGHT = 32;
 
 /** Where the lines start, from the drawer's outer edge. */
 const TEXT_START = CENTER_INSET + TEXT_RADIUS;

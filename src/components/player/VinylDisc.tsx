@@ -10,6 +10,12 @@ interface VinylDiscProps {
    */
   eager?: boolean;
   className?: string;
+  /**
+   * The label's width as a share of the record's. The platter's proportions
+   * unless said otherwise; the lyrics record, which needs the room around
+   * its label for words, asks for a smaller one.
+   */
+  labelRatio?: number;
 }
 
 /** Label diameter as a fraction of the disc — 56/152, the platter's original ratio. */
@@ -49,8 +55,14 @@ const DETAILED_FROM = 96;
  * the ratio of their boxes, so a filter or an overflowing edge would land the
  * clone at the wrong apparent size.
  */
-export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProps) {
-  const label = Math.round(size * LABEL_RATIO);
+export function VinylDisc({
+  size,
+  coverArtUrl,
+  eager,
+  className,
+  labelRatio = LABEL_RATIO,
+}: VinylDiscProps) {
+  const label = Math.round(size * labelRatio);
   const spindle = Math.max(2, Math.round(size * 0.05));
   const detailed = size >= DETAILED_FROM;
   const texture = detailed ? grooveTexture() : null;
@@ -65,12 +77,15 @@ export function VinylDisc({ size, coverArtUrl, eager, className }: VinylDiscProp
   // the previous surface sat at luminance 35-50 everywhere, which is the
   // reading of matte plastic. Vinyl is dark and *glossy* — the black has to go
   // low so the reflection has somewhere to be bright against.
+  // The run-out and the start of the grooves follow the label: a smaller label
+  // brings the grooves in with it rather than leaving a wide smooth ring.
+  const labelEdge = labelRatio * 100;
   const body =
     `radial-gradient(${extent},` +
     // the run-out, smooth, between label and first groove
-    ' #191311 0%, #181310 35%,' +
+    ` #191311 0%, #181310 ${labelEdge - 1.8}%,` +
     // the grooved band begins: a real one starts at a visible edge
-    ' #131010 39%, #120f0e 60%, #0e0c0b 82%,' +
+    ` #131010 ${labelEdge + 2.2}%, #120f0e 60%, #0e0c0b 82%,` +
     // and runs almost to the edge. The land outside the last groove is a
     // couple of pixels on a disc this size; it had been a seventh of the
     // radius, which read as one big sweep where the texture should have been.

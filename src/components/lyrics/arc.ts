@@ -43,10 +43,12 @@ export const DISC_RADIUS = 620;
  */
 export const CENTER_INSET = 14;
 /**
- * Where a line's inner end sits, measured from the centre: just past the
- * label, which is 0.368 of the record across.
+ * The label's share of the record's width: smaller than on the platter, so
+ * the cover sits in a tighter ring and the words have the rest.
  */
-export const TEXT_RADIUS = 250;
+export const LABEL_RATIO = 0.21;
+/** Where a line's inner end sits, measured from the centre: just past the label. */
+export const TEXT_RADIUS = Math.round(DISC_RADIUS * LABEL_RATIO) + 22;
 
 /** Which way round the angles run: +1 on the left, −1 on the mirrored right. */
 function sign(side: DrawerSide): 1 | -1 {
