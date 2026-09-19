@@ -40,6 +40,45 @@ fn split_tags(line: &str) -> (Vec<&str>, &str) {
     (tags, rest)
 }
 
+/// A line's words without the per-word stamps of "enhanced" LRC —
+/// `<00:12.34>word <00:12.80>word` — which time each word within the line.
+/// Only the line's own time is used, so they are only in the way.
+fn without_word_stamps(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('<') {
+        let Some(len) = rest[open + 1..].find('>') else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        let inner = &rest[open + 1..open + 1 + len];
+        if stamp_ms(inner).is_none() {
+            out.push_str(&rest[open..open + len + 2]);
+        }
+        rest = &rest[open + len + 2..];
+    }
+    out.push_str(rest);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Fewer lines than this, and there is not enough to judge by.
+const MIN_FRAGMENT_LINES: usize = 20;
+
+/// Whether synced lyrics are stored a syllable or a letter at a time — each
+/// its own line, `[00:08.75] 문`, `[00:08.86] 을` — rather than a line at a
+/// time. They keep time, but a list of single syllables is not something to
+/// read. Taken to be so when at least half the lines with words in them have
+/// one or two letters.
+pub fn fragmented(lines: &[LyricLine]) -> bool {
+    let lengths: Vec<usize> = lines
+        .iter()
+        .map(|l| l.text.chars().filter(|c| !c.is_whitespace()).count())
+        .filter(|&n| n > 0)
+        .collect();
+    lengths.len() >= MIN_FRAGMENT_LINES
+        && lengths.iter().filter(|&&n| n <= 2).count() * 2 >= lengths.len()
+}
+
 /// Every timed line, earliest first.
 ///
 /// A line with several stamps — a chorus written once — becomes one line per
@@ -60,7 +99,7 @@ pub fn parse_lrc(text: &str) -> Vec<LyricLine> {
                 offset = value.trim().trim_start_matches('+').parse().unwrap_or(0);
             }
         }
-        let words = rest.trim();
+        let words = without_word_stamps(rest);
         for ms in stamps {
             timed.push((ms, words.to_string()));
         }
@@ -151,6 +190,52 @@ mod tests {
         assert_eq!(stamp_ms("length:03:20"), None);
         // NetEase writes this on its credit lines.
         assert_eq!(stamp_ms("00:00.00-1"), None);
+    }
+
+    #[test]
+    fn drops_the_stamps_on_each_word() {
+        let lines = parse_lrc("[00:12.34]<00:12.34>kimi <00:12.80>no <00:13.10>koe <b>");
+        assert_eq!(lines, vec![line(12340, "kimi no koe <b>")]);
+    }
+
+    #[test]
+    fn tells_a_syllable_at_a_time_from_a_line_at_a_time() {
+        let syllables: String = (0..30)
+            .map(|i| {
+                format!(
+                    "[00:{:02}.00]문
+",
+                    i
+                )
+            })
+            .collect();
+        assert!(fragmented(&parse_lrc(&syllables)));
+        // Two to a line is still fragments: "열어", "보면".
+        let pairs: String = (0..30)
+            .map(|i| {
+                format!(
+                    "[00:{:02}.00]열어
+",
+                    i
+                )
+            })
+            .collect();
+        assert!(fragmented(&parse_lrc(&pairs)));
+        let sentences: String = (0..30)
+            .map(|i| {
+                format!(
+                    "[00:{:02}.00]드러나는 My worth
+",
+                    i
+                )
+            })
+            .collect();
+        assert!(!fragmented(&parse_lrc(&sentences)));
+        // Too few lines to say.
+        assert!(!fragmented(&parse_lrc(
+            "[00:01.00]문
+[00:02.00]을"
+        )));
     }
 
     #[test]

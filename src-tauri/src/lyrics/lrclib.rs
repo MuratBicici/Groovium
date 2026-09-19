@@ -4,8 +4,7 @@ use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
 use super::lrc::{parse_lrc, words_of};
-use super::script;
-use super::{fetch, or_default, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
+use super::{fetch, flaw, or_default, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
 
 const API_ROOT: &str = "https://lrclib.net/api";
 
@@ -35,17 +34,16 @@ impl Record {
             .is_some_and(|s| !s.trim().is_empty())
     }
 
-    /// How good a pick this is, lower better: synced in the song's own
-    /// script, synced but romanized, then words alone.
+    /// How good a pick this is, lower better: synced and clean, synced with
+    /// a flaw (see `flaw`), then words alone.
     pub fn rank(&self) -> u8 {
         match self
             .synced_lyrics
             .as_deref()
             .filter(|s| !s.trim().is_empty())
         {
-            Some(synced) if script::lines_romanized(&parse_lrc(synced)) => 1,
-            Some(_) => 0,
-            None => 2,
+            Some(synced) => flaw(&parse_lrc(synced)),
+            None => 3,
         }
     }
 
@@ -212,6 +210,29 @@ mod tests {
         native.synced_lyrics = Some("[00:01.00]君の声が聞こえる".into());
         let found = [romanized, native];
         assert_eq!(choose(&found, &q).map(|r| r.duration), Some(181.0));
+    }
+
+    #[test]
+    fn prefers_whole_lines_to_a_syllable_at_a_time() {
+        let q = query("Song", "Band", 168_000);
+        let mut syllables = record("Song", "Band", 168.0, true);
+        syllables.synced_lyrics = Some(
+            (0..30)
+                .map(|i| {
+                    format!(
+                        "[00:{i:02}.00]문
+"
+                    )
+                })
+                .collect(),
+        );
+        let mut lines = record("Song", "Band", 168.0, true);
+        lines.synced_lyrics = Some("[00:09.77]드러나는 My worth".into());
+        let found = [syllables, lines];
+        assert!(choose(&found, &q).is_some_and(|r| r
+            .synced_lyrics
+            .as_deref()
+            .is_some_and(|s| s.contains("worth"))));
     }
 
     #[test]

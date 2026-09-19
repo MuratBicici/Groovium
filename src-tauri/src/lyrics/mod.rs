@@ -198,10 +198,10 @@ async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
 /// source failed.
 #[derive(Default)]
 struct Waterfall {
-    /// Synced lyrics that look like a romanization of the song — see
-    /// `script.rs`. Kept, and used if no place has them in the song's own
-    /// script.
-    romanized: Option<Found>,
+    /// Synced lyrics with a flaw — a romanization, or a syllable to a line —
+    /// and how bad it is. Kept, the least flawed, and used if no place has
+    /// them clean.
+    flawed: Option<(u8, Found)>,
     plain: Option<Found>,
     failed: Option<String>,
 }
@@ -212,9 +212,14 @@ impl Waterfall {
     fn offer(&mut self, answer: Result<Option<Found>, String>) -> Option<LyricsLookup> {
         match answer {
             Ok(Some(found)) => match &found.result {
-                LyricsResult::Synced(lines) if script::lines_romanized(lines) => {
-                    if self.romanized.is_none() {
-                        self.romanized = Some(found);
+                LyricsResult::Synced(lines) if flaw(lines) > 0 => {
+                    let how_bad = flaw(lines);
+                    if self
+                        .flawed
+                        .as_ref()
+                        .map_or(true, |(worst, _)| how_bad < *worst)
+                    {
+                        self.flawed = Some((how_bad, found));
                     }
                     None
                 }
@@ -236,12 +241,13 @@ impl Waterfall {
         }
     }
 
-    /// Nothing synced in the song's own script anywhere: a romanization if
-    /// there was one, else the words if some place had them, and whether the
+    /// Nothing synced and clean anywhere: the least flawed synced lyrics if
+    /// there were any, else the words if some place had them, and whether the
     /// answer may be kept.
     fn finish(self) -> Result<(LyricsLookup, bool), String> {
         let settled = self.failed.is_none();
-        match (self.romanized.or(self.plain), self.failed) {
+        let best = self.flawed.map(|(_, found)| found).or(self.plain);
+        match (best, self.failed) {
             (Some(plain), _) => Ok((plain.into(), settled)),
             (None, Some(e)) => Err(e),
             (None, None) => Ok((
@@ -252,6 +258,19 @@ impl Waterfall {
                 true,
             )),
         }
+    }
+}
+
+/// What is wrong with synced lyrics, lower better: nothing, a romanization
+/// of the song (`script.rs`), or a syllable to a line (`lrc::fragmented`).
+/// The last is worst: a romanization can at least be read along with.
+pub fn flaw(lines: &[LyricLine]) -> u8 {
+    if lrc::fragmented(lines) {
+        2
+    } else if script::lines_romanized(lines) {
+        1
+    } else {
+        0
     }
 }
 
@@ -412,6 +431,37 @@ mod tests {
         assert!(matches!(lookup.result, LyricsResult::Synced(_)));
     }
 
+    fn syllables(via: &'static str) -> Found {
+        let lines = (0..30)
+            .map(|i| LyricLine {
+                time_ms: i * 100,
+                text: "문".into(),
+            })
+            .collect();
+        found(LyricsResult::Synced(lines), via)
+    }
+
+    #[test]
+    fn a_syllable_to_a_line_waits_for_whole_lines() {
+        let mut w = Waterfall::default();
+        assert!(w.offer(Ok(Some(syllables("lrclib:get")))).is_none());
+        let done = w.offer(Ok(Some(found(synced(), "lrclib:search"))));
+        assert_eq!(
+            done.and_then(|d| d.matched).map(|m| m.via),
+            Some("lrclib:search")
+        );
+    }
+
+    #[test]
+    fn the_least_flawed_is_kept_whatever_order_they_come_in() {
+        let mut w = Waterfall::default();
+        w.offer(Ok(Some(syllables("lrclib:get"))));
+        w.offer(Ok(Some(romaji("lrclib:search"))));
+        w.offer(Ok(Some(syllables("netease"))));
+        let (lookup, _) = w.finish().unwrap();
+        assert_eq!(lookup.matched.map(|m| m.via), Some("lrclib:search"));
+    }
+
     #[test]
     fn keeps_the_first_words_while_it_looks_for_timings() {
         let mut w = Waterfall::default();
@@ -526,6 +576,8 @@ mod tests {
                 "Wonderland Trickery",
                 199_316,
             ),
+            // LRCLIB holds this one a syllable to a line as well as a line at a time.
+            ("Biggest Fan", "IRENE", "Like A Flower", 168_000),
         ];
         tauri::async_runtime::block_on(async {
             for (title, artist, album, ms) in songs {
