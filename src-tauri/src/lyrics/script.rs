@@ -99,15 +99,39 @@ const MIN_WORDS: usize = 20;
 /// The share of words that must break into syllables.
 const ROMAJI_SHARE: f64 = 0.7;
 
+/// Letters of another script may make up at most this share of the letters
+/// for the text still to count as written in Latin ones. Not none: lyrics
+/// typed by hand carry the odd look-alike — a Cyrillic "е" where an "e" was
+/// meant — and one of those is not a song in its own script. A song that is
+/// has hundreds.
+const STRAY_SHARE: f64 = 0.02;
+
+/// A long vowel as romanizations mark it — "ō", "ū", "â" — as the plain vowel,
+/// so "Sōdayo" is read as one word rather than split at the macron.
+fn plain_vowel(c: char) -> char {
+    match c {
+        'ā' | 'â' | 'Ā' | 'Â' => 'a',
+        'ī' | 'î' | 'Ī' | 'Î' => 'i',
+        'ū' | 'û' | 'Ū' | 'Û' => 'u',
+        'ē' | 'ê' | 'Ē' | 'Ê' => 'e',
+        'ō' | 'ô' | 'Ō' | 'Ô' => 'o',
+        other => other,
+    }
+}
+
 /// Whether lyrics look like Japanese written in Latin letters.
 ///
-/// Only lyrics with no letters in any other script at all: mixed text is a
-/// song that uses both, and is already in its own script.
+/// Only lyrics in Latin letters, give or take a stray look-alike: text with
+/// a real share of another script is a song that uses it, and is already in
+/// its own script.
 pub fn looks_romanized(text: &str) -> bool {
-    if text.chars().any(is_non_latin_letter) {
+    let letters = text.chars().filter(|c| c.is_alphabetic()).count();
+    let stray = text.chars().filter(|&c| is_non_latin_letter(c)).count();
+    if letters == 0 || stray as f64 / letters as f64 > STRAY_SHARE {
         return false;
     }
-    let words: Vec<String> = text
+    let folded: String = text.chars().map(plain_vowel).collect();
+    let words: Vec<String> = folded
         .split(|c: char| !c.is_ascii_alphabetic() && c != '\'')
         .filter(|w| w.len() >= 2)
         .map(str::to_ascii_lowercase)
@@ -180,6 +204,19 @@ mod tests {
         assert!(!looks_romanized("君の声が聞こえる\nずっと前から知っていた"));
         // A Japanese song with English in it is in its own script already.
         assert!(!looks_romanized(&format!("{ROMAJI}\n夢の中")));
+    }
+
+    #[test]
+    fn a_stray_look_alike_letter_does_not_make_it_another_script() {
+        // A Cyrillic "е" typed for an "e", as hand-made lyrics carry.
+        let typo = ROMAJI.replace("hareru", "harеru");
+        assert!(looks_romanized(&typo));
+    }
+
+    #[test]
+    fn reads_long_vowels_as_vowels() {
+        let long = "Sōdayo mō teokure Teikōshinaide anata no make ".repeat(4);
+        assert!(looks_romanized(&long));
     }
 
     #[test]

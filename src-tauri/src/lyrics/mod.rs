@@ -519,6 +519,13 @@ mod tests {
             ),
             ("Flying Theme", "John Williams", "E.T.", 240_000),
             ("iffy iffy", "LE SSERAFIM", "PUREFLOW pt.1", 129_500),
+            // LRCLIB's exact match for this one is a romanization.
+            (
+                "Wonderland Trickery",
+                "Sān-Z, HOYO-MiX",
+                "Wonderland Trickery",
+                199_316,
+            ),
         ];
         tauri::async_runtime::block_on(async {
             for (title, artist, album, ms) in songs {
