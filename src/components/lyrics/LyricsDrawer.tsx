@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { seekLyrics } from '@/core/lyrics/playhead';
 import type { DrawerSide } from '@/core/settings';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
@@ -7,18 +8,26 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { DiscLight } from '@/components/player/DiscLight';
 import { DRAWER_WIDTH } from '@/platform/window';
-import { CENTER_OUTSIDE, DISC_RADIUS } from './arc';
-import { LyricWheel } from './LyricWheel';
+import { CENTER_INSET, DISC_RADIUS, TEXT_RADIUS, wheelAngle } from './arc';
+import { LyricWheel, turnTransition } from './LyricWheel';
+import { useBrowse } from './useBrowse';
+import { useLyricFrame } from './useLyricFrame';
 import { ARRIVE_EASING, ARRIVE_MS, SCENE_MS } from './motion';
 
 /**
  * Lyrics in the drawer: the big view.
  *
- * A record far larger than the window comes in from the drawer's outer edge —
- * the side away from the player — and turns with the deck. The song's lines
- * lie along its grooves (`LyricWheel`). A song without timings is shown as
- * words to read beside the record, and the other states say what they are in
- * one quiet line where the sung line would be.
+ * A record sits against the drawer's outer edge — the side away from the
+ * player — with its label and the cover on it in view. It is not the deck's
+ * record and does not spin with it: it turns with the lyrics, a line at a
+ * time, the song's lines lying along it as spokes (`LyricWheel`).
+ *
+ * It can be scrolled: the wheel goes round under the pointer, stays where it
+ * was left for five seconds after the last scroll, and then winds back to
+ * the line being sung. A line picked by hand is gone to at once.
+ *
+ * A song without timings is words to read beside the record, and the other
+ * states say what they are in one quiet line where the sung line would be.
  */
 export function LyricsDrawer({
   id,
@@ -33,7 +42,6 @@ export function LyricsDrawer({
 }) {
   const t = useT();
   const track = usePlayerStore((s) => s.currentTrack);
-  const playing = usePlayerStore((s) => s.playbackState === 'PLAYING');
   const status = useLyricsStore((s) => s.status);
   const lookup = useLyricsStore((s) => s.lookup);
   const retry = useLyricsStore((s) => s.retry);
@@ -69,6 +77,14 @@ export function LyricsDrawer({
 
   const result = status === 'done' ? lookup?.result : undefined;
   const source = lookup?.matched?.via.split(':')[0];
+  const lines = result?.status === 'Synced' ? result.data : null;
+
+  const sungEl = useRef<HTMLButtonElement | null>(null);
+  const { active: sung } = useLyricFrame(lines, sungEl);
+  const browse = useBrowse(lines?.length ?? 0, sung, track?.id);
+  // The record and the lines turn by the same angle, on the same curve.
+  const angle = lines ? wheelAngle(browse.view, side) : 0;
+  const turn = lines ? turnTransition(browse.move) : 'none';
 
   let quiet: string | null = null;
   if (!track) quiet = t('lyrics.nothingPlaying');
@@ -83,34 +99,6 @@ export function LyricsDrawer({
       className="relative isolate flex h-full shrink-0 flex-col overflow-hidden border-l border-[var(--color-edge)]"
       style={{ width: `${DRAWER_WIDTH}px` }}
     >
-      {/* The record, most of it past the outer edge. Its own element spins;
-          the light stays still over it, as on the deck. */}
-      <div
-        ref={record}
-        aria-hidden="true"
-        className="pointer-events-none absolute"
-        style={{
-          width: DISC_RADIUS * 2,
-          height: DISC_RADIUS * 2,
-          top: `calc(50% - ${DISC_RADIUS}px)`,
-          [left ? 'left' : 'right']: -(CENTER_OUTSIDE + DISC_RADIUS),
-        }}
-      >
-        <div className="groove-spin" data-spinning={playing}>
-          <VinylDisc size={DISC_RADIUS * 2} coverArtUrl={track?.coverArtUrl} />
-        </div>
-        <DiscLight size={DISC_RADIUS * 2} />
-        {/* A shade over the grooves toward the lines, so words laid across
-            them stay readable in any palette. */}
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              'radial-gradient(circle closest-side, transparent 52%, rgb(0 0 0 / 0.35) 62%, rgb(0 0 0 / 0.55) 100%)',
-          }}
-        />
-      </div>
-
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
           {t('lyrics.title')}
@@ -135,14 +123,62 @@ export function LyricsDrawer({
         </div>
       </div>
 
-      <div ref={body} className="relative min-h-0 flex-1">
-        {result?.status === 'Synced' && <LyricWheel lines={result.data} side={side} />}
+      <div
+        ref={body}
+        className="relative min-h-0 flex-1"
+        onWheel={lines ? (e) => browse.onWheel(e.deltaY) : undefined}
+      >
+        {/* The record, centred on the same point as the lines. It turns with
+            them; the light over it stays where it is, as on the deck. */}
+        <div
+          ref={record}
+          aria-hidden="true"
+          className="pointer-events-none absolute"
+          style={{
+            width: DISC_RADIUS * 2,
+            height: DISC_RADIUS * 2,
+            top: `calc(50% - ${DISC_RADIUS}px)`,
+            [left ? 'left' : 'right']: CENTER_INSET - DISC_RADIUS,
+          }}
+        >
+          <div className="h-full w-full" style={{ transform: `rotate(${angle}deg)`, transition: turn }}>
+            <VinylDisc size={DISC_RADIUS * 2} coverArtUrl={track?.coverArtUrl} />
+          </div>
+          <DiscLight size={DISC_RADIUS * 2} />
+          {/* A shade over the grooves, where the lines lie, so they stay
+              readable on any palette. The label is left bright. */}
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background:
+                'radial-gradient(circle closest-side, transparent 38%, rgb(0 0 0 / 0.4) 48%, rgb(0 0 0 / 0.5) 100%)',
+            }}
+          />
+        </div>
+
+        {lines && (
+          <LyricWheel
+            lines={lines}
+            side={side}
+            view={browse.view}
+            sung={sung}
+            angle={angle}
+            move={browse.move}
+            sungEl={sungEl}
+            onPick={(line) => {
+              browse.release();
+              seekLyrics(line.timeMs);
+            }}
+          />
+        )}
 
         {result?.status === 'Plain' && (
           <div
-            className={`lyric-scroll-fade absolute inset-y-0 w-[340px] overflow-y-auto py-6 ${
-              left ? 'right-6' : 'left-6'
-            }`}
+            className="lyric-scroll-fade absolute inset-y-0 overflow-y-auto py-6"
+            style={{
+              [left ? 'left' : 'right']: TEXT_START,
+              width: DRAWER_WIDTH - TEXT_START - 24,
+            }}
           >
             <p className="mb-3 text-label tracking-wide text-cream-400 uppercase">
               {t('lyrics.plainOnly')}
@@ -155,9 +191,8 @@ export function LyricsDrawer({
 
         {quiet && (
           <div
-            className={`absolute top-1/2 -translate-y-1/2 ${left ? 'left-[80px]' : 'right-[80px]'} ${
-              left ? 'text-left' : 'text-right'
-            }`}
+            className={`absolute top-1/2 -translate-y-1/2 ${left ? 'text-left' : 'text-right'}`}
+            style={{ [left ? 'left' : 'right']: TEXT_START + 8 }}
           >
             <p
               className={`text-[16px] text-cream-200 ${
@@ -190,6 +225,9 @@ export function LyricsDrawer({
     </div>
   );
 }
+
+/** Where the lines start, from the drawer's outer edge. */
+const TEXT_START = CENTER_INSET + TEXT_RADIUS;
 
 /** The sources' names as people know them. */
 const SOURCES: Record<string, string> = {

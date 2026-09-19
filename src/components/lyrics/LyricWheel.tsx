@@ -1,73 +1,89 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from 'react';
 import type { DrawerSide } from '@/core/settings';
 import type { LyricLine } from '@/core/lyrics/activeLine';
-import { seekLyrics } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import {
-  CENTER_OUTSIDE,
-  TEXT_RADIUS,
-  lineAngle,
-  lineLook,
-  visibleRange,
-  wheelAngle,
-} from './arc';
+import { CENTER_INSET, TEXT_RADIUS, lineAngle, lineLook, visibleRange } from './arc';
+import type { Move } from './browse';
 import { LineText } from './LineText';
 import { ARRIVE_EASING, LOOK_MS, TURN_EASING, TURN_MS } from './motion';
-import { useLyricFrame } from './useLyricFrame';
 
 /**
- * The lines of a synced song as spokes of a record too big for the window.
- *
- * A zero-sized wheel sits at the record's centre, out past the drawer's outer
- * edge, and every line is placed on it once, at its own fixed angle. What
- * moves as the song goes is the wheel: one turn of `STEP_DEG` a line, on a long
- * settling curve, so the next line glides up onto the level. Only the lines
- * within `REACH` of the level exist at all — nine elements however long the
- * song — and a line coming into range is already at its angle, so the turn
- * carries it in rather than it appearing.
- *
- * A seek of more than a couple of lines does not turn the wheel through the
- * whole of the song. The wheel is simply there, and the lines fade in.
+ * The CSS transition for a turn of the wheel — and of the record, which turns
+ * with it — by how it moved: an ordinary turn, the longer wind back from a
+ * scroll, or nothing at all for a cut.
  */
-export function LyricWheel({ lines, side }: { lines: LyricLine[]; side: DrawerSide }) {
-  const activeEl = useRef<HTMLButtonElement | null>(null);
-  const { active, jumped } = useLyricFrame(lines, activeEl);
+export function turnTransition(move: Move): string {
+  if (move.kind === 'cut' || prefersReducedMotion()) return 'none';
+  const ms = move.kind === 'return' ? move.ms : TURN_MS;
+  return `transform ${ms}ms ${TURN_EASING}`;
+}
+
+/**
+ * The lines of a synced song as spokes of the record beside them.
+ *
+ * A zero-sized wheel sits at the record's centre and every line is placed on
+ * it once, at its own fixed angle. What moves is the wheel, turned by
+ * `angle` — the same angle the record is turned by, so the two go round as
+ * one. Only the lines within `REACH` of the one shown exist, nine elements
+ * however long the song, and a line coming into range is already at its
+ * angle, so the turn carries it in rather than it appearing.
+ *
+ * The line shown on the level is usually the one being sung, but a scroll
+ * can take the view elsewhere; the line being sung keeps its light wherever
+ * it is.
+ */
+export function LyricWheel({
+  lines,
+  side,
+  view,
+  sung,
+  angle,
+  move,
+  sungEl,
+  onPick,
+}: {
+  lines: LyricLine[];
+  side: DrawerSide;
+  /** The line on the level. */
+  view: number;
+  /** The line being sung. */
+  sung: number;
+  angle: number;
+  move: Move;
+  sungEl: RefObject<HTMLButtonElement | null>;
+  onPick: (line: LyricLine) => void;
+}) {
   const layer = useRef<HTMLDivElement | null>(null);
-  const range = visibleRange(active, lines.length);
+  const range = visibleRange(view, lines.length);
   const left = side === 'left';
 
-  // A jump fades the lines in where they now are, instead of turning to them.
+  // A cut fades the lines in where they now are, instead of turning to them.
   useLayoutEffect(() => {
-    if (!jumped || prefersReducedMotion()) return;
+    if (move.kind !== 'cut' || prefersReducedMotion()) return;
     layer.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: 260,
       easing: ARRIVE_EASING,
     });
-  }, [active, jumped]);
+  }, [view, move]);
 
   const wheel: CSSProperties = {
     position: 'absolute',
     top: '50%',
-    [left ? 'left' : 'right']: -CENTER_OUTSIDE,
+    [left ? 'left' : 'right']: CENTER_INSET,
     width: 0,
     height: 0,
-    transform: `rotate(${wheelAngle(active, side)}deg)`,
-    transition: jumped || prefersReducedMotion() ? 'none' : `transform ${TURN_MS}ms ${TURN_EASING}`,
+    transform: `rotate(${angle}deg)`,
+    transition: turnTransition(move),
   };
 
   return (
-    <div
-      ref={layer}
-      className="lyric-edge-fade absolute inset-0 overflow-hidden"
-      aria-hidden="true"
-    >
+    <div ref={layer} className="lyric-edge-fade absolute inset-0 overflow-hidden" aria-hidden="true">
       <div style={wheel}>
         {range &&
           lines.slice(range[0], range[1] + 1).map((line, k) => {
             const index = range[0] + k;
-            const offset = index - active;
-            const singing = offset === 0;
-            const look = lineLook(offset);
+            const singing = index === sung;
+            const look = lineLook(index - view);
             return (
               <div
                 key={index}
@@ -80,12 +96,12 @@ export function LyricWheel({ lines, side }: { lines: LyricLine[]; side: DrawerSi
                 }}
               >
                 <button
-                  ref={singing ? activeEl : undefined}
+                  ref={singing ? sungEl : undefined}
                   type="button"
                   tabIndex={-1}
                   data-line={index}
-                  onClick={() => seekLyrics(line.timeMs)}
-                  className={`block w-max max-w-[440px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
+                  onClick={() => onPick(line)}
+                  className={`block w-max max-w-[420px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
                     left ? 'text-left' : 'text-right'
                   } ${
                     singing

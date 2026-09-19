@@ -1,40 +1,42 @@
 /**
  * Where each line sits on the full view's wheel.
  *
- * The record is huge and mostly outside the drawer: its centre is past the
- * drawer's outer edge, the side away from the player. The lines are spokes of
- * that record, each a fixed angle further round than the one before, and the
- * whole wheel turns so the line being sung lies level. Past lines curve away
- * above it, the ones to come below.
+ * A record sits against the drawer's outer edge — the side away from the
+ * player — with its centre inside the drawer, so its label and the cover
+ * printed on it show. The lines are spokes of that record, starting just
+ * past the label and running out over the grooves, each a fixed angle round
+ * from the one before. The record and its spokes turn together, a line at a
+ * time, so the line being sung lies level: past lines curve away above it,
+ * the ones to come below.
  *
- * On the left the record comes in from the left and a spoke points right, as
- * one would draw it. On the right — where the drawer opens unless told
- * otherwise — it is the mirror image: the record comes in from the right, the
- * spokes point left, and every angle changes sign so that what is to come is
- * still below. The text itself is never mirrored; a line on the right is
- * anchored at its right-hand end instead, and reads left to right as ever.
+ * On the left the record is at the left and a spoke points right, as one
+ * would draw it. On the right — where the drawer opens unless told otherwise
+ * — it is the mirror image: the record at the right, spokes pointing left,
+ * every angle's sign changed so that what is to come is still below. The text
+ * is never mirrored; a line on the right is anchored at its right-hand end
+ * instead, and reads left to right as ever.
  */
 
 import type { DrawerSide } from '@/core/settings';
 
 /**
- * Degrees between one line and the next.
- *
- * Eight, not the twelve first drawn: at the text's radius twelve degrees put
- * lines 87px apart, and a drawer 412px tall showed two either side of the
- * level. At eight they are 58px apart and three show clearly, the fourth
- * fading at the edge.
+ * Degrees between one line and the next. Measured where the lines start, just
+ * past the label, twelve degrees is a line's height and a little more; they
+ * fan out from there.
  */
-export const STEP_DEG = 8;
+export const STEP_DEG = 12;
 /** Lines drawn on each side of the one being sung: nine in all. */
 export const REACH = 4;
 
-/** The record's radius. Most of it is outside the drawer. */
-export const DISC_RADIUS = 760;
-/** How far past the drawer's outer edge the record's centre is. */
-export const CENTER_OUTSIDE = 360;
-/** Where a line's inner end sits, measured from the centre. */
-export const TEXT_RADIUS = 420;
+/** The record's radius. */
+export const DISC_RADIUS = 300;
+/** How far inside the drawer's outer edge the record's centre is. */
+export const CENTER_INSET = 90;
+/**
+ * Where a line's inner end sits, measured from the centre: just past the
+ * label, which is 0.368 of the record across.
+ */
+export const TEXT_RADIUS = 150;
 
 /** Which way round the angles run: +1 on the left, −1 on the mirrored right. */
 function sign(side: DrawerSide): 1 | -1 {
