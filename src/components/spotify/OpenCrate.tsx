@@ -39,8 +39,23 @@ const COVER_FAILURES = {
  *
  * It opens and closes as one page, the way the sheets over it do: rising into
  * place while it fades in, and back down as it fades out. It grows from the
- * crate that was pressed, so it is still plain where it came from.
+ * crate that was pressed, and the records come out of that crate one after
+ * another into their places, so what you see is a crate emptying rather than
+ * a grid appearing.
  */
+
+/** How long one record takes to reach its place. */
+const FLIGHT_MS = 340;
+/** The gap between one record leaving and the next. */
+const STAGGER_MS = 26;
+/**
+ * How many records are staggered before the rest arrive together.
+ *
+ * A playlist of two hundred would otherwise take five seconds to finish
+ * unpacking, and the last record would be a separate event from the first
+ * rather than the end of the same one.
+ */
+const STAGGERED = 14;
 
 const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
@@ -99,6 +114,17 @@ interface OpenCrateProps {
   /** Where the crate was on screen, so the page can grow out of it. */
   origin: { x: number; y: number; width: number; height: number };
   onClose: () => void;
+}
+
+/** The transform that takes this element's box onto the crate's. */
+function ontoCrate(el: HTMLElement, origin: OpenCrateProps['origin']): string | null {
+  const box = el.getBoundingClientRect();
+  if (box.width === 0) return null;
+  // The crate is square and so is a record, so one ratio covers both axes.
+  const scale = origin.width / box.width;
+  const dx = origin.x + origin.width / 2 - (box.left + box.width / 2);
+  const dy = origin.y + origin.height / 2 - (box.top + box.height / 2);
+  return `translate(${dx}px, ${dy}px) scale(${scale})`;
 }
 
 /**
@@ -274,6 +300,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   /** Latched, so a second Escape or a double click cannot start a second close. */
   const shutting = useRef(false);
+  /** How many records have already been played in; the rest are new. */
+  const unpacked = useRef(0);
   const [closing, setClosing] = useState(false);
 
   /**
@@ -356,6 +384,42 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [requestClose, surface, coverImage, editing, setEditing]);
+
+  // The unpacking. A layout effect so the first frame is never the finished
+  // grid — by the time anything is painted the records are already back at the
+  // crate, waiting to leave it. Before the page's own entrance below, so each
+  // record is measured where it really is and not part-way through that.
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || prefersReducedMotion() || shutting.current) return;
+
+    const discs = [...grid.querySelectorAll<HTMLElement>('[data-record]')];
+    // Only the ones that have just arrived. A second page appended to the grid
+    // must not send the first page back into the crate to come out again.
+    const arriving = discs.slice(unpacked.current);
+    unpacked.current = discs.length;
+    // Not while editing. Edit mode reads the rest of the crate at once, and up
+    // to three hundred records flying out of a sleeve together is not an
+    // unpacking, it is the window stopping.
+    if (editing) return;
+
+    for (const [i, el] of arriving.entries()) {
+      const from = ontoCrate(el, origin);
+      if (!from) continue;
+      el.animate(
+        [
+          { transform: from, opacity: 0 },
+          { transform: 'none', opacity: 1 },
+        ],
+        {
+          duration: FLIGHT_MS,
+          delay: Math.min(i, STAGGERED) * STAGGER_MS,
+          easing: EASING,
+          fill: 'backwards',
+        },
+      );
+    }
+  }, [tracks, origin, editing]);
 
   // Opening. A layout effect so the first frame painted is already the start
   // of it, never the finished page followed by a jump back.
