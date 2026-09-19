@@ -12,6 +12,7 @@ vi.mock('./lastfm', () => ({
 
 import { artistCandidates, similarTracks } from './lastfm';
 import { SPOTIFY_SEARCH_BUDGET, forgetStationRest, resolveNextTracks } from './index';
+import { SpotifyError } from '@/core/providers/spotifyApi';
 
 /**
  * When the station is allowed to stop asking, and when it is not.
@@ -110,6 +111,67 @@ describe('a search that is refused part way through', () => {
 
     await fill(searchSpotify);
     expect(searchSpotify.mock.calls.length).toBeLessThanOrEqual(SPOTIFY_SEARCH_BUDGET);
+  });
+});
+
+describe('Spotify saying to slow down', () => {
+  const many = Array.from({ length: 30 }, (_, at) => ({
+    artist: `Artist${at}`,
+    title: `Song${at}`,
+    matchScore: 1 - at * 0.01,
+  }));
+  const slowDown = () => new SpotifyError('Spotify is asking this app to slow down.', 429);
+
+  it('ends the searching for the rest of the fill at the first 429', async () => {
+    // Every search after it would be refused by the shut gate, one after
+    // another, and the first past it when it opens would shut it again.
+    asked.mockResolvedValue(many);
+    const searchSpotify = vi.fn(async () => {
+      throw slowDown();
+    });
+    await fill(searchSpotify);
+    expect(searchSpotify).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps going after a refusal that was not a 429', async () => {
+    // A timeout says nothing about the next search.
+    asked.mockResolvedValue(many);
+    const searchSpotify = vi.fn(async () => {
+      throw new SpotifyError('Spotify did not answer in time.', 408);
+    });
+    await fill(searchSpotify);
+    expect(searchSpotify.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('asks nothing more of Spotify for the other seeds either', async () => {
+    // One seed's candidates hit the 429. The other has none, and would go on
+    // to the genre lookup — four more searches. Seeds are tried in a weighted
+    // random order, so the genre lookup may come first, before any 429; what
+    // must never happen is anything reaching Spotify after one.
+    const other: TrackMetadata = { ...seed, id: 'other', title: 'Other', artist: 'Else' };
+    asked.mockImplementation(async (artist: string) => (artist === seed.artist ? many : []));
+    const calls: string[] = [];
+    const searchSpotify = vi.fn(async () => {
+      calls.push('search');
+      throw slowDown();
+    });
+    const tracksLikeArtist = vi.fn(async () => {
+      calls.push('genre');
+      return [];
+    });
+    for (let run = 0; run < 20; run++) {
+      calls.length = 0;
+      await resolveNextTracks({
+        seeds: [seed, other],
+        library: [],
+        played: [],
+        excludeArtists: new Set(),
+        spotifyAvailable: true,
+        searchSpotify,
+        tracksLikeArtist,
+      });
+      expect(calls.slice(calls.indexOf('search') + 1)).toEqual([]);
+    }
   });
 });
 

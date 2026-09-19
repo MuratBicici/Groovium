@@ -4,6 +4,7 @@ import type { TrackMetadata } from '@/core/types';
 import { artistCandidates, similarTracks, type SimilarTrack } from './lastfm';
 import { drawWeighted, orderSeeds, similarityWeight, weightedShuffle } from './sampling';
 import { log } from '@/platform/log';
+import { SpotifyError } from '@/core/providers/spotifyApi';
 
 export { hasApiKey, setApiKey, clearApiKey, openAccountPage } from './lastfm';
 export type { SimilarTrack } from './lastfm';
@@ -73,6 +74,24 @@ export interface SearchPurse {
    * the station to sleep for half an hour.
    */
   refused?: boolean;
+  /**
+   * Whether Spotify itself said to slow down — a 429 — in this fill.
+   *
+   * Once it has, nothing else in the fill asks it anything: not the rest of
+   * the candidates, not the genre lookup, not the next seed's top-up. They
+   * would only be refused by the transport's shut gate one after another,
+   * spending the purse and filling the log to say the same thing, and the
+   * first one past the gate when it opens would be refused again and shut it
+   * for twice as long. Other refusals — a timeout, a dropped connection — do
+   * not set this: the next search may well get through.
+   */
+  throttled?: boolean;
+}
+
+/** A lookup refused rather than answered, noted on the fill's purse. */
+function noteRefusal(purse: SearchPurse, err: unknown): void {
+  purse.refused = true;
+  if (err instanceof SpotifyError && err.status === 429) purse.throttled = true;
 }
 
 /**
@@ -407,7 +426,7 @@ export async function resolveViaSpotify(
   const spentOn = new Map<string, number>();
 
   for (const candidate of attempts) {
-    if (picked.length >= limit || purse.left <= 0) break;
+    if (picked.length >= limit || purse.left <= 0 || purse.throttled) break;
 
     const wanted = matchKey(candidate.artist, candidate.title);
     if (takenKeys.has(wanted)) continue;
@@ -432,7 +451,7 @@ export async function resolveViaSpotify(
       results = await searchSpotify(`track:${candidate.title} artist:${candidate.artist}`);
     } catch (err) {
       log('warn', 'station', 'a search was refused', err);
-      purse.refused = true;
+      noteRefusal(purse, err);
       continue;
     }
 
@@ -517,7 +536,7 @@ async function quietly<T>(
     return await lookup();
   } catch (err) {
     log('warn', 'station', `the ${tier} lookup failed`, err);
-    purse.refused = true;
+    noteRefusal(purse, err);
     return [];
   }
 }
@@ -548,7 +567,7 @@ async function deeperCandidatesFor(
   const byArtist = await quietly('artist', () => artistCandidates(seed.artist), purse);
   if (byArtist.length > 0) return { kind: 'names', names: byArtist };
 
-  if (!options.spotifyAvailable) return NOTHING;
+  if (!options.spotifyAvailable || purse.throttled) return NOTHING;
   // Four searches in one go, so it is only worth starting if there are four to
   // spend. Charged before rather than after: the requests happen whatever the
   // answer, and a purse that only pays for successes is not one.
