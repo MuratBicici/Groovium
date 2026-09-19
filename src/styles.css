@@ -647,9 +647,8 @@ body {
 /*
  * `content-visibility: auto` is paint containment as well as the skipping, and
  * paint containment clips every descendant to this box. That is invisible
- * until something is meant to leave it: the record slid out of its sleeve and
- * was cut off dead straight at the card's edge, with the part outside simply
- * not drawn.
+ * until something is meant to leave it: a record lifted on hover was cut off
+ * dead straight at the card's edge, with the part outside simply not drawn.
  *
  * So the containment is dropped from the one card being pointed at. Only one
  * card can be, the browser has already drawn its contents by then, and
@@ -658,7 +657,6 @@ body {
  * which is the whole reason it is here.
  */
 .groove-record:hover,
-.groove-record.groove-sliding,
 .groove-record.groove-held {
   content-visibility: visible;
 }
@@ -674,18 +672,6 @@ body {
   cursor: grabbing;
   transition: none;
   box-shadow: 0 14px 28px rgb(0 0 0 / 0.45);
-}
-
-/*
- * A card whose record is on its way back in from outside it.
- *
- * Raised for exactly that span, for the reason a hovered one is: the part of
- * the record still outside the card would otherwise be cut across by the next
- * card along, and the card on the end of a row would behave differently from
- * the rest.
- */
-.groove-record.groove-sliding {
-  z-index: 1;
 }
 
 /*
@@ -717,34 +703,6 @@ body {
  */
 .groove-sleeve-empty {
   visibility: hidden;
-}
-
-/*
- * The record that has been taken out, lying across its sleeve.
- *
- * Only a shadow and a nudge. The disc itself is a `VinylDisc`, the same
- * drawing the platter shows, and nothing here may touch it — the flight to the
- * deck scales this element's box onto the platter's, so a filter or a border
- * would land the record at the wrong apparent size. What this adds is the one
- * thing a flat drawing cannot say on its own: that it is on top of the card
- * rather than printed on it.
- */
-.groove-taken {
-  filter: drop-shadow(-3px 2px 4px rgb(0 0 0 / calc(0.55 * var(--shade))));
-  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.groove-sleeve:hover .groove-taken {
-  transform: translateX(11px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .groove-taken {
-    transition: none;
-  }
-  .groove-sleeve:hover .groove-taken {
-    transform: none;
-  }
 }
 
 /*

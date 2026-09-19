@@ -63,84 +63,16 @@ const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 /** Into the crate: gathering speed rather than easing off, which is a drop. */
 const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 
-/** Diameter of a record in the grid. The cells are wider than this on purpose. */
-const DISC_SIZE = 140;
+/**
+ * The narrowest a card may be, and so the smallest a record in the grid is.
+ *
+ * The record is as wide as its card, whatever the columns come to; see
+ * `useCardWidth`.
+ */
+const MIN_CARD = 132;
 
 /** How far the pointer travels before a press becomes a lift rather than a click. */
 const DRAG_THRESHOLD = 5;
-
-/** How long a record takes to slide back into its sleeve when it leaves the deck. */
-const RESHELVE_MS = 380;
-/** How far out of the mouth a record starts when it slides back in. */
-const RESHELVE_FROM = 74;
-
-/**
- * How far out of a sleeve a record has to be to be clear of it, in px.
- *
- * Half a card plus half a record. It is where the hand lets go of one it is
- * putting back and where one being taken out has got to before it flies —
- * because it is the only place a record drawn over the card and the same
- * record drawn behind it look identical. Anywhere nearer, one of them is lying
- * across artwork the other is hidden by, and the swap shows as the record
- * jumping between in front of the sleeve and inside it.
- */
-const CLEAR_OF_SLEEVE = 152;
-
-/**
- * The curve's control point, out beyond that.
- *
- * Beyond rather than short of it, so the record comes back leftwards into the
- * handover instead of arriving from the left across the sleeve's face. What it
- * does last is what the slide does first, which is what makes the two one move.
- */
-const HAND_BACK_VIA = { x: 250, y: -14 };
-
-/**
- * Where the lift bends on the way out, relative to the mouth it starts from.
- *
- * The mirror of the way back. A record that has just been drawn sideways out
- * of a sleeve is travelling sideways; sending it straight at the pointer from
- * there is a corner in the middle of one gesture. It carries on out and turns,
- * which is the arc a hand actually makes picking something up.
- */
-const LIFT_VIA = { x: 96, y: -34 };
-
-/**
- * A record sliding the last stretch into its sleeve.
- *
- * A fixed distance, so a fixed time; the arm's rule is about reaching, and
- * this is not a reach. Longer than the pull because it is arriving rather than
- * setting off, and it has to settle.
- */
-const SLIDE_MS = 150;
-
-/**
- * Drawing one out of the mouth, before the hand or the flight takes it.
- *
- * Also a fixed distance and so a fixed time, and short: this is the part a
- * hand is waiting through — the pointer is already moving and the record is
- * not following yet — so it is a decisive tug rather than something to watch.
- * The lift that follows is a reach and is paced by the arm's own rule, which
- * at the distances a drag actually covers runs at about the same rate as this
- * does, so the seam is a change of pace rather than a stop.
- */
-const PULL_MS = 90;
-
-/**
- * Both slides settle at the end, for opposite reasons.
- *
- * In, the record picks up where the hand let go and comes to rest at home,
- * which is where it is going.
- *
- * Out, it is drawn out of the mouth and stops there — because what happens
- * next is a *reversal*. The flight to the deck is an `easeInOutCubic` arc, so
- * it starts from a standstill and heads back the other way; a slide that
- * arrived at the mouth still accelerating rightwards handed over to something
- * moving leftwards at zero, which is a cut wherever the pixels happen to line
- * up. Turning round is the one place a pause belongs.
- */
-const SLIDE_IN_EASING = 'cubic-bezier(0.15, 0.75, 0.35, 1)';
-const SLIDE_OUT_EASING = 'cubic-bezier(0.32, 0.72, 0.35, 1)';
 
 /** An empty sleeve saying so. */
 const SHAKE_MS = 360;
@@ -245,6 +177,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   /** Where each record was laid out last time, by key, for the settling animation. */
   const laidOut = useRef(new Map<string, { x: number; y: number }>());
   const gridInnerRef = useRef<HTMLDivElement | null>(null);
+  const cardWidth = useCardWidth(gridInnerRef);
 
   const keys = useMemo(() => recordKeys(tracks.map((track) => track.id)), [tracks]);
   const copies = useMemo(() => {
@@ -278,27 +211,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
    *
    * The hand lets go the instant the record lands, and a Spotify track is not
    * `currentTrack` until the provider has started it — routinely a second
-   * later. In that gap the sleeve believed its record was back, slid it in
-   * from the mouth, and hid it again the moment playback began. This holds the
+   * later. In that gap the sleeve believed its record was back, showed it, and
+   * hid it again the moment playback began. This holds the
    * sleeve empty across the gap, and lets go if the track never starts, which
    * is the one case where the record really should come back.
    */
   const [handedOver, setHandedOver] = useState<string | null>(null);
-  /**
-   * A record the hand has just let go of at the mouth of its sleeve.
-   *
-   * The hand carries records in a layer above the whole window, which is right
-   * until one starts going in: a record entering a sleeve passes behind the
-   * printed face, and nothing drawn on top of everything can. So the hand stops
-   * at the mouth, still moving, and the sleeve's own record — which is behind
-   * its artwork, where it belongs — covers the last stretch and is occluded
-   * properly on the way.
-   *
-   * `key` because the same record can be put back twice and the second time
-   * has to re-run: the offsets would compare equal and nothing would happen.
-   */
-  const [returning, setReturning] = useState<Returning | null>(null);
-  const returns = useRef(0);
   const deliver = useCallback(
     (taken: TrackMetadata) => {
       setHandedOver(taken.id);
@@ -309,11 +227,14 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
   );
 
   /**
-   * Take a record out of its sleeve.
+   * Pick a record up off its sleeve.
    *
    * Nothing happens until the pointer has actually travelled: a press that
    * does not move is a click, and lifting the record on `pointerdown` would
    * make every click look like a fumble.
+   *
+   * The record lies on top of its sleeve, so it is simply lifted from where it
+   * is — the same as on the spotlight shelves — and put back the same way.
    *
    * The listeners go on the window rather than on the card. Pointer capture
    * would do as well for the moving, but where the record is set down is in
@@ -324,74 +245,42 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       const homeEl = sleeve.disc;
       if (down.button !== 0 || !homeEl) return;
       const from = { x: down.clientX, y: down.clientY };
-      /** Where the hand is, which keeps moving while the record is coming out. */
-      let at = from;
-      let pulling = false;
       let holding = false;
-      let letGo: 'up' | 'cancel' | null = null;
-
-      const take = () => {
-        holding = true;
-        grab({
-          track,
-          // Measured after the pull, so it is the record at the mouth rather
-          // than the record in the sleeve. The `forwards` fill is still holding
-          // it there at this point, which is what makes that true.
-          homeEl,
-          // A record is smaller in a sleeve than on the deck and the hand draws
-          // it at the deck's size, so it starts scaled to the sleeve and shrinks
-          // from there — rather than jumping to full size and then shrinking.
-          homeSize: DISC_SIZE,
-          pointer: at,
-          // It has just been pulled clear and is still travelling: the lift
-          // carries on from that rather than starting again from nothing, and
-          // bends the way it was already going before turning to the hand.
-          alreadyMoving: true,
-          liftVia: LIFT_VIA,
-          visiting: {
-            deckEl: platterEl(),
-            onDelivered: deliver,
-            // Home is entered through the mouth on the right, so the way back
-            // curves round to that side rather than crossing straight in.
-            homeApproach: HAND_BACK_VIA,
-            handOverAt: CLEAR_OF_SLEEVE,
-            onReturned: (back) =>
-              setReturning({ id: track.id, x: back.x, y: back.y, key: ++returns.current }),
-          },
-        });
-        // Let go of before the record was even out: the press is over, so the
-        // hold is told immediately and puts it straight back.
-        if (letGo === 'up') release();
-        else if (letGo === 'cancel') cancel();
-      };
 
       const move = (e: PointerEvent) => {
-        at = { x: e.clientX, y: e.clientY };
+        const at = { x: e.clientX, y: e.clientY };
         if (holding) {
           moveTo(at.x, at.y);
           return;
         }
-        if (pulling) return;
         if (Math.hypot(at.x - from.x, at.y - from.y) < DRAG_THRESHOLD) return;
-        pulling = true;
+        holding = true;
         // The card that was pressed is told, so the `click` still to come from
         // this same press knows it was a drag and does not also play the track.
         sleeve.lifted();
-        // The record comes out of the mouth before the hand has it. Reaching
-        // into the sleeve for it looked like the record passing through its own
-        // cover, because that is what was being drawn.
-        sleeve.pullOut(take, true);
+        grab({
+          track,
+          homeEl,
+          // A record is smaller here than on the deck and the hand draws it at
+          // the deck's size, so it starts scaled to the card and grows from
+          // there — rather than jumping to full size.
+          homeSize: homeEl.getBoundingClientRect().width,
+          pointer: at,
+          visiting: { deckEl: platterEl(), onDelivered: deliver },
+        });
       };
 
       const drop = (e: PointerEvent) => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', drop);
         window.removeEventListener('pointercancel', drop);
-        if (!pulling) return;
-        letGo = e.type === 'pointerup' ? 'up' : 'cancel';
         if (!holding) return;
-        if (letGo === 'up') release();
-        else cancel();
+        if (e.type === 'pointerup') {
+          moveTo(e.clientX, e.clientY);
+          release();
+        } else {
+          cancel();
+        }
       };
 
       window.addEventListener('pointermove', move);
@@ -873,7 +762,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           // Positioned, so each card's `offsetLeft` and `offsetTop` are measured
           // from here — the grid's content, which scrolls with the cards.
           className="relative grid gap-3 pt-0.5"
-          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))' }}
+          style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${MIN_CARD}px, 1fr))` }}
         >
           {(order ?? tracks.map((_, at) => at)).map((index) => {
             const track = tracks[index];
@@ -888,14 +777,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
                 copies={copies.get(track.id) ?? 1}
                 onReorder={(down, card) => reorder(down, index, key, card)}
                 onTakeOut={(card) => void takeOut(track, card)}
-                // Two questions, not one. Whether the sleeve is empty, and
-                // whether it is empty *because the record is on the deck* —
-                // only the second earns the slide back in, because the first is
-                // also true of a record in somebody's hand, which the hand is
-                // already putting back itself.
+                discSize={cardWidth}
                 absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
-                onDeck={track.id === onDeck || track.id === handedOver}
-                returning={returning?.id === track.id ? returning : null}
                 onCarry={carry}
                 onPlay={(disc) => {
                   flyToPlatter(disc, track);
@@ -1000,18 +883,38 @@ function HeaderIcon({
 }
 
 /**
- * One record, half out of its sleeve, with what it is written underneath.
+ * How wide a card in the grid is, kept up to date as the drawer resizes.
  *
- * The sleeve is here because a bare disc is not a picture of anything. Forty
- * records drawn as forty black circles are forty copies of one drawing — the
- * cover is the only thing that tells them apart, and on a record the cover is
- * a label an inch across. So the cover is printed at full size as the sleeve,
- * the record lies across it, and the two together fill a square cell instead
- * of leaving its four corners empty, which is what a grid of circles does.
+ * Measured off the first card rather than worked out from the columns, so it
+ * is what the browser actually laid out. The record is drawn at exactly that,
+ * which is what lets it cover its sleeve the way it does on the shelves.
+ */
+function useCardWidth(grid: React.RefObject<HTMLDivElement | null>): number {
+  const [width, setWidth] = useState(MIN_CARD);
+  useLayoutEffect(() => {
+    const el = grid.current;
+    if (!el) return;
+    const measure = () => {
+      const card = el.querySelector<HTMLElement>('[data-record]');
+      if (card) setWidth(Math.floor(card.offsetWidth));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [grid]);
+  return width;
+}
+
+/**
+ * One record lying on its sleeve, with what it is written underneath.
  *
- * It is also the shelf's own object one step further on: out there a sleeve
- * keeps its record hidden until you reach for it, and in here the record has
- * been taken out. Same card, same cardboard, same light.
+ * The same card as the spotlight shelves: the cover printed at full size as the
+ * sleeve, and the record on top of it at the same size, so the cover shows in
+ * the corners and on the label. A record in a sleeve had to be drawn out of the
+ * mouth before anything could take it and slid back in when it came home, and
+ * that in-and-out on every play was more motion than a list of songs wants.
+ * Lying on top, it is simply lifted off and set back down.
  */
 function Record({
   track,
@@ -1020,9 +923,8 @@ function Record({
   copies,
   onReorder,
   onTakeOut,
+  discSize,
   absent,
-  onDeck,
-  returning,
   onCarry,
   onPlay,
 }: {
@@ -1035,12 +937,10 @@ function Record({
   copies: number;
   onReorder: (down: React.PointerEvent, card: HTMLElement) => void;
   onTakeOut: (card: HTMLElement | null) => void;
-  /** The record is not in the sleeve — on the deck, or in somebody's hand. */
+  /** The record's diameter: the card's width. */
+  discSize: number;
+  /** The record is not on its sleeve — on the deck, or in somebody's hand. */
   absent: boolean;
-  /** It is on the deck, which is the only way out that ends in a way back. */
-  onDeck: boolean;
-  /** The hand has just let go of it at the mouth, from this far out. */
-  returning: Returning | null;
   onCarry: (track: TrackMetadata, down: React.PointerEvent, sleeve: Sleeve) => void;
   onPlay: (disc: HTMLElement) => void;
 }) {
@@ -1049,126 +949,6 @@ function Record({
   const button = useRef<HTMLButtonElement | null>(null);
   /** Whether the press being finished turned into a lift. */
   const lifted = useRef(false);
-  const was = useRef(onDeck);
-
-  /**
-   * Tidying up after the record has gone, once it is safe to be seen doing it.
-   *
-   * The slide out of the sleeve leaves two marks behind: a `forwards` fill
-   * holding the record a card's width to the right, and the class that let it
-   * be drawn out there at all. Undoing either while the record is still on
-   * screen would move it or clip it. By the time the sleeve reads as empty the
-   * record is in the air, drawn by something else, and neither shows.
-   */
-  useLayoutEffect(() => {
-    if (!absent) return;
-    button.current?.classList.remove('groove-sliding');
-    for (const a of disc.current?.getAnimations() ?? []) a.cancel();
-  }, [absent]);
-
-  /**
-   * Coming back off the deck, the record slides into its sleeve.
-   *
-   * Only that direction is animated here. Going the other way it is either
-   * flying to the platter or being carried there by hand, and in both cases
-   * something else is already drawing the record in transit — an entrance for
-   * the sleeve's own copy on top of that would be two of the same record.
-   */
-  useLayoutEffect(() => {
-    const leaving = was.current;
-    if (leaving === onDeck) return;
-    was.current = onDeck;
-    const el = disc.current;
-    if (onDeck || !el || prefersReducedMotion()) return;
-    el.animate(
-      [
-        { transform: `translateX(${RESHELVE_FROM}px)`, opacity: 0 },
-        { transform: 'none', opacity: 1 },
-      ],
-      { duration: RESHELVE_MS, easing: EASING },
-    );
-  }, [onDeck]);
-
-  /**
-   * The last stretch, from wherever the hand let go to home.
-   *
-   * The card drops its containment for the length of it. `content-visibility`
-   * clips everything to the card's box, and the record starts this outside it
-   * — without this it would be invisible until it was already halfway in,
-   * which is the fault this whole handover exists to fix, moved along by a few
-   * pixels. It is raised for the same span so the next card along does not cut
-   * across the part still outside.
-   *
-   * The class goes on by hand rather than through state. It is the same
-   * statement as the animation beside it — this record is in transit — and a
-   * render for it would re-run the whole card twice for something no other
-   * part of the card is interested in.
-   */
-  useLayoutEffect(() => {
-    const el = disc.current;
-    const card = button.current;
-    if (!returning || !el || !card || prefersReducedMotion()) return;
-    card.classList.add('groove-sliding');
-    const run = el.animate(
-      [{ transform: `translate(${returning.x}px, ${returning.y}px)` }, { transform: 'none' }],
-      // Quicker than a record coming back off the deck, and picking up where
-      // the hand left off rather than starting from rest.
-      { duration: SLIDE_MS, easing: SLIDE_IN_EASING },
-    );
-    const done = () => card.classList.remove('groove-sliding');
-    run.finished.then(done, done);
-    return () => {
-      run.cancel();
-      done();
-    };
-  }, [returning]);
-
-  /**
-   * Draw the record out of the mouth, then hand it to whatever asked for it.
-   *
-   * Nothing may take a record straight from where it sits, because where it
-   * sits is behind the printed face. A click used to launch the flight from
-   * there and the record appeared to leap out through the front of its own
-   * sleeve; a drag used to lift it from there and it came through the artwork
-   * into the hand. Both draw it out of the mouth first now, exactly as far as
-   * a record being put back is when the hand lets go of it, and only then does
-   * anything else touch it. Which is why a click flies right before it flies
-   * left: that is the direction a record leaves a sleeve.
-   *
-   * `fill: 'forwards'` so whatever takes it next measures the record where it
-   * has got to rather than where it started. Nothing is undone here — putting
-   * the card's containment back or cancelling the fill would move the record,
-   * or clip it away, in a frame the thing taking it has not been committed in
-   * yet. The tidying waits until the sleeve reads empty; see above.
-   */
-  const pullOut = (then: () => void, handingOn: boolean) => {
-    const el = disc.current;
-    const card = button.current;
-    if (!el) return;
-    if (!card || prefersReducedMotion()) {
-      then();
-      return;
-    }
-    card.classList.add('groove-sliding');
-    const out = el.animate(
-      [{ transform: 'none' }, { transform: `translateX(${CLEAR_OF_SLEEVE}px)` }],
-      {
-        duration: PULL_MS,
-        // Into a hand that carries straight on: no easing at all, so the record
-        // is still moving at the same rate when it changes hands. Into a
-        // flight, which turns round and goes back the other way: settle, since
-        // that is the one place a pause belongs.
-        easing: handingOn ? 'linear' : SLIDE_OUT_EASING,
-        fill: 'forwards',
-      },
-    );
-    // Not if the crate closed underneath it: an animation cancelled by an
-    // unmount lands here too, and there is nothing left to take.
-    const go = () => {
-      if (el.isConnected) then();
-    };
-    out.finished.then(go, go);
-  };
 
   return (
     <button
@@ -1193,7 +973,6 @@ function Record({
         lifted.current = false;
         onCarry(track, e, {
           disc: disc.current,
-          pullOut,
           lifted: () => {
             lifted.current = true;
           },
@@ -1206,10 +985,9 @@ function Record({
         // dropped, and the `click` that follows it must not send it again.
         // In edit mode a press is for moving, never for playing.
         if (editing || absent || lifted.current) return;
-        const el = disc.current;
-        if (el) pullOut(() => onPlay(el), false);
+        if (disc.current) onPlay(disc.current);
       }}
-      className={`groove-record groove-sleeve relative flex flex-col rounded-md text-left ${
+      className={`groove-record groove-sleeve group relative flex flex-col rounded-md text-left ${
         editing ? 'cursor-grab' : ''
       }`}
     >
@@ -1240,28 +1018,10 @@ function Record({
         </span>
       )}
       <span className="relative aspect-square w-full">
-        {/* In the sleeve, not on it. Drawn before the print and therefore under
-            it, so the only part of it anyone sees is the crescent in the
-            opening; nothing clips it, so it has somewhere to go when it slides
-            out. `data-disc` is what the flight to the platter picks up and
-            scales, so it is the disc alone with nothing around it.
-            Centred by arithmetic rather than `top-1/2 -translate-y-1/2`: that
-            utility writes the `translate` property and the nudge on hover
-            writes `transform`, and both would apply. */}
-        <span aria-hidden="true" className="groove-sleeve-pocket absolute inset-0" />
-        <span
-          ref={disc}
-          data-disc
-          className={`groove-taken absolute right-0 ${absent ? 'groove-sleeve-empty' : ''}`}
-          style={{ width: DISC_SIZE, height: DISC_SIZE, top: `calc(50% - ${DISC_SIZE / 2}px)` }}
-        >
-          <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
-        </span>
         <span
           className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900"
-          // A wider cell than the shelf's wants a wider cut, or the opening
-          // reads as a chip in the corner rather than somewhere a hand goes.
-          style={{ ['--notch' as string]: '42px' }}
+          // No cut: nothing goes in or out of this sleeve.
+          style={{ ['--notch' as string]: '0px' }}
         >
           {track.coverArtUrl && (
             <img
@@ -1273,6 +1033,19 @@ function Record({
             />
           )}
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+        </span>
+        {/* On the sleeve, over it. `data-disc` is what the flight to the
+            platter picks up and scales, so it is the disc alone with nothing
+            around it. */}
+        <span
+          ref={disc}
+          data-disc
+          className={`absolute top-0 left-0 transition-transform duration-200 group-hover:-translate-y-0.5 motion-reduce:transition-none ${
+            absent ? 'groove-sleeve-empty' : ''
+          }`}
+          style={{ width: discSize, height: discSize }}
+        >
+          <VinylDisc size={discSize} coverArtUrl={track.coverArtUrl} />
         </span>
       </span>
       <span className="relative flex min-w-0 flex-col px-1.5 py-1 text-center">
@@ -1295,24 +1068,6 @@ function Record({
 interface Sleeve {
   /** The record where it sits, for measuring and for the flight to clone. */
   disc: HTMLElement | null;
-  /**
-   * Draw it out of the mouth and call back once it is clear.
-   *
-   * `handingOn` says whether something is going to carry straight on with the
-   * move. It decides whether the record comes to rest at the mouth or arrives
-   * there still travelling, which is the difference between one gesture and
-   * two.
-   */
-  pullOut: (then: () => void, handingOn: boolean) => void;
   /** This press has become a lift; the click that follows is not a play. */
   lifted: () => void;
-}
-
-/** A record the hand has let go of, and how far out of home it was. */
-interface Returning {
-  id: string;
-  x: number;
-  y: number;
-  /** Distinguishes one putting-back from the next of the same record. */
-  key: number;
 }
