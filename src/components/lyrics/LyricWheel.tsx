@@ -24,7 +24,7 @@ export function turnTransition(move: Move): string {
  * A zero-sized wheel sits at the record's centre and every line is placed on
  * it once, at its own fixed angle. What moves is the wheel, turned by
  * `angle` — the same angle the record is turned by, so the two go round as
- * one. Only the lines within `REACH` of the one shown exist, nine elements
+ * one. Only the lines within `REACH` of the one shown exist, seven elements
  * however long the song, and a line coming into range is already at its
  * angle, so the turn carries it in rather than it appearing.
  *
@@ -101,12 +101,12 @@ export function LyricWheel({
                   tabIndex={-1}
                   data-line={index}
                   onClick={() => onPick(line)}
-                  className={`block w-max max-w-[420px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
+                  className={`block w-max max-w-[400px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
                     left ? 'text-left' : 'text-right'
                   } ${
                     singing
-                      ? 'text-[20px] font-semibold text-cream-50 lyric-glow'
-                      : 'text-[16px] text-cream-200'
+                      ? 'text-[22px] font-semibold text-cream-50 lyric-glow'
+                      : 'text-[17px] text-cream-200'
                   }`}
                   style={{
                     opacity: look.opacity,

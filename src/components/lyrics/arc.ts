@@ -20,23 +20,33 @@
 import type { DrawerSide } from '@/core/settings';
 
 /**
- * Degrees between one line and the next. Measured where the lines start, just
- * past the label, twelve degrees is a line's height and a little more; they
- * fan out from there.
+ * Degrees between one line and the next. Where the lines start, just past the
+ * label, fourteen degrees is about two lines' height; they fan out from there
+ * across the grooves, two either side of the level in plain view.
  */
-export const STEP_DEG = 12;
-/** Lines drawn on each side of the one being sung: nine in all. */
-export const REACH = 4;
+export const STEP_DEG = 14;
+/**
+ * Lines drawn on each side of the one being sung: seven in all. The third
+ * either side is past the drawer's top and bottom by its outer end and is
+ * there to be turned in, not read.
+ */
+export const REACH = 3;
 
-/** The record's radius. */
-export const DISC_RADIUS = 300;
-/** How far inside the drawer's outer edge the record's centre is. */
-export const CENTER_INSET = 90;
+/**
+ * The record's radius: nearly the drawer's width. Its rim comes round a
+ * little short of the player's side, and the drawer is mostly record.
+ */
+export const DISC_RADIUS = 620;
+/**
+ * How far inside the drawer's outer edge the record's centre is: just inside,
+ * so half the label — and the cover on it — is in view.
+ */
+export const CENTER_INSET = 14;
 /**
  * Where a line's inner end sits, measured from the centre: just past the
  * label, which is 0.368 of the record across.
  */
-export const TEXT_RADIUS = 150;
+export const TEXT_RADIUS = 250;
 
 /** Which way round the angles run: +1 on the left, −1 on the mirrored right. */
 function sign(side: DrawerSide): 1 | -1 {

@@ -108,7 +108,9 @@ export function LyricsDrawer({
             </span>
           )}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
+        {/* On a dark pill: on the right the record's label is under these, and
+            it is whatever colour the cover is. */}
+        <div className="flex shrink-0 items-center gap-1 rounded-full bg-shell-900/60 p-0.5 backdrop-blur-sm">
           <IconButton label={t('lyrics.toCompact')} onPress={onCompact}>
             {/* Out of the drawer, into the player beside it. */}
             <path
@@ -151,7 +153,7 @@ export function LyricsDrawer({
             className="absolute inset-0 rounded-full"
             style={{
               background:
-                'radial-gradient(circle closest-side, transparent 38%, rgb(0 0 0 / 0.4) 48%, rgb(0 0 0 / 0.5) 100%)',
+                'radial-gradient(circle closest-side, transparent 37%, rgb(0 0 0 / 0.38) 42%, rgb(0 0 0 / 0.5) 100%)',
             }}
           />
         </div>
