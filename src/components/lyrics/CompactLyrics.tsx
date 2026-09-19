@@ -45,7 +45,21 @@ interface Geometry {
 /** Two lines of the sung line's largest size, and a little air. */
 const ACTIVE_HEIGHT = 44;
 const NEXT_HEIGHT = 18;
-const META_HEIGHT = 14;
+/**
+ * The title and artist's row: tall enough for the whole of the type, not for
+ * the type size. The words are truncated, and truncating is overflow hidden,
+ * so a line box cut to the type size cuts the tails off everything that has
+ * one — the ş in a Turkish title, the q in an artist's name.
+ */
+const META_HEIGHT = 18;
+/** The line box inside it, in ems of the type. */
+const META_LEADING = 1.6;
+/**
+ * How far the row hangs below the stage's foot, into the gap over the progress
+ * bar: the words belong to the bar more than to the stage, and read as a
+ * caption to it rather than as the last of the lyrics.
+ */
+const META_DROP = 6;
 
 /** The line to come's size against the line being sung's, for the move between them. */
 const NEXT_TO_SUNG = 12 / 16;
@@ -101,7 +115,7 @@ export function CompactLyrics({
         activeTop,
         activeHeight: ACTIVE_HEIGHT,
         nextTop: activeTop + ACTIVE_HEIGHT + 2,
-        metaTop: base.height - META_HEIGHT - 1,
+        metaTop: base.height - META_HEIGHT + META_DROP,
       });
     };
     measure();
@@ -220,8 +234,8 @@ export function CompactLyrics({
 
           {/* Title left, artist right, small, just over the progress bar. */}
           <div
-            className="absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px] leading-none"
-            style={{ top: geo.metaTop, height: META_HEIGHT }}
+            className="absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px]"
+            style={{ top: geo.metaTop, height: META_HEIGHT, lineHeight: META_LEADING }}
           >
             <span ref={titleText} className="min-w-0 truncate font-medium text-cream-300">
               {track?.title}
