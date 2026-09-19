@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 /// Whether NetEase is asked at all. Its endpoint is unofficial and may stop
@@ -240,6 +240,17 @@ impl Waterfall {
             )),
         }
     }
+}
+
+/// A field a source may send as `null`: read as its empty value. `default`
+/// alone covers a field that is missing, not one that is there and null — and
+/// one null among fifty search results failed the whole search.
+pub fn or_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
 
 /// The candidate nearest in length, within `PLAIN_GAP_MS`.
@@ -454,6 +465,7 @@ mod tests {
                 170_000,
             ),
             ("Flying Theme", "John Williams", "E.T.", 240_000),
+            ("iffy iffy", "LE SSERAFIM", "PUREFLOW pt.1", 129_500),
         ];
         tauri::async_runtime::block_on(async {
             for (title, artist, album, ms) in songs {

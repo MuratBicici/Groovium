@@ -14,7 +14,9 @@ use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
 use super::lrc::{parse_lrc, words_of};
-use super::{fetch, pick_nearest, Found, LyricLine, LyricsResult, Query, SYNCED_GAP_MS};
+use super::{
+    fetch, or_default, pick_nearest, Found, LyricLine, LyricsResult, Query, SYNCED_GAP_MS,
+};
 
 const SEARCH: &str = "https://music.163.com/api/cloudsearch/pc";
 const LYRIC: &str = "https://music.163.com/api/song/lyric";
@@ -27,20 +29,21 @@ struct SearchAnswer {
 
 #[derive(Deserialize, Debug)]
 struct SearchResult {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     songs: Vec<Song>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Song {
     pub id: u64,
+    #[serde(default, deserialize_with = "or_default")]
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub ar: Vec<Artist>,
     /// Length in milliseconds.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub dt: u32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub al: Option<Album>,
 }
 
@@ -66,17 +69,17 @@ impl Song {
 
 #[derive(Deserialize, Debug, Default)]
 struct LyricAnswer {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     lrc: Option<LyricBody>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     nolyric: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     uncollected: bool,
 }
 
 #[derive(Deserialize, Debug, Default)]
 struct LyricBody {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     lyric: String,
 }
 

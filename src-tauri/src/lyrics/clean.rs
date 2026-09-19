@@ -77,12 +77,33 @@ fn strip_brackets(title: &str) -> String {
     out
 }
 
+/// A title with a track number in front of it — "05. Song", "3 - Song" —
+/// without the number. A title that is only a number, or that starts with one
+/// as part of its name ("7 rings", "22"), is left alone: only digits followed
+/// by a dot, a dash or a bracket and a space count.
+fn without_track_number(title: &str) -> &str {
+    let trimmed = title.trim_start();
+    let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 || digits > 3 {
+        return title;
+    }
+    let rest = &trimmed[digits..];
+    for marker in [". ", " - ", ") ", "- "] {
+        if let Some(after) = rest.strip_prefix(marker) {
+            if !after.trim().is_empty() {
+                return after.trim_start();
+            }
+        }
+    }
+    title
+}
+
 /// A title as the lyrics sites are likely to have it.
 ///
 /// `"Cry For Me - Slowed + Reverb (feat. Bubi)"` becomes `"Cry For Me"`. A
 /// title that would be left with nothing is returned as it was.
 pub fn clean_title(title: &str) -> String {
-    let unbracketed = strip_brackets(title);
+    let unbracketed = strip_brackets(without_track_number(title));
 
     // " - Remastered 2011", " - Live at …": the first dashed part that
     // describes the recording ends the title.
@@ -152,6 +173,18 @@ fn artist_names(credit: &str) -> Vec<String> {
             .flat_map(|p| p.split(separator).map(str::to_string).collect::<Vec<_>>())
             .collect();
     }
+    // "LE SSERAFIM (르세라핌)": a name followed by the same name in another
+    // script. Both halves are names the artist goes by.
+    let parts: Vec<String> = parts
+        .iter()
+        .flat_map(|p| match (p.find('('), p.rfind(')')) {
+            (Some(open), Some(close)) if open < close => vec![
+                format!("{}{}", &p[..open], &p[close + 1..]),
+                p[open + 1..close].to_string(),
+            ],
+            _ => vec![p.clone()],
+        })
+        .collect();
     parts
         .iter()
         .map(|p| normalize(p))
@@ -200,6 +233,8 @@ mod tests {
         assert_eq!(clean_title("Song - Single Version"), "Song");
         assert_eq!(clean_title("Song - Sped Up"), "Song");
         assert_eq!(clean_title("Song feat. Someone"), "Song");
+        assert_eq!(clean_title("05. iffy iffy"), "iffy iffy");
+        assert_eq!(clean_title("3 - Song"), "Song");
     }
 
     #[test]
@@ -211,6 +246,11 @@ mod tests {
         assert_eq!(clean_title("Stay With Me"), "Stay With Me");
         assert_eq!(clean_title("Song - Remix"), "Song - Remix");
         assert_eq!(clean_title("Gülpembe"), "Gülpembe");
+        assert_eq!(clean_title("7 rings"), "7 rings");
+        assert_eq!(clean_title("22"), "22");
+        assert_eq!(clean_title("1999"), "1999");
+        // A year that is the title, not a track number in front of it.
+        assert_eq!(clean_title("1979 - Remastered 2012"), "1979");
     }
 
     #[test]
@@ -226,6 +266,19 @@ mod tests {
 
     #[test]
     fn recognises_the_same_song_written_differently() {
+        assert!(same_song(
+            "iffy iffy",
+            "LE SSERAFIM",
+            "05. iffy iffy",
+            "LE SSERAFIM (르세라핌)"
+        ));
+        // The name in brackets is a name too, for a credit written only in it.
+        assert!(same_song(
+            "iffy iffy",
+            "르세라핌",
+            "iffy iffy",
+            "LE SSERAFIM (르세라핌)"
+        ));
         assert!(same_song(
             "Get Lucky (feat. Pharrell Williams)",
             "Daft Punk, Pharrell Williams",

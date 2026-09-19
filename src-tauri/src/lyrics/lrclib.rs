@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
 use super::lrc::{parse_lrc, words_of};
-use super::{fetch, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
+use super::{fetch, or_default, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
 
 const API_ROOT: &str = "https://lrclib.net/api";
 
@@ -12,15 +12,15 @@ const API_ROOT: &str = "https://lrclib.net/api";
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Record {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub track_name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub artist_name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub album_name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub duration: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub instrumental: bool,
     pub plain_lyrics: Option<String>,
     pub synced_lyrics: Option<String>,
@@ -217,5 +217,12 @@ mod tests {
         let r: Record = serde_json::from_str(body).unwrap();
         assert_eq!(r.duration_ms(), 181_500);
         assert!(!r.has_synced());
+
+        // Nulls where values usually are, as LRCLIB sends for some records.
+        let sparse = r#"[{"id":2,"trackName":"T","artistName":"A","albumName":null,"duration":null,
+            "instrumental":null,"plainLyrics":null,"syncedLyrics":"[00:01.00]x"}]"#;
+        let rs: Vec<Record> = serde_json::from_str(sparse).unwrap();
+        assert_eq!(rs[0].duration_ms(), 0);
+        assert!(rs[0].has_synced());
     }
 }
