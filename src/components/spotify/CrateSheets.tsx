@@ -114,6 +114,65 @@ function Sheet({
   );
 }
 
+/** The side of the cover in the details sheet. */
+const THUMB = 72;
+
+/**
+ * The playlist's cover in the details sheet, which is also how it is changed.
+ *
+ * No button saying so: pointing at the cover dims it and shows a pencil, which
+ * is enough for a picture that is plainly the playlist's. The label is still
+ * there for a screen reader and as the tooltip. Without `onPress` — outside
+ * the app, with no file dialog — it is only a picture.
+ */
+function CoverThumb({
+  url,
+  label,
+  onPress,
+}: {
+  url: string | undefined;
+  label: string;
+  onPress?: () => void;
+}) {
+  const picture = (
+    <span
+      className="block overflow-hidden rounded-sm bg-shell-900 shadow-md ring-1 ring-[var(--color-edge)]"
+      style={{ width: THUMB, height: THUMB }}
+    >
+      {url && <img src={url} alt="" draggable={false} className="h-full w-full object-cover" />}
+    </span>
+  );
+  if (!onPress) return picture;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onPress}
+      className="group relative block rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brass-500"
+    >
+      {picture}
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 flex items-center justify-center rounded-sm bg-shell-900/60 text-cream-50 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          className="h-5 w-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M10.8 2.7l2.5 2.5L5.6 12.9 2.5 13.5l.6-3.1z" />
+          <path d="M9.4 4.1l2.5 2.5" />
+        </svg>
+      </span>
+    </button>
+  );
+}
+
 /** Spotify's limit on a playlist description. */
 const DESCRIPTION_MAX = 300;
 
@@ -153,50 +212,44 @@ export function DetailsSheet({
       <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
         {t('spotify.detailsTitle')}
       </p>
-      <div className="flex items-center gap-3">
-        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-sm bg-shell-900 shadow-md ring-1 ring-[var(--color-edge)]">
-          {playlist.coverArtUrl && (
-            <img src={playlist.coverArtUrl} alt="" draggable={false} className="h-full w-full object-cover" />
-          )}
-        </div>
-        <div className="flex min-w-0 flex-col items-start gap-1">
-          <p className="max-w-full truncate text-body text-cream-100">{playlist.name}</p>
-          {onCover && (
-            <button
-              type="button"
-              onClick={onCover}
-              className="rounded-full px-2 py-0.5 text-label tracking-wide text-brass-300 uppercase ring-1 ring-[var(--color-edge)] transition-colors hover:text-brass-200"
-            >
-              {t('spotify.changeCover')}
-            </button>
-          )}
+      <p className="truncate text-body text-cream-100">{playlist.name}</p>
+
+      {/* The cover on the left, the rest beside it: the cover is one of the
+          details, not a separate action above them. */}
+      <div className="flex items-start gap-3">
+        <CoverThumb
+          url={playlist.coverArtUrl}
+          label={t('spotify.changeCover')}
+          {...(onCover && { onPress: onCover })}
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-meta text-cream-400">{t('spotify.description')}</span>
+            <textarea
+              value={description}
+              maxLength={DESCRIPTION_MAX}
+              rows={3}
+              onChange={(e) => setDescription(e.target.value)}
+              className="resize-none groove-inset rounded px-2 py-1 text-meta leading-snug text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+            />
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => setIsPublic(e.target.checked)}
+              className="mt-0.5 accent-[var(--color-brass-500)]"
+            />
+            <span className="flex flex-col">
+              <span className="text-meta text-cream-100">{t('spotify.public')}</span>
+              <span className="text-label leading-snug text-cream-400">{t('spotify.publicHint')}</span>
+            </span>
+          </label>
         </div>
       </div>
       {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
-
-      <label className="flex flex-col gap-1">
-        <span className="text-meta text-cream-400">{t('spotify.description')}</span>
-        <textarea
-          value={description}
-          maxLength={DESCRIPTION_MAX}
-          rows={3}
-          onChange={(e) => setDescription(e.target.value)}
-          className="resize-none groove-inset rounded px-2 py-1 text-meta leading-snug text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
-        />
-      </label>
-
-      <label className="flex cursor-pointer items-start gap-2">
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-          className="mt-0.5 accent-[var(--color-brass-500)]"
-        />
-        <span className="flex flex-col">
-          <span className="text-meta text-cream-100">{t('spotify.public')}</span>
-          <span className="text-label leading-snug text-cream-400">{t('spotify.publicHint')}</span>
-        </span>
-      </label>
 
       <div className="mt-1 flex justify-end gap-2">
         <button
