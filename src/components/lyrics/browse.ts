@@ -14,31 +14,28 @@
 export const HOLD_MS = 5_000;
 
 /**
- * How much wheel movement is a line.
+ * How long after a tick the next one counts.
  *
- * A mouse wheel notch is about 100 in Chromium, so a notch is a line and the
- * rest carries over. A touchpad sends many small amounts, which add up the
- * same way — so a slow drag moves a line at a time instead of flinging.
+ * A wheel notch is one line, whatever the notch's size — some mice send 100,
+ * some send 53, a touchpad sends a stream of small ones, and a line each was
+ * asked for. A touchpad sending sixty of those a second would fly through the
+ * song, so a tick only counts once this long has passed since the last one
+ * that did.
  */
-export const PX_PER_LINE = 90;
+export const TICK_MS = 110;
 
 export interface Wheel {
-  /** Wheel movement not yet enough for a line, carried to the next event. */
-  carry: number;
+  /** When the last tick that counted was, on the clock the caller passes. */
+  at: number;
 }
 
 /**
- * Whole lines to move for a wheel movement, and what is left over. Positive
- * is down the song, towards the lines to come.
+ * Lines to move for one wheel event: one, in the direction scrolled, unless
+ * the last one was too recent to count.
  */
-export function linesFor(wheel: Wheel, deltaY: number): { lines: number; wheel: Wheel } {
-  // A change of direction starts afresh rather than first paying off what was
-  // carried the other way.
-  const carried = Math.sign(deltaY) === Math.sign(wheel.carry) ? wheel.carry : 0;
-  const total = carried + deltaY;
-  // `|| 0`: a small upward movement is no lines, not minus nought of them.
-  const lines = Math.trunc(total / PX_PER_LINE) || 0;
-  return { lines, wheel: { carry: total - lines * PX_PER_LINE } };
+export function linesFor(wheel: Wheel, deltaY: number, now: number): { lines: number; wheel: Wheel } {
+  if (deltaY === 0 || now - wheel.at < TICK_MS) return { lines: 0, wheel };
+  return { lines: deltaY > 0 ? 1 : -1, wheel: { at: now } };
 }
 
 /**

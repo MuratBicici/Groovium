@@ -20,6 +20,18 @@
 /** Drawn at twice the platter disc, so a 2x display gets it pixel for pixel. */
 const SIZE = 304;
 
+/**
+ * As large as it is ever drawn.
+ *
+ * The lyrics record is 1240px across, and the platter's 304px texture
+ * stretched over it is the blockiness that showed. A texture is kept for as
+ * long as the window is open, so the cap is about memory: at 1024 the image
+ * is about four megabytes decoded, where 1280 was six and a half, and the
+ * difference on screen is a fifth of a pixel of softness on a record this
+ * size — against four times the blockiness it replaces.
+ */
+const MAX_SIZE = 1024;
+
 /** Fractions of the disc's radius: label edge out to the smooth margin. */
 const INNER = 0.39;
 const OUTER = 0.95;
@@ -48,21 +60,35 @@ function seeded(seed: number): () => number {
   };
 }
 
-let cached: string | null | undefined;
+/** One texture per size drawn, kept for the life of the window. */
+const cache = new Map<number, string | null>();
 
-export function grooveTexture(): string | null {
-  if (cached !== undefined) return cached;
+/**
+ * The texture at a given side in pixels, drawn once per size.
+ *
+ * The rings are spaced in pixels of the canvas, so a larger one is not the
+ * same picture enlarged: it is a finer field on a bigger record, which is what
+ * a bigger record has.
+ */
+export function grooveTexture(side = SIZE): string | null {
+  const px = Math.max(SIZE, Math.min(MAX_SIZE, Math.round(side)));
+  const had = cache.get(px);
+  if (had !== undefined) return had;
+  const keep = (texture: string | null) => {
+    cache.set(px, texture);
+    return texture;
+  };
   // Node has no canvas, and the tests import the tree.
-  if (typeof document === 'undefined') return (cached = null);
+  if (typeof document === 'undefined') return keep(null);
 
   const canvas = document.createElement('canvas');
-  canvas.width = SIZE;
-  canvas.height = SIZE;
+  canvas.width = px;
+  canvas.height = px;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return (cached = null);
+  if (!ctx) return keep(null);
 
-  const centre = SIZE / 2;
-  const radius = SIZE / 2;
+  const centre = px / 2;
+  const radius = px / 2;
   const random = seeded(0x9e3779b9);
 
   ctx.lineWidth = 1;
@@ -94,5 +120,5 @@ export function grooveTexture(): string | null {
     ctx.stroke();
   }
 
-  return (cached = canvas.toDataURL('image/png'));
+  return keep(canvas.toDataURL('image/png'));
 }

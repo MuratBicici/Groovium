@@ -24,9 +24,14 @@ export function turnTransition(move: Move): string {
  * A zero-sized wheel sits at the record's centre and every line is placed on
  * it once, at its own fixed angle. What moves is the wheel, turned by
  * `angle` — the same angle the record is turned by, so the two go round as
- * one. Only the lines within `REACH` of the one shown exist, seven elements
- * however long the song, and a line coming into range is already at its
- * angle, so the turn carries it in rather than it appearing.
+ * one.
+ *
+ * Every line of the song is drawn, however long it is. Only the few near the
+ * level can be seen; the rest are transparent and take no pointer. Drawing
+ * only those few was quicker, and it meant a fast scroll could reach a line
+ * before it existed — blank for a frame, which is exactly the moment somebody
+ * is looking. A few hundred spans that are never repainted cost less than
+ * that does.
  *
  * The line shown on the level is usually the one being sung, but a scroll
  * can take the view elsewhere; the line being sung keeps its light wherever
@@ -79,48 +84,50 @@ export function LyricWheel({
   return (
     <div ref={layer} className="lyric-edge-fade absolute inset-0 overflow-hidden" aria-hidden="true">
       <div style={wheel}>
-        {range &&
-          lines.slice(range[0], range[1] + 1).map((line, k) => {
-            const index = range[0] + k;
-            const singing = index === sung;
-            const look = lineLook(index - view);
-            return (
-              <div
-                key={index}
-                className="absolute top-0 left-0"
+        {lines.map((line, index) => {
+          const singing = index === sung;
+          const near = range !== null && index >= range[0] && index <= range[1];
+          const look = lineLook(index - view);
+          return (
+            <div
+              key={index}
+              className="absolute top-0 left-0"
+              style={{
+                transformOrigin: '0 0',
+                transform: left
+                  ? `rotate(${lineAngle(index, side)}deg) translate(${TEXT_RADIUS}px, -50%)`
+                  : `rotate(${lineAngle(index, side)}deg) translate(${-TEXT_RADIUS}px, -50%) translateX(-100%)`,
+                // Out of reach: still there, still in its place, but nothing
+                // to see and nothing to press.
+                visibility: near ? 'visible' : 'hidden',
+              }}
+            >
+              <button
+                ref={singing ? sungEl : undefined}
+                type="button"
+                tabIndex={-1}
+                data-line={index}
+                onClick={() => onPick(line)}
+                className={`block w-max max-w-[400px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
+                  left ? 'text-left' : 'text-right'
+                } ${
+                  singing
+                    ? 'text-[22px] font-semibold text-cream-50 lyric-glow'
+                    : 'text-[17px] text-cream-200'
+                }`}
                 style={{
-                  transformOrigin: '0 0',
-                  transform: left
-                    ? `rotate(${lineAngle(index, side)}deg) translate(${TEXT_RADIUS}px, -50%)`
-                    : `rotate(${lineAngle(index, side)}deg) translate(${-TEXT_RADIUS}px, -50%) translateX(-100%)`,
+                  opacity: near ? look.opacity : 0,
+                  transform: `scale(${look.scale})`,
+                  transformOrigin: left ? 'left center' : 'right center',
+                  transitionDuration: `${LOOK_MS}ms`,
+                  transitionTimingFunction: ARRIVE_EASING,
                 }}
               >
-                <button
-                  ref={singing ? sungEl : undefined}
-                  type="button"
-                  tabIndex={-1}
-                  data-line={index}
-                  onClick={() => onPick(line)}
-                  className={`block w-max max-w-[400px] cursor-pointer rounded-md px-2 py-1 leading-snug transition-[opacity,transform,color] hover:!opacity-80 ${
-                    left ? 'text-left' : 'text-right'
-                  } ${
-                    singing
-                      ? 'text-[22px] font-semibold text-cream-50 lyric-glow'
-                      : 'text-[17px] text-cream-200'
-                  }`}
-                  style={{
-                    opacity: look.opacity,
-                    transform: `scale(${look.scale})`,
-                    transformOrigin: left ? 'left center' : 'right center',
-                    transitionDuration: `${LOOK_MS}ms`,
-                    transitionTimingFunction: ARRIVE_EASING,
-                  }}
-                >
-                  <LineText line={line} singing={singing} />
-                </button>
-              </div>
-            );
-          })}
+                <LineText line={line} singing={singing} />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

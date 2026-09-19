@@ -32,7 +32,7 @@ export function useBrowse(count: number, sung: number, song: string | undefined)
     });
   }
 
-  const wheel = useRef<Wheel>({ carry: 0 });
+  const wheel = useRef<Wheel>({ at: 0 });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sungNow = useRef(sung);
   useEffect(() => {
@@ -42,14 +42,11 @@ export function useBrowse(count: number, sung: number, song: string | undefined)
 
   const onWheel = useCallback(
     (deltaY: number) => {
-      const step = linesFor(wheel.current, deltaY);
+      const step = linesFor(wheel.current, deltaY, performance.now());
       wheel.current = step.wheel;
       // Every scroll, even one short of a line, restarts the wait.
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        wheel.current = { carry: 0 };
-        setAway(null);
-      }, HOLD_MS);
+      timer.current = setTimeout(() => setAway(null), HOLD_MS);
       if (step.lines !== 0) {
         setAway((current) => scrollTo(current, sungNow.current, step.lines, count));
       }
@@ -59,7 +56,6 @@ export function useBrowse(count: number, sung: number, song: string | undefined)
 
   const release = useCallback(() => {
     clearTimeout(timer.current);
-    wheel.current = { carry: 0 };
     setAway(null);
   }, []);
 

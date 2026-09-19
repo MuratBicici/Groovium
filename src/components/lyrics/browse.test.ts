@@ -1,32 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_LINE, RETURN_REACH, linesFor, moveBetween, scrollTo, shownLine } from './browse';
+import { RETURN_REACH, TICK_MS, linesFor, moveBetween, scrollTo, shownLine } from './browse';
 
-describe('wheel movement into lines', () => {
-  it('makes a mouse notch one line, carrying the rest', () => {
-    const { lines, wheel } = linesFor({ carry: 0 }, 100);
-    expect(lines).toBe(1);
-    expect(wheel.carry).toBe(100 - PX_PER_LINE);
+describe('a wheel tick', () => {
+  it('is one line, whatever the notch is worth', () => {
+    expect(linesFor({ at: 0 }, 100, 1000).lines).toBe(1);
+    expect(linesFor({ at: 0 }, 6, 1000).lines).toBe(1);
+    expect(linesFor({ at: 0 }, -53, 1000).lines).toBe(-1);
   });
 
-  it('adds up small touchpad movements into lines', () => {
-    let wheel = { carry: 0 };
+  it('remembers when it counted, so the next one can be too soon', () => {
+    const first = linesFor({ at: 0 }, 100, 1000);
+    expect(first.wheel.at).toBe(1000);
+    expect(linesFor(first.wheel, 100, 1000 + TICK_MS - 1).lines).toBe(0);
+    expect(linesFor(first.wheel, 100, 1000 + TICK_MS).lines).toBe(1);
+  });
+
+  it('holds a touchpad to one line a tick rather than a line an event', () => {
+    // A touchpad sends an event about every 16ms; a second of scrolling is
+    // the lines a second's worth of ticks allows, not sixty.
+    let wheel = { at: 0 };
     let moved = 0;
-    for (let i = 0; i < 9; i++) {
-      const step = linesFor(wheel, 20);
+    const events = [];
+    for (let ms = 100; ms < 1100; ms += 16) events.push(ms);
+    for (const ms of events) {
+      const step = linesFor(wheel, 12, ms);
       moved += step.lines;
       wheel = step.wheel;
     }
-    expect(moved).toBe(Math.trunc((9 * 20) / PX_PER_LINE));
+    // A second of scrolling is a second's worth of ticks, not sixty events.
+    expect(moved).toBeLessThanOrEqual(Math.ceil(1000 / TICK_MS));
+    expect(moved).toBeGreaterThanOrEqual(Math.floor(1000 / TICK_MS) - 1);
+    expect(moved).toBeLessThan(events.length / 4);
   });
 
-  it('starts afresh when the direction changes', () => {
-    const { lines } = linesFor({ carry: 80 }, -20);
-    expect(lines).toBe(0);
-    expect(linesFor({ carry: 80 }, -20).wheel.carry).toBe(-20);
-  });
-
-  it('moves up the song for an upward scroll', () => {
-    expect(linesFor({ carry: 0 }, -200).lines).toBe(-2);
+  it('is nothing at all for a wheel that did not move', () => {
+    expect(linesFor({ at: 0 }, 0, 5000).lines).toBe(0);
   });
 });
 

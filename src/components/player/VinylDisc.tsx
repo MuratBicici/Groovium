@@ -65,7 +65,9 @@ export function VinylDisc({
   const label = Math.round(size * labelRatio);
   const spindle = Math.max(2, Math.round(size * 0.05));
   const detailed = size >= DETAILED_FROM;
-  const texture = detailed ? grooveTexture() : null;
+  // Twice the size it is drawn at, so a 2x display has it pixel for pixel —
+  // capped inside `grooveTexture`, which is what the huge lyrics record gets.
+  const texture = detailed ? grooveTexture(size * 2) : null;
 
   // Every radial gradient here says `closest-side`, which is the difference
   // between a percentage meaning what it reads as and meaning something 41%
