@@ -8,7 +8,7 @@ import { useT } from '@/core/i18n';
  * point the icon lookup starts missing in Turkish and every button turns into
  * the library. The id is the id now; the label is looked up from it.
  */
-export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings';
+export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings' | 'lyrics';
 
 const ICONS: Record<PanelId, React.ReactNode> = {
   library: <path d="M4 5v14M8 5v14M12 6l6 13" strokeLinecap="round" />,
@@ -24,6 +24,15 @@ const ICONS: Record<PanelId, React.ReactNode> = {
       fill="currentColor"
       stroke="none"
     />
+  ),
+  // A speech line with a note: words to a song. The panel is a development
+  // build's alone for now.
+  lyrics: (
+    <>
+      <path d="M4 6h10M4 10h10M4 14h6" strokeLinecap="round" />
+      <circle cx="17" cy="17" r="2" />
+      <path d="M19 17V9l2 1" strokeLinecap="round" strokeLinejoin="round" />
+    </>
   ),
   settings: (
     <>

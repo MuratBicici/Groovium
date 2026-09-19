@@ -43,6 +43,7 @@ export const en = {
   'panel.playlists': 'Playlists',
   'panel.spotify': 'Spotify',
   'panel.settings': 'Settings',
+  'panel.lyrics': 'Lyrics',
 
   // Transport
   'transport.shuffle': 'Shuffle',

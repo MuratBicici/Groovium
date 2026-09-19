@@ -8,6 +8,7 @@ mod keyring;
 mod lastfm;
 mod library;
 mod logging;
+mod lyrics;
 mod media;
 mod metadata;
 mod playlists;
@@ -57,6 +58,7 @@ fn main() {
         .manage(shell::ClickArea::default())
         .manage(shell::Placekeeper::default())
         .manage(visualizer::Running::default())
+        .manage(lyrics::LyricsCache::default())
         .setup(|app| {
             // Before anything is shown. The window has a frame of its own that
             // this app draws over, and the corners are where that shows.
@@ -129,6 +131,7 @@ fn main() {
             lastfm::lastfm_open_account,
             lastfm::lastfm_similar_tracks,
             lastfm::lastfm_artist_candidates,
+            lyrics::get_lyrics,
             audio::audio_backend_available,
             shell::set_window_box,
             shell::set_click_area,

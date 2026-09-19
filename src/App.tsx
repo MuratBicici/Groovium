@@ -13,6 +13,7 @@ import { WindowGlow } from '@/components/player/WindowGlow';
 import { CoverTheme } from '@/components/player/CoverTheme';
 import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { LyricsPanel } from '@/components/lyrics/LyricsPanel';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -46,6 +47,7 @@ const PANEL_IDS = {
   library: 'groovium-library',
   playlists: 'groovium-playlists',
   settings: 'groovium-settings',
+  lyrics: 'groovium-lyrics',
 } as const;
 
 /**
@@ -454,6 +456,14 @@ export default function App() {
             onPickColour={setPickingColour}
             onShowWhatsNew={summary ? () => setReopened(true) : undefined}
           />
+          {/* A test bench for synced lyrics. Development builds only. */}
+          {import.meta.env.DEV && (
+            <LyricsPanel
+              id={PANEL_IDS.lyrics}
+              open={shown === 'lyrics'}
+              onClose={() => setOverlay('none')}
+            />
+          )}
         </div>
 
         {/* Always reachable, including while an overlay is open. */}
@@ -489,6 +499,14 @@ export default function App() {
                 open={drawerOpen}
                 onToggle={() => setDrawerOpen(!drawerOpen)}
                 controls={DRAWER_ID}
+              />
+            )}
+            {import.meta.env.DEV && isTauri() && (
+              <PanelButton
+                panel="lyrics"
+                open={shown === 'lyrics'}
+                onToggle={() => toggle('lyrics')}
+                controls={PANEL_IDS.lyrics}
               />
             )}
             <PanelButton

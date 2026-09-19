@@ -44,6 +44,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'panel.playlists': 'Çalma listeleri',
   'panel.spotify': 'Spotify',
   'panel.settings': 'Ayarlar',
+  'panel.lyrics': 'Şarkı sözleri',
 
   'transport.shuffle': 'Karıştır',
   'transport.previous': 'Önceki',
