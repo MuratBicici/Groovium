@@ -41,6 +41,10 @@ use tauri::State;
 
 /// Whether NetEase is asked at all. Its endpoint is unofficial and may stop
 /// answering at any time; see `netease.rs`. Off here switches it off entirely.
+///
+/// On by the project's own decision, with no setting for it: it is what finds
+/// timed lyrics for much of what LRCLIB lacks. PRIVACY.md says that the song's
+/// title and first artist go to NetEase when lyrics are on.
 const NETEASE_ENABLED: bool = true;
 
 /// Every request's limit. A place that has not answered by then is passed

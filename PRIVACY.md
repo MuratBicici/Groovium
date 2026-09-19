@@ -3,9 +3,9 @@
 Groovium has no servers, no accounts of its own, no analytics and no telemetry.
 Nothing about you or how you use it is sent to the people who make it.
 
-It does talk to three outside services. One of them it contacts on its own; the
-other two only once you have set them up yourself. This page says which, when,
-and what goes to each.
+It does talk to a few outside services. One of them it contacts on its own; the
+others only once you have set them up or turned them on yourself. This page
+says which, when, and what goes to each.
 
 ## What it contacts
 
@@ -41,6 +41,20 @@ Infinite play is off until you give it a Last.fm API key. Once it is on, the
 artist and title of tracks you play are sent to `ws.audioscrobbler.com` to find
 similar songs. Nothing is scrobbled and no Last.fm account is involved. See
 [Last.fm's privacy policy](https://www.last.fm/legal/privacy).
+
+### LRCLIB and NetEase — only while lyrics are on
+
+Lyrics are off until you press the lyrics button. While they are on, the title,
+artist, album and length of the song that is playing are sent to `lrclib.net`,
+an open lyrics database, to find its lyrics. If LRCLIB has no timed lyrics for
+it, the title (with things like "Remastered" or "feat." taken off) and the first
+artist are also sent to `music.163.com`, NetEase Cloud Music, a music service
+based in China. Groovium uses the same address NetEase's own web player uses; it
+is not a published API. See [LRCLIB](https://lrclib.net) and
+[NetEase Cloud Music](https://music.163.com).
+
+Nothing is sent while lyrics are off. The lyrics found are kept in memory while
+the app is open and are not written anywhere.
 
 ## What stays on your computer
 
