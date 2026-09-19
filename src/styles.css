@@ -706,6 +706,23 @@ body {
 }
 
 /*
+ * The dimmed backdrop behind a sheet over an open crate, thinning to nothing
+ * at all four edges.
+ *
+ * Cut off square, it drew a hard line where the crate meets the window's frame
+ * and the edge light — a second box inside the first. Two gradients, one
+ * across and one down, intersected: each edge fades on its own and the
+ * corners fade from both.
+ */
+.groove-sheet-backdrop {
+  --fade: 28px;
+  mask-image:
+    linear-gradient(to right, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent),
+    linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  mask-composite: intersect;
+}
+
+/*
  * A soft fade at the bottom of a list that scrolls, present only while there
  * is more of it to see.
  *

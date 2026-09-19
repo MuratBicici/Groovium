@@ -50,7 +50,7 @@ function Sheet({
         type="button"
         aria-label={t('common.cancel')}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
+        className="groove-sheet-backdrop absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
       />
       <div
         role="dialog"
