@@ -28,4 +28,15 @@ describe('the line being sung', () => {
   it('stays on the last line to the end', () => {
     expect(activeLine(lines, 999_999)).toBe(3);
   });
+
+  it('finds the syllable being sung within a line the same way', () => {
+    const words = [
+      { timeMs: 8750, text: '문' },
+      { timeMs: 8860, text: '을 ' },
+      { timeMs: 9080, text: '열' },
+    ];
+    expect(activeLine(words, 8700)).toBe(-1);
+    expect(activeLine(words, 8900)).toBe(1);
+    expect(activeLine(words, 9080)).toBe(2);
+  });
 });

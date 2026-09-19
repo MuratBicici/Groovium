@@ -28,6 +28,7 @@
 mod clean;
 mod lrc;
 mod lrclib;
+mod merge;
 mod netease;
 mod script;
 
@@ -60,9 +61,22 @@ pub const SYNCED_GAP_MS: u32 = 4_000;
 /// How far it may be and still be taken for its words alone.
 pub const PLAIN_GAP_MS: u32 = 10_000;
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricLine {
+    pub time_ms: u32,
+    pub text: String,
+    /// The line in pieces — syllables or words — each with the moment it is
+    /// sung, when some source times them. Joined, they are `text` exactly.
+    /// Empty when only the line is timed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub words: Vec<Syllable>,
+}
+
+/// A piece of a line and when it is sung.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Syllable {
     pub time_ms: u32,
     pub text: String,
 }
@@ -176,22 +190,32 @@ pub async fn get_lyrics(
 async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
     let mut w = Waterfall::default();
     if let Some(done) = w.offer(lrclib::exact(q, &q.title, "lrclib:get").await) {
-        return Ok((done, true));
+        return Ok((with_syllables(q, done).await, true));
     }
     if q.clean_title != q.title {
         if let Some(done) = w.offer(lrclib::exact(q, &q.clean_title, "lrclib:get-clean").await) {
-            return Ok((done, true));
+            return Ok((with_syllables(q, done).await, true));
         }
     }
+    // Already given its syllables from the results it chose among.
     if let Some(done) = w.offer(lrclib::search(q).await) {
         return Ok((done, true));
     }
     if NETEASE_ENABLED {
         if let Some(done) = w.offer(netease::find(q).await) {
-            return Ok((done, true));
+            return Ok((with_syllables(q, done).await, true));
         }
     }
     w.finish()
+}
+
+/// Synced lines found without their syllables' timings, given them from
+/// LRCLIB's search when a syllable-at-a-time record of the song lines up.
+async fn with_syllables(q: &Query, mut lookup: LyricsLookup) -> LyricsLookup {
+    if let LyricsResult::Synced(lines) = lookup.result {
+        lookup.result = LyricsResult::Synced(lrclib::syllables_for(q, lines).await);
+    }
+    lookup
 }
 
 /// The search so far: the best answers that did not end it, and whether a
@@ -360,6 +384,7 @@ mod tests {
         LyricsResult::Synced(vec![LyricLine {
             time_ms: 0,
             text: "x".into(),
+            ..Default::default()
         }])
     }
 
@@ -397,6 +422,7 @@ mod tests {
             LyricsResult::Synced(vec![LyricLine {
                 time_ms: 0,
                 text: text.into(),
+                ..Default::default()
             }]),
             via,
         )
@@ -410,6 +436,7 @@ mod tests {
             LyricsResult::Synced(vec![LyricLine {
                 time_ms: 0,
                 text: "君の声が聞こえる".into(),
+                ..Default::default()
             }]),
             "netease",
         );
@@ -436,6 +463,7 @@ mod tests {
             .map(|i| LyricLine {
                 time_ms: i * 100,
                 text: "문".into(),
+                ..Default::default()
             })
             .collect();
         found(LyricsResult::Synced(lines), via)
@@ -588,7 +616,11 @@ mod tests {
                 match answer {
                     Ok((lookup, settled)) => {
                         let kind = match &lookup.result {
-                            LyricsResult::Synced(l) => format!("Synced ({} lines)", l.len()),
+                            LyricsResult::Synced(l) => format!(
+                                "Synced ({} lines, {} with syllables)",
+                                l.len(),
+                                l.iter().filter(|x| !x.words.is_empty()).count()
+                            ),
                             LyricsResult::Plain(_) => "Plain".into(),
                             LyricsResult::Instrumental => "Instrumental".into(),
                             LyricsResult::NotFound => "NotFound".into(),

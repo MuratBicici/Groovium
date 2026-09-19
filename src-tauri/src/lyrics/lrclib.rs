@@ -3,8 +3,11 @@
 use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
-use super::lrc::{parse_lrc, words_of};
-use super::{fetch, flaw, or_default, pick_nearest, Found, LyricsResult, Query, SYNCED_GAP_MS};
+use super::lrc::{fragmented, parse_lrc, words_of};
+use super::merge::with_syllables;
+use super::{
+    fetch, flaw, or_default, pick_nearest, Found, LyricLine, LyricsResult, Query, SYNCED_GAP_MS,
+};
 
 const API_ROOT: &str = "https://lrclib.net/api";
 
@@ -81,14 +84,65 @@ pub async fn exact(q: &Query, title: &str, via: &'static str) -> Result<Option<F
 
 /// A search on the cleaned title and first artist, and failing that on the two
 /// as free text. Only records that are this song are considered.
+///
+/// Whole lines that are chosen are given their syllables' timings from a
+/// syllable-at-a-time record of the same song in the same results, when
+/// there is one that lines up.
 pub async fn search(q: &Query) -> Result<Option<Found>, String> {
+    let records = search_records(q).await?;
+    Ok(choose(&records, q).map(|r| {
+        let mut found = found(r, q, "lrclib:search");
+        if let LyricsResult::Synced(lines) = found.result {
+            found.result = LyricsResult::Synced(add_syllables(lines, &records, q));
+        }
+        found
+    }))
+}
+
+async fn search_records(q: &Query) -> Result<Vec<Record>, String> {
     let artist = primary_artist(&q.artist);
-    let mut records =
-        run_search(&[("track_name", &q.clean_title), ("artist_name", artist)]).await?;
-    if records.is_empty() {
-        records = run_search(&[("q", &format!("{artist} {}", q.clean_title))]).await?;
+    let records = run_search(&[("track_name", &q.clean_title), ("artist_name", artist)]).await?;
+    if !records.is_empty() {
+        return Ok(records);
     }
-    Ok(choose(&records, q).map(|r| found(r, q, "lrclib:search")))
+    run_search(&[("q", &format!("{artist} {}", q.clean_title))]).await
+}
+
+/// Syllable timings for lines found elsewhere — LRCLIB's exact match or
+/// NetEase — from LRCLIB's search. Costs one request, and anything that goes
+/// wrong leaves the lines as they came.
+pub async fn syllables_for(q: &Query, lines: Vec<LyricLine>) -> Vec<LyricLine> {
+    match search_records(q).await {
+        Ok(records) => add_syllables(lines, &records, q),
+        Err(e) => {
+            log::warn!("no syllable timings: {e}");
+            lines
+        }
+    }
+}
+
+/// The lines with each syllable timed, from the first syllable-at-a-time
+/// record of this song — nearest in length first — that lines up with them.
+/// Lines that already have their pieces, or are in pieces themselves, are
+/// left alone.
+pub fn add_syllables(lines: Vec<LyricLine>, records: &[Record], q: &Query) -> Vec<LyricLine> {
+    if lines.iter().any(|l| !l.words.is_empty()) || fragmented(&lines) {
+        return lines;
+    }
+    let mut candidates: Vec<(u32, Vec<LyricLine>)> = records
+        .iter()
+        .filter(|r| same_song(&q.title, &q.artist, &r.track_name, &r.artist_name))
+        .filter(|r| r.duration_ms().abs_diff(q.duration_ms) <= SYNCED_GAP_MS)
+        .filter_map(|r| {
+            let parsed = parse_lrc(r.synced_lyrics.as_deref()?);
+            fragmented(&parsed).then(|| (r.duration_ms().abs_diff(q.duration_ms), parsed))
+        })
+        .collect();
+    candidates.sort_by_key(|(gap, _)| *gap);
+    candidates
+        .iter()
+        .find_map(|(_, fragments)| with_syllables(&lines, fragments))
+        .unwrap_or(lines)
 }
 
 async fn run_search(params: &[(&str, &str)]) -> Result<Vec<Record>, String> {
@@ -233,6 +287,69 @@ mod tests {
             .synced_lyrics
             .as_deref()
             .is_some_and(|s| s.contains("worth"))));
+    }
+
+    fn syllable_record(duration: f64) -> Record {
+        let mut r = record("Song", "Band", duration, true);
+        let body: String = (0..30)
+            .map(|i| {
+                format!(
+                    "[00:{:02}.00]la
+",
+                    i + 1
+                )
+            })
+            .collect();
+        r.synced_lyrics = Some(body);
+        r
+    }
+
+    fn la_lines() -> Vec<LyricLine> {
+        parse_lrc(
+            &(0..30)
+                .map(|i| {
+                    format!(
+                        "[00:{:02}.00]la
+",
+                        i + 1
+                    )
+                })
+                .collect::<String>(),
+        )
+        .into_iter()
+        .map(|mut l| {
+            l.text = "la".into();
+            l
+        })
+        .collect()
+    }
+
+    #[test]
+    fn gives_whole_lines_their_syllables_from_a_record_of_the_same_take() {
+        let q = query("Song", "Band", 180_000);
+        let lines = parse_lrc("[00:01.00]la la");
+        let with = add_syllables(lines.clone(), &[syllable_record(180.0)], &q);
+        assert_eq!(with[0].words.len(), 2);
+
+        // A syllable record of another take keeps different time.
+        let other = add_syllables(lines, &[syllable_record(180.0 + 20.0)], &q);
+        assert!(other[0].words.is_empty());
+    }
+
+    #[test]
+    fn leaves_lines_that_already_have_their_pieces_alone() {
+        let q = query("Song", "Band", 180_000);
+        let mut lines = parse_lrc("[00:01.00]<00:01.00>la <00:01.40>la");
+        let before = lines.clone();
+        lines = add_syllables(lines, &[syllable_record(180.0)], &q);
+        assert_eq!(lines, before);
+
+        // Nor are lines that are in pieces themselves given more.
+        let fragments = la_lines();
+        assert_eq!(
+            add_syllables(fragments.clone(), &[syllable_record(180.0)], &q),
+            fragments
+        );
     }
 
     #[test]

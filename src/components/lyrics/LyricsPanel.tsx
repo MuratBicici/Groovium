@@ -17,6 +17,11 @@ import { LyricsClock } from '@/core/lyrics/clock';
 
 /** Marks the line being sung. Swapped by hand, not rendered, so it costs no re-render. */
 const ACTIVE = ['font-bold', 'text-green-400', 'bg-white/10'];
+/**
+ * A syllable of the line being sung that has not been sung yet. Dimmed, and
+ * lit as it is reached — a syllable at a time, where a source times them.
+ */
+const UNSUNG = 'opacity-35';
 
 type Status =
   | { kind: 'idle' }
@@ -81,12 +86,16 @@ export function LyricsPanel({
     ? status.lookup.result.data
     : null;
 
-  // Every frame while open: the clock to the counter, and the line to the list
-  // when — only when — it changes.
+  // Every frame while open: the clock to the counter, and the line and its
+  // syllables to the list when — only when — they change.
   useEffect(() => {
     if (!open) return;
     let frame = 0;
     let shown = -2;
+    /** How far into the current line's syllables has been lit: −1 for none. */
+    let lit = -1;
+    const syllablesOf = (index: number) =>
+      list.current?.children[index]?.querySelectorAll<HTMLElement>('[data-syllable]') ?? [];
     const tick = () => {
       const ms = clock.current.at(performance.now());
       if (counter.current) counter.current.textContent = formatMs(ms);
@@ -96,11 +105,29 @@ export function LyricsPanel({
           // The button inside each item, which carries the text colour the
           // mark has to replace.
           const items = list.current.children;
-          if (shown >= 0) items[shown]?.firstElementChild?.classList.remove(...ACTIVE);
+          if (shown >= 0) {
+            items[shown]?.firstElementChild?.classList.remove(...ACTIVE);
+            for (const el of syllablesOf(shown)) el.classList.remove(UNSUNG);
+          }
           const now = index >= 0 ? items[index]?.firstElementChild : undefined;
           now?.classList.add(...ACTIVE);
           now?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // A new line starts unsung, and lights as it goes.
+          if (index >= 0) for (const el of syllablesOf(index)) el.classList.add(UNSUNG);
           shown = index;
+          lit = -1;
+        }
+        const words = index >= 0 ? lines[index]?.words : undefined;
+        if (words) {
+          const reached = activeLine(words, ms);
+          if (reached !== lit) {
+            const spans = syllablesOf(index);
+            // Forward as the song goes, or back after a seek within the line.
+            for (let k = 0; k < spans.length; k++) {
+              spans[k]?.classList.toggle(UNSUNG, k > reached);
+            }
+            lit = reached;
+          }
         }
       }
       frame = requestAnimationFrame(tick);
@@ -187,7 +214,17 @@ export function LyricsPanel({
                   <span className="mr-2 font-mono text-label text-cream-400">
                     {formatMs(line.timeMs)}
                   </span>
-                  {line.text || '♪'}
+                  {line.words
+                    ? line.words.map((word, w) => (
+                        <span
+                          key={w}
+                          data-syllable
+                          className="transition-opacity duration-150 ease-out"
+                        >
+                          {word.text}
+                        </span>
+                      ))
+                    : line.text || '♪'}
                 </button>
               </li>
             ))}
