@@ -114,8 +114,11 @@ function Sheet({
   );
 }
 
-/** The side of the cover in the details sheet. */
-const THUMB = 72;
+/**
+ * The side of the cover in the details sheet: most of the height of the row it
+ * starts, and large enough to judge a crop by.
+ */
+const THUMB = 112;
 
 /**
  * The playlist's cover in the details sheet, which is also how it is changed.
@@ -214,41 +217,40 @@ export function DetailsSheet({
       </p>
       <p className="truncate text-body text-cream-100">{playlist.name}</p>
 
-      {/* The cover on the left, the rest beside it: the cover is one of the
-          details, not a separate action above them. */}
-      <div className="flex items-start gap-3">
+      {/* The cover on the left, large, and the description beside it at the
+          same height — the two things that say what the playlist is. Whether
+          it is public goes underneath, across the whole sheet, where its hint
+          has room to be read on one or two lines instead of five. */}
+      <div className="flex items-stretch gap-3">
         <CoverThumb
           url={playlist.coverArtUrl}
           label={t('spotify.changeCover')}
           {...(onCover && { onPress: onCover })}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-meta text-cream-400">{t('spotify.description')}</span>
-            <textarea
-              value={description}
-              maxLength={DESCRIPTION_MAX}
-              rows={3}
-              onChange={(e) => setDescription(e.target.value)}
-              className="resize-none groove-inset rounded px-2 py-1 text-meta leading-snug text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
-            />
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-2">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-              className="mt-0.5 accent-[var(--color-brass-500)]"
-            />
-            <span className="flex flex-col">
-              <span className="text-meta text-cream-100">{t('spotify.public')}</span>
-              <span className="text-label leading-snug text-cream-400">{t('spotify.publicHint')}</span>
-            </span>
-          </label>
-        </div>
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-meta text-cream-400">{t('spotify.description')}</span>
+          <textarea
+            value={description}
+            maxLength={DESCRIPTION_MAX}
+            onChange={(e) => setDescription(e.target.value)}
+            className="min-h-0 flex-1 resize-none groove-inset rounded px-2 py-1 text-meta leading-snug text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+          />
+        </label>
       </div>
+
+      <label className="flex cursor-pointer items-start gap-2">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => setIsPublic(e.target.checked)}
+          className="mt-0.5 accent-[var(--color-brass-500)]"
+        />
+        <span className="flex flex-col">
+          <span className="text-meta text-cream-100">{t('spotify.public')}</span>
+          <span className="text-label leading-snug text-cream-400">{t('spotify.publicHint')}</span>
+        </span>
+      </label>
       {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
 
       <div className="mt-1 flex justify-end gap-2">
