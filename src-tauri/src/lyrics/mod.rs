@@ -11,6 +11,10 @@
 //! 3. LRCLIB's search on the cleaned title and first artist.
 //! 4. NetEase, when it is switched on.
 //!
+//! Timings come first. Words without them never end the search: LRCLIB
+//! having only the words still sends it on to NetEase for synced ones, and
+//! the words are used only when no place has timings.
+//!
 //! Anything found is checked to be the same song — title, artist, and a
 //! length close enough that its timings are this recording's. Words without
 //! timings are kept from the first place that had them, and returned if
@@ -325,6 +329,23 @@ mod tests {
             done.and_then(|d| d.matched).map(|m| m.via),
             Some("lrclib:search")
         );
+    }
+
+    #[test]
+    fn words_from_lrclib_do_not_stop_netease_being_asked_for_timings() {
+        // Timings come first: LRCLIB having only the words is not an answer,
+        // and NetEase's synced lyrics win over them.
+        let mut w = Waterfall::default();
+        assert!(w
+            .offer(Ok(Some(found(
+                LyricsResult::Plain("words".into()),
+                "lrclib:get"
+            ))))
+            .is_none());
+        let done = w.offer(Ok(Some(found(synced(), "netease"))));
+        let done = done.expect("synced lyrics settle it");
+        assert!(matches!(done.result, LyricsResult::Synced(_)));
+        assert_eq!(done.matched.map(|m| m.via), Some("netease"));
     }
 
     #[test]
