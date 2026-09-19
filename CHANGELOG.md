@@ -4,6 +4,140 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.1.2 — 2026-09-19
+
+Your playlists, yours to change.
+
+Until now the crates in the drawer could be played and nothing else. This
+release lets you edit them from where they already are. Carry a record onto a
+crate on the shelf and the song goes into that playlist — even the one on the
+deck, which comes back and carries on playing when it has been filed. Open a
+crate and the pencil beside its name opens its details: the name, the cover,
+the description, whether it shows on your profile, and removing it from your
+library. The list icon next to the pencil lets you drag the songs into a new
+order and take any of them out. An empty sleeve at the start of the shelf makes
+a new playlist, and the add-to-playlist sheet offers your Spotify playlists
+beside Groovium's own.
+
+A new cover is cropped before it is sent. Choose a picture, drag it and zoom
+until the square is the one you want, and the crate shows it straight away
+while Spotify makes its own copy.
+
+Everything happens on screen first and is sent to Spotify afterwards, so
+nothing waits on the network. If Spotify says no, the change is undone and the
+crate says why.
+
+The drawer also remembers. Your playlists and the crates you have opened are kept
+between launches, so the drawer opens on what you had rather than on an empty
+room, and all of it is forgotten the moment you sign out. And what goes wrong
+is now written to a log file, because an installed app has no console for
+anyone to read.
+
+HIGHLIGHTS
+· Carry a record onto a crate to add the song to that playlist. The playing
+  record goes back to the deck and the music carries on.
+· Your Spotify playlists are in the add-to-playlist sheet, next to Groovium's
+  own.
+· A pencil in an open crate opens its details: name, cover, description,
+  whether it is on your profile, and removing it from your library.
+· The list icon beside it lets you reorder the songs by dragging and take any
+  of them out.
+· New playlists from an empty sleeve at the start of the shelf, or from the
+  sheet. They start private.
+· New covers are cropped square before upload and shown at once.
+· Records in an open crate lie on their sleeves, as on the shelves above, and
+  are lifted straight off them.
+· Your playlists and opened crates are kept between launches and forgotten
+  when you sign out.
+· Problems are written to a log file in the app's data folder.
+
+ALL CHANGES
+
+Adding songs
+· Hold a Spotify record over a crate on the playlist shelf: the sleeve lifts
+  and opens. Let go and it takes the record, flashes, and its count goes up by
+  one. The record then goes back where it came from.
+· The record on the deck can be carried too. The music pauses while it is in
+  your hand and resumes when it lands back on the deck.
+· A crate that cannot take the record — a song from this computer — dims and
+  stays shut.
+· A song already in the playlist is not added twice. The crate says it is
+  already there.
+· Hold a record against either end of the shelf and the shelf scrolls, so a
+  crate off the edge can still be reached.
+· The add-to-playlist sheet has two sections: Groovium's playlists and your
+  Spotify ones. A song from this computer shows the Spotify section with the
+  reason it cannot go there.
+· Each section can make a new playlist from its own row, and the song goes
+  straight in.
+
+Inside a crate
+· A pencil opens the playlist's details. A list icon beside it starts editing
+  the songs.
+· Editing: drag a record to a new place, and the others make room. Letting go
+  sends one move.
+· Each record has a × to take it out. A song that is in the playlist twice says
+  so, because Spotify takes every copy out together.
+· Escape closes one thing at a time: the topmost sheet, then editing, then the
+  crate.
+· Records lie on top of their sleeves rather than half inside them, and are
+  picked up and put back without sliding in and out.
+· The crate opens as a page rising from the crate you pressed, with the records
+  coming out one after another, and closes the same way in reverse.
+
+Details
+· Name, description and whether the playlist is on your profile, saved
+  together. Only what changed is sent.
+· Point at the cover and a pencil appears. Press it to choose a picture.
+· Removing from your library asks first, and says what happens: Spotify keeps
+  the playlist for 90 days, and it can be brought back from your account page.
+· The sheets fade and rise in and ease away, and the dimming behind them fades
+  out at its edges rather than stopping at a line.
+· The public switch is the one from Settings, and slides.
+
+Covers
+· JPEG, PNG or WebP up to 20 MB.
+· Drag to move, scroll or use the slider to zoom. The picture always covers the
+  square.
+· It is brought under Spotify's 256 KB limit by lowering the quality first and
+  the size after.
+· The new cover shows on the crate at once, and Spotify's own copy replaces it
+  once it is ready.
+
+New playlists
+· An empty sleeve at the start of the shelf. Press it, type a name, press
+  Enter, and the new crate arrives beside it.
+· New playlists are private. Spotify's default is public.
+
+Keeping in step with Spotify
+· Every change shows at once and is sent afterwards, one at a time per
+  playlist.
+· A change Spotify refuses is undone on screen, along with anything queued
+  behind it, and the reason is shown.
+· What Spotify sends back is written everywhere the playlist is kept, so
+  nothing has to be read again.
+· Spotify moves songs by their place in the whole playlist, including songs
+  that cannot play here and are not shown. Positions are worked out against
+  that, not the grid.
+
+Kept between launches
+· The playlist shelf and the crates you have opened are saved in the app's data
+  folder and shown on the next launch while Spotify is asked again.
+· Signing out forgets all of it, and the drawer shows the connect screen at
+  once, without being closed and reopened.
+· Forgetting the Client ID signs out too, which it had not.
+
+The log file
+· The app keeps a log in %LOCALAPPDATA%\com.groovium.desktop\logs: that it
+  started, and what went wrong. Tokens, codes and search text are removed
+  before anything is written.
+· Only this app's own lines are kept, and warnings and errors from the
+  libraries under it.
+
+Privacy
+· PRIVACY.md says what the app sends and where, and what it keeps on your
+  computer.
+
 ## 1.1.1 — 2026-09-16
 
 The drawer, as it was meant to be.

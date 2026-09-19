@@ -13,6 +13,35 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.1.2 — 2026-09-19
+
+Çalma listeleriniz artık sizin elinizde.
+
+Şimdiye kadar çekmecedeki kasaları yalnızca çalabiliyordunuz. Bu sürümde
+onları durdukları yerden düzenleyebilirsiniz. Bir plağı raftaki bir kasanın
+üstüne taşıyın, şarkı o listeye girsin. Pikaptaki plak da olur. Kasaya
+bırakıldıktan sonra pikaba döner ve müzik kaldığı yerden devam eder.
+
+Bir kasayı açın. Adının yanındaki kalem ayrıntıları açar. Ad, kapak, açıklama,
+profilde görünüp görünmediği ve kitaplıktan kaldırma orada. Kalemin yanındaki
+liste simgesiyle şarkıları sürükleyip sıralayabilir, istediğinizi
+çıkarabilirsiniz. Rafın başındaki boş kılıf yeni bir liste açar. "Listeye
+ekle" penceresi de artık Groovium listelerinin yanında Spotify listelerinizi
+gösteriyor.
+
+Yeni kapak gönderilmeden önce kırpılır. Bir resim seçin, kare istediğiniz gibi
+olana kadar kaydırıp yakınlaştırın. Kasa onu hemen gösterir, Spotify da bu
+arada kendi kopyasını hazırlar.
+
+Her değişiklik önce ekranda olur, Spotify'a sonra gider. Yani hiçbir şey ağı
+beklemez. Spotify kabul etmezse değişiklik geri alınır ve kasa nedenini söyler.
+
+Çekmece artık hatırlıyor da. Listeleriniz ve açtığınız kasalar uygulama
+kapanınca kaybolmuyor. Çekmece boş bir odayla değil, bıraktığınız haliyle
+açılıyor. Spotify'dan çıkış yaptığınız anda hepsi unutuluyor. Ayrıca ters
+giden şeyler artık bir günlük dosyasına yazılıyor. Kurulu bir uygulamanın,
+birinin okuyabileceği bir konsolu yok.
+
 ## 1.1.1 — 2026-09-16
 
 Çekmece nihayet olması gerektiği gibi.
