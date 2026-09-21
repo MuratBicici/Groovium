@@ -752,6 +752,32 @@ body {
 }
 
 /*
+ * The line being sung, lit from its first letter to its last in the time the
+ * line has: the light reaches the end of the line as the next line begins.
+ *
+ * `--sung` is how far across it has got, nought to one, written every frame by
+ * the loop in `useLyricFrame`. The light is clipped to the letters rather than
+ * drawn as a bar behind them, so it is the words that light up; the soft edge
+ * is the light arriving, not a cursor sitting on a letter. The glow over the
+ * line is a filter on what is drawn, so it follows the light across.
+ *
+ * Only for lines a source timed as a line. A line timed syllable by syllable
+ * is lit a syllable at a time instead, which is this same light told exactly,
+ * and the two would disagree by a word if both were drawn.
+ */
+.lyric-lit {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-cream-50) calc(var(--sung, 0) * 100%),
+    color-mix(in srgb, var(--color-cream-50) 38%, transparent) calc(var(--sung, 0) * 100% + 6%)
+  );
+  background-origin: content-box;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
  * The wheel's lines, thinning to nothing at the drawer's top and bottom rather
  * than being cut off there.
  */

@@ -505,7 +505,9 @@ function SungLines({
             data-line={view}
             onClick={() => onPick(current)}
             className={`pointer-events-auto line-clamp-2 max-w-full text-center leading-[1.3] ${
-              singing ? 'font-semibold text-cream-50 lyric-glow' : 'font-medium text-cream-200'
+              singing
+                ? `font-semibold text-cream-50 lyric-glow${current.words ? '' : ' lyric-lit'}`
+                : 'font-medium text-cream-200'
             }`}
           >
             <LineText line={current} singing={singing} />

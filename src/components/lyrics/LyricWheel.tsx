@@ -47,6 +47,11 @@ export function turnTransition(move: Move): string {
  * can take the view elsewhere; the line being sung keeps its light wherever
  * it is.
  *
+ * The line being sung is lit rather than simply coloured — the light crosses
+ * it as it is sung, see `.lyric-lit` — and its ink is the light, so the change
+ * to and from it is not something to ease: eased, the letters would be neither
+ * for as long as it took.
+ *
  * Every line is drawn at one type size and scaled from there, so growing and
  * shrinking is a transform that can be animated rather than a size that
  * changes in a step. Each line's own scale — `--fit` — is measured once from
@@ -146,9 +151,13 @@ export function LyricWheel({
                 tabIndex={-1}
                 data-line={index}
                 onClick={() => onPick(line)}
-                className={`block w-max cursor-pointer rounded-md px-2 py-1 leading-snug whitespace-nowrap transition-[opacity,transform,color] hover:!opacity-80 ${
+                className={`block w-max cursor-pointer rounded-md px-2 py-1 leading-snug whitespace-nowrap transition-[opacity,transform] hover:!opacity-80 ${
                   left ? 'text-left' : 'text-right'
-                } ${singing ? 'font-semibold text-cream-50 lyric-glow' : 'text-cream-200'}`}
+                } ${
+                  singing
+                    ? `font-semibold text-cream-50 lyric-glow${line.words ? '' : ' lyric-lit'}`
+                    : 'text-cream-200'
+                }`}
                 style={{
                   fontSize: LINE_FONT_PX,
                   opacity: near ? look.opacity : 0,
