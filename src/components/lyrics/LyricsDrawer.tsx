@@ -9,6 +9,7 @@ import { VinylDisc } from '@/components/player/VinylDisc';
 import { DiscLight } from '@/components/player/DiscLight';
 import { DRAWER_WIDTH } from '@/platform/window';
 import { CENTER_INSET, DISC_RADIUS, LABEL_RATIO, TEXT_RADIUS, wheelAngle } from './arc';
+import { DiscOrbit } from './DiscOrbit';
 import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
@@ -25,6 +26,9 @@ import { ARRIVE_EASING, ARRIVE_MS, SCENE_MS } from './motion';
  * It can be scrolled: the wheel goes round under the pointer, stays where it
  * was left for five seconds after the last scroll, and then winds back to
  * the line being sung. A line picked by hand is gone to at once.
+ *
+ * The label's rim keeps time while they are read: lights going round the cover
+ * and the rim brightening under each hit (`DiscOrbit`).
  *
  * A song without timings is words to read beside the record, and the other
  * states say what they are in one quiet line where the sung line would be.
@@ -166,6 +170,12 @@ export function LyricsDrawer({
                 `radial-gradient(circle closest-side, transparent ${LABEL_RATIO * 100}%, rgb(0 0 0 / 0.38) ${LABEL_RATIO * 100 + 5}%, rgb(0 0 0 / 0.5) 100%)`,
             }}
           />
+          {/* The beat, on the label's rim: lights going round the cover and
+              the rim itself taking each hit. Inside the record's own box, so
+              its centre is the record's centre. Nobody reading the words is
+              looking at the window's edge or at the deck, so this is where
+              keeping time has to happen. */}
+          <DiscOrbit radius={DISC_RADIUS} labelRatio={LABEL_RATIO} />
         </div>
 
         {lines && (
