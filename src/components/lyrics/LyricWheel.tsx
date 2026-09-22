@@ -122,6 +122,10 @@ export function LyricWheel({
     height: 0,
     transform: `rotate(${angle}deg)`,
     transition: turnTransition(move),
+    // Turned on the compositor rather than drawn again at each angle. Without
+    // it a turn is every line in view re-rasterised sixty times a second, text
+    // and all, for the length of the turn.
+    willChange: 'transform',
   };
 
   return (
@@ -170,6 +174,12 @@ export function LyricWheel({
                   transformOrigin: left ? 'left center' : 'right center',
                   transitionDuration: `${LOOK_MS}ms`,
                   transitionTimingFunction: ARRIVE_EASING,
+                  // The few lines in view have their own size and fade to run
+                  // through a turn. On their own layers those are the
+                  // compositor moving what it already has; inside the wheel's
+                  // layer they would spoil its picture on every frame and take
+                  // the whole turn back to being redrawn.
+                  willChange: near ? 'transform, opacity' : undefined,
                 }}
               >
                 <LineText line={line} singing={singing} />

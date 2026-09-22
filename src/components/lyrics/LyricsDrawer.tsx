@@ -153,7 +153,13 @@ export function LyricsDrawer({
             [left ? 'left' : 'right']: CENTER_INSET - DISC_RADIUS,
           }}
         >
-          <div className="h-full w-full" style={{ transform: `rotate(${angle}deg)`, transition: turn }}>
+          {/* `will-change`: the record is twelve hundred pixels across with a
+              groove texture on it, and a turn it is redrawn for rather than
+              turned on the compositor is the most expensive frame in the app. */}
+          <div
+            className="h-full w-full"
+            style={{ transform: `rotate(${angle}deg)`, transition: turn, willChange: 'transform' }}
+          >
             <VinylDisc
               size={DISC_RADIUS * 2}
               coverArtUrl={track?.coverArtUrl}
