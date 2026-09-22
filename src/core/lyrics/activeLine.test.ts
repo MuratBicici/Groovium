@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAST_LINE_MS, activeLine, lineSweep } from './activeLine';
+import { LAST_LINE_MS, acrossWords, activeLine, lineSweep } from './activeLine';
 
 const lines = [1000, 2000, 2000, 5000].map((timeMs, i) => ({ timeMs, text: `${i}` }));
 
@@ -82,5 +82,37 @@ describe('the light over the line being sung', () => {
   it('is nothing at all off the end of the song', () => {
     expect(lineSweep(song, -1, 3000)).toBe(0);
     expect(lineSweep(song, 9, 3000)).toBe(0);
+  });
+});
+
+describe('the light laid out along the words', () => {
+  it('is nothing anywhere before the line begins', () => {
+    expect(acrossWords([10, 30, 10], 0)).toEqual([0, 0, 0]);
+  });
+
+  it('is everything everywhere once it is over', () => {
+    expect(acrossWords([10, 30, 10], 1)).toEqual([1, 1, 1]);
+  });
+
+  it('spends on each word the room that word takes', () => {
+    // Half of fifty is twenty-five: the first word is behind it, the second is
+    // halfway through, the third has not been reached.
+    expect(acrossWords([10, 30, 10], 0.5)).toEqual([1, 0.5, 0]);
+  });
+
+  it('crosses a word boundary without a step in it', () => {
+    const just = acrossWords([10, 10], 0.499);
+    const over = acrossWords([10, 10], 0.501);
+    expect(just[0]).toBeCloseTo(0.998, 3);
+    expect(just[1]).toBe(0);
+    expect(over[0]).toBe(1);
+    expect(over[1]).toBeCloseTo(0.002, 3);
+  });
+
+  it('stays inside itself however it is asked', () => {
+    expect(acrossWords([10, 10], -3)).toEqual([0, 0]);
+    expect(acrossWords([10, 10], 9)).toEqual([1, 1]);
+    expect(acrossWords([], 0.5)).toEqual([]);
+    expect(acrossWords([0, 0], 1)).toEqual([1, 1]);
   });
 });

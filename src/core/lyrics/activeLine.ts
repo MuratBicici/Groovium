@@ -39,6 +39,34 @@ export function lineSweep(lines: readonly LyricLine[], index: number, ms: number
 }
 
 /**
+ * How far into each word the light has got, from how far into the line it is.
+ *
+ * A line the eye reads left to right is not a box the light can cross left to
+ * right: wrapped onto two rows, a ramp across the box lights the same distance
+ * into both of them at once, and the second row fills before its first word is
+ * sung. Laid out along the words in the order they are read, a row break is
+ * nothing at all — the light leaves the end of one row and arrives at the
+ * start of the next, because that is where the next word is.
+ *
+ * `widths` is each word's own width, in whatever unit they were measured in;
+ * what comes back is how far through each of them the light is, nought to one.
+ */
+export function acrossWords(widths: readonly number[], through: number): number[] {
+  let total = 0;
+  for (const width of widths) total += Math.max(0, width);
+  if (total <= 0) return widths.map(() => (through >= 1 ? 1 : 0));
+
+  const at = Math.min(1, Math.max(0, through)) * total;
+  let start = 0;
+  return widths.map((width) => {
+    const room = Math.max(0, width);
+    const lit = room <= 0 ? (at > start ? 1 : 0) : (at - start) / room;
+    start += room;
+    return Math.min(1, Math.max(0, lit));
+  });
+}
+
+/**
  * The line being sung at `ms`: the last one that has started.
  *
  * A binary search, since it runs every frame against a list that can be a few

@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { activeLine, lineSweep, type LyricLine } from '@/core/lyrics/activeLine';
+import { acrossWords, activeLine, lineSweep, type LyricLine } from '@/core/lyrics/activeLine';
 import { playheadMs } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
@@ -25,10 +25,15 @@ export const UNSUNG = 'lyric-unsung';
  *
  * How the line is lit depends on what the source gave. Timed syllable by
  * syllable, each is lit as it is reached — the exact thing, and only when the
- * syllable reached changes. Timed only as a line, the light crosses it evenly
- * instead, in the time between this line and the next: `--sung` is how far
- * across it has got, and the stylesheet draws it. Either way the whole line is
- * lit as it ends.
+ * syllable reached changes. Timed only as a line, the light crosses its words
+ * evenly instead, in the time between this line and the next: each word is
+ * told how far into it the light has got, and the stylesheet draws it. Either
+ * way the whole line is lit as it ends.
+ *
+ * Along the words rather than across the box, because a line can wrap. A ramp
+ * across the box is a ramp across both rows at once, and the second row fills
+ * before its first word is sung; along the words, a row break is only where
+ * the next word happens to be.
  */
 export function useLyricFrame(
   lines: readonly LyricLine[] | null,
@@ -49,6 +54,13 @@ export function useLyricFrame(
     /** The element lit so far, and how far into it. */
     let litIn: HTMLElement | null = null;
     let lit = -2;
+    /** The line whose words were measured, and what came back. */
+    let wordsIn: HTMLElement | null = null;
+    // Not `words`: below, that is what a source timed, if it timed any.
+    let spans: HTMLElement[] = [];
+    let widths: number[] = [];
+    /** What each word was last told, so a frame that moves nothing writes nothing. */
+    let told: number[] = [];
 
     const tick = () => {
       const ms = playheadMs();
@@ -77,10 +89,26 @@ export function useLyricFrame(
             lit = reached;
           }
         } else {
-          // Nothing to light a piece at a time, so the light crosses the whole
-          // line. Written every frame, which is what it is for; the stylesheet
-          // turns the number into the light.
-          el.style.setProperty('--sung', still ? '1' : lineSweep(lines, index, ms).toFixed(4));
+          // Measured once a line, off the words as they are laid out — which is
+          // where a wrapped row is decided, and the only thing that has to be
+          // true is that they are in the order they are read.
+          if (el !== wordsIn) {
+            wordsIn = el;
+            spans = [...el.querySelectorAll<HTMLElement>('[data-word]')];
+            widths = spans.map((span) => span.offsetWidth);
+            told = [];
+          }
+          const through = still ? 1 : lineSweep(lines, index, ms);
+          const shares = acrossWords(widths, through);
+          for (let w = 0; w < spans.length; w += 1) {
+            const share = shares[w] ?? 0;
+            const was = told[w];
+            // A hundredth of a word is well under a pixel of one: writing it
+            // is a style change nobody could see.
+            if (was !== undefined && Math.abs(was - share) < 0.01) continue;
+            told[w] = share;
+            spans[w]?.style.setProperty('--sung', share.toFixed(3));
+          }
         }
       }
       frame = requestAnimationFrame(tick);
