@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { remember, type CoverRead, type Known } from './readCover';
+import { remember, tryAgainIn, type CoverRead, type Known } from './readCover';
 
 /**
  * What is worth keeping about a cover that has been looked at.
@@ -18,7 +18,7 @@ import { remember, type CoverRead, type Known } from './readCover';
 
 const colourful: CoverRead = { read: true, palette: { surface: '#101014', accent: '#e0b071' } };
 const grey: CoverRead = { read: true, palette: null };
-const missed: CoverRead = { read: false };
+const missed: CoverRead = { read: false, why: 'refused' };
 
 const held: Known = { cover: 'sleeve-a', palette: { surface: '#000000', accent: '#ff0000' } };
 
@@ -49,5 +49,35 @@ describe('what a look at a cover is worth keeping', () => {
 
   it('replaces what it knew once it has actually seen the new one', () => {
     expect(remember(held, 'sleeve-b', grey)).toEqual({ cover: 'sleeve-b', palette: null });
+  });
+});
+
+describe('looking at a cover again', () => {
+  it('waits a moment for the first go, and longer for each after it', () => {
+    const first = tryAgainIn(0);
+    const second = tryAgainIn(1);
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBeGreaterThan(first ?? 0);
+    expect(tryAgainIn(2)).toBeGreaterThan(second ?? 0);
+  });
+
+  it('gives up rather than trying for ever', () => {
+    // Past the ladder, something is wrong that another go will not mend, and
+    // the palette somebody chose stands.
+    expect(tryAgainIn(4)).toBeNull();
+    expect(tryAgainIn(99)).toBeNull();
+  });
+
+  it('is the whole ladder inside half a minute', () => {
+    // Long enough for a network that blinked, short enough that a track is
+    // still playing when the last go happens.
+    let total = 0;
+    for (let failures = 0; ; failures += 1) {
+      const wait = tryAgainIn(failures);
+      if (wait === null) break;
+      total += wait;
+    }
+    expect(total).toBeLessThanOrEqual(35_000);
+    expect(total).toBeGreaterThan(10_000);
   });
 });

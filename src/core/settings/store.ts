@@ -21,6 +21,7 @@ import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
 import type { LyricsLayout } from '@/core/lyrics/layout';
+import { log } from '@/platform/log';
 
 /**
  * Preferences, in their own store.
@@ -154,6 +155,13 @@ function applyToDocument(settings: Settings, cover: CoverPalette | null = null):
     // stylesheet. Not a preference: CSS cannot measure what it produced, and
     // what it produced for a light surface was light text on a light ground.
     const derived = derivePalette(primary, secondary, settings.boostContrast);
+    // The last way a cover's colours could be dropped without a word: a pair
+    // that will not parse builds no ramp, nothing is written, and the window
+    // keeps the theme it had — which from the outside is a record whose colours
+    // were not taken.
+    if (!derived && painting) {
+      log('warn', 'theme', 'the cover pair would not make a palette', { primary, secondary });
+    }
     if (derived) {
       for (const [name, value] of Object.entries(derived.variables)) set(name, value);
       lightGround = derived.lightGround;

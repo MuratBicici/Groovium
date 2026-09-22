@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { readCover, remember, type Known } from '@/core/theme/readCover';
+import { readCover, remember, tryAgainIn, type Known } from '@/core/theme/readCover';
+import { log } from '@/platform/log';
 import { useSettingsStore } from '@/core/settings/store';
 import { usePlayerStore } from '@/core/store';
 import { useHeldTrack } from './DiscHold';
@@ -41,27 +42,44 @@ export function CoverTheme() {
   const known = useRef<Known | null>(null);
   /** A cover this could not read, so it knows there is something to go back to. */
   const missed = useRef<string | null>(null);
+  /** How many looks at this cover have failed, which is what paces the next. */
+  const failures = useRef(0);
   /** Bumped to look again. */
   const [attempt, setAttempt] = useState(0);
 
+  // A different sleeve is a fresh start: whatever went wrong with the last one
+  // has nothing to say about this one.
+  useEffect(() => {
+    failures.current = 0;
+  }, [cover]);
+
   /**
-   * Look again when the window comes back.
+   * Look again when the world changes under a failure.
    *
-   * Which is the other half of not keeping a failure. Most of these happen
-   * while nobody is watching — the reports were all of a track that changed
-   * with the widget behind something — and a window that is not on screen is a
-   * window whose timers are throttled and whose work is deferred. Whatever it
-   * is that goes wrong out there, the moment somebody looks at the app again is
-   * the moment it is worth another try.
+   * Which is the other half of not keeping one. Many of these happen while
+   * nobody is watching — a window that is not on screen is a window whose
+   * timers are throttled and whose work is deferred — and the moment somebody
+   * looks at the app again is the moment it is worth another try. A network
+   * that comes back is the same argument: nothing about the sleeve changed,
+   * everything about reaching it did.
+   *
+   * Each of these starts the ladder over, because each of them is a reason to
+   * believe the answer is different now.
    */
   useEffect(() => {
     const again = () => {
-      if (document.visibilityState !== 'visible' || missed.current === null) return;
+      if (missed.current === null) return;
+      if (document.visibilityState !== 'visible') return;
       missed.current = null;
+      failures.current = 0;
       setAttempt((count) => count + 1);
     };
     document.addEventListener('visibilitychange', again);
-    return () => document.removeEventListener('visibilitychange', again);
+    window.addEventListener('online', again);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', again);
+    };
   }, []);
 
   useEffect(() => {
@@ -80,7 +98,8 @@ export function CoverTheme() {
     }
 
     let alive = true;
-    void readCover(cover).then((seen) => {
+    let soon: ReturnType<typeof setTimeout> | undefined;
+    void readCover(cover, failures.current).then((seen) => {
       // The track can change while an image is loading, and the answer to the
       // last one is not an answer to this one.
       if (!alive) return;
@@ -89,10 +108,30 @@ export function CoverTheme() {
       // the last record's colours on a window that is playing something else.
       // It is only the *remembering* that a failure must not do.
       setCoverPalette(seen.read ? seen.palette : null);
-      if (!seen.read) missed.current = cover;
+      if (seen.read) {
+        failures.current = 0;
+        // Both said out loud, and this is the point of saying them. A record
+        // whose colours were not taken looks the same from the outside whatever
+        // the reason, so the log is where the reasons are told apart: colours
+        // found, a sleeve with none in it, or one of the three ways a look can
+        // come back with nothing.
+        if (seen.palette) log('info', 'theme', 'palette from the cover', seen.palette);
+        else log('info', 'theme', 'no colour in this sleeve', cover);
+        return;
+      }
+
+      missed.current = cover;
+      log('warn', 'theme', `could not read the cover (${seen.why})`, cover);
+      // And again in a moment. Most of what goes wrong here is a moment's
+      // trouble, and the whole of the fault being chased is that a moment's
+      // trouble used to last the length of the track.
+      const wait = tryAgainIn(failures.current);
+      failures.current += 1;
+      if (wait !== null) soon = setTimeout(() => setAttempt((count) => count + 1), wait);
     });
     return () => {
       alive = false;
+      clearTimeout(soon);
     };
   }, [on, cover, inHand, attempt, setCoverPalette]);
 
