@@ -22,6 +22,18 @@ export interface LyricsLayout {
   lyricsPlace: LyricsPlace;
 }
 
+/**
+ * Whether the Spotify button is lit.
+ *
+ * It says the drawer is out, not what is in it. Lyrics taking the drawer over
+ * do not put the drawer away, and a light that went out for them would be
+ * saying they had — with the drawer still there, wider than the player, in
+ * plain sight.
+ */
+export function drawerOut(s: LyricsLayout): boolean {
+  return s.drawerOpen;
+}
+
 /** The drawer is showing lyrics rather than Spotify. */
 export function fullShown(s: LyricsLayout): boolean {
   return s.drawerOpen && s.lyricsOn && s.lyricsPlace === 'full';
@@ -53,13 +65,21 @@ export function expand(s: LyricsLayout): LyricsLayout {
 }
 
 /**
- * The Spotify button. On a drawer showing lyrics it switches to Spotify, and
- * the lyrics carry on in the player; otherwise it opens or shuts the drawer as
- * it always has, and opening it this way always opens it on Spotify.
+ * The Spotify button: the drawer, out or away.
+ *
+ * Out — showing Spotify or showing lyrics — it puts the drawer away, and
+ * lyrics that were in it carry on in the player. The same press for both,
+ * because the light is on for both: a button that is lit and does nothing
+ * recognisable to what is lighting it is the one thing a toggle must not be.
+ *
+ * Away, it brings the drawer out on Spotify, never on lyrics.
+ *
+ * Swapping the drawer's lyrics for Spotify without shutting it is still one
+ * press — the lyrics view's own control for going back to the player, which is
+ * where somebody looking at the lyrics is already looking.
  */
 export function pressSpotify(s: LyricsLayout): LyricsLayout {
-  if (fullShown(s)) return { ...s, lyricsPlace: 'compact' };
-  if (s.drawerOpen) return { ...s, drawerOpen: false };
+  if (s.drawerOpen) return { ...s, drawerOpen: false, lyricsPlace: 'compact' };
   return { ...s, drawerOpen: true, lyricsPlace: 'compact' };
 }
 
@@ -74,5 +94,5 @@ export function showSpotify(s: LyricsLayout): LyricsLayout {
  * last put in, and every way of opening it again says which it opens on.
  */
 export function closeDrawer(s: LyricsLayout): LyricsLayout {
-  return { ...s, drawerOpen: false };
+  return { ...s, drawerOpen: false, lyricsPlace: 'compact' };
 }

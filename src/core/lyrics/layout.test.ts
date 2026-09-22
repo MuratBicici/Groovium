@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   closeDrawer,
+  drawerOut,
   compactShown,
   expand,
   fullShown,
@@ -49,8 +50,22 @@ describe('moving lyrics between the two places', () => {
 });
 
 describe('the Spotify button', () => {
-  it('switches a drawer showing lyrics to Spotify, lyrics carrying on in the player', () => {
-    expect(seen(pressSpotify(pressLyrics(drawer)))).toBe('drawer:spotify player:lyrics');
+  it('is lit while the drawer is out, whatever the drawer is showing', () => {
+    // The light says the drawer is out. Lyrics taking it over do not put it
+    // away, and a light that went out for them would be saying they had.
+    expect(drawerOut(shut)).toBe(false);
+    expect(drawerOut(drawer)).toBe(true);
+    expect(drawerOut(pressLyrics(drawer))).toBe(true);
+  });
+
+  it('puts away a drawer showing lyrics, and the lyrics carry on in the player', () => {
+    expect(seen(pressSpotify(pressLyrics(drawer)))).toBe('drawer:shut player:lyrics');
+  });
+
+  it('still swaps lyrics for Spotify in one press, from the lyrics view itself', () => {
+    // What the button used to do. It is where somebody looking at the lyrics is
+    // already looking, and it leaves the drawer out.
+    expect(seen(toCompact(pressLyrics(drawer)))).toBe('drawer:spotify player:lyrics');
   });
 
   it('shuts a drawer showing Spotify, as it always has', () => {
@@ -70,6 +85,11 @@ describe('the Spotify button', () => {
 describe('closing the drawer itself', () => {
   it('leaves the lyrics in the player', () => {
     expect(seen(closeDrawer(pressLyrics(drawer)))).toBe('drawer:shut player:lyrics');
+  });
+
+  it('records where the lyrics now are, so the drawer opens on Spotify next time', () => {
+    const away = closeDrawer(pressLyrics(drawer));
+    expect(seen(pressSpotify(away))).toBe('drawer:spotify player:lyrics');
   });
 });
 

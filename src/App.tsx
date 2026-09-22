@@ -18,6 +18,7 @@ import { CompactLyrics } from '@/components/lyrics/CompactLyrics';
 import { usePresence } from '@/components/lyrics/usePresence';
 import {
   closeDrawer,
+  drawerOut,
   compactShown,
   expand,
   fullShown,
@@ -528,11 +529,15 @@ export default function App() {
               controls={PANEL_IDS.playlists}
             />
             {/* Spotify needs the loopback listener and the OS credential store,
-                neither of which exists in a plain browser. */}
+                neither of which exists in a plain browser.
+
+                Lit while the drawer is out, whatever is in it: lyrics taking it
+                over do not put it away, and a light that went out for them
+                would be saying they had. */}
             {isTauri() && (
               <PanelButton
                 panel="spotify"
-                open={drawerOpen && !lyricsInDrawer}
+                open={drawerOut(layout)}
                 onToggle={() => setLyricsLayout(pressSpotify(layout))}
                 controls={DRAWER_ID}
               />
