@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { GLOW, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
+import { GLOW, NOTCHES, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
@@ -18,6 +18,12 @@ import { whilePaletteMoves } from '@/core/theme/palette';
  * nodes is sixty style recalculations a second on the top of the whole tree.
  * The motion itself is in `core/visualizer/motes`, where it can be tried out
  * without a window or a sound card.
+ *
+ * Two canvases, one down each edge, rather than one across the window. A
+ * canvas costs its area on every frame whether anything is drawn in it or not
+ * — cleared, rasterised and composited — and this draws along the two sides
+ * and nowhere else. One the size of the window was a million pixels of that,
+ * sixty times a second, so that seventy at each side could be lit.
  */
 
 /** How far the haze reaches in from an edge. */
@@ -100,6 +106,31 @@ const PUNCH_WEIGHT = 0.55;
 
 /** The lowest level worth drawing anything for. */
 const FLOOR = 0.004;
+
+/**
+ * How wide a strip of the window the light can ever touch.
+ *
+ * Worked out from the numbers above rather than guessed at, because what it
+ * decides is the edge of the canvas: the widest flare the dials allow, or the
+ * widest bolt, whichever reaches further in — and then a little, because a
+ * light cut off against its own canvas is a straight line down the window.
+ */
+const BAND =
+  Math.ceil(
+    Math.max(
+      HAZE * (1 + GLOW.flashReach(NOTCHES)),
+      BOLT_REACH * (SWELL_AT_REST + SWELL_WITH_LEVEL) * GLOW.strength(NOTCHES),
+    ),
+  ) + 2;
+
+/** One edge: the canvas down it, and which way it faces. */
+interface Edge {
+  context: CanvasRenderingContext2D;
+  /** -1 for the left edge, 1 for the right, as the drawing has always said. */
+  at: -1 | 1;
+  /** Which of the two sprites belongs to it. */
+  facing: 0 | 1;
+}
 
 interface Palette {
   /** Low and deep, high and bright. */
@@ -236,7 +267,8 @@ export function WindowGlow({
   flash: number;
   flare: number;
 }) {
-  const canvas = useRef<HTMLCanvasElement | null>(null);
+  const leftEdge = useRef<HTMLCanvasElement | null>(null);
+  const rightEdge = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
   const measured = useRef(0);
   /** The bands themselves, which is where the hits are heard. */
@@ -268,11 +300,18 @@ export function WindowGlow({
   }, [on]);
 
   useEffect(() => {
-    const el = canvas.current;
-    if (!on || !el) return;
+    const near = leftEdge.current;
+    const far = rightEdge.current;
+    if (!on || !near || !far) return;
 
-    const context = el.getContext('2d');
-    if (!context) return;
+    const nearContext = near.getContext('2d');
+    const farContext = far.getContext('2d');
+    if (!nearContext || !farContext) return;
+
+    const edges: Edge[] = [
+      { context: nearContext, at: -1, facing: 0 },
+      { context: farContext, at: 1, facing: 1 },
+    ];
 
     let colours = palette(document.documentElement);
     // Deep and bright, one of each per edge.
@@ -280,7 +319,6 @@ export function WindowGlow({
       low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
       high: [bolt(colours.high, -1), bolt(colours.high, 1)] as const,
     };
-    let width = 0;
     let height = 0;
 
     /**
@@ -294,16 +332,17 @@ export function WindowGlow({
      */
     const measure = () => {
       const dpr = window.devicePixelRatio || 1;
-      const w = Math.max(1, el.clientWidth);
-      const h = Math.max(1, el.clientHeight);
-      if (w === width && h === height && el.width === Math.round(w * dpr)) return;
-      width = w;
+      const h = Math.max(1, near.clientHeight);
+      if (h === height && near.width === Math.round(BAND * dpr)) return;
       height = h;
-      el.width = Math.round(w * dpr);
-      el.height = Math.round(h * dpr);
-      // Writing either resets the context, so the scale goes back on here and
-      // not once at the start.
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      for (const edge of edges) {
+        const el = edge.at < 0 ? near : far;
+        el.width = Math.round(BAND * dpr);
+        el.height = Math.round(h * dpr);
+        // Writing either resets the context, so the scale goes back on here and
+        // not once at the start.
+        edge.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
     };
 
     // A theme change rewrites the custom properties on the root and changes no
@@ -328,7 +367,7 @@ export function WindowGlow({
     // what left this edge a theme behind.
     const fading = whilePaletteMoves(reread);
 
-    const mixing = canMix(context);
+    const mixing = canMix(nearContext);
     let motes: Mote[] = [];
     let owed = 0;
     let showing = 0;
@@ -340,15 +379,16 @@ export function WindowGlow({
     let frame = 0;
 
     /** One wash of light along an edge, fading inwards from it. */
-    const haze = (side: -1 | 1, colour: string, reach: number, alpha: number) => {
+    const haze = (edge: Edge, colour: string, reach: number, alpha: number) => {
       if (alpha <= 0) return;
-      const from = side < 0 ? 0 : width;
-      const inward = context.createLinearGradient(from, 0, from + side * -reach, 0);
+      const { context, at } = edge;
+      const from = at < 0 ? 0 : BAND;
+      const inward = context.createLinearGradient(from, 0, from + at * -reach, 0);
       inward.addColorStop(0, colour);
       inward.addColorStop(1, 'transparent');
       context.globalAlpha = Math.min(1, alpha);
       context.fillStyle = inward;
-      context.fillRect(side < 0 ? 0 : width - reach, 0, reach, height);
+      context.fillRect(at < 0 ? 0 : BAND - reach, 0, reach, height);
     };
 
     const draw = (now: number) => {
@@ -383,12 +423,12 @@ export function WindowGlow({
       // replaced by a white rectangle.
       const felt = Math.min(1, showing + punch * PUNCH_WEIGHT);
 
-      context.clearRect(0, 0, width, height);
+      for (const edge of edges) edge.context.clearRect(0, 0, BAND, height);
       if (showing <= FLOOR && motes.length === 0) return;
 
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.
-      context.globalCompositeOperation = 'lighter';
+      for (const edge of edges) edge.context.globalCompositeOperation = 'lighter';
       // The room, then the flare in it. Added rather than painted over, so a
       // kick brightens the whole of both frames by what it was worth.
       const standing = (HAZE_AT_REST + felt * HAZE_WITH_LEVEL) * force;
@@ -398,9 +438,9 @@ export function WindowGlow({
       // change, and a colour worked out when the hit landed would hold the old
       // one until the next one did.
       const flareTone = flareColour(colours, struckAt, mixing);
-      for (const side of [-1, 1] as const) {
-        haze(side, colours.low, HAZE, standing);
-        haze(side, flareTone, flareReach, flaring);
+      for (const edge of edges) {
+        haze(edge, colours.low, HAZE, standing);
+        haze(edge, flareTone, flareReach, flaring);
       }
 
       // Wider and harder the louder it is, which on a bass-leaning level means
@@ -417,8 +457,9 @@ export function WindowGlow({
         // Both edges, the same light on each. They are a mirror rather than
         // two streams: sparks going off independently on either side read as
         // noise, and two that move together read as the window doing it.
-        for (const facing of [0, 1] as const) {
-          const x = facing === 0 ? 0 : width - reach;
+        for (const edge of edges) {
+          const { context, facing } = edge;
+          const x = facing === 0 ? 0 : BAND - reach;
           // Deep at the foot and bright at the top, crossed over as it climbs.
           context.globalAlpha = alpha * (1 - mote.height);
           context.drawImage(bolts.low[facing], x, y, reach, length);
@@ -427,19 +468,22 @@ export function WindowGlow({
         }
       }
 
-      context.globalAlpha = 1;
-      context.globalCompositeOperation = 'source-over';
+      for (const edge of edges) {
+        edge.context.globalAlpha = 1;
+        edge.context.globalCompositeOperation = 'source-over';
+      }
     };
 
     // With motion turned down the edges keep a still haze and nothing rises.
     if (prefersReducedMotion()) {
       measure();
-      context.clearRect(0, 0, width, height);
-      context.globalCompositeOperation = 'lighter';
-      haze(-1, colours.low, HAZE, HAZE_AT_REST);
-      haze(1, colours.low, HAZE, HAZE_AT_REST);
-      context.globalAlpha = 1;
-      context.globalCompositeOperation = 'source-over';
+      for (const edge of edges) {
+        edge.context.clearRect(0, 0, BAND, height);
+        edge.context.globalCompositeOperation = 'lighter';
+        haze(edge, colours.low, HAZE, HAZE_AT_REST);
+        edge.context.globalAlpha = 1;
+        edge.context.globalCompositeOperation = 'source-over';
+      }
     } else {
       frame = requestAnimationFrame(draw);
     }
@@ -455,21 +499,31 @@ export function WindowGlow({
 
   // `z-50` and immediately before the window's edge, so the hairline stays
   // crisp on top of the light. Both are the window's own border and neither may
-  // be covered by anything inside. `h-full w-full` as well as `inset-0`: a
-  // canvas is a replaced element, so with no CSS size it draws at its own
-  // intrinsic size and the offsets are simply ignored.
+  // be covered by anything inside. A width as well as `inset-y-0`: a canvas is
+  // a replaced element, so with no CSS size it draws at its own intrinsic size
+  // and the offsets are simply ignored.
+  //
+  // Each is rounded on its own side, as well as clipped by the shell. The
+  // shell's `overflow-hidden` should be enough and is not always: a canvas
+  // repainting every frame gets a compositor layer of its own, and a promoted
+  // layer can escape an ancestor's rounded clip — which shows as exactly that
+  // shape, a square corner in the light's own colour poking out past the
+  // rounded one, repainting when focus moves. Its own radius costs nothing and
+  // does not depend on being clipped by anybody.
   return (
-    <canvas
-      ref={canvas}
-      aria-hidden="true"
-      // Rounded like the shell it sits in, as well as clipped by it. The
-      // shell's `overflow-hidden` should be enough and is not always: a canvas
-      // repainting every frame gets a compositor layer of its own, and a
-      // promoted layer can escape an ancestor's rounded clip — which shows as
-      // exactly this shape, a square corner in the light's own colour poking
-      // out past the rounded one, repainting when focus moves. Its own radius
-      // costs nothing and does not depend on being clipped by anybody.
-      className="pointer-events-none absolute inset-0 z-50 h-full w-full rounded-[var(--radius-widget)]"
-    />
+    <>
+      <canvas
+        ref={leftEdge}
+        aria-hidden="true"
+        style={{ width: BAND }}
+        className="pointer-events-none absolute inset-y-0 left-0 z-50 h-full rounded-l-[var(--radius-widget)]"
+      />
+      <canvas
+        ref={rightEdge}
+        aria-hidden="true"
+        style={{ width: BAND }}
+        className="pointer-events-none absolute inset-y-0 right-0 z-50 h-full rounded-r-[var(--radius-widget)]"
+      />
+    </>
   );
 }

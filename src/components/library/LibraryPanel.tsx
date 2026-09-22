@@ -56,8 +56,15 @@ export function LibraryPanel({ open, onClose, id }: LibraryPanelProps) {
       // nobody could see — a WCAG 4.1.2 failure, and Chromium says so in the
       // console. One attribute covers visibility, focus and pointers together.
       inert={!open}
+      // `invisible` while closed, not only transparent. This carries a
+      // backdrop blur, and a blur is the most expensive thing per pixel a
+      // compositor does: three of these are mounted at all times over the
+      // whole stage, and one that is merely transparent can still be asked for
+      // it on every frame. Visibility is in `transition-all`, so it holds
+      // `visible` for the length of the way out and flips at once on the way
+      // in — the panel still slides and fades exactly as it did.
       className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
-        open ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
+        open ? 'translate-y-0 opacity-100' : 'invisible translate-y-3 opacity-0'
       }`}
     >
       <div className="flex shrink-0 items-center justify-between px-3 py-2">
