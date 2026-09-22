@@ -377,6 +377,8 @@ export function WindowGlow({
     let struckAt = 0;
     let last = performance.now();
     let frame = 0;
+    /** Whether the edges are already empty, so silence is not cleared again. */
+    let blank = false;
 
     /** One wash of light along an edge, fading inwards from it. */
     const haze = (edge: Edge, colour: string, reach: number, alpha: number) => {
@@ -423,8 +425,18 @@ export function WindowGlow({
       // replaced by a white rectangle.
       const felt = Math.min(1, showing + punch * PUNCH_WEIGHT);
 
+      // Nothing alight and nothing to come. The edges are already empty, and
+      // clearing an empty canvas on every frame is a frame's work for a
+      // picture that does not change — which is most of the time this app is
+      // open, with nothing playing.
+      if (showing <= FLOOR && motes.length === 0) {
+        if (blank) return;
+        for (const edge of edges) edge.context.clearRect(0, 0, BAND, height);
+        blank = true;
+        return;
+      }
+      blank = false;
       for (const edge of edges) edge.context.clearRect(0, 0, BAND, height);
-      if (showing <= FLOOR && motes.length === 0) return;
 
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.

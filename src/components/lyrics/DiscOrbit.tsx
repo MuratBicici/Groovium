@@ -113,6 +113,8 @@ export function DiscOrbit({
     let owed = 0;
     let showing = 0;
     let punch = 0;
+    /** Whether the rim is already empty, so silence is not cleared again. */
+    let blank = false;
     let beat: Beat = NO_BEAT;
     let last = performance.now();
     let frame = 0;
@@ -169,8 +171,17 @@ export function DiscOrbit({
       punch = Math.max(0, punch - (seconds * 1000) / GLOW.flare(felt));
       punch = Math.max(punch, heard.hit);
 
+      // Nothing on the rim and nothing left of a hit: it is already empty, and
+      // clearing an empty canvas every frame is a frame's work for a picture
+      // that does not change.
+      if (motes.length === 0 && punch <= 0.01) {
+        if (blank) return;
+        context.clearRect(0, 0, side, side);
+        blank = true;
+        return;
+      }
+      blank = false;
       context.clearRect(0, 0, side, side);
-      if (motes.length === 0 && punch <= 0.01) return;
 
       // Added rather than painted over: where two lights overlap the rim is
       // brighter, which is what light does.

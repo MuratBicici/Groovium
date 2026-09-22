@@ -13,10 +13,18 @@ import { whilePaletteMoves } from '@/core/theme/palette';
  * bars answer to the whole machine rather than to this app, which the setting
  * that turns them on says out loud.
  *
- * A canvas rather than two dozen elements. This repaints thirty times a second
- * for as long as the app is open, and doing that by writing heights onto DOM
- * nodes is thirty style recalculations a second on the element that everything
- * else in the window sits on top of.
+ * A canvas rather than two dozen elements. This answers the capture for as long
+ * as the app is open, and doing that by writing heights onto DOM nodes is a
+ * style recalculation per frame on the element that everything else in the
+ * window sits on top of.
+ *
+ * A column is only redrawn when it has changed height. It used to lay the whole
+ * grid down again on every frame — at this size, two and a half thousand blocks
+ * sixty times a second — and it did that with the machine silent as well, since
+ * a grid of unlit blocks is still a grid that has to be drawn. Silence now
+ * costs nothing at all: every column is already showing what it should, so
+ * nothing is painted, and a layer nothing paints into is a layer the compositor
+ * has no new work for.
  */
 
 /**
@@ -134,6 +142,9 @@ export function Visualizer({ on }: { on: boolean }) {
       if (w === width && h === height && el.width === Math.round(w * dpr)) return;
       width = w;
       height = h;
+      // A resize empties the canvas and moves every column, so what each one
+      // is showing is no longer known.
+      afresh = true;
       el.width = Math.round(w * dpr);
       el.height = Math.round(h * dpr);
       // Writing either of those resets the context, so the scale goes back on
@@ -146,6 +157,7 @@ export function Visualizer({ on }: { on: boolean }) {
     // about it.
     const reread = () => {
       colours = palette(document.documentElement);
+      afresh = true;
     };
     const themed = new MutationObserver(reread);
     themed.observe(document.documentElement, {
@@ -161,11 +173,15 @@ export function Visualizer({ on }: { on: boolean }) {
     const fading = whilePaletteMoves(reread);
 
     let frame = 0;
+    /** How high each column is drawn, so one that has not moved is left alone. */
+    let standing: number[] = [];
+    /** Everything down again: the first frame, a resize, a change of palette. */
+    let afresh = true;
+
     const draw = () => {
       frame = requestAnimationFrame(draw);
       measure();
       const values = bars.current;
-      context.clearRect(0, 0, width, height);
       if (values.length === 0) return;
 
       const step = BLOCK + GAP;
@@ -175,10 +191,24 @@ export function Visualizer({ on }: { on: boolean }) {
       // edge with a wider gap at the other.
       const left = Math.round((width - (columns * step - GAP)) / 2);
 
+      if (standing.length !== columns) {
+        standing = new Array<number>(columns).fill(-1);
+        afresh = true;
+      }
+      // The margins either side of the grid are never drawn in, so they are
+      // only ever cleared here — where the grid may just have moved.
+      if (afresh) context.clearRect(0, 0, width, height);
+
       for (let c = 0; c < columns; c++) {
-        const x = left + c * step;
         const value = spread(values, c, columns);
         const lit = value <= FLOOR ? 0 : Math.max(1, Math.round(value * rows));
+        // Already showing exactly this. The blocks below are what a column is,
+        // and drawing them again would put down the same picture.
+        if (!afresh && standing[c] === lit) continue;
+        standing[c] = lit;
+
+        const x = left + c * step;
+        if (!afresh) context.clearRect(x, 0, BLOCK, height);
         for (let r = 0; r < rows; r++) {
           const y = height - (r + 1) * BLOCK - r * GAP;
           if (r < lit) {
@@ -192,6 +222,7 @@ export function Visualizer({ on }: { on: boolean }) {
           context.fillRect(x, y, BLOCK, BLOCK);
         }
       }
+      afresh = false;
     };
 
     // With motion turned down the bars are drawn once, unlit, and left alone.
