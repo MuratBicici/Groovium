@@ -769,15 +769,24 @@ body {
  * the whole of it read as one light travelling. The glow over the line is a
  * filter on what is drawn, so it follows the light across.
  *
+ * The edge travels the word's width *and its own*, from entirely off the front
+ * of the word to entirely past its end. Across the width alone, a word not
+ * reached yet has the lit end of the edge sitting on its first letter — which
+ * is every word in the line wearing a lit initial, waiting for a light that
+ * has not arrived.
+ *
  * Only for lines a source timed as a line. A line timed syllable by syllable
  * is lit a syllable at a time instead, which is this same light told exactly,
  * and the two would disagree by a word if both were drawn.
  */
 .lyric-lit [data-word] {
+  --lyric-edge: 9px;
   background-image: linear-gradient(
     90deg,
-    var(--color-cream-50) calc(var(--sung, 0) * 100%),
-    color-mix(in srgb, var(--color-cream-50) 38%, transparent) calc(var(--sung, 0) * 100% + 9px)
+    var(--color-cream-50)
+      calc(var(--sung, 0) * (100% + var(--lyric-edge)) - var(--lyric-edge)),
+    color-mix(in srgb, var(--color-cream-50) 38%, transparent)
+      calc(var(--sung, 0) * (100% + var(--lyric-edge)))
   );
   -webkit-background-clip: text;
   background-clip: text;
