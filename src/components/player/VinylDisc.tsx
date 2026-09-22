@@ -180,6 +180,13 @@ export function VinylDisc({
       >
         {coverArtUrl ? (
           <img
+            // A different sleeve is a different element, not the same one with
+            // a new address. Handed a new `src`, a browser goes on painting the
+            // picture it already has until the new one has arrived and decoded
+            // — which on a cover coming over the wire is the old record sitting
+            // on the deck through the first seconds of the next song. There is
+            // nothing stale about an element that has never drawn anything.
+            key={coverArtUrl}
             src={coverArtUrl}
             alt=""
             loading={eager ? 'eager' : 'lazy'}
