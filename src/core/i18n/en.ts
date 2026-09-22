@@ -305,6 +305,9 @@ export const en = {
   'settings.windowGlow': 'Edge light',
   'settings.windowGlowHint':
     'The window’s border lights up with the music, climbing higher and brighter the louder it gets.',
+  'settings.sleepWhenHidden': 'Rest out of sight',
+  'settings.sleepWhenHiddenHint':
+    'Nothing is drawn while the window is put away, minimised, or buried under something full-screen. Turn it off to keep everything moving whether or not anyone is looking.',
   'settings.glowStrength': 'Strength',
   'settings.glowSensitivity': 'Sensitivity',
   'settings.glowSpeed': 'Speed',

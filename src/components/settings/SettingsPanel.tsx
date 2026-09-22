@@ -68,6 +68,7 @@ export function SettingsPanel({
   const glowFlash = useSettingsStore((s) => s.glowFlash);
   const glowFlare = useSettingsStore((s) => s.glowFlare);
   const visualizer = useSettingsStore((s) => s.visualizer);
+  const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
   const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
   const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
@@ -75,6 +76,7 @@ export function SettingsPanel({
   const setThemeFromCover = useSettingsStore((s) => s.setThemeFromCover);
   const setGlow = useSettingsStore((s) => s.setGlow);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
+  const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
@@ -286,6 +288,16 @@ export function SettingsPanel({
             hint={t('settings.themeFromCoverHint')}
             on={themeFromCover}
             onChange={setThemeFromCover}
+          />
+
+          {/* Under the ornaments, because it is about all of them at once:
+              what it decides is whether any of them run while nobody can see
+              them. */}
+          <Toggle
+            label={t('settings.sleepWhenHidden')}
+            hint={t('settings.sleepWhenHiddenHint')}
+            on={sleepWhenHidden}
+            onChange={setSleepWhenHidden}
           />
 
           <Toggle

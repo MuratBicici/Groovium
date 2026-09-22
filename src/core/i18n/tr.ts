@@ -291,6 +291,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.windowGlow': 'Kenar ışığı',
   'settings.windowGlowHint':
     'Pencerenin çerçevesi müzikle birlikte ışıklanır; ses yükseldikçe daha yukarı ve daha parlak çıkar.',
+  'settings.sleepWhenHidden': 'Görünmezken dinlen',
+  'settings.sleepWhenHiddenHint':
+    'Pencere kaldırılmışken, simge durumundayken ya da tam ekran bir şeyin altında kalmışken hiçbir şey çizilmez. Kimse bakmıyorken de her şey dönsün istiyorsanız kapatın.',
   'settings.glowStrength': 'Güç',
   'settings.glowSensitivity': 'Hassasiyet',
   'settings.glowSpeed': 'Hız',

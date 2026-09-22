@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isTauri } from '@/core/utils/env';
+import { useSettingsStore } from '@/core/settings/store';
 
 /**
  * Whether the window can be seen at all, which is what every drawing loop in
@@ -22,6 +23,11 @@ import { isTauri } from '@/core/utils/env';
  * It reaches further than the drawing. The loops are what hold the audio
  * capture open — it is counted, and stops when the last watcher leaves — so a
  * window nobody can see puts the spectrum in Rust to sleep as well.
+ *
+ * All of which somebody can turn off. `sleepWhenHidden` is on by default,
+ * because what this saves is real on a laptop's own graphics; switched off,
+ * every loop runs on as though the window were in front of you, which is the
+ * one thing nobody can check for themselves.
  */
 
 /** What the watcher in Rust emits: true while the window is buried. */
@@ -60,6 +66,7 @@ async function hearRust(): Promise<void> {
 
 /** Whether the window is being shown, watched, for a loop to hang an effect on. */
 export function useShown(): boolean {
+  const sleeps = useSettingsStore((s) => s.sleepWhenHidden);
   const [is, setIs] = useState(shown);
 
   useEffect(() => {
@@ -76,5 +83,7 @@ export function useShown(): boolean {
     };
   }, []);
 
-  return is;
+  // Asked not to sleep: as far as every loop is concerned the window is in
+  // front of somebody, whatever it is really doing.
+  return is || !sleeps;
 }

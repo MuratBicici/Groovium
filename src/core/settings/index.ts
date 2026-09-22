@@ -99,6 +99,21 @@ export interface Settings {
    */
   windowGlow: boolean;
   /**
+   * Stop drawing while the window cannot be seen.
+   *
+   * Put away to the tray, minimised, or buried under something full-screen
+   * with this window not pinned above it — in each case nothing on it is being
+   * looked at, and everything that moves can stop: the blocks, the edges, the
+   * lights on the record, the loop that follows the song. It puts the audio
+   * capture down with them, since the drawing is what holds it open.
+   *
+   * On by default, and worth having a switch for anyway. What it costs is real
+   * on a laptop's own graphics, and what it takes away is the one thing a
+   * person cannot check for themselves: whether this app is still working when
+   * they are not looking at it.
+   */
+  sleepWhenHidden: boolean;
+  /**
    * Take the palette from the cover of whatever is playing.
    *
    * The two colours come out of the artwork the same way a person picks them
@@ -185,6 +200,7 @@ export const DEFAULT_SETTINGS: Settings = {
   windowBorder: false,
   visualizer: true,
   windowGlow: false,
+  sleepWhenHidden: true,
   themeFromCover: false,
   glowStrength: 0,
   glowSensitivity: 0,
