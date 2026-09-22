@@ -761,6 +761,49 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
   }
 
+  /**
+   * Take a provider into use.
+   *
+   * `keepDeck` is the difference between the two reasons for doing this. On its
+   * own — signing out, or being told to use another source — the switch is the
+   * end of something, and what was playing is gone from the deck with it. As
+   * part of starting a track it is the *beginning* of something, and the record
+   * that was on the deck has to stay there until the new one is ready, because
+   * coming up can take a while: a cold Spotify start is the SDK loading, a
+   * token, and a device to claim. Emptying the deck first is a record vanishing
+   * the moment somebody puts another one on, and staying gone until the music
+   * starts. The caller writes the new record itself, a line later.
+   */
+  async function takeProvider(id: SourceType, keepDeck: boolean): Promise<void> {
+    const provider = getProvider(id);
+    if (!provider) {
+      set({ error: `No provider registered for "${id}".` });
+      return;
+    }
+    if (subscribedProvider === provider) return;
+
+    unsubscribeFromProvider?.();
+    unsubscribeFromProvider = provider.subscribe(handleProviderEvent);
+    subscribedProvider = provider;
+
+    set({
+      activeProviderId: id,
+      playbackState: 'IDLE',
+      error: null,
+      // Whatever was playing is not playing through this one.
+      ...(keepDeck ? {} : { currentTrack: null, positionMs: 0, durationMs: 0 }),
+    });
+
+    const ready = await provider.initialize();
+    if (!ready) {
+      if (!get().error) {
+        set({ error: say('error.providerUnavailable', { provider: provider.displayName }) });
+      }
+      return;
+    }
+    await provider.setVolume(outputAmplitude());
+  }
+
   /** The starting itself, so the flag above is cleared however this leaves. */
   async function startingTrack(track: TrackMetadata, index: number): Promise<void> {
     // Signing out does not empty the collections a Spotify track is sitting in,
@@ -776,9 +819,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     }
 
     // A collection can mix sources; the track says which provider owns it.
+    // The record already on the deck stays there through the switch: this one
+    // is not ready to take its place yet, and an empty deck in between is the
+    // record somebody just chose disappearing until it starts.
     if (track.source !== get().activeProviderId) {
       await withProvider((provider) => provider.pause());
-      await get().setActiveProvider(track.source);
+      await takeProvider(track.source, true);
       if (get().error) return;
     }
 
@@ -892,34 +938,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async setActiveProvider(id) {
-      const provider = getProvider(id);
-      if (!provider) {
-        set({ error: `No provider registered for "${id}".` });
-        return;
-      }
-      if (subscribedProvider === provider) return;
-
-      unsubscribeFromProvider?.();
-      unsubscribeFromProvider = provider.subscribe(handleProviderEvent);
-      subscribedProvider = provider;
-
-      set({
-        activeProviderId: id,
-        currentTrack: null,
-        playbackState: 'IDLE',
-        positionMs: 0,
-        durationMs: 0,
-        error: null,
-      });
-
-      const ready = await provider.initialize();
-      if (!ready) {
-        if (!get().error) {
-          set({ error: say('error.providerUnavailable', { provider: provider.displayName }) });
-        }
-        return;
-      }
-      await provider.setVolume(outputAmplitude());
+      await takeProvider(id, false);
     },
 
     async refreshLibrary() {

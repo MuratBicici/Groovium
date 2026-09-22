@@ -100,6 +100,28 @@ describe('a track on its way', () => {
     expect(usePlayerStore.getState().starting).toBeNull();
   });
 
+  it('leaves the record already on the deck there until the new one is ready', async () => {
+    // The bug this is here for: choosing a Spotify track on a cold start swaps
+    // providers first, and the swap used to empty the deck. The record
+    // somebody had just put another one on top of vanished, and nothing was
+    // there until the SDK came up — seconds, on a first run.
+    const onDeck = song('local:9', 'local');
+    usePlayerStore.setState({ currentTrack: onDeck, activeProviderId: 'local' });
+
+    const started = usePlayerStore.getState().playSingle(song('sp:3', 'spotify'));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('local:9');
+    expect(usePlayerStore.getState().starting).toBe('sp:3');
+
+    spotify.comeUp();
+    await started;
+
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('sp:3');
+  });
+
   it('is nothing at all once the track is playing', async () => {
     await usePlayerStore.getState().playSingle(song('local:1', 'local'));
     expect(usePlayerStore.getState().currentTrack?.id).toBe('local:1');
