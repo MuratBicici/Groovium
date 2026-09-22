@@ -47,6 +47,13 @@ export function turnTransition(move: Move): string {
  * can take the view elsewhere; the line being sung keeps its light wherever
  * it is.
  *
+ * And it sits in the middle of the room rather than at the start of it. The
+ * lines are spokes and a spoke begins at the label, which is what makes a
+ * column of them read as one thing — but the line being sung is not one of a
+ * column, it is the line being read, and a short one left at the beginning
+ * hangs off the label with the room it was given empty beside it. It slides
+ * into the middle as it lights, and back to the beginning as it stops.
+ *
  * The line being sung is lit rather than simply coloured — the light crosses
  * it as it is sung, see `.lyric-lit` — and its ink is the light, so the change
  * to and from it is not something to ease: eased, the letters would be neither
@@ -101,7 +108,14 @@ export function LyricWheel({
     box.classList.remove('font-semibold');
     els.forEach((el, index) => {
       const natural = widths[index] ?? 0;
-      el.style.setProperty('--fit', natural > 0 ? String(LINE_ROOM / natural) : '1');
+      const fit = natural > 0 ? LINE_ROOM / natural : 1;
+      el.style.setProperty('--fit', String(fit));
+      // And how far along the room it would have to move to sit in the middle
+      // of it: half of what it leaves over at the size it is drawn at. Only
+      // the line being sung uses it, but it is the same sum for every line and
+      // this is where a line is measured.
+      const drawn = natural * Math.min(Math.max(fit, SUNG_MIN_SCALE), SUNG_MAX_SCALE);
+      el.style.setProperty('--mid', `${Math.max(0, (LINE_ROOM - drawn) / 2)}px`);
     });
   }, [lines]);
 
@@ -168,8 +182,13 @@ export function LyricWheel({
                   // The line being sung takes the room it has, between a size
                   // that still reads and one that is still a line among lines;
                   // the rest keep their own size or less, dimmed by distance.
+                  // Moved along its own spoke, which the rotation above has
+                  // already pointed the right way — outwards on either side,
+                  // so the mirrored half is not centred by moving it inwards.
                   transform: singing
-                    ? `scale(clamp(${SUNG_MIN_SCALE}, var(--fit, 1), ${SUNG_MAX_SCALE}))`
+                    ? `translateX(${
+                        left ? 'var(--mid, 0px)' : 'calc(var(--mid, 0px) * -1)'
+                      }) scale(clamp(${SUNG_MIN_SCALE}, var(--fit, 1), ${SUNG_MAX_SCALE}))`
                     : `scale(calc(min(1, var(--fit, 1)) * ${look.scale}))`,
                   transformOrigin: left ? 'left center' : 'right center',
                   transitionDuration: `${LOOK_MS}ms`,
