@@ -44,8 +44,15 @@ const SETTLE_MS = 150;
  * Local tracks are instant, but a Spotify track only becomes `currentTrack`
  * after the provider initialises and the device is claimed — routinely more
  * than a second. The clone rests on the platter through that, which is exactly
- * what a record waiting for the needle looks like. Past this, playback is not
- * coming and the clone bows out.
+ * what a record waiting for the needle looks like.
+ *
+ * This is only how often the wait is reconsidered, not how long it lasts. It
+ * used to be the whole of it, and on a cold start — the SDK loading, a token,
+ * a device to claim — the track takes longer than any number that is not a
+ * guess. The clone gave up, the deck had nothing on it yet, and the record
+ * somebody had just put on vanished until the music started. Now the store
+ * says while a track is on its way (`starting`), and the wait lasts as long as
+ * that does; this is the pulse that asks.
  */
 const HOLD_MS = 2500;
 
@@ -418,6 +425,22 @@ function FlyingDisc({
       onDone(flight);
     };
 
+    /**
+     * Rest on the platter while the track is still on its way.
+     *
+     * Asked again every `HOLD_MS` rather than waited out once: what decides
+     * this is whether the store is still starting this track, and that has no
+     * length anybody can name. Giving up fades out rather than snapping, so a
+     * load that never arrives ends quietly.
+     */
+    const rest = () => {
+      if (arrived || usePlayerStore.getState().starting !== flight.track.id) {
+        commit();
+        return;
+      }
+      holdTimer = setTimeout(rest, HOLD_MS);
+    };
+
     const land = () => {
       // `onfinish` and the failsafe can both arrive; a second hold timer would
       // outlive the first and fire after the flight is gone.
@@ -430,9 +453,7 @@ function FlyingDisc({
       syncSpin();
 
       if (arrived) commit();
-      // Otherwise rest on the platter until the track actually loads. Giving up
-      // fades out rather than snapping, so a failed load ends quietly.
-      else holdTimer = setTimeout(commit, HOLD_MS);
+      else holdTimer = setTimeout(rest, HOLD_MS);
     };
 
     animation.onfinish = land;

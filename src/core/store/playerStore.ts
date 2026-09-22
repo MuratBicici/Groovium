@@ -155,6 +155,18 @@ export interface PlayerState {
   storeDir: string;
 
   playback: PlaybackContext;
+  /**
+   * The track the player is trying to start, for as long as it is trying.
+   *
+   * `currentTrack` is written once the provider that owns the track is ready,
+   * which on a local file is the same instant and on a Spotify track on a cold
+   * start is the SDK loading, a token, and a device being claimed — seconds,
+   * routinely. Between the two there is a track on its way and nothing in the
+   * store that says so, and anything waiting for it has to guess with a timer.
+   *
+   * Null the rest of the time, including while a track plays.
+   */
+  starting: string | null;
   /** Playback order when shuffle is on. Indices into `playback.tracks`. */
   shuffleOrder: number[];
   /** Non-null while files are being copied in. */
@@ -301,6 +313,7 @@ const initialState: PlayerState = {
   playlists: [],
   storeDir: '',
   playback: EMPTY_CONTEXT,
+  starting: null,
   shuffleOrder: [],
   importing: null,
   station: false,
@@ -734,7 +747,22 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     if (!track) return;
 
     if (!continuingStation) discardStationQueue();
+    // From here to the end, however it ends: this track is on its way. The
+    // record flying to the deck rests until this clears rather than until a
+    // timer it cannot know the right length of runs out.
+    set({ starting: track.id });
+    try {
+      await startingTrack(track, index);
+    } finally {
+      // Only if it is still this one. A second choice while the first was
+      // still opening owns the slot now, and clearing it here would tell the
+      // deck that nothing is coming while something is.
+      if (get().starting === track.id) set({ starting: null });
+    }
+  }
 
+  /** The starting itself, so the flag above is cleared however this leaves. */
+  async function startingTrack(track: TrackMetadata, index: number): Promise<void> {
     // Signing out does not empty the collections a Spotify track is sitting in,
     // so stepping onto one afterwards is ordinary. Without this it reached the
     // provider and came back as "Spotify player is not connected." — true, and
