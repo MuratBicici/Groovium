@@ -3,6 +3,7 @@ import { GLOW, NOTCHES, levelFrom, settleLevel, watchBars } from '@/core/visuali
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { useShown } from '@/core/utils/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**
@@ -267,6 +268,7 @@ export function WindowGlow({
   flash: number;
   flare: number;
 }) {
+  const shown = useShown();
   const leftEdge = useRef<HTMLCanvasElement | null>(null);
   const rightEdge = useRef<HTMLCanvasElement | null>(null);
   /** What Rust last said, which the drawing chases rather than jumps to. */
@@ -287,7 +289,7 @@ export function WindowGlow({
   }, [strength, sensitivity, speed, flash, flare]);
 
   useEffect(() => {
-    if (!on) return;
+    if (!on || !shown) return;
     return watchBars((bars) => {
       measured.current = levelFrom(bars);
       // Kept apart from the level. The level is one number for the whole mix,
@@ -297,12 +299,12 @@ export function WindowGlow({
       // struck rather than that the music got louder.
       spectrum.current = bars;
     });
-  }, [on]);
+  }, [on, shown]);
 
   useEffect(() => {
     const near = leftEdge.current;
     const far = rightEdge.current;
-    if (!on || !near || !far) return;
+    if (!on || !shown || !near || !far) return;
 
     const nearContext = near.getContext('2d');
     const farContext = far.getContext('2d');
@@ -505,7 +507,7 @@ export function WindowGlow({
       themed.disconnect();
       fading();
     };
-  }, [on]);
+  }, [on, shown]);
 
   if (!on) return null;
 

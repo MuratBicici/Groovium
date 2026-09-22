@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { watchBars } from '@/core/visualizer';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { useShown } from '@/core/utils/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**
@@ -102,20 +103,21 @@ export function Visualizer({ on }: { on: boolean }) {
    * directly at.
    */
   const bars = useRef<number[]>([]);
+  const shown = useShown();
 
   useEffect(() => {
-    if (!on) return;
+    if (!on || !shown) return;
     // Counted rather than started here. The light around the window's edge
     // wants the same frames, and two components calling the capture's own stop
     // is one of them switching the other off.
     return watchBars((frame) => {
       bars.current = frame;
     });
-  }, [on]);
+  }, [on, shown]);
 
   useEffect(() => {
     const el = canvas.current;
-    if (!on || !el) return;
+    if (!on || !shown || !el) return;
 
     const context = el.getContext('2d');
     if (!context) return;
@@ -238,7 +240,7 @@ export function Visualizer({ on }: { on: boolean }) {
       themed.disconnect();
       fading();
     };
-  }, [on]);
+  }, [on, shown]);
 
   if (!on) return null;
 

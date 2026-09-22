@@ -2,6 +2,7 @@ import { useEffect, useState, type RefObject } from 'react';
 import { activeLine, lineSweep, type LyricLine } from '@/core/lyrics/activeLine';
 import { playheadMs } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { useShown } from '@/core/utils/shown';
 import { turnsTo } from './arc';
 
 /** The line being sung, and whether the move to it was a jump rather than a step. */
@@ -34,9 +35,13 @@ export function useLyricFrame(
   activeEl: RefObject<HTMLElement | null>,
 ): Place {
   const [place, setPlace] = useState<Place>({ active: -1, jumped: true });
+  // Not `shown`: below, that is the line last shown.
+  const onScreen = useShown();
 
   useEffect(() => {
-    if (!lines) return;
+    // A window nobody can see has no line to light. The clock keeps the time
+    // either way, so coming back is the next frame rather than a catch-up.
+    if (!lines || !onScreen) return;
     let frame = 0;
     let shown = Number.NaN;
     /** No light crossing the line when motion is not wanted: lit, and still. */
@@ -82,7 +87,7 @@ export function useLyricFrame(
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [lines, activeEl]);
+  }, [lines, activeEl, onScreen]);
 
   return lines ? place : { active: -1, jumped: true };
 }

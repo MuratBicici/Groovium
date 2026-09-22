@@ -4,6 +4,7 @@ import { advance, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { useSettingsStore } from '@/core/settings/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { useShown } from '@/core/utils/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 import { HALO_ALPHA, HALO_WIDTH, RIM_ALPHA, orbitMargin, orbitRadius, streak } from './orbit';
 
@@ -65,6 +66,7 @@ export function DiscOrbit({
   const speed = useSettingsStore((s) => s.glowSpeed);
   const flare = useSettingsStore((s) => s.glowFlare);
 
+  const shown = useShown();
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const measured = useRef(0);
   const spectrum = useRef<number[]>([]);
@@ -82,7 +84,7 @@ export function DiscOrbit({
 
   useEffect(() => {
     const el = canvas.current;
-    if (!on || !el || prefersReducedMotion()) return;
+    if (!on || !shown || !el || prefersReducedMotion()) return;
 
     const context = el.getContext('2d');
     if (!context) return;
@@ -236,7 +238,7 @@ export function DiscOrbit({
       fading();
       context.clearRect(0, 0, side, side);
     };
-  }, [on, side, ring, radius, labelRatio]);
+  }, [on, shown, side, ring, radius, labelRatio]);
 
   if (!on) return null;
 
