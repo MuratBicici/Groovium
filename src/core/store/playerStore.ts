@@ -165,8 +165,12 @@ export interface PlayerState {
    * store that says so, and anything waiting for it has to guess with a timer.
    *
    * Null the rest of the time, including while a track plays.
+   *
+   * The whole track rather than its id, because the deck draws it: a record
+   * dropped on an empty deck is on the deck from that moment, and what it looks
+   * like cannot wait for a provider to come up.
    */
-  starting: string | null;
+  starting: TrackMetadata | null;
   /** Playback order when shuffle is on. Indices into `playback.tracks`. */
   shuffleOrder: number[];
   /** Non-null while files are being copied in. */
@@ -750,14 +754,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // From here to the end, however it ends: this track is on its way. The
     // record flying to the deck rests until this clears rather than until a
     // timer it cannot know the right length of runs out.
-    set({ starting: track.id });
+    set({ starting: track });
     try {
       await startingTrack(track, index);
     } finally {
       // Only if it is still this one. A second choice while the first was
       // still opening owns the slot now, and clearing it here would tell the
       // deck that nothing is coming while something is.
-      if (get().starting === track.id) set({ starting: null });
+      if (get().starting?.id === track.id) set({ starting: null });
     }
   }
 
@@ -816,7 +820,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    */
   async function startingTrack(track: TrackMetadata, index: number): Promise<void> {
     /** Whether this attempt is still the one that counts. */
-    const mine = () => get().starting === track.id;
+    const mine = () => get().starting?.id === track.id;
 
     // Signing out does not empty the collections a Spotify track is sitting in,
     // so stepping onto one afterwards is ordinary. Without this it reached the

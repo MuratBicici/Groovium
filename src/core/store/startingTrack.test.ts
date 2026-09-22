@@ -91,7 +91,7 @@ describe('a track on its way', () => {
     await Promise.resolve();
 
     expect(usePlayerStore.getState().currentTrack).toBeNull();
-    expect(usePlayerStore.getState().starting).toBe('sp:1');
+    expect(usePlayerStore.getState().starting?.id).toBe('sp:1');
 
     spotify.comeUp();
     await started;
@@ -114,7 +114,7 @@ describe('a track on its way', () => {
     await Promise.resolve();
 
     expect(usePlayerStore.getState().currentTrack?.id).toBe('local:9');
-    expect(usePlayerStore.getState().starting).toBe('sp:3');
+    expect(usePlayerStore.getState().starting?.id).toBe('sp:3');
 
     spotify.comeUp();
     await started;
@@ -134,7 +134,7 @@ describe('a track on its way', () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
-    expect(usePlayerStore.getState().starting).toBe('sp:slow');
+    expect(usePlayerStore.getState().starting?.id).toBe('sp:slow');
 
     // The second choice, which needs nothing and is done at once.
     await usePlayerStore.getState().playSingle(quick);

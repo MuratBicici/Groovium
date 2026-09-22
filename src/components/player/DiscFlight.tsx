@@ -434,7 +434,7 @@ function FlyingDisc({
      * load that never arrives ends quietly.
      */
     const rest = () => {
-      if (arrived || usePlayerStore.getState().starting !== flight.track.id) {
+      if (arrived || usePlayerStore.getState().starting?.id !== flight.track.id) {
         commit();
         return;
       }

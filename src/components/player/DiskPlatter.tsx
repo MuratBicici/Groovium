@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
-import { useCurrentTrack, useIsPlaying } from '@/core/store';
+import { useCurrentTrack, useIsPlaying, usePlayerStore } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useDiscFlight, usePendingLanding } from './DiscFlight';
 import { useDiscHold, useHeldTrack } from './DiscHold';
@@ -28,7 +28,23 @@ const SWAP_MS = 450;
 export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
   const t = useT();
   const isPlaying = useIsPlaying();
-  const track = useCurrentTrack();
+  /**
+   * What is on the deck: what is playing, or — with nothing playing — what is
+   * on its way onto it.
+   *
+   * A record put on by hand is on the deck the moment it is let go of, and a
+   * record clicked onto an empty deck is on it from the click. Neither becomes
+   * the current track until the provider that owns it is ready, which on a cold
+   * start is seconds; drawing nothing until then is the record vanishing in the
+   * hand that just put it there.
+   *
+   * Only when the deck would otherwise be empty. With a record already on it,
+   * that one stays until the new one is really playing — the deck and the words
+   * under it then never disagree.
+   */
+  const playing = useCurrentTrack();
+  const coming = usePlayerStore((s) => s.starting);
+  const track = playing ?? coming;
   const { registerPlatter, didJustLand } = useDiscFlight();
   const pendingTrackId = usePendingLanding();
   const { grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat } = useDiscHold();

@@ -28,7 +28,10 @@ import { useHeldTrack } from './DiscHold';
 export function CoverTheme() {
   const on = useSettingsStore((s) => s.themeFromCover);
   const setCoverPalette = useSettingsStore((s) => s.setCoverPalette);
-  const cover = usePlayerStore((s) => s.currentTrack?.coverArtUrl);
+  // What is on the deck, which with nothing playing is what is arriving on it:
+  // the same record `DiskPlatter` draws, so the colours arrive with the picture.
+  const onDeckTrack = usePlayerStore((s) => s.currentTrack ?? s.starting);
+  const cover = onDeckTrack?.coverArtUrl;
   /**
    * Which record the cover belongs to.
    *
@@ -38,7 +41,7 @@ export function CoverTheme() {
    * being read. What goes on the window has to be the colours of what is on the
    * deck at the moment it is put there, not of whatever asked first.
    */
-  const onDeck = usePlayerStore((s) => s.currentTrack?.id);
+  const onDeck = onDeckTrack?.id;
   const inHand = useHeldTrack() !== null;
 
   /**
@@ -115,7 +118,8 @@ export function CoverTheme() {
       // torn down says the question changed, and the deck says what the answer
       // is for — a read that started for one record cannot colour another.
       if (!alive) return;
-      if (usePlayerStore.getState().currentTrack?.id !== onDeck) return;
+      const still = usePlayerStore.getState();
+      if ((still.currentTrack ?? still.starting)?.id !== onDeck) return;
       known.current = remember(known.current, cover, seen);
       // A failure falls back to the palette that was chosen rather than leaving
       // the last record's colours on a window that is playing something else.
