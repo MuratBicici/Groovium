@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { watchBars } from '@/core/visualizer';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { useShown } from '@/core/utils/shown';
+import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**

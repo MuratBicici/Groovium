@@ -11,6 +11,7 @@ mod logging;
 mod lyrics;
 mod media;
 mod metadata;
+mod onscreen;
 mod playlists;
 mod session;
 mod shell;
@@ -67,6 +68,9 @@ fn main() {
             }
             log::info!("Groovium {} started", app.package_info().version);
             shell::forget_old_place(app.handle());
+            // Nothing should be drawn for a window buried under something
+            // else; the webview cannot see that from the inside.
+            onscreen::watch(app.handle().clone());
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
             shortcuts::register(app.handle());

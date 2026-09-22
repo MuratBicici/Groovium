@@ -3,7 +3,7 @@ import { GLOW, NOTCHES, levelFrom, settleLevel, watchBars } from '@/core/visuali
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { useShown } from '@/core/utils/shown';
+import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**

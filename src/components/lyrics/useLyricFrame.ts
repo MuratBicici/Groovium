@@ -2,7 +2,7 @@ import { useEffect, useState, type RefObject } from 'react';
 import { activeLine, lineSweep, type LyricLine } from '@/core/lyrics/activeLine';
 import { playheadMs } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { useShown } from '@/core/utils/shown';
+import { useShown } from '@/platform/shown';
 import { turnsTo } from './arc';
 
 /** The line being sung, and whether the move to it was a jump rather than a step. */
