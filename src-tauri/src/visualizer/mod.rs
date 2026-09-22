@@ -29,7 +29,7 @@ mod bands;
 #[cfg(windows)]
 mod capture;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -64,9 +64,20 @@ const FRAME: Duration = Duration::from_millis(16);
 /// The event the webview listens on. One array of `BARS` floats in 0..=1.
 const EVENT: &str = "visualizer:bars";
 
-/// Whether the capture should keep going.
+/// Whether the capture should keep going, and which run is the one going.
+///
+/// A flag on its own was enough while this started once and never stopped. It
+/// stops now — a window nobody can see wants no spectrum — and starting and
+/// stopping in quick succession is two threads racing over one boolean: a stop
+/// the running thread has not noticed yet lets the next start through, and then
+/// the old thread's own tidying up switches the new one off. What is left is an
+/// app that believes it is listening and never hears anything again.
+///
+/// A number instead of a flag. Every start takes the next one and keeps going
+/// only while it is still the current one, so an older run can end without
+/// touching a newer one, and nought means nobody is listening.
 #[derive(Default)]
-pub struct Running(Arc<AtomicBool>);
+pub struct Running(Arc<AtomicU64>);
 
 /// The most recent samples, mixed down to mono.
 ///
@@ -104,15 +115,20 @@ impl Ring {
 /// stop the app playing music.
 #[tauri::command]
 pub fn visualizer_start(app: AppHandle, running: tauri::State<'_, Running>) {
-    let flag = running.0.clone();
-    if flag.swap(true, Ordering::SeqCst) {
+    let turn = running.0.clone();
+    // Nought is nobody listening; anything else is a run in progress, and one
+    // in progress needs no second thread.
+    if turn.load(Ordering::SeqCst) != 0 {
         return;
     }
+    let mine = NEXT_RUN.fetch_add(1, Ordering::SeqCst) + 1;
+    turn.store(mine, Ordering::SeqCst);
     std::thread::spawn(move || {
-        if let Err(err) = run(&app, &flag) {
+        if let Err(err) = run(&app, &turn, mine) {
             log::warn!("[visualizer] {err}");
         }
-        flag.store(false, Ordering::SeqCst);
+        // Only if this run is still the one: a newer one has its own thread.
+        let _ = turn.compare_exchange(mine, 0, Ordering::SeqCst, Ordering::SeqCst);
         // One last frame of nothing, so whatever was on screen falls away
         // rather than freezing at the height it had when the sound stopped.
         let _ = app.emit(EVENT, vec![0.0_f32; BARS]);
@@ -121,16 +137,19 @@ pub fn visualizer_start(app: AppHandle, running: tauri::State<'_, Running>) {
 
 #[tauri::command]
 pub fn visualizer_stop(running: tauri::State<'_, Running>) {
-    running.0.store(false, Ordering::SeqCst);
+    running.0.store(0, Ordering::SeqCst);
 }
 
+/// Where a run's number comes from. Only ever goes up.
+static NEXT_RUN: AtomicU64 = AtomicU64::new(0);
+
 #[cfg(not(windows))]
-fn run(_app: &AppHandle, _running: &AtomicBool) -> Result<(), String> {
+fn run(_app: &AppHandle, _turn: &AtomicU64, _mine: u64) -> Result<(), String> {
     Err("per-process capture is a Windows interface".into())
 }
 
 #[cfg(windows)]
-fn run(app: &AppHandle, running: &AtomicBool) -> Result<(), String> {
+fn run(app: &AppHandle, turn: &AtomicU64, mine: u64) -> Result<(), String> {
     let me = capture::me();
     let webview =
         capture::webview_of(me).ok_or_else(|| format!("no webview under {me} to listen to"))?;
@@ -165,7 +184,7 @@ fn run(app: &AppHandle, running: &AtomicBool) -> Result<(), String> {
     let writer = ring.clone();
     let result = capture::listen(
         webview,
-        &|| running.load(Ordering::SeqCst),
+        &|| turn.load(Ordering::SeqCst) == mine,
         &mut |samples| {
             let Ok(mut ring) = writer.lock() else { return };
             // Mixed to mono as it arrives. Two bars for two ears is not what

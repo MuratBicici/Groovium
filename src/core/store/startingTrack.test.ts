@@ -122,6 +122,32 @@ describe('a track on its way', () => {
     expect(usePlayerStore.getState().currentTrack?.id).toBe('sp:3');
   });
 
+  it('lets the choice made last own the deck', async () => {
+    // Two starts overlapping: the first is waiting for a provider to come up
+    // when the second arrives and finishes. The slow one coming back must not
+    // put its own record on the deck over the one that is playing — which is
+    // the same sleeve sitting there through a different song.
+    const slow = song('sp:slow', 'spotify');
+    const quick = song('local:quick', 'local');
+
+    const first = usePlayerStore.getState().playSingle(slow);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(usePlayerStore.getState().starting).toBe('sp:slow');
+
+    // The second choice, which needs nothing and is done at once.
+    await usePlayerStore.getState().playSingle(quick);
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('local:quick');
+
+    // Now the first one's provider finally comes up.
+    spotify.comeUp();
+    await first;
+
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('local:quick');
+    expect(usePlayerStore.getState().starting).toBeNull();
+  });
+
   it('is nothing at all once the track is playing', async () => {
     await usePlayerStore.getState().playSingle(song('local:1', 'local'));
     expect(usePlayerStore.getState().currentTrack?.id).toBe('local:1');

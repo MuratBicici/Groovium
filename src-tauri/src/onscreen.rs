@@ -30,6 +30,18 @@ const LOOK_EVERY: Duration = Duration::from_millis(700);
 /// How far up the stacking order to walk before giving up on an answer.
 const AT_MOST: usize = 64;
 
+/**
+ * How many looks between saying the same thing again.
+ *
+ * On a change is not enough on its own. Everything in the window that moves
+ * hangs on this, so an event that goes missing — and one can — leaves the app
+ * believing it is buried for as long as it stays that way: a window that has
+ * quietly stopped, which is the worst way for this to be wrong. Saying it again
+ * every few seconds costs a boolean and takes the worst case from "until the
+ * app is restarted" to "a few seconds".
+ */
+const SAY_AGAIN_EVERY: u32 = 8;
+
 /// A window's corners, as Windows gives them: left, top, right, bottom.
 type Box = (i32, i32, i32, i32);
 
@@ -46,15 +58,16 @@ fn covers(over: Box, under: Box) -> bool {
 pub fn watch(app: AppHandle) {
     std::thread::spawn(move || {
         let mut said: Option<bool> = None;
+        let mut looks: u32 = 0;
         loop {
             std::thread::sleep(LOOK_EVERY);
             let Some(window) = app.get_webview_window("main") else {
                 continue;
             };
             let buried = buried(&window);
-            // Only when it changes. This is a few bytes every three quarters of
-            // a second otherwise, for an answer that is the same every time.
-            if said != Some(buried) {
+            looks = looks.wrapping_add(1);
+            // When it changes, and every so often regardless.
+            if said != Some(buried) || looks % SAY_AGAIN_EVERY == 0 {
                 said = Some(buried);
                 let _ = app.emit(EVENT, buried);
             }

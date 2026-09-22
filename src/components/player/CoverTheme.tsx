@@ -29,6 +29,16 @@ export function CoverTheme() {
   const on = useSettingsStore((s) => s.themeFromCover);
   const setCoverPalette = useSettingsStore((s) => s.setCoverPalette);
   const cover = usePlayerStore((s) => s.currentTrack?.coverArtUrl);
+  /**
+   * Which record the cover belongs to.
+   *
+   * Watched as well as the address, and checked again when the answer comes
+   * back. A sleeve is an address and a track is a song; two songs can share an
+   * address, and — the thing this is for — a song can change while its cover is
+   * being read. What goes on the window has to be the colours of what is on the
+   * deck at the moment it is put there, not of whatever asked first.
+   */
+  const onDeck = usePlayerStore((s) => s.currentTrack?.id);
   const inHand = useHeldTrack() !== null;
 
   /**
@@ -101,8 +111,11 @@ export function CoverTheme() {
     let soon: ReturnType<typeof setTimeout> | undefined;
     void readCover(cover, failures.current).then((seen) => {
       // The track can change while an image is loading, and the answer to the
-      // last one is not an answer to this one.
+      // last one is not an answer to this one. Twice over: the effect being
+      // torn down says the question changed, and the deck says what the answer
+      // is for — a read that started for one record cannot colour another.
       if (!alive) return;
+      if (usePlayerStore.getState().currentTrack?.id !== onDeck) return;
       known.current = remember(known.current, cover, seen);
       // A failure falls back to the palette that was chosen rather than leaving
       // the last record's colours on a window that is playing something else.
@@ -133,7 +146,7 @@ export function CoverTheme() {
       alive = false;
       clearTimeout(soon);
     };
-  }, [on, cover, inHand, attempt, setCoverPalette]);
+  }, [on, cover, onDeck, inHand, attempt, setCoverPalette]);
 
   return null;
 }

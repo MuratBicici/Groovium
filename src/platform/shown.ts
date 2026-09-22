@@ -71,8 +71,26 @@ export function useShown(): boolean {
 
   useEffect(() => {
     const read = () => setIs(shown());
+    /**
+     * Being used is proof of being seen.
+     *
+     * The watcher in Rust is a few Win32 calls a second on another thread, and
+     * anything it says can go missing or go stale. Everything in this app that
+     * moves hangs on the answer, so being wrong in the direction of "buried" is
+     * a window that has quietly stopped: the worst way to be wrong. A click, a
+     * key or the window taking focus settles it from this side — none of those
+     * reach a window under something else.
+     */
+    const used = () => {
+      if (!buried) return;
+      buried = false;
+      for (const tell of watchers) tell();
+    };
     watchers.add(read);
     document.addEventListener('visibilitychange', read);
+    window.addEventListener('focus', used);
+    window.addEventListener('pointerdown', used);
+    window.addEventListener('keydown', used);
     void hearRust();
     // Once now as well: the window can have been put away between the first
     // render and this.
@@ -80,6 +98,9 @@ export function useShown(): boolean {
     return () => {
       watchers.delete(read);
       document.removeEventListener('visibilitychange', read);
+      window.removeEventListener('focus', used);
+      window.removeEventListener('pointerdown', used);
+      window.removeEventListener('keydown', used);
     };
   }, []);
 

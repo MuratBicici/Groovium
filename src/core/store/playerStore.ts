@@ -804,8 +804,20 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     await provider.setVolume(outputAmplitude());
   }
 
-  /** The starting itself, so the flag above is cleared however this leaves. */
+  /**
+   * The starting itself, so the flag above is cleared however this leaves.
+   *
+   * Every wait in here is a place a second choice can arrive. The one that
+   * arrives last is the one somebody made last, and it owns the deck: an
+   * earlier attempt coming back from a slow provider must not write its track
+   * over it. That is the record on the deck being a different song from the one
+   * playing — the same sleeve sitting there through track after track, which is
+   * how it was reported — and `starting` already says whose turn it is.
+   */
   async function startingTrack(track: TrackMetadata, index: number): Promise<void> {
+    /** Whether this attempt is still the one that counts. */
+    const mine = () => get().starting === track.id;
+
     // Signing out does not empty the collections a Spotify track is sitting in,
     // so stepping onto one afterwards is ordinary. Without this it reached the
     // provider and came back as "Spotify player is not connected." — true, and
@@ -817,6 +829,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       set({ playbackState: 'IDLE', positionMs: 0, error: say('error.spotifyDisconnected') });
       return;
     }
+    if (!mine()) return;
 
     // A collection can mix sources; the track says which provider owns it.
     // The record already on the deck stays there through the switch: this one
@@ -824,8 +837,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // record somebody just chose disappearing until it starts.
     if (track.source !== get().activeProviderId) {
       await withProvider((provider) => provider.pause());
+      if (!mine()) return;
       await takeProvider(track.source, true);
-      if (get().error) return;
+      if (get().error || !mine()) return;
     }
 
     set({
@@ -837,6 +851,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     });
     rememberPlayed(track);
     await withProvider((provider) => provider.play(track.id));
+    // And one last time, for the sound rather than the picture: two plays that
+    // overlapped would leave the provider on the earlier of them.
+    if (!mine()) return;
 
     // Deliberately not awaited: finding the successor must not delay playback.
     void prefetchStationTrack();
