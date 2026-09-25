@@ -1,4 +1,5 @@
 import { paletteFrom, type CoverPalette } from './fromCover';
+import { Late, loadCover, Refused } from './coverStore';
 
 /**
  * The colours in a cover, and whether they were ever seen.
@@ -27,8 +28,8 @@ import { paletteFrom, type CoverPalette } from './fromCover';
  */
 const READ_AT = 48;
 
-/** Long enough for a cover to arrive, short enough not to hold a palette back. */
-const PATIENCE_MS = 8000;
+/** How many covers' colours are kept, so a record come round again is instant. */
+const KEEP_PALETTES = 64;
 
 /**
  * How long to wait before looking again, by how many looks have failed.
@@ -51,46 +52,18 @@ export function tryAgainIn(failures: number): number | null {
 }
 
 /**
- * The same cover, asked for in a way a cache cannot answer from what it has.
+ * The same cover, asked for in a way no cache can answer from what it has.
  *
- * A cover is on screen as an ordinary picture before this ever looks at it, and
- * that request asks for no cross-origin permission. A cache holding *that*
- * answer can hand it to this one, which does ask — and what comes back is
- * refused, so the sleeve reads as unloadable while it sits there in plain view.
- * Nothing about it is deterministic: it is a race between the picture and the
- * palette, which is exactly how it was reported — sometimes.
- *
- * Only for a second look, and only where a query means anything: a `data:` or
- * `blob:` cover carries its own bytes and appending to one breaks it.
+ * Only for a look after one has failed: whatever went wrong with the first
+ * answer — a cache holding something unusable, a request that never came
+ * back — this one does not go through it. And only where a query means
+ * anything: a `data:` or `blob:` cover carries its own bytes and appending to
+ * one breaks it.
  */
 function unanswerable(url: string, mark: number): string {
   if (!/^https?:/i.test(url)) return url;
   return `${url}${url.includes('?') ? '&' : '?'}groovium=${mark}`;
 }
-
-function load(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    // Asked for before `src`, or it does not apply. Without it a cover from
-    // Spotify's CDN paints perfectly well and poisons the canvas, so reading a
-    // pixel back throws — which is the whole of what this is for.
-    image.crossOrigin = 'anonymous';
-
-    const timer = setTimeout(() => reject(new Late()), PATIENCE_MS);
-    const settle = (go: () => void) => () => {
-      clearTimeout(timer);
-      go();
-    };
-    image.onload = settle(() => resolve(image));
-    image.onerror = settle(() => reject(new Refused()));
-    image.src = url;
-  });
-}
-
-/** The cover was still not there after `PATIENCE_MS`. */
-class Late extends Error {}
-/** The picture would not load: a dead link, a refusal, a cache's leftovers. */
-class Refused extends Error {}
 
 /**
  * Why a look at a cover came back with nothing.
@@ -103,18 +76,47 @@ export type Missed = 'late' | 'refused' | 'unreadable';
 
 /** What came of looking at a cover. */
 export type CoverRead =
-  /** The pixels were seen. `palette` is null for a sleeve with no colour in it. */
+  /** The pixels were seen. `palette` is null only for a picture with nothing solid in it. */
   | { read: true; palette: CoverPalette | null }
   /** It never arrived, or the canvas would not give its pixels back. */
   | { read: false; why: Missed };
 
+/** What each cover was found to be, most recently read last. */
+const palettes = new Map<string, CoverPalette | null>();
+/** Looks under way, so two askers of one cover share one. */
+const looking = new Map<string, Promise<CoverRead>>();
+
+/** The colours already read off this cover, or undefined if it has not been. */
+export function knownPalette(url: string): CoverPalette | null | undefined {
+  return palettes.get(url);
+}
+
 /**
  * Look at a cover. `again` is how many looks have already failed, which is what
  * decides whether this one is allowed to be answered from a cache.
+ *
+ * The picture comes from `loadCover`, the same one the deck draws, so looking
+ * at its colours costs no second request. A cover already read is answered at
+ * once; one being read is answered with that look.
  */
-export async function readCover(url: string, again = 0): Promise<CoverRead> {
+export function readCover(url: string, again = 0): Promise<CoverRead> {
+  const known = palettes.get(url);
+  if (known !== undefined) return Promise.resolve({ read: true, palette: known });
+  const already = looking.get(url);
+  if (already && again === 0) return already;
+
+  const look = lookAt(url, again).then((seen) => {
+    remember(palettes, url, seen);
+    if (looking.get(url) === look) looking.delete(url);
+    return seen;
+  });
+  looking.set(url, look);
+  return look;
+}
+
+async function lookAt(url: string, again: number): Promise<CoverRead> {
   try {
-    const image = await load(again > 0 ? unanswerable(url, again) : url);
+    const image = await loadCover(again > 0 ? unanswerable(url, again) : url);
 
     const canvas = document.createElement('canvas');
     canvas.width = READ_AT;
@@ -137,22 +139,26 @@ export async function readCover(url: string, again = 0): Promise<CoverRead> {
   }
 }
 
-/** A cover that has been looked at, and what looking found. */
-export interface Known {
-  cover: string;
-  palette: CoverPalette | null;
-}
-
 /**
- * What to keep after looking at a cover.
+ * Keep what a look at a cover found.
  *
- * A read is an answer and is kept, including the answer that a sleeve has no
- * colour in it — that one is as final as any other and should not cost a second
- * look. A failure is not an answer. Keeping it is what made a cover that did
- * not load once stay colourless for the rest of the track, and it is why this
- * is a function with a name rather than an assignment in the middle of a
- * `then`.
+ * A read is an answer and is kept, including a sleeve with no colour in it —
+ * that one is as final as any other and should not cost a second look. A
+ * failure is not an answer. Keeping it is what made a cover that did not load
+ * once stay colourless for the rest of the track, and it is why this is a
+ * function with a name rather than an assignment in the middle of a `then`.
  */
-export function remember(known: Known | null, cover: string, seen: CoverRead): Known | null {
-  return seen.read ? { cover, palette: seen.palette } : known;
+export function remember(
+  kept: Map<string, CoverPalette | null>,
+  cover: string,
+  seen: CoverRead,
+): void {
+  if (!seen.read) return;
+  kept.delete(cover);
+  kept.set(cover, seen.palette);
+  while (kept.size > KEEP_PALETTES) {
+    const oldest = kept.keys().next().value;
+    if (oldest === undefined) break;
+    kept.delete(oldest);
+  }
 }

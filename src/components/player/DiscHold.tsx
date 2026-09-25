@@ -1074,6 +1074,8 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
                   {held.track.coverArtUrl && (
                     <img
                       src={held.track.coverArtUrl}
+                      // Asked the way every cover is — see `Sleeve` in VinylDisc.
+                      crossOrigin="anonymous"
                       alt=""
                       draggable={false}
                       className="h-full w-full object-cover"

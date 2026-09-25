@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { remember, tryAgainIn, type CoverRead, type Known } from './readCover';
+import { remember, tryAgainIn, type CoverRead } from './readCover';
 
 /**
  * What is worth keeping about a cover that has been looked at.
@@ -17,38 +17,44 @@ import { remember, tryAgainIn, type CoverRead, type Known } from './readCover';
  */
 
 const colourful: CoverRead = { read: true, palette: { surface: '#101014', accent: '#e0b071' } };
-const grey: CoverRead = { read: true, palette: null };
+const empty: CoverRead = { read: true, palette: null };
 const missed: CoverRead = { read: false, why: 'refused' };
-
-const held: Known = { cover: 'sleeve-a', palette: { surface: '#000000', accent: '#ff0000' } };
 
 describe('what a look at a cover is worth keeping', () => {
   it('keeps the colours it found', () => {
-    expect(remember(null, 'sleeve-b', colourful)).toEqual({
-      cover: 'sleeve-b',
-      palette: colourful.read ? colourful.palette : null,
-    });
+    const kept = new Map();
+    remember(kept, 'sleeve-b', colourful);
+    expect(kept.get('sleeve-b')).toEqual(colourful.read ? colourful.palette : null);
   });
 
-  it('keeps the finding that a sleeve has no colour in it', () => {
-    // As final as any other answer, and worth not paying for twice. This is the
-    // one that made the two nothings look like the same nothing.
-    expect(remember(null, 'sleeve-b', grey)).toEqual({ cover: 'sleeve-b', palette: null });
+  it('keeps the finding that there was nothing to read', () => {
+    // As final as any other answer, and worth not paying for twice.
+    const kept = new Map();
+    remember(kept, 'sleeve-b', empty);
+    expect(kept.has('sleeve-b')).toBe(true);
+    expect(kept.get('sleeve-b')).toBeNull();
   });
 
   it('keeps nothing at all from a cover it could not read', () => {
     // The fault. Written down, this becomes "sleeve-b is colourless" and the
     // record plays to the end wearing the palette somebody chose instead.
-    expect(remember(null, 'sleeve-b', missed)).toBeNull();
+    const kept = new Map();
+    remember(kept, 'sleeve-b', missed);
+    expect(kept.has('sleeve-b')).toBe(false);
   });
 
   it('leaves what it already knew alone when a read fails', () => {
-    // And does not throw away a good answer on the way past.
-    expect(remember(held, 'sleeve-b', missed)).toBe(held);
+    const kept = new Map([['sleeve-a', { surface: '#000000', accent: '#ff0000' }]]);
+    remember(kept, 'sleeve-b', missed);
+    expect(kept.size).toBe(1);
   });
 
-  it('replaces what it knew once it has actually seen the new one', () => {
-    expect(remember(held, 'sleeve-b', grey)).toEqual({ cover: 'sleeve-b', palette: null });
+  it('forgets the oldest once it holds enough', () => {
+    const kept = new Map();
+    for (let n = 0; n < 100; n += 1) remember(kept, `sleeve-${n}`, colourful);
+    expect(kept.size).toBeLessThan(100);
+    expect(kept.has('sleeve-99')).toBe(true);
+    expect(kept.has('sleeve-0')).toBe(false);
   });
 });
 

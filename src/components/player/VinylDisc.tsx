@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react';
+import { prefersReducedMotion } from '@/core/utils/motion';
 import { grooveTexture } from './grooveTexture';
 
 interface VinylDiscProps {
@@ -179,7 +181,7 @@ export function VinylDisc({
         }}
       >
         {coverArtUrl ? (
-          <img
+          <Sleeve
             // A different sleeve is a different element, not the same one with
             // a new address. Handed a new `src`, a browser goes on painting the
             // picture it already has until the new one has arrived and decoded
@@ -187,11 +189,10 @@ export function VinylDisc({
             // on the deck through the first seconds of the next song. There is
             // nothing stale about an element that has never drawn anything.
             key={coverArtUrl}
-            src={coverArtUrl}
-            alt=""
-            loading={eager ? 'eager' : 'lazy'}
-            className="h-full w-full object-cover"
-            draggable={false}
+            url={coverArtUrl}
+            // Anything drawn large is on screen and wanted now; the rows of a
+            // long list can wait until they are scrolled to.
+            eager={eager || detailed}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brass-500 to-brass-600">
@@ -230,5 +231,50 @@ export function VinylDisc({
         style={{ width: spindle, height: spindle }}
       />
     </div>
+  );
+}
+
+/** How long a sleeve that arrives late takes to come up on its label. */
+const SLEEVE_ARRIVES_MS = 180;
+
+/**
+ * The picture on a label.
+ *
+ * Asked for with permission to read it, like every cover in the app. The
+ * palette reader and the look-ahead in `coverStore` ask that way, and a
+ * picture that asked without it was a second, different request for the same
+ * address — the one WebView2 left hanging, which is what held a record's
+ * colours back until ten seconds into its song.
+ *
+ * A sleeve that is already here — loaded ahead of its turn, or on the deck a
+ * moment ago — is drawn in the first frame. One still on its way comes up over
+ * the label when it lands rather than appearing all at once, and one that never
+ * lands leaves the brass label showing rather than a broken picture.
+ */
+function Sleeve({ url, eager }: { url: string; eager: boolean }) {
+  const image = useRef<HTMLImageElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = image.current;
+    if (!el || (el.complete && el.naturalWidth > 0)) return;
+    el.style.opacity = '0';
+    const show = () => {
+      if (!prefersReducedMotion()) el.style.transition = `opacity ${SLEEVE_ARRIVES_MS}ms ease-out`;
+      el.style.opacity = '1';
+    };
+    el.addEventListener('load', show, { once: true });
+    return () => el.removeEventListener('load', show);
+  }, []);
+
+  return (
+    <img
+      ref={image}
+      src={url}
+      crossOrigin="anonymous"
+      alt=""
+      loading={eager ? 'eager' : 'lazy'}
+      className="h-full w-full object-cover"
+      draggable={false}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { usePlayerStore } from './playerStore';
+import { stepWithin, usePlayerStore, type PlayerState } from './playerStore';
 
 /**
  * Narrow selector hooks.
@@ -40,3 +40,31 @@ export const useHasPlayback = () => usePlayerStore((s) => s.playback.tracks.leng
 /** 0..1 fraction of the current track elapsed. */
 export const useProgressFraction = () =>
   usePlayerStore((s) => (s.durationMs > 0 ? Math.min(s.positionMs / s.durationMs, 1) : 0));
+
+/**
+ * The covers likely to be on the deck next, one address a line.
+ *
+ * What is being started, what Next and Previous would land on — in the order
+ * shuffle and repeat make — and what the station would play when this ends.
+ * Loaded ahead of their turn, so a record arrives with its sleeve on and its
+ * colours already read. A string rather than a list so that it only changes
+ * when one of them does.
+ */
+export function upcomingCovers(s: PlayerState): string {
+  const { playback, shuffle, shuffleOrder, repeat } = s;
+  const order =
+    shuffle && shuffleOrder.length === playback.tracks.length
+      ? shuffleOrder
+      : playback.tracks.map((_, index) => index);
+  const wrap = repeat === 'all';
+  const near = [
+    s.starting,
+    ...[1, -1].map((step) => {
+      const index = stepWithin(order, playback.index, step, wrap);
+      return index === null ? null : playback.tracks[index];
+    }),
+    s.stationQueue[0],
+  ];
+  const covers = near.map((track) => track?.coverArtUrl).filter((url): url is string => !!url);
+  return [...new Set(covers)].join('\n');
+}

@@ -24,7 +24,7 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
             `DiskPlatter` for why that matters to the measurement. */}
         <span data-morph="disc" className="shrink-0">
           <span className="groove-spin block" data-spinning={isPlaying}>
-            <VinylDisc size={28} coverArtUrl={track?.coverArtUrl} />
+            <VinylDisc size={28} eager coverArtUrl={track?.coverArtUrl} />
           </span>
         </span>
         <span className="min-w-0 flex-1">

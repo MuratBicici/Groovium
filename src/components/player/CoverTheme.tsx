@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { readCover, remember, tryAgainIn, type Known } from '@/core/theme/readCover';
+import { knownPalette, readCover, tryAgainIn } from '@/core/theme/readCover';
+import { preloadCovers } from '@/core/theme/coverStore';
+import type { CoverPalette } from '@/core/theme/fromCover';
 import { log } from '@/platform/log';
 import { useSettingsStore } from '@/core/settings/store';
-import { usePlayerStore } from '@/core/store';
+import { upcomingCovers, usePlayerStore } from '@/core/store';
 import { useHeldTrack } from './DiscHold';
 
 /**
@@ -43,16 +45,25 @@ export function CoverTheme() {
    */
   const onDeck = onDeckTrack?.id;
   const inHand = useHeldTrack() !== null;
+  /** The covers that could be on the deck next — see `upcomingCovers`. */
+  const upcoming = usePlayerStore(upcomingCovers);
 
   /**
-   * The last cover this read, so putting a record back is instant.
+   * Ahead of their turn: the pictures always, since the deck draws them, and
+   * their colours when the colours are being taken.
    *
-   * Reading one is an image load, a decode and a canvas read, and none of that
-   * is worth doing twice for a sleeve that has not changed. It matters for how
-   * this feels rather than for what it costs: the colours should come back as
-   * the record settles, not a moment after it.
+   * This is what makes a change of song one change on screen. By the time
+   * Next is pressed, or a song ends into the next, the new sleeve is decoded
+   * and its colours are known, so the record and the window turn over in the
+   * same frame instead of the window catching up a moment — or ten seconds —
+   * later.
    */
-  const known = useRef<Known | null>(null);
+  useEffect(() => {
+    const covers = upcoming ? upcoming.split('\n') : [];
+    preloadCovers(covers);
+    if (on) for (const url of covers) void readCover(url);
+  }, [upcoming, on]);
+
   /** A cover this could not read, so it knows there is something to go back to. */
   const missed = useRef<string | null>(null);
   /** How many looks at this cover have failed, which is what paces the next. */
@@ -104,14 +115,19 @@ export function CoverTheme() {
       return;
     }
 
-    const already = known.current;
-    if (already?.cover === cover) {
-      setCoverPalette(already.palette);
+    const already = knownPalette(cover);
+    if (already !== undefined) {
+      setCoverPalette(already);
+      say(already, cover);
       return;
     }
 
+    // Not read yet. The colours on the window stay as they are until it has
+    // been: they change once, to the new record's, rather than back to the
+    // chosen theme on the way there.
     let alive = true;
     let soon: ReturnType<typeof setTimeout> | undefined;
+    const asked = performance.now();
     void readCover(cover, failures.current).then((seen) => {
       // The track can change while an image is loading, and the answer to the
       // last one is not an answer to this one. Twice over: the effect being
@@ -120,28 +136,23 @@ export function CoverTheme() {
       if (!alive) return;
       const still = usePlayerStore.getState();
       if ((still.currentTrack ?? still.starting)?.id !== onDeck) return;
-      known.current = remember(known.current, cover, seen);
-      // A failure falls back to the palette that was chosen rather than leaving
-      // the last record's colours on a window that is playing something else.
-      // It is only the *remembering* that a failure must not do.
-      setCoverPalette(seen.read ? seen.palette : null);
       if (seen.read) {
         failures.current = 0;
-        // Both said out loud, and this is the point of saying them. A record
-        // whose colours were not taken looks the same from the outside whatever
-        // the reason, so the log is where the reasons are told apart: colours
-        // found, a sleeve with none in it, or one of the three ways a look can
-        // come back with nothing.
-        if (seen.palette) log('info', 'theme', 'palette from the cover', seen.palette);
-        else log('info', 'theme', 'no colour in this sleeve', cover);
+        setCoverPalette(seen.palette);
+        const took = Math.round(performance.now() - asked);
+        if (took > SLOW_MS) log('info', 'theme', `cover ready in ${took} ms`, cover);
+        say(seen.palette, cover);
         return;
       }
 
       missed.current = cover;
       log('warn', 'theme', `could not read the cover (${seen.why})`, cover);
-      // And again in a moment. Most of what goes wrong here is a moment's
-      // trouble, and the whole of the fault being chased is that a moment's
-      // trouble used to last the length of the track.
+      // One quick go before giving up on the colours: most of what goes wrong
+      // here is a moment's trouble, and falling back to the chosen theme for a
+      // second is exactly the extra change of colour this exists to avoid.
+      // Past that, the last record's colours on a window playing something
+      // else would be wrong, and the chosen theme is the honest answer.
+      if (failures.current > 0) setCoverPalette(null);
       const wait = tryAgainIn(failures.current);
       failures.current += 1;
       if (wait !== null) soon = setTimeout(() => setAttempt((count) => count + 1), wait);
@@ -153,4 +164,21 @@ export function CoverTheme() {
   }, [on, cover, onDeck, inHand, attempt, setCoverPalette]);
 
   return null;
+}
+
+/** A cover slower than this to be ready is worth a line in the log. */
+const SLOW_MS = 1000;
+
+/**
+ * Say which colours a record got.
+ *
+ * A record whose colours look wrong looks the same from the outside whatever
+ * the reason, so the log is where the reasons are told apart: colours found,
+ * a sleeve in black and white, or — logged where it happens — one of the
+ * ways a look can come back with nothing.
+ */
+function say(palette: CoverPalette | null, cover: string): void {
+  if (palette?.mono) log('info', 'theme', `no colour in this sleeve → ${palette.mono} theme`, cover);
+  else if (palette) log('info', 'theme', 'palette from the cover', palette);
+  else log('info', 'theme', 'nothing to read in this sleeve', cover);
 }

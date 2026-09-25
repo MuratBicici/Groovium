@@ -231,6 +231,8 @@ function Card({ track }: { track: TrackMetadata }) {
         {track.coverArtUrl && (
           <img
             src={track.coverArtUrl}
+            // Asked the way every cover is — see `Sleeve` in VinylDisc.
+            crossOrigin="anonymous"
             alt=""
             loading="lazy"
             draggable={false}
