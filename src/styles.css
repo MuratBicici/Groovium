@@ -855,10 +855,16 @@ body {
  * In ems, so it is the same share of whatever size the line is drawn at.
  */
 .lyric-wave {
-  --lyric-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 22'%3E%3Cpath d='M2 11Q10.5 8 19 11Q27.5 17 36 11Q44.5 2 53 11Q61.5 22 70 11Q78.5 0 87 11Q95.5 20 104 11Q112.5 5 121 11Q129.5 14 138 11' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --lyric-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 264 22'%3E%3Cpath d='M2 11Q10.12 9.9 18.25 11Q26.38 14.2 34.5 11Q42.62 5.8 50.75 11Q58.88 18 67 11Q75.12 2.5 83.25 11Q91.38 20.7 99.5 11Q107.62 0.5 115.75 11Q123.88 21.9 132 11Q140.12 0.1 148.25 11Q156.38 21.5 164.5 11Q172.62 1.3 180.75 11Q188.88 19.5 197 11Q205.12 4 213.25 11Q221.38 16.2 229.5 11Q237.62 7.8 245.75 11Q253.88 12.1 262 11' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   display: block;
-  width: 7em;
-  height: 1.375em;
+  /*
+   * Most of the line's room: the silence stands where a line of words would,
+   * and at a fraction of that it read as a mark rather than as the line. Each
+   * view says how much room its lines have; the drawing's own proportions give
+   * its height, so a narrower room is a lower wave rather than a squashed one.
+   */
+  width: calc(var(--lyric-room, 19em) * 0.6);
+  height: max(1.375em, calc(var(--lyric-room, 19em) * 0.6 * 22 / 264));
   background-color: color-mix(in srgb, var(--color-brass-400) 40%, transparent);
   -webkit-mask-image: var(--lyric-wave);
   mask-image: var(--lyric-wave);

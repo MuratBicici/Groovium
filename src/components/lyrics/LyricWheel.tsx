@@ -140,6 +140,8 @@ export function LyricWheel({
     width: 0,
     height: 0,
     transform: `rotate(${angle}deg)`,
+    // How wide a silence is drawn: see `.lyric-wave`.
+    ['--lyric-room' as string]: `${LINE_ROOM}px`,
     transition: turnTransition(move),
     // Turned on the compositor rather than drawn again at each angle. Without
     // it a turn is every line in view re-rasterised sixty times a second, text

@@ -40,6 +40,8 @@ interface Geometry {
   nextTop: number;
   /** The title and artist's row, at the foot of the stage. */
   metaTop: number;
+  /** How wide the line being sung can be, inside its row's padding. */
+  room: number;
 }
 
 /** Two lines of the sung line's largest size, and a little air. */
@@ -141,6 +143,8 @@ export function CompactLyrics({
         activeHeight: ACTIVE_HEIGHT,
         nextTop: activeTop + ACTIVE_HEIGHT + 2,
         metaTop,
+        // The sung row's padding, `px-6`, either side.
+        room: base.width - 48,
       });
     };
     measure();
@@ -232,7 +236,10 @@ export function CompactLyrics({
 
   if (!present) return null;
   return (
-    <div className="pointer-events-none absolute inset-0 z-[5]">
+    <div
+      className="pointer-events-none absolute inset-0 z-[5]"
+      style={geo ? { ['--lyric-room' as string]: `${geo.room}px` } : undefined}
+    >
       {geo && (
         <>
           <button
