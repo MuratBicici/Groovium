@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paletteFrom } from './fromCover';
+import { BLACK_SLEEVE, paletteFrom, WHITE_SLEEVE } from './fromCover';
 import { parseHex, rgbToHsv } from '@/core/utils/colour';
 import { ACCENT_VISIBLE, contrastRatio } from '@/core/utils/contrast';
 
@@ -101,15 +101,38 @@ describe('a palette out of a sleeve', () => {
     }
   });
 
-  it('says no to a sleeve with no colour in it', () => {
+  it('answers a dark sleeve with no colour in it in black', () => {
     // Inventing an accent for a black-and-white photograph is worse than
-    // leaving the palette somebody chose alone.
+    // anything, and the chosen theme around it was the theme not following.
     const greyscale = cover(
       { colour: [20, 20, 20], share: 400 },
       { colour: [128, 128, 128], share: 400 },
       { colour: [230, 230, 230], share: 200 },
     );
-    expect(paletteFrom(greyscale)).toBeNull();
+    expect(paletteFrom(greyscale)).toEqual(BLACK_SLEEVE);
+  });
+
+  it('answers white lettering on a black sleeve in black', () => {
+    const art = cover({ colour: [6, 6, 6], share: 900 }, { colour: [250, 250, 250], share: 100 });
+    expect(paletteFrom(art)).toEqual(BLACK_SLEEVE);
+  });
+
+  it('answers a mid-grey sleeve in black', () => {
+    expect(paletteFrom(cover({ colour: [128, 128, 128], share: 100 }))).toEqual(BLACK_SLEEVE);
+  });
+
+  it('answers a white sleeve in white', () => {
+    const art = cover(
+      { colour: [245, 245, 243], share: 850 },
+      { colour: [30, 30, 30], share: 150 },
+    );
+    expect(paletteFrom(art)).toEqual(WHITE_SLEEVE);
+  });
+
+  it('keeps black and white for sleeves that have no colour', () => {
+    // A colourful cover is still read for its colours, and says nothing of mono.
+    const art = cover({ colour: [12, 18, 40], share: 800 }, { colour: [232, 128, 32], share: 200 });
+    expect(paletteFrom(art)?.mono).toBeUndefined();
   });
 
   it('says no to nothing at all', () => {

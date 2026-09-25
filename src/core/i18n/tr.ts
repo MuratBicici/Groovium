@@ -287,7 +287,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Yazıyı zeminine karşı güçlendirir, en çok da ikincil yazıyı. Başka hiçbir renk değişmez.',
   'settings.themeFromCover': 'Renkler kapaktan',
   'settings.themeFromCoverHint':
-    'Palet, çalan şarkının kapağını izler. İçinde renk olmayan bir kapak temanıza dokunmaz.',
+    'Palet, çalan şarkının kapağını izler. Renksiz bir kapak, açık mı koyu mu olduğuna göre beyaz ya da siyah temayı alır.',
   'settings.windowGlow': 'Kenar ışığı',
   'settings.windowGlowHint':
     'Pencerenin çerçevesi müzikle birlikte ışıklanır; ses yükseldikçe daha yukarı ve daha parlak çıkar.',

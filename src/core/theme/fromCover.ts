@@ -10,8 +10,8 @@ import { ACCENT_VISIBLE, contrastRatio } from '@/core/utils/contrast';
  * from these two and is what actually guarantees the text can be read.
  *
  * What this has to guarantee is narrower and still real: a ground dark enough
- * to be a ground, an accent bright enough to be seen against it, and an honest
- * "no" for a cover with no colour in it.
+ * to be a ground, an accent bright enough to be seen against it, and, for a cover
+ * with no colour in it, black or white rather than a colour it does not have.
  */
 
 export interface CoverPalette {
@@ -19,6 +19,8 @@ export interface CoverPalette {
   surface: string;
   /** What the buttons and the record label take. */
   accent: string;
+  /** Set when the sleeve had no colour in it, and says which of the two it got. */
+  mono?: 'black' | 'white';
 }
 
 /** How coarsely colours are grouped: four bits a channel, so 4096 buckets. */
@@ -28,10 +30,29 @@ const BITS = 4;
 const SOLID = 128;
 
 /**
- * The least a colour may be worth before it is called grey.
+ * The two palettes for a sleeve with no colour in it.
  *
  * A black-and-white cover has no accent in it, and inventing one is worse than
- * leaving the palette the listener chose alone. Measured on the winning bucket
+ * anything — but falling back to the palette the listener chose was a window
+ * in sepia under a record in black and white, and the one place the theme
+ * visibly did not follow the cover. So such a sleeve is answered in its own
+ * terms: black, or white, with no hue in either.
+ */
+export const BLACK_SLEEVE: CoverPalette = { surface: '#161616', accent: '#d9d9d9', mono: 'black' };
+export const WHITE_SLEEVE: CoverPalette = { surface: '#eeeeee', accent: '#1f1f1f', mono: 'white' };
+
+/**
+ * How bright a colourless sleeve must be, on average, to be called white.
+ *
+ * Above the middle rather than at it: the window is a dark thing by nature, and
+ * a grey cover sits better on black than a white window does around it. White
+ * lettering on a black sleeve averages well under this and stays black.
+ */
+const WHITE_FROM = 0.6;
+
+/**
+ * The least a colour may be worth before it is called grey.
+ * Measured on the winning bucket
  * rather than on the picture as a whole: one bright flower on a grey field is
  * an accent, and an evenly desaturated photograph is not.
  */
@@ -192,9 +213,19 @@ function readableOn(accent: Rgb, ground: Rgb): Rgb {
 /**
  * The two colours a cover is worth, or null when it is worth none.
  *
- * `pixels` is RGBA, as a canvas hands it over. Null means the cover has no
- * colour in it to speak of, and the listener's own palette should stand.
+ * `pixels` is RGBA, as a canvas hands it over. A cover with no colour in it to
+ * speak of gets `BLACK_SLEEVE` or `WHITE_SLEEVE`; null means there was no
+ * picture at all.
  */
+/** How bright a picture is on average, 0 to 1, as the eye weighs the channels. */
+function brightness(buckets: Map<number, Bucket>, total: number): number {
+  let sum = 0;
+  for (const bucket of buckets.values()) {
+    sum += 0.2126 * bucket.r + 0.7152 * bucket.g + 0.0722 * bucket.b;
+  }
+  return sum / (total * 255);
+}
+
 export function paletteFrom(pixels: Uint8ClampedArray): CoverPalette | null {
   const { buckets, total } = bucketsOf(pixels);
   if (total === 0) return null;
@@ -216,7 +247,9 @@ export function paletteFrom(pixels: Uint8ClampedArray): CoverPalette | null {
     }
   }
 
-  if (!accent || best < COLOURFUL * COLOURFUL) return null;
+  if (!accent || best < COLOURFUL * COLOURFUL) {
+    return brightness(buckets, total) >= WHITE_FROM ? WHITE_SLEEVE : BLACK_SLEEVE;
+  }
 
   const ground = groundFrom(buckets, total, accent);
   return { surface: toHex(ground), accent: toHex(readableOn(accent, ground)) };
