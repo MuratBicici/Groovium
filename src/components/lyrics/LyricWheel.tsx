@@ -108,7 +108,12 @@ export function LyricWheel({
     box.classList.remove('font-semibold');
     els.forEach((el, index) => {
       const natural = widths[index] ?? 0;
-      const fit = natural > 0 ? LINE_ROOM / natural : 1;
+      // A silence is drawn at the size it was designed at. Words grow into the
+      // room they are given so a short line is not lost in it; the wave is
+      // already the length it should be, and grown it stops being a mark and
+      // becomes a line drawn across the record.
+      const silent = !(lines[index]?.text.trim() ?? '');
+      const fit = silent ? 1 : natural > 0 ? LINE_ROOM / natural : 1;
       el.style.setProperty('--fit', String(fit));
       // And how far along the room it would have to move to sit in the middle
       // of it: half of what it leaves over at the size it is drawn at. Only
