@@ -295,6 +295,20 @@ export function resync(clock: number, reported: number, tripMs: number): number 
   return Math.abs(now - clock) > DRIFT_TOLERANCE_MS ? now : null;
 }
 
+/**
+ * Whether Spotify has started making a sound from a start at `from`.
+ *
+ * Spotify marks a track as playing the moment the command registers, and the
+ * sound follows — at once when the track is cached, five or ten seconds later
+ * on a cold start. What moves when the sound starts is Spotify's own position:
+ * it waits where the start was asked for through the silence. So the sound is
+ * in when the position has moved past the start, and not while Spotify says it
+ * is still loading, on the occasions it says.
+ */
+export function heardFrom(from: number, position: number, loading?: boolean): boolean {
+  return loading !== true && position > from;
+}
+
 export interface Watch {
   /** Where Spotify last said it was, or null before the first look. */
   seen: number | null;

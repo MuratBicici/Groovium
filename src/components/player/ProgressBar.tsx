@@ -23,6 +23,15 @@ export function ProgressBar() {
   const positionMs = usePositionMs();
   const durationMs = useDurationMs();
   const seek = usePlayerStore((s) => s.seek);
+  /**
+   * The music has been asked for and has not started.
+   *
+   * Said here because this is where the eye goes. A record on the deck with a
+   * bar standing at nought reads as something that has stopped; the same bar
+   * with a light crossing it reads as something on its way — which is the
+   * truth, and on a cold start it is the truth for several seconds.
+   */
+  const loading = usePlayerStore((s) => s.playbackState === 'LOADING');
 
   const [scrubMs, setScrubMs] = useState<number | null>(null);
   // A ref, not state: pointerup must see what pointerdown wrote in the same
@@ -84,11 +93,12 @@ export function ProgressBar() {
         }`}
       >
         {/* Track */}
-        <div className="groove-inset h-1 w-full overflow-hidden rounded-full">
+        <div className="groove-inset relative h-1 w-full overflow-hidden rounded-full">
           <div
             className="h-full rounded-full bg-gradient-to-r from-brass-600 to-brass-400"
             style={{ width: `${fraction * 100}%` }}
           />
+          {loading && <span aria-hidden="true" className="progress-waiting" />}
         </div>
 
         {/* Handle, shown on hover or while scrubbing. */}

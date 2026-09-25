@@ -25,6 +25,7 @@ import {
   type Watch,
   DRIFT_TOLERANCE_MS,
   TRUSTED_TRIP_MS,
+  heardFrom,
   resync,
 } from './stallWatch';
 
@@ -330,5 +331,26 @@ describe('putting the clock right', () => {
   it('corrects anything past the tolerance and nothing inside it', () => {
     expect(resync(0, DRIFT_TOLERANCE_MS, 0)).toBeNull();
     expect(resync(0, DRIFT_TOLERANCE_MS + 1, 0)).toBe(DRIFT_TOLERANCE_MS + 1);
+  });
+});
+
+describe('hearing a start', () => {
+  it('is not the command registering', () => {
+    // What Spotify sends first on a cold start: playing, at the top, silent.
+    expect(heardFrom(0, 0)).toBe(false);
+    expect(heardFrom(0, 0, false)).toBe(false);
+  });
+
+  it('is the position moving past where the start was asked for', () => {
+    expect(heardFrom(0, 180)).toBe(true);
+    // A start partway in — coming back after an outage — waits for its own
+    // position, not the top of the song.
+    expect(heardFrom(94_000, 94_000)).toBe(false);
+    expect(heardFrom(94_000, 94_210)).toBe(true);
+  });
+
+  it('is never while Spotify says it is still loading', () => {
+    expect(heardFrom(0, 400, true)).toBe(false);
+    expect(heardFrom(0, 400, false)).toBe(true);
   });
 });

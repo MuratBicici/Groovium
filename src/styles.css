@@ -794,6 +794,49 @@ body {
 }
 
 /*
+ * The progress bar while the music is on its way: a light crossing the track
+ * from end to end, over and over, rather than a fill that means anything. It
+ * says "loading" in the one place a listener looks to see whether something is
+ * happening — a bar standing at nought under a record says the opposite.
+ *
+ * Transform only, so it costs the compositor and nothing else. Without motion
+ * it is a still, dim band instead: the state is still said, just not moved.
+ */
+.progress-waiting {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-brass-400) 70%, transparent),
+    transparent
+  );
+  animation: progress-waiting 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes progress-waiting {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-waiting {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+:root[data-motion='off'] .progress-waiting {
+  animation: none;
+  width: 100%;
+  opacity: 0.35;
+}
+
+/*
  * A stretch of the song with no words: a wave where the words would be.
  *
  * One swell rather than a row of even ripples — quiet at both ends and fullest

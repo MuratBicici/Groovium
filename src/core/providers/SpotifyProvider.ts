@@ -7,6 +7,7 @@ import {
   clockUnwatched,
   freshWatch,
   giveUpReason,
+  heardFrom,
   recordStall,
   hasRecovered,
   hasStalled,
@@ -48,6 +49,18 @@ const PLAYER_NAME = 'Groovium';
  */
 const PROGRESS_TICK_MS = 250;
 
+/** How often to ask the SDK, locally, whether a start has made a sound yet. */
+const SOUND_LISTEN_MS = 250;
+
+/**
+ * How long a start may take to make a sound before the watchdog takes it.
+ *
+ * A cold start — the SDK loading, the track arriving over the network — is
+ * five or ten seconds, and a slow connection more. Past this it is not slow,
+ * it is not coming, and that is what the watchdog is for.
+ */
+const SOUND_PATIENCE_MS = 20_000;
+
 /**
  * How near the end the clock must be for a reset to zero to mean the track
  * finished.
@@ -76,6 +89,8 @@ const SDK_LOAD_TIMEOUT_MS = 15_000;
 // Minimal shape of the globals the SDK installs.
 interface SpotifyPlayerState {
   paused: boolean;
+  /** Not in Spotify's reference, but sent — and true while the track is still arriving. */
+  loading?: boolean;
   position: number;
   duration: number;
   track_window: { current_track: { uri: string; name: string } | null };
@@ -129,6 +144,16 @@ export class SpotifyProvider extends BaseProvider {
   private positionMs = 0;
   private durationMs = 0;
   private lastTickAt = 0;
+  /**
+   * Where a start was asked for, until Spotify has made a sound from it.
+   *
+   * Null the rest of the time. See `soundIn`.
+   */
+  private startingFrom: number | null = null;
+  /** When that start was asked for, for how long the sound took. */
+  private startedAt = 0;
+  /** The local question, asked until the sound comes or the wait runs out. */
+  private listening: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Watchdog over that clock.
@@ -319,6 +344,9 @@ export class SpotifyProvider extends BaseProvider {
 
     this.setState('LOADING');
     this.playing = trackId;
+    // Before the command goes out, not after: Spotify can answer with a state
+    // before the request that caused it has returned.
+    this.expectSound(0);
     try {
       // `connect()` resolving does not mean Spotify has registered the device;
       // that arrives later on the `ready` event. Picking a track inside that
@@ -360,6 +388,7 @@ export class SpotifyProvider extends BaseProvider {
     // says why, which beats a play button that quietly does nothing.
     const at = this.positionMs;
     const deviceId = await this.waitForDevice();
+    this.expectSound(at);
     await playOnDevice(deviceId, this.playing, at);
     this.positionMs = at;
   }
@@ -381,6 +410,7 @@ export class SpotifyProvider extends BaseProvider {
   override dispose(): void {
     window.removeEventListener('offline', this.onOffline);
     window.removeEventListener('online', this.onOnline);
+    this.stopListening();
     this.stopTicker();
     this.stopVerifier();
     this.player?.disconnect();
@@ -469,6 +499,8 @@ export class SpotifyProvider extends BaseProvider {
     player.addListener('player_state_changed', ((state: SpotifyPlayerState | null) => {
       if (!state) {
         // Null state means playback moved to another device.
+        this.stopListening();
+        this.startingFrom = null;
         this.stopTicker();
         this.stopVerifier();
         this.setState('IDLE');
@@ -540,13 +572,98 @@ export class SpotifyProvider extends BaseProvider {
         this.emit({ type: 'ended', trackId: track?.uri ?? null });
         return;
       }
+      this.stopListening();
+      this.startingFrom = null;
       this.setState('PAUSED');
+    } else if (this.startingFrom !== null && !this.soundIn(state)) {
+      // Taken, not yet heard. Spotify marks a track as playing the moment the
+      // command registers, and on a cold start the sound follows five or ten
+      // seconds later — while the clock, started here, counted through the
+      // silence, and then jumped back to the top when the music really began.
+      // So it is loading until Spotify's own position moves, and says so.
+      this.stopTicker();
+      this.setState('LOADING');
+      this.listenForSound();
     } else {
+      this.heard();
       this.setState('PLAYING');
       this.startTicker();
     }
 
     this.emitProgress();
+  }
+
+  /**
+   * Whether this state is the sound a start was waiting for.
+   *
+   * Spotify's own position is what tells: it stays where the start was asked
+   * for until audio is coming out, and moves the moment it is. That is the
+   * whole evidence for this — a cold start jumped the bar back to the top
+   * when the music began, which it could only do if Spotify's position had
+   * not moved through the silence while the clock here had. A state that says
+   * it is still loading is believed as well, when it says so.
+   */
+  private soundIn(state: SpotifyPlayerState): boolean {
+    return heardFrom(this.startingFrom ?? 0, state.position, state.loading);
+  }
+
+  /** A start is on its way: nothing plays until Spotify is heard to. */
+  private expectSound(from: number): void {
+    this.startingFrom = from;
+    this.startedAt = performance.now();
+  }
+
+  /** The sound came, or waiting for it is over. */
+  private heard(): void {
+    if (this.startingFrom === null) return;
+    const took = Math.round(performance.now() - this.startedAt);
+    this.startingFrom = null;
+    this.stopListening();
+    log('info', 'playback', `sound after ${took} ms`);
+  }
+
+  /**
+   * Ask the SDK where it is until the sound comes.
+   *
+   * Local — the player's own idea of its state, no request to anyone — so it
+   * can be asked four times a second. Spotify sends a state of its own when
+   * the music starts, and this is not instead of that; it is for a start
+   * whose first state was the only one it sent.
+   *
+   * Not for ever. A start that has made no sound in `SOUND_PATIENCE_MS` is
+   * handed to the watchdog, which exists for music that is not coming and is
+   * better at it: it asks Spotify itself, tries again, and in the end says so.
+   */
+  private listenForSound(): void {
+    if (this.listening) return;
+    this.listening = setInterval(() => {
+      if (this.startingFrom === null) {
+        this.stopListening();
+        return;
+      }
+      if (performance.now() - this.startedAt > SOUND_PATIENCE_MS) {
+        log('warn', 'playback', 'no sound from a start; handing it to the watchdog');
+        this.heard();
+        this.setState('PLAYING');
+        this.startTicker();
+        this.emitProgress();
+        return;
+      }
+      void this.player
+        ?.getCurrentState()
+        .then((state) => {
+          if (state && !state.paused && this.startingFrom !== null && this.soundIn(state)) {
+            this.onStateChanged(state);
+          }
+        })
+        .catch(() => {});
+    }, SOUND_LISTEN_MS);
+  }
+
+  private stopListening(): void {
+    if (!this.listening) return;
+    clearInterval(this.listening);
+    this.listening = null;
   }
 
   private startTicker(): void {
@@ -920,6 +1037,10 @@ export class SpotifyProvider extends BaseProvider {
     this.stalls = recordStall(this.stalls);
     this.restartsTried = 0;
     this.confirmsLeft = 0;
+    // A start still waiting for its sound is the watchdog's now. Left running,
+    // its own time limit would call it playing in the middle of an outage.
+    this.stopListening();
+    this.startingFrom = null;
     this.stopTicker();
 
     // Stop the sound, not just the picture. The outage is caught inside a
