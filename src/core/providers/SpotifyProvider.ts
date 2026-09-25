@@ -152,6 +152,16 @@ export class SpotifyProvider extends BaseProvider {
   private startingFrom: number | null = null;
   /** When that start was asked for, for how long the sound took. */
   private startedAt = 0;
+  /**
+   * The track that was on before the one being started, while it is starting.
+   *
+   * The player can still be describing it after the new one is asked for — a
+   * last word about the old song, paused or at its old position — and neither
+   * is news about the start. Taken as news, a pause called the wait off and a
+   * position far past the top called it heard, and the clock ran through the
+   * silence again. Null when there was none, or it is the same track again.
+   */
+  private leaving: string | null = null;
   /** The local question, asked until the sound comes or the wait runs out. */
   private listening: ReturnType<typeof setInterval> | null = null;
 
@@ -343,6 +353,7 @@ export class SpotifyProvider extends BaseProvider {
     if (!this.player) throw new Error('Spotify player is not connected.');
 
     this.setState('LOADING');
+    this.leaving = this.playing !== trackId ? this.playing : null;
     this.playing = trackId;
     // Before the command goes out, not after: Spotify can answer with a state
     // before the request that caused it has returned.
@@ -397,6 +408,9 @@ export class SpotifyProvider extends BaseProvider {
     if (!this.player) return;
     const target = clamp(positionMs, 0, this.durationMs || positionMs);
     await this.player.seek(target);
+    // Moved while still waiting for the sound: Spotify's position is now the
+    // seek, and it is past that, not past the top, that means it is heard.
+    if (this.startingFrom !== null) this.startingFrom = target;
     this.positionMs = target;
     this.emitProgress();
   }
@@ -528,6 +542,15 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
 
+    // The old song's last word, after the new one was asked for. Not news
+    // about the start, and not about this track's length or place either —
+    // taken in, its pause called the wait off and its position called the
+    // start heard. Waited through, with the patience running.
+    if (this.startingFrom !== null && this.fromBefore(state)) {
+      this.listenForSound();
+      return;
+    }
+
     const wasPlaying = this.state === 'PLAYING';
     // Read before the incoming state overwrites it. Where the clock had got to
     // is the whole of the evidence for whether a track finished, and this line
@@ -604,7 +627,14 @@ export class SpotifyProvider extends BaseProvider {
    * it is still loading is believed as well, when it says so.
    */
   private soundIn(state: SpotifyPlayerState): boolean {
+    if (this.fromBefore(state)) return false;
     return heardFrom(this.startingFrom ?? 0, state.position, state.loading);
+  }
+
+  /** Whether a state is about the track that was on before this start. */
+  private fromBefore(state: SpotifyPlayerState): boolean {
+    const uri = state.track_window.current_track?.uri;
+    return this.leaving !== null && uri === this.leaving;
   }
 
   /** A start is on its way: nothing plays until Spotify is heard to. */
@@ -618,6 +648,7 @@ export class SpotifyProvider extends BaseProvider {
     if (this.startingFrom === null) return;
     const took = Math.round(performance.now() - this.startedAt);
     this.startingFrom = null;
+    this.leaving = null;
     this.stopListening();
     log('info', 'playback', `sound after ${took} ms`);
   }
