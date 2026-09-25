@@ -5,7 +5,7 @@ import { useLyricsStore } from '@/core/lyrics/store';
 import { seekLyrics } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import type { LyricLine } from '@/core/lyrics/activeLine';
-import { LineText } from './LineText';
+import { LineText, Silence } from './LineText';
 import { ARRIVE_EASING, ARRIVE_MS, LEAVE_EASING, LEAVE_MS } from './motion';
 import { useLyricFrame } from './useLyricFrame';
 import type { Move } from './browse';
@@ -486,7 +486,7 @@ function SungLines({
                   : 'truncate text-[12px] text-cream-400'
               }
             >
-              {line.text || '♪'}
+              {line.text || <Silence />}
             </span>
           </div>
         );
@@ -513,7 +513,7 @@ function SungLines({
             <LineText line={current} singing={singing} />
           </button>
         ) : (
-          <span className="text-[15px] text-cream-400">♪</span>
+          <Silence />
         )}
       </div>
       {next && (
@@ -528,7 +528,7 @@ function SungLines({
             onClick={() => onPick(next)}
             className="pointer-events-auto max-w-full truncate text-[12px] text-cream-400 transition-colors hover:text-cream-200"
           >
-            {next.text || '♪'}
+            {next.text || <Silence />}
           </button>
         </div>
       )}

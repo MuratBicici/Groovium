@@ -39,6 +39,34 @@ export function lineSweep(lines: readonly LyricLine[], index: number, ms: number
 }
 
 /**
+ * How long a song has to wait before its silence is worth showing.
+ *
+ * Every song starts with something before the first word, and most of them
+ * start with a second of it that nobody would call an introduction. Below this
+ * a mark would appear and be gone before it was read.
+ */
+export const INTRO_WORTH_SHOWING_MS = 3_000;
+
+/**
+ * The song's own opening, as a line with nothing in it.
+ *
+ * A stretch with no words in the middle of a song is written as an empty line
+ * by whoever timed it, and the view draws those as a mark that fills while they
+ * last. The stretch before the first word is exactly the same thing and no
+ * source writes it down, so the wait at the start of a song was the one silence
+ * with nothing to show for it.
+ *
+ * Added here rather than drawn as a special case, so it is a line like any
+ * other: it can be scrolled to, it can be clicked to seek back to the
+ * beginning, and the light that crosses it is the light that crosses the rest.
+ */
+export function withIntro(lines: readonly LyricLine[]): LyricLine[] {
+  const first = lines[0];
+  if (!first || first.timeMs < INTRO_WORTH_SHOWING_MS) return [...lines];
+  return [{ timeMs: 0, text: '' }, ...lines];
+}
+
+/**
  * How far into each word the light has got, from how far into the line it is.
  *
  * A line the eye reads left to right is not a box the light can cross left to

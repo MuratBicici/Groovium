@@ -794,6 +794,42 @@ body {
 }
 
 /*
+ * A stretch of the song with no words: a short wave where the words would be.
+ *
+ * Drawn as a colour seen through the shape of a wave — a mask — rather than as
+ * a picture, so it can be lit exactly as a word is. On its own it is the dim
+ * ink of the lines around it. On the line being sung, the rule above paints the
+ * same moving light onto it that it paints onto letters, and the wave fills from
+ * the left as the silence runs out, full as the next line begins.
+ *
+ * In ems, so it is the size of a word or two in whatever size the line is drawn
+ * at, and grows with the line being sung the way a short line does.
+ */
+.lyric-wave {
+  --lyric-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 16'%3E%3Cpath d='M1 8q3.5-5 7 0t7 0t7 0t7 0t7 0t7 0t7 0t7 0t7 0' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  display: inline-block;
+  width: 3.6em;
+  height: 0.9em;
+  vertical-align: middle;
+  background-color: color-mix(in srgb, currentColor 55%, transparent);
+  -webkit-mask-image: var(--lyric-wave);
+  mask-image: var(--lyric-wave);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+/*
+ * Lit, the light is clipped to the wave's mask rather than to text — it has
+ * none, and clipped to text a background with no text in front of it is
+ * nothing at all.
+ */
+.lyric-lit .lyric-wave {
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+
+/*
  * The wheel's lines, thinning to nothing at the drawer's top and bottom rather
  * than being cut off there.
  */

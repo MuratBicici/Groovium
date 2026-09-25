@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { TrackMetadata } from '@/core/types';
 import { getLyrics, type LyricsLookup } from './api';
+import { withIntro } from './activeLine';
 
 /**
  * The lyrics of the song that is playing, shared by the two views.
@@ -34,6 +35,16 @@ interface LyricsState {
 let asked = 0;
 let lastTrack: TrackMetadata | null = null;
 
+/**
+ * The lookup with the song's own opening in it, where there is one worth
+ * showing. Done once, here, so both views and the frame loop see the same song.
+ */
+function withOpening(lookup: LyricsLookup): LyricsLookup {
+  const { result } = lookup;
+  if (result.status !== 'Synced') return lookup;
+  return { ...lookup, result: { ...result, data: withIntro(result.data) } };
+}
+
 export const useLyricsStore = create<LyricsState>((set, get) => {
   async function fetchFor(track: TrackMetadata): Promise<void> {
     const ask = ++asked;
@@ -43,7 +54,7 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
       if (ask !== asked) return;
       set(
         lookup
-          ? { status: 'done', lookup }
+          ? { status: 'done', lookup: withOpening(lookup) }
           : { status: 'error', error: 'Lyrics are only looked up in the app.' },
       );
     } catch (err) {

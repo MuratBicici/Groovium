@@ -5,6 +5,20 @@ import { UNSUNG } from './useLyricFrame';
 const WORDS = /\S+\s*/g;
 
 /**
+ * A stretch of the song with no words in it: the wait before the first line,
+ * and the instrumental breaks whoever timed the song wrote as empty lines.
+ *
+ * A short wave rather than a note. It is drawn dim and filled from the left as
+ * the stretch runs out, so it says how long is left the way the line being sung
+ * says how far through it the singing is — the same light, through the shape of
+ * a wave instead of the shape of letters. Nothing to read, so nothing is read
+ * out: the line is in the list a screen reader gets, empty, as it is.
+ */
+export function Silence({ lit = false }: { lit?: boolean }) {
+  return <span {...(lit ? { 'data-word': true } : {})} className="lyric-wave" aria-hidden="true" />;
+}
+
+/**
  * A line's words: in syllables where a source times them, and in plain words
  * where it does not.
  *
@@ -33,7 +47,10 @@ export function LineText({ line, singing }: { line: LyricLine; singing: boolean 
     );
   }
 
-  const words = (line.text || '♪').match(WORDS) ?? ['♪'];
+  // Nothing to say: a wave for as long as the silence lasts.
+  if (!line.text.trim()) return <Silence lit />;
+
+  const words = line.text.match(WORDS) ?? [line.text];
   return (
     <>
       {words.map((word, w) => (
