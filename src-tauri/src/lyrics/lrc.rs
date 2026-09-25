@@ -10,7 +10,9 @@ pub fn stamp_ms(tag: &str) -> Option<i64> {
         Some((s, f)) => (s, f),
         None => (rest, ""),
     };
-    if minutes.is_empty() || !minutes.bytes().all(|b| b.is_ascii_digit()) {
+    // Four digits of minutes is a week of song; more is not a stamp, and a
+    // number that size would overflow when it is turned into milliseconds.
+    if minutes.is_empty() || minutes.len() > 4 || !minutes.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     if seconds.len() != 2 || !seconds.bytes().all(|b| b.is_ascii_digit()) {
@@ -133,7 +135,9 @@ type Pieces = Vec<(i64, String)>;
 
 /// A stamp with the offset applied, never before the start.
 fn at(ms: i64, offset: i64) -> u32 {
-    u32::try_from((ms - offset).max(0)).unwrap_or(u32::MAX)
+    // Saturating: the offset is whatever the file says, and a file can say
+    // anything.
+    u32::try_from(ms.saturating_sub(offset).max(0)).unwrap_or(u32::MAX)
 }
 
 /// Every timed line, earliest first.
@@ -393,6 +397,17 @@ mod tests {
         let lines =
             parse_lrc("[ar:Someone]\n[ti:Something]\n[00:01.00]words\n[00:04.00]\nnot a line");
         assert_eq!(lines, vec![line(1000, "words"), line(4000, "")]);
+    }
+
+    #[test]
+    fn survives_stamps_and_offsets_of_any_size() {
+        assert_eq!(stamp_ms("999999999999999999:00.00"), None);
+        let lines = parse_lrc("[offset:-9223372036854775808]
+[00:01.00]x");
+        assert_eq!(lines[0].time_ms, u32::MAX);
+        let lines = parse_lrc("[offset:9223372036854775807]
+[00:01.00]x");
+        assert_eq!(lines[0].time_ms, 0);
     }
 
     #[test]
