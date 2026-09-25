@@ -39,6 +39,23 @@ export function lineSweep(lines: readonly LyricLine[], index: number, ms: number
 }
 
 /**
+ * What a timer writes on a line to say there are no words on it.
+ *
+ * Mostly nothing at all, but not always: plenty of people timing a song for
+ * LRCLIB mark an instrumental break with a note, or a row of them, or dots, or
+ * a dash — and a line that says "♪" was drawn as a word that said "♪", in the
+ * middle of the song, where a wave belongs. Whitespace, music signs, and the
+ * punctuation such marks are made of; anything with a letter or a digit in it
+ * is words, however few.
+ */
+const SILENCE_MARKS = /[\s♩♪♫♬🎵🎶🎼.…·•*~\-–—()[\]]/gu;
+
+/** Whether a line has no words in it, only a mark that there are none. */
+export function isSilence(text: string): boolean {
+  return text.replace(SILENCE_MARKS, '') === '';
+}
+
+/**
  * How long a song has to wait before its silence is worth showing.
  *
  * Every song starts with something before the first word, and most of them

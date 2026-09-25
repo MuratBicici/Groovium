@@ -812,11 +812,11 @@ body {
  * In ems, so it is the same share of whatever size the line is drawn at.
  */
 .lyric-wave {
-  --lyric-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 22'%3E%3Cpath d='M2 11Q10 7 18 11Q26 19 34 11Q42 0 50 11Q58 22 66 11Q74 3 82 11Q90 15 98 11' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --lyric-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 22'%3E%3Cpath d='M2 11Q10.5 8 19 11Q27.5 17 36 11Q44.5 2 53 11Q61.5 22 70 11Q78.5 0 87 11Q95.5 20 104 11Q112.5 5 121 11Q129.5 14 138 11' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   display: block;
-  width: 5.2em;
+  width: 7em;
   height: 1.375em;
-  background-color: color-mix(in srgb, var(--color-brass-400) 45%, transparent);
+  background-color: color-mix(in srgb, var(--color-brass-400) 40%, transparent);
   -webkit-mask-image: var(--lyric-wave);
   mask-image: var(--lyric-wave);
   -webkit-mask-size: 100% auto;
@@ -827,17 +827,22 @@ body {
   mask-repeat: no-repeat;
 }
 /*
- * Lit, in the brass as well: bright where the light has reached, dim ahead of
- * it, crossing on the same moving edge as a word. Clipped to the mask rather
- * than to text — it has none, and clipped to text a background with no text in
- * front of it is nothing at all.
+ * Lit: filled in a different colour from the wave waiting to be filled, not a
+ * brighter version of the same one. Brass over dim brass was one colour at two
+ * strengths, and on a dark record the step between them was too small to see
+ * the fill move — which is the whole of what this is for. Filled, it is the
+ * pale gold the sung words are lit in; ahead of the light, a dimmer brass than
+ * it waits in. Crossing on the same moving edge as a word.
+ *
+ * Clipped to the mask rather than to text — it has none, and clipped to text a
+ * background with no text in front of it is nothing at all.
  */
 .lyric-lit .lyric-wave {
   background-image: linear-gradient(
     90deg,
-    var(--color-brass-400)
+    color-mix(in oklab, var(--color-brass-400) 30%, var(--color-cream-50))
       calc(var(--sung, 0) * (100% + var(--lyric-edge)) - var(--lyric-edge)),
-    color-mix(in srgb, var(--color-brass-400) 38%, transparent)
+    color-mix(in srgb, var(--color-brass-400) 30%, transparent)
       calc(var(--sung, 0) * (100% + var(--lyric-edge)))
   );
   -webkit-background-clip: border-box;

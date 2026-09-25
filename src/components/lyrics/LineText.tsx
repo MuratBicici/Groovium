@@ -1,4 +1,4 @@
-import type { LyricLine } from '@/core/lyrics/activeLine';
+import { isSilence, type LyricLine } from '@/core/lyrics/activeLine';
 import { UNSUNG } from './useLyricFrame';
 
 /** A word and the space after it, which travels with it when a line wraps. */
@@ -47,8 +47,9 @@ export function LineText({ line, singing }: { line: LyricLine; singing: boolean 
     );
   }
 
-  // Nothing to say: a wave for as long as the silence lasts.
-  if (!line.text.trim()) return <Silence lit />;
+  // Nothing to say — nothing at all, or a note where the words would be: a wave
+  // for as long as the silence lasts.
+  if (isSilence(line.text)) return <Silence lit />;
 
   const words = line.text.match(WORDS) ?? [line.text];
   return (

@@ -4,6 +4,7 @@ import {
   LAST_LINE_MS,
   acrossWords,
   activeLine,
+  isSilence,
   lineSweep,
   withIntro,
 } from './activeLine';
@@ -153,5 +154,28 @@ describe("the song's own opening", () => {
     expect(lineSweep(song, 0, 0)).toBe(0);
     expect(lineSweep(song, 0, 4_000)).toBeCloseTo(0.5, 5);
     expect(lineSweep(song, 0, 8_000)).toBe(1);
+  });
+});
+
+describe('a line with no words on it', () => {
+  it('is nothing at all', () => {
+    expect(isSilence('')).toBe(true);
+    expect(isSilence('   ')).toBe(true);
+  });
+
+  it('is a note, or a row of them, the way people timing songs mark a break', () => {
+    // What the report was: a line that says "♪" drawn as a word saying "♪".
+    for (const mark of ['♪', '♪ ♪ ♪', '♫', '♬♪', '🎵', '🎶', ' ♪ '])
+      expect(isSilence(mark), mark).toBe(true);
+  });
+
+  it('is dots, a dash, or a note in brackets', () => {
+    for (const mark of ['...', '…', '-', '—', '(♪)', '[♪]', '• • •', '~♪~'])
+      expect(isSilence(mark), mark).toBe(true);
+  });
+
+  it('is never a line with a word in it, however short', () => {
+    for (const words of ['I', 'oh ♪', '♪ la la ♪', 'Instrumental', '1, 2', 'N’olur'])
+      expect(isSilence(words), words).toBe(false);
   });
 });

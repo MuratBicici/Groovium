@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from 'react';
 import type { DrawerSide } from '@/core/settings';
-import type { LyricLine } from '@/core/lyrics/activeLine';
+import { isSilence, type LyricLine } from '@/core/lyrics/activeLine';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import {
   CENTER_INSET,
@@ -112,7 +112,7 @@ export function LyricWheel({
       // room they are given so a short line is not lost in it; the wave is
       // already the length it should be, and grown it stops being a mark and
       // becomes a line drawn across the record.
-      const silent = !(lines[index]?.text.trim() ?? '');
+      const silent = isSilence(lines[index]?.text ?? '');
       const fit = silent ? 1 : natural > 0 ? LINE_ROOM / natural : 1;
       el.style.setProperty('--fit', String(fit));
       // And how far along the room it would have to move to sit in the middle
