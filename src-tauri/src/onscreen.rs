@@ -85,7 +85,9 @@ fn buried(window: &tauri::WebviewWindow) -> bool {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindow, GetWindowRect, IsIconic, IsWindowVisible, GW_HWNDPREV,
+        GetLayeredWindowAttributes, GetWindow, GetWindowLongW, GetWindowRect, IsIconic,
+        IsWindowVisible, GWL_EXSTYLE, GW_HWNDPREV, LAYERED_WINDOW_ATTRIBUTES_FLAGS, LWA_ALPHA,
+        LWA_COLORKEY, WS_EX_LAYERED, WS_EX_TRANSPARENT,
     };
 
     let Ok(handle) = window.hwnd() else { return false };
@@ -119,6 +121,35 @@ fn buried(window: &tauri::WebviewWindow) -> bool {
         asked.is_ok() && state != 0
     }
 
+    /// Whether a window can be seen through.
+    ///
+    /// Overlays — a graphics driver's, a game launcher's, a voice chat's — sit
+    /// above everything, the size of the whole screen, visible by every
+    /// measure, and drawn almost entirely clear. Read as windows they bury
+    /// this one for as long as they run, which is the wrong way for this to
+    /// be wrong: a window in plain sight that has stopped moving. So anything
+    /// that says it is click-through, or layered with less than solid alpha,
+    /// is looked past. A layered window that will not say what its alpha is
+    /// draws its own per pixel, and is taken to be see-through as well.
+    fn see_through(hwnd: HWND) -> bool {
+        let style = unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) } as u32;
+        if style & WS_EX_TRANSPARENT.0 != 0 {
+            return true;
+        }
+        if style & WS_EX_LAYERED.0 == 0 {
+            return false;
+        }
+        let mut alpha: u8 = 255;
+        let mut flags = LAYERED_WINDOW_ATTRIBUTES_FLAGS(0);
+        let asked = unsafe {
+            GetLayeredWindowAttributes(hwnd, None, Some(&mut alpha), Some(&mut flags))
+        };
+        if asked.is_err() {
+            return true;
+        }
+        flags.0 & LWA_COLORKEY.0 != 0 || (flags.0 & LWA_ALPHA.0 != 0 && alpha < 255)
+    }
+
     // Hidden to the tray, or minimised: the webview has said so itself, and
     // agreeing costs nothing.
     if unsafe { !IsWindowVisible(ours).as_bool() || IsIconic(ours).as_bool() } {
@@ -139,7 +170,7 @@ fn buried(window: &tauri::WebviewWindow) -> bool {
         above = next;
 
         let seen = unsafe { IsWindowVisible(above).as_bool() && !IsIconic(above).as_bool() };
-        if !seen || cloaked(above) {
+        if !seen || cloaked(above) || see_through(above) {
             continue;
         }
         if corners(above).is_some_and(|theirs| covers(theirs, mine)) {
