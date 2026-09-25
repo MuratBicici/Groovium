@@ -13,6 +13,42 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.2.0 — 2026-09-25
+
+Şarkı sözleri, plakla aynı anda.
+
+Yeni sözler düğmesine basın. Şarkının sözleri söylendikçe yanarak görünür.
+Oynatıcıda plağın altında dururlar: o an söylenen satır ve sıradaki satır.
+Şarkı adı ve sanatçı da pencerenin altına iner. İsterseniz sözleri çekmecede
+açın. Orada satırlar, şarkının kapağını taşıyan büyük bir plağın çevresine
+dizilir. Şarkı ilerledikçe plak her satırda bir adım döner.
+
+Her satır, söylendiği süre boyunca ilk harfinden son harfine doğru dolar.
+Sözler hece hece zamanlanmışsa her hece söylendiği anda yanar. Sözlerin
+arasındaki boşluklarda bir dalga görünür ve sessizlik bittikçe dolar. Bir
+satıra basarsanız şarkı oraya gider. Kaydırarak ileriyi okuyabilirsiniz.
+Birkaç saniye sonra sözler kendiliğinden söylenen satıra döner. Pencere kenarı
+ışığı açıksa, sözler açıkken o ışıklar plağın etiketinin çevresinde döner.
+Böylece ritim, baktığınız yerde kalır.
+
+Sözler siz açana kadar kapalıdır. Açıkken şarkının adı, sanatçısı, albümü ve
+süresi açık bir söz veritabanı olan LRCLIB'e gider. LRCLIB'de zamanlama yoksa
+NetEase Cloud Music'e de sorulur. Sözler kapalıyken hiçbir şey gönderilmez.
+Bulunan sözler diske de yazılmaz.
+
+Pencere artık kimse bakmıyorken dinleniyor. Tepsiye kaldırıldığında, simge
+durumuna küçültüldüğünde ya da tam ekran bir pencerenin altında kaldığında
+hiçbir şey çizmez. Görselleştirici için müziği dinlemeyi de bırakır. Bu, özellikle dizüstü
+bilgisayarlarda ekran kartının yükünü ciddi biçimde azaltır. Her şeyin yine de
+hareket etmesini isterseniz Ayarlar'da bir anahtarı var.
+
+Şarkı değişimi de artık ekranda tek bir değişim. Sıradaki plağın kapağı sırası
+gelmeden yüklenir. Plak pikaba kapağıyla birlikte gelir, pencere de renklerini
+on saniye sonra değil, aynı anda alır. Hiç renk içermeyen bir kapak pencereyi
+siyaha ya da beyaza çevirir. Hâlâ yüklenen bir Spotify şarkısı da artık bunu
+söylüyor: ilerleme çubuğunda bir ışık kayar. Eskiden sayaç sessizliğin içinden
+sayar, müzik gelince de başa sıçrardı.
+
 ## 1.1.2 — 2026-09-19
 
 Çalma listeleriniz artık sizin elinizde.

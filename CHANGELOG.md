@@ -4,6 +4,151 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.2.0 — 2026-09-25
+
+The words, in time with the record.
+
+Press the new lyrics button and the song's words appear, lit as they are sung.
+In the player they sit under the record: the line being sung and the one to
+come, with the title and artist moved to the foot of the window. Or open them
+in the drawer, where the lines lie round a large record carrying the song's
+cover, and the record turns a line at a time as the song goes on. Each line is
+lit from its first letter to its last over the time it is sung, and syllable
+by syllable where the lyrics are timed that finely. A pause between words is a
+wave that fills as the silence runs out. Press a line to go to that point in
+the song, or scroll to read ahead; the lyrics come back to the singing on their
+own. With the window's edge lighting on, its lights go round the cover on the
+label while the lyrics are open, so the beat is kept where you are looking.
+
+Lyrics are off until you turn them on. While they are on, the song's title,
+artist, album and length go to LRCLIB, an open lyrics database, and to NetEase
+Cloud Music if LRCLIB has no timings for it. Nothing is sent while they are
+off, and nothing is written to disk.
+
+The window also rests when nobody can see it. Put away, minimised, or under a
+full-screen window, it draws nothing and stops listening to the music for the
+visualiser, which takes a real load off a laptop's graphics. A switch in
+Settings keeps everything moving if you would rather it did.
+
+And a change of song is one change on screen. The next record's cover is
+loaded before its turn, so it arrives on the deck with its sleeve on, and the
+window takes its colours at the same moment rather than ten seconds later. A
+sleeve with no colour in it turns the window black or white. A Spotify song
+that is still loading now says so, with a light running along the bar, instead
+of counting through silence and then jumping back to the start.
+
+HIGHLIGHTS
+· Lyrics, lit as they are sung: under the record in the player, or round a
+  large record in the drawer.
+· Syllable by syllable where the lyrics are timed that finely, and a wave
+  through the pauses.
+· Press a line to go to it; scroll to read ahead.
+· With edge lighting on, the lyrics record's label keeps the beat.
+· The window draws nothing while it is out of sight. On by default, with a
+  switch in Settings.
+· A new song's cover and colours arrive together, straight away.
+· Covers with no colour in them turn the window black or white.
+· A Spotify song says it is loading until the music actually starts.
+· The words and the progress bar stay in step with Spotify.
+
+ALL CHANGES
+
+Lyrics
+· A lyrics button in the row at the bottom right. Off until pressed, and
+  remembered between launches.
+· In the player: the line being sung and the next one, between the record and
+  the title and artist, which move to the foot of the window. A button in the
+  corner opens them in the drawer.
+· In the drawer: the lines lie like spokes round a large record, with the
+  cover on its label. The record and the lines turn together, a line at a
+  time. A button moves them back to the player.
+· The Spotify button stays lit while the lyrics have the drawer, because the
+  drawer is still out. Pressing it closes the drawer, and the lyrics go back
+  under the record.
+· The line being sung fills with light from its first letter to its last, over
+  the time until the next line. A line that wraps fills along its words, row by
+  row.
+· Where the lyrics time each syllable, each lights as it is sung.
+· Each line is sized to fit its row. The line being sung sits in the middle of
+  its row.
+· Before the first words, between verses, and on lines marked only with ♪ or
+  similar, a wave fills as the silence runs out.
+· Press a line to go to that point in the song.
+· Scroll to read ahead or back: a notch is a line. Five seconds after the last
+  scroll, the lyrics wind back to the line being sung.
+· With the window's edge lighting on, its lights go round the cover on the
+  lyrics record while the lyrics are open in the drawer, and the rim flashes
+  on each hit, tuned by the same dials. They
+  keep to the rim and never reach the words.
+· Songs with words but no timings show the words to read. Instrumentals, songs
+  with no lyrics found, and failed lookups each say so, and a failed lookup can
+  be tried again.
+
+Finding the right lyrics
+· LRCLIB is asked by exact match first, then without extras such as
+  "Remastered", "feat." or a track number, then by search. NetEase is asked
+  only when none of those has timings.
+· A result has to be the same song by the same artist, and within a few
+  seconds of the same length, before its timings are used.
+· Lyrics in the song's own script are preferred to a romanization of it, and
+  lyrics timed a line at a time to lyrics timed a syllable per line.
+· A translation written after a caret on every line, as some records do, is
+  left out, so only what is sung is shown.
+· Credits lines from NetEase ("作词 : …") are left out.
+· An answer that arrives after the song has been skipped is dropped.
+· Answers are kept in memory while the app is open, so a song played again
+  shows its lyrics at once.
+
+Resting out of sight
+· While the window is put away to the tray, minimised, or entirely under
+  another window that is not see-through, nothing on it is drawn: not the
+  visualiser, the window's edge, the record's lights or the lyrics. The audio
+  capture for the visualiser stops with them.
+· Clicking or typing in the window always wakes it.
+· "Rest out of sight" in Settings, on by default, turns this off.
+· Overlays from graphics drivers, game launchers and voice chats do not count
+  as covering the window.
+
+Lighter on the graphics card
+· The window's edge paints nothing when there is nothing lit, and only the
+  strips along the edges rather than the whole window.
+· The lyrics wheel turns without being drawn again.
+· The lights on the lyrics record cover only the label and its rim.
+
+Covers and colours
+· Every cover is fetched once, in one way, and shared by the record, the bar
+  and the palette. It had been fetched twice, and the second request could
+  hang until the palette gave up on it, which is what held a song's colours
+  back and showed the chosen theme in between.
+· The covers of the next and previous songs, and the station's next song, are
+  loaded and their colours read before their turn.
+· Until a new cover's colours are read, the window keeps the colours it has,
+  rather than going to the chosen theme on the way.
+· A cover still on its way fades onto the label when it arrives.
+· A cover with no colour in it turns the window black, or white if it is
+  mostly light, instead of leaving the chosen theme.
+· The record on the deck is always the song that is playing. A record put on
+  while the player is still starting stays on the deck, and the previous
+  song's cover is no longer painted onto the next one.
+
+Playback
+· A Spotify song is shown as loading, with a light running along the progress
+  bar and a spinner on the play button, until Spotify is actually playing it.
+  The bar had counted through the silence and then jumped back to the start.
+· Spotify's position is checked against the app's own count on the regular
+  check, and put right when they drift more than about a second apart. The
+  count runs on a clock the system time cannot move.
+· The station stops asking Spotify for the rest of a search once Spotify says
+  to slow down.
+
+Security
+· rustls, which every HTTPS request goes through, is updated past
+  RUSTSEC-2026-0285.
+· Timestamps and offsets in lyrics files cannot overflow, whatever a file says.
+
+Privacy
+· PRIVACY.md says what is sent to LRCLIB and NetEase, and when.
+
 ## 1.1.2 — 2026-09-19
 
 Your playlists, yours to change.
