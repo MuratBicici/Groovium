@@ -112,6 +112,16 @@ pub struct Settings {
     /// to the shape of the app rather than something added to it.
     #[serde(default)]
     pub window_glow: bool,
+    /// Stop drawing while the window cannot be seen: in the tray, minimised,
+    /// or buried under something full-screen.
+    ///
+    /// On unless turned off, including in a config written before the field
+    /// existed — and it has to be here at all, not only in the webview's idea
+    /// of the settings: this struct is what a save goes through, and a field
+    /// it does not name is dropped on the way to disk. Turned off, it came back
+    /// on at every launch.
+    #[serde(default = "on_unless_turned_off")]
+    pub sleep_when_hidden: bool,
     /// Take the palette from the cover of whatever is playing.
     ///
     /// Off unless asked for. A window that repaints itself every few minutes is
@@ -176,6 +186,7 @@ impl Default for Settings {
             window_border: false,
             visualizer: on_unless_turned_off(),
             window_glow: false,
+            sleep_when_hidden: true,
             theme_from_cover: false,
             glow_strength: 0,
             glow_sensitivity: 0,
@@ -351,6 +362,7 @@ mod tests {
             window_border: false,
             visualizer: true,
             window_glow: true,
+            sleep_when_hidden: false,
             theme_from_cover: true,
             glow_strength: 3,
             glow_sensitivity: -2,
@@ -375,6 +387,19 @@ mod tests {
         assert!(written.contains(r##""customPrimary":"#2e231b""##));
         assert!(written.contains(r#""lastSeenVersion":"1.0.4""#));
         assert!(written.contains(r#""declinedVersion":"1.0.5""#));
+        assert!(written.contains(r#""sleepWhenHidden":false"#));
+    }
+
+    #[test]
+    fn sleeping_when_hidden_is_on_until_turned_off_and_stays_off() {
+        // On for a config from before the switch existed.
+        let old: AppConfig =
+            serde_json::from_str(r#"{"settings":{"theme":"espresso"}}"#).expect("parses");
+        assert!(old.settings.sleep_when_hidden);
+        // And off, once somebody has said so, through a save and a load.
+        let off: AppConfig =
+            serde_json::from_str(r#"{"settings":{"sleepWhenHidden":false}}"#).expect("parses");
+        assert!(!off.settings.sleep_when_hidden);
     }
 
     #[test]
