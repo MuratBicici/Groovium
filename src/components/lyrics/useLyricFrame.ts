@@ -12,6 +12,9 @@ export interface Place {
   jumped: boolean;
 }
 
+/** The least the light over a word is moved by, in pixels. */
+const MIN_MOVE_PX = 0.25;
+
 /** A syllable not yet sung, on the line being sung. */
 export const UNSUNG = 'lyric-unsung';
 
@@ -103,11 +106,15 @@ export function useLyricFrame(
           for (let w = 0; w < spans.length; w += 1) {
             const share = shares[w] ?? 0;
             const was = told[w];
-            // A hundredth of a word is well under a pixel of one: writing it
-            // is a style change nobody could see.
-            if (was !== undefined && Math.abs(was - share) < 0.01) continue;
+            // Skipped when the light would move less than a quarter of a pixel:
+            // a style change nobody could see. In pixels, not in shares of the
+            // word — a hundredth of a short word is nothing, but a hundredth of
+            // a silence's wave is nearly three pixels, and a light that only
+            // moved in steps that size crept across it a jump at a time.
+            const moved = was === undefined ? Infinity : Math.abs(was - share) * (widths[w] ?? 0);
+            if (moved < MIN_MOVE_PX) continue;
             told[w] = share;
-            spans[w]?.style.setProperty('--sung', share.toFixed(3));
+            spans[w]?.style.setProperty('--sung', share.toFixed(4));
           }
         }
       }
