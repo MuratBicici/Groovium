@@ -11,6 +11,7 @@ import {
   hasRecovered,
   hasStalled,
   observe,
+  resync,
   stayAlert,
   verifyGap,
   watchingFrom,
@@ -503,7 +504,7 @@ export class SpotifyProvider extends BaseProvider {
     const wasAt = this.positionMs;
     this.durationMs = state.duration;
     this.positionMs = state.position;
-    this.lastTickAt = Date.now();
+    this.lastTickAt = performance.now();
 
     // What the player says it is on. The store owns the metadata — it came from
     // the Web API when the track was queued, with artwork this state does not
@@ -551,9 +552,14 @@ export class SpotifyProvider extends BaseProvider {
   private startTicker(): void {
     this.startVerifier();
     if (this.ticker) return;
-    this.lastTickAt = Date.now();
+    this.lastTickAt = performance.now();
     this.ticker = setInterval(() => {
-      const now = Date.now();
+      // Monotonic time, not the wall's. The wall clock is moved by whatever
+      // sets it — Windows synchronising, somebody changing the time, a zone
+      // being corrected — and a count built on it moved with it: seconds
+      // gained or lost in one tick, in the middle of a song, for no reason
+      // anybody could see.
+      const now = performance.now();
       this.positionMs = Math.min(this.positionMs + (now - this.lastTickAt), this.durationMs);
       this.lastTickAt = now;
 
@@ -757,7 +763,9 @@ export class SpotifyProvider extends BaseProvider {
     }
     if (this.confirmsLeft > 0) this.confirmsLeft -= 1;
 
+    const asked = performance.now();
     const playback = await currentPlayback();
+    const trip = performance.now() - asked;
 
     // No answer is not ambiguous, and waiting for a second opinion is what
     // made this arrive too late: audio runs on out of the buffer for five or
@@ -801,9 +809,24 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
 
-    // Playing, moving, and reachable. The first "not playing" is enough to go
-    // back to asking quickly — `STALL_AFTER` wants its second observation
-    // soon, not half a minute later — and only a clean answer relaxes it.
+    // Playing, moving, and reachable — so the answer is also the one reading
+    // of where Spotify really is that the clock gets while nothing is wrong.
+    // Put right if it has wandered; said out loud when it has, so a song whose
+    // words ran ahead can be found in the log rather than guessed at.
+    if (reported !== null && this.state === 'PLAYING') {
+      const right = resync(this.positionMs, reported, trip);
+      if (right !== null) {
+        const by = Math.round(right - this.positionMs);
+        this.positionMs = Math.min(right, this.durationMs || right);
+        this.lastTickAt = performance.now();
+        this.emitProgress();
+        log('info', 'playback', `clock put right by ${by} ms`);
+      }
+    }
+
+    // The first "not playing" is enough to go back to asking quickly —
+    // `STALL_AFTER` wants its second observation soon, not half a minute
+    // later — and only a clean answer relaxes it.
     this.alert = stayAlert(this.stalled, reported);
   }
 
@@ -842,7 +865,7 @@ export class SpotifyProvider extends BaseProvider {
     }
 
     if (reported !== null) this.positionMs = reported;
-    this.lastTickAt = Date.now();
+    this.lastTickAt = performance.now();
     this.setState('PLAYING');
     this.startTicker();
     this.emitProgress();

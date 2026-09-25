@@ -23,6 +23,9 @@ import {
   watchingFrom,
   type Running,
   type Watch,
+  DRIFT_TOLERANCE_MS,
+  TRUSTED_TRIP_MS,
+  resync,
 } from './stallWatch';
 
 /**
@@ -295,5 +298,37 @@ describe('noticing that nothing is watching the clock', () => {
     // Given up on, or handed to another device. Reviving it here would restart
     // a loop that was ended on purpose.
     expect(clockUnwatched(running({ watching: false }))).toBe(false);
+  });
+});
+
+describe('putting the clock right', () => {
+  it('leaves a clock alone that is where Spotify says it is', () => {
+    expect(resync(60_000, 60_000, 200)).toBeNull();
+    // Spotify's own roughness is not a drift.
+    expect(resync(60_000, 60_400, 200)).toBeNull();
+    expect(resync(60_000, 59_300, 200)).toBeNull();
+  });
+
+  it('moves a clock that has run ahead of the song back to it', () => {
+    // A buffer ran dry for a moment; the count went on.
+    expect(resync(64_000, 60_000, 200)).toBe(60_100);
+  });
+
+  it('moves a clock that has fallen behind forward to it', () => {
+    expect(resync(52_000, 60_000, 200)).toBe(60_100);
+  });
+
+  it('carries the answer forward by half the time it took to arrive', () => {
+    expect(resync(0, 10_000, 800)).toBe(10_400);
+    expect(resync(0, 10_000, -50)).toBe(10_000);
+  });
+
+  it('does not trust an answer too slow to say where Spotify is now', () => {
+    expect(resync(0, 10_000, TRUSTED_TRIP_MS + 1)).toBeNull();
+  });
+
+  it('corrects anything past the tolerance and nothing inside it', () => {
+    expect(resync(0, DRIFT_TOLERANCE_MS, 0)).toBeNull();
+    expect(resync(0, DRIFT_TOLERANCE_MS + 1, 0)).toBe(DRIFT_TOLERANCE_MS + 1);
   });
 });

@@ -257,6 +257,44 @@ export function stayAlert(stalled: boolean, reported: number | null): boolean {
   return stalled || reported === null;
 }
 
+/**
+ * How far the clock may drift from Spotify before it is put right.
+ *
+ * The clock is a count kept here, started from where Spotify last said it was
+ * and added to as time passes. Nothing about that count knows whether the
+ * music kept pace: a buffer that ran dry for a second too short to call a
+ * stall, a player that started a beat late, and the count is ahead of the
+ * song for as long as the song lasts — the words lit before they are sung.
+ * The checks already ask Spotify where it is, and that answer used to be read
+ * only for whether anything was playing at all.
+ *
+ * Wide enough that the answer's own roughness never moves anything: what
+ * Spotify reports is a few hundred milliseconds either way of the truth, and
+ * a clock pushed about by that would stutter. Narrow enough that a drift
+ * anybody could hear against the words is put right at the next check.
+ */
+export const DRIFT_TOLERANCE_MS = 1_200;
+
+/**
+ * How slow an answer can be and still be trusted to say where Spotify is now.
+ *
+ * Where Spotify was is somewhere inside the time the request took, and half
+ * of it is the guess. On a slow answer the guess is wider than the tolerance,
+ * and correcting the clock by it would be swapping one error for another.
+ */
+export const TRUSTED_TRIP_MS = 1_500;
+
+/**
+ * Where the clock should be, given what Spotify said and how long it took to
+ * say it — or null to leave the clock alone.
+ */
+export function resync(clock: number, reported: number, tripMs: number): number | null {
+  if (tripMs > TRUSTED_TRIP_MS) return null;
+  // Spotify answered from about half way through the request.
+  const now = reported + Math.max(0, tripMs) / 2;
+  return Math.abs(now - clock) > DRIFT_TOLERANCE_MS ? now : null;
+}
+
 export interface Watch {
   /** Where Spotify last said it was, or null before the first look. */
   seen: number | null;
