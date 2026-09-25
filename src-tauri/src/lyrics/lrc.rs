@@ -146,8 +146,20 @@ pub fn parse_lrc(text: &str) -> Vec<LyricLine> {
     let mut offset = 0i64;
     let mut timed: Vec<(i64, String, Pieces)> = Vec::new();
 
+    // Decided for the whole record before any line is read, because it is a
+    // fact about the record: whoever timed it either wrote a translation after
+    // every line or did not.
+    let stamped = text.lines().filter_map(|line| {
+        let (tags, rest) = split_tags(line);
+        tags.iter().any(|tag| stamp_ms(tag).is_some()).then_some(rest)
+    });
+    let translated = translated(stamped);
+
     for line in text.lines() {
         let (tags, rest) = split_tags(line);
+        // Cut before the word stamps are read, so a translation takes no
+        // pieces with it and leaves none behind.
+        let rest = if translated { sung_part(rest) } else { rest };
         let mut stamps = Vec::new();
         for tag in tags {
             if let Some(ms) = stamp_ms(tag) {
@@ -189,6 +201,61 @@ pub fn parse_lrc(text: &str) -> Vec<LyricLine> {
     lines
 }
 
+/// How many lines a record needs before a caret on most of them is a pattern
+/// rather than a coincidence.
+const MIN_TRANSLATED_LINES: usize = 4;
+
+/// Whether whoever timed a record wrote a translation after every line.
+///
+/// Some records put the translation on the line itself, after a caret: the
+/// words as they are sung, `^`, and the same line in English. Drawn as they
+/// are, every line of the song is both, run together — twice the length, half
+/// of it words nobody is singing.
+///
+/// Decided for the record rather than line by line, because a caret on its own
+/// is not a separator: `^^` is a smile, and it turns up in the lyrics of plenty
+/// of songs. It is a translation when most of the record's lines carry exactly
+/// one, with words on both sides of it; a record that happens to smile once or
+/// twice is left exactly as it is.
+fn translated<'a>(lines: impl Iterator<Item = &'a str>) -> bool {
+    let mut lyric = 0usize;
+    let mut split = 0usize;
+    for line in lines {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        lyric += 1;
+        if line.matches('^').count() == 1 {
+            if let Some((sung, meant)) = line.split_once('^') {
+                if !sung.trim().is_empty() && !meant.trim().is_empty() {
+                    split += 1;
+                }
+            }
+        }
+    }
+    lyric >= MIN_TRANSLATED_LINES && split * 2 >= lyric
+}
+
+/// What is sung on a line that carries its translation after a caret.
+///
+/// The last caret, not the first: a line that smiles before its translation
+/// keeps its smile. A line with no caret is all words and is kept whole.
+fn sung_part(line: &str) -> &str {
+    match line.rfind('^') {
+        Some(at) => line[..at].trim_end(),
+        None => line,
+    }
+}
+
+/// Words to read, without the translation some records carry after a caret.
+pub fn without_translations(plain: &str) -> String {
+    if !translated(plain.lines()) {
+        return plain.to_string();
+    }
+    plain.lines().map(sung_part).collect::<Vec<_>>().join("\n")
+}
+
 /// The words alone, one line each, for lyrics that are to be read rather than
 /// followed — synced ones from a take too far off in length to keep time.
 pub fn words_of(lines: &[LyricLine]) -> String {
@@ -211,6 +278,86 @@ mod tests {
             text: text.into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn keeps_what_is_sung_and_drops_a_translation_after_a_caret() {
+        // NAYEON's "POP!", as six of the eight records LRCLIB holds for it
+        // write it.
+        let lines = parse_lrc(
+            "[00:15.28] (Let's start) 내 맘대로 play it^(Let's start) I'll play it my way\n\
+             [00:17.61] (Won't stop) 거침없이 shake it^(Won't stop) I'll shake it without hesitation\n\
+             [00:25.70] 이미 넌 나를 벗어날 수가 없어^You can't escape me anymore\n\
+             [00:32.86] 터뜨리고 싶은 너^You want to burst\n\
+             [00:35.27] 설렘이 멎기 전에^Before the excitement fades",
+        );
+        let texts: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "(Let's start) 내 맘대로 play it",
+                "(Won't stop) 거침없이 shake it",
+                "이미 넌 나를 벗어날 수가 없어",
+                "터뜨리고 싶은 너",
+                "설렘이 멎기 전에",
+            ]
+        );
+    }
+
+    #[test]
+    fn leaves_a_smile_in_an_ordinary_song_alone() {
+        // A caret here and there is somebody smiling, not a translation.
+        let lines = parse_lrc(
+            "[00:01.00]you make me laugh ^^\n\
+             [00:02.00]every single day\n\
+             [00:03.00]and I can't stop\n\
+             [00:04.00]thinking about you\n\
+             [00:05.00]so happy ^^",
+        );
+        assert_eq!(lines[0].text, "you make me laugh ^^");
+        assert_eq!(lines[4].text, "so happy ^^");
+    }
+
+    #[test]
+    fn leaves_a_record_with_only_a_few_carets_alone() {
+        let lines = parse_lrc(
+            "[00:01.00]a^b\n[00:02.00]one\n[00:03.00]two\n[00:04.00]three\n[00:05.00]four",
+        );
+        assert_eq!(lines[0].text, "a^b");
+    }
+
+    #[test]
+    fn keeps_a_smile_before_the_translation() {
+        let lines = parse_lrc(
+            "[00:01.00]웃어요 ^^^Smile\n[00:02.00]가요^Let's go\n\
+             [00:03.00]좋아^Good\n[00:04.00]정말^Really",
+        );
+        assert_eq!(lines[0].text, "웃어요 ^^");
+        assert_eq!(lines[1].text, "가요");
+    }
+
+    #[test]
+    fn a_translation_takes_no_word_stamps_with_it() {
+        let lines = parse_lrc(
+            "[00:01.00]<00:01.00>내 <00:01.40>맘대로^My way\n\
+             [00:02.00]<00:02.00>거침 <00:02.30>없이^Without stopping\n\
+             [00:03.00]<00:03.00>터뜨 <00:03.20>려^Burst\n\
+             [00:04.00]<00:04.00>좋아^Good",
+        );
+        assert_eq!(lines[0].text, "내 맘대로");
+        let pieces: Vec<&str> = lines[0].words.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(pieces, vec!["내 ", "맘대로"]);
+    }
+
+    #[test]
+    fn words_to_read_lose_their_translations_the_same_way() {
+        let plain = "내 맘대로 play it^I'll play it my way\n거침없이 shake it^I'll shake it\n\
+                     이미 넌^You already\n터뜨리고 싶은 너^You want to burst";
+        assert_eq!(
+            without_translations(plain),
+            "내 맘대로 play it\n거침없이 shake it\n이미 넌\n터뜨리고 싶은 너"
+        );
+        assert_eq!(without_translations("so happy ^^\nla la"), "so happy ^^\nla la");
     }
 
     #[test]

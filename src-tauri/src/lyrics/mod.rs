@@ -643,6 +643,25 @@ mod tests {
     /// first: `cargo test lyrics::tests::live_netease -- --ignored --nocapture`.
     #[test]
     #[ignore]
+    fn live_translated() {
+        // Most of LRCLIB's records for this one carry an English translation
+        // after a caret on every line. What comes back has to be the song alone.
+        let q = Query::new("POP!", "NAYEON", "POP!", 169_000);
+        tauri::async_runtime::block_on(async {
+            let (lookup, _) = look_up(&q).await.expect("a lookup");
+            let LyricsResult::Synced(lines) = lookup.result else {
+                panic!("expected synced lyrics");
+            };
+            for line in lines.iter().take(12) {
+                println!("{:>6} {}", line.time_ms, line.text);
+            }
+            let left = lines.iter().filter(|l| l.text.contains('^')).count();
+            assert_eq!(left, 0, "{left} lines still carry a translation");
+        });
+    }
+
+    #[test]
+    #[ignore]
     fn live_netease() {
         let q = Query::new(
             "Get Lucky (feat. Pharrell Williams & Nile Rodgers)",
