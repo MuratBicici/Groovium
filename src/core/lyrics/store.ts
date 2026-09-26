@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TrackMetadata } from '@/core/types';
 import { getLyrics, type LyricsLookup } from './api';
 import { withIntro } from './activeLine';
+import { choose, chosenFor, type LyricsSource } from './sourceChoice';
 
 /**
  * The lyrics of the song that is playing, shared by the two views.
@@ -21,10 +22,14 @@ interface LyricsState {
   status: LyricsStatus;
   lookup: LyricsLookup | null;
   error: string | null;
+  /** The source asked by name for this track, or null for the usual order. */
+  source: LyricsSource | null;
   /** Look up this track's lyrics, unless they are already here or on the way. */
   want: (track: TrackMetadata | null) => void;
   /** Ask again for the same track, after a failure. */
   retry: () => void;
+  /** Take this track's lyrics from one source from now on, and ask it now. */
+  pickSource: (source: LyricsSource) => void;
 }
 
 /**
@@ -48,9 +53,10 @@ function withOpening(lookup: LyricsLookup): LyricsLookup {
 export const useLyricsStore = create<LyricsState>((set, get) => {
   async function fetchFor(track: TrackMetadata): Promise<void> {
     const ask = ++asked;
-    set({ trackId: track.id, status: 'loading', lookup: null, error: null });
+    const source = chosenFor(track.id);
+    set({ trackId: track.id, status: 'loading', lookup: null, error: null, source });
     try {
-      const lookup = await getLyrics(track);
+      const lookup = await getLyrics(track, source);
       if (ask !== asked) return;
       set(
         lookup
@@ -68,6 +74,7 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
     status: 'idle',
     lookup: null,
     error: null,
+    source: null,
 
     want(track) {
       lastTrack = track;
@@ -83,6 +90,12 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
 
     retry() {
       if (lastTrack) void fetchFor(lastTrack);
+    },
+
+    pickSource(source) {
+      if (!lastTrack) return;
+      choose(lastTrack.id, source);
+      void fetchFor(lastTrack);
     },
   };
 });

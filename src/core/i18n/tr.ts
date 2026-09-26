@@ -54,6 +54,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'lyrics.retry': 'Tekrar dene',
   'lyrics.nothingPlaying': 'Sözlerini görmek için bir şarkı çalın.',
   'lyrics.source': 'kaynak: {source}',
+  'lyrics.trySource': 'Sözler şarkıyla uyuşmuyor mu? {source} kaynağından getir',
+  'lyrics.notFoundIn': '{source} bu şarkının sözlerini bulamadı.',
   'lyrics.expand': 'Çekmecede aç',
   'lyrics.toCompact': 'Oynatıcıya taşı',
 

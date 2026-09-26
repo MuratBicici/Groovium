@@ -161,8 +161,9 @@ impl Query {
     }
 }
 
-/// Answers already had this session, by track id. Only answers every source
-/// was reachable for, so a failed request is asked again next time.
+/// Answers already had this session, by track id and the source asked. Only
+/// answers every source was reachable for, so a failed request is asked again
+/// next time.
 #[derive(Default)]
 pub struct LyricsCache(Mutex<HashMap<String, LyricsLookup>>);
 
@@ -174,43 +175,106 @@ pub async fn get_lyrics(
     artist_name: String,
     album_name: String,
     duration_ms: u32,
+    source: Option<String>,
 ) -> Result<LyricsLookup, String> {
-    if let Some(hit) = cache.0.lock().map_err(|e| e.to_string())?.get(&track_id) {
+    let from = Source::named(source.as_deref());
+    let key = format!("{track_id}|{}", from.name());
+    if let Some(hit) = cache.0.lock().map_err(|e| e.to_string())?.get(&key) {
         return Ok(hit.clone());
     }
 
     let q = Query::new(&track_name, &artist_name, &album_name, duration_ms);
-    let (lookup, settled) = look_up(&q).await?;
+    let (lookup, settled) = match from {
+        Source::Any => look_up(&q).await?,
+        Source::Lrclib => from_lrclib(&q).await?,
+        Source::Netease => from_netease(&q).await?,
+    };
     if settled {
         cache
             .0
             .lock()
             .map_err(|e| e.to_string())?
-            .insert(track_id, lookup.clone());
+            .insert(key, lookup.clone());
     }
     Ok(lookup)
 }
 
-async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
-    let mut w = Waterfall::default();
-    if let Some(done) = w.offer(lrclib::exact(q, &q.title, "lrclib:get").await) {
-        return Ok((done, true));
-    }
-    if q.clean_title != q.title {
-        if let Some(done) = w.offer(lrclib::exact(q, &q.clean_title, "lrclib:get-clean").await) {
-            return Ok((done, true));
+/// Where to look.
+///
+/// Anywhere, in the usual order, unless somebody has said which. A record can
+/// be timed wrongly — Metallica's "Turn the Page" on LRCLIB starts its words
+/// nine seconds after the singing does, in all twenty copies of it — and
+/// nothing here can hear that. The listener can, and can ask the other source
+/// instead. Asked by name, only that source is asked, so what comes back is
+/// that source's answer, including that it has none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Source {
+    Any,
+    Lrclib,
+    Netease,
+}
+
+impl Source {
+    fn named(name: Option<&str>) -> Self {
+        match name {
+            Some("lrclib") => Source::Lrclib,
+            Some("netease") if NETEASE_ENABLED => Source::Netease,
+            _ => Source::Any,
         }
     }
-    // Given its syllables from the results it chose among, where some record
-    // there times them. Nothing else is asked for them: another request on
-    // every song for the rare one that has them is not worth the wait.
-    if let Some(done) = w.offer(lrclib::search(q).await) {
+
+    fn name(self) -> &'static str {
+        match self {
+            Source::Any => "any",
+            Source::Lrclib => "lrclib",
+            Source::Netease => "netease",
+        }
+    }
+}
+
+async fn look_up(q: &Query) -> Result<(LyricsLookup, bool), String> {
+    let mut w = Waterfall::default();
+    if let Some(done) = ask_lrclib(q, &mut w).await {
         return Ok((done, true));
     }
     if NETEASE_ENABLED {
         if let Some(done) = w.offer(netease::find(q).await) {
             return Ok((done, true));
         }
+    }
+    w.finish()
+}
+
+/// Every way LRCLIB is asked, in order, until one of them settles it.
+async fn ask_lrclib(q: &Query, w: &mut Waterfall) -> Option<LyricsLookup> {
+    if let Some(done) = w.offer(lrclib::exact(q, &q.title, "lrclib:get").await) {
+        return Some(done);
+    }
+    if q.clean_title != q.title {
+        if let Some(done) = w.offer(lrclib::exact(q, &q.clean_title, "lrclib:get-clean").await) {
+            return Some(done);
+        }
+    }
+    // Given its syllables from the results it chose among, where some record
+    // there times them. Nothing else is asked for them: another request on
+    // every song for the rare one that has them is not worth the wait.
+    w.offer(lrclib::search(q).await)
+}
+
+/// LRCLIB alone.
+async fn from_lrclib(q: &Query) -> Result<(LyricsLookup, bool), String> {
+    let mut w = Waterfall::default();
+    match ask_lrclib(q, &mut w).await {
+        Some(done) => Ok((done, true)),
+        None => w.finish(),
+    }
+}
+
+/// NetEase alone.
+async fn from_netease(q: &Query) -> Result<(LyricsLookup, bool), String> {
+    let mut w = Waterfall::default();
+    if let Some(done) = w.offer(netease::find(q).await) {
+        return Ok((done, true));
     }
     w.finish()
 }
@@ -383,6 +447,18 @@ mod tests {
             text: "x".into(),
             ..Default::default()
         }])
+    }
+
+    #[test]
+    fn a_source_is_asked_by_name_and_anything_else_is_the_usual_order() {
+        assert_eq!(Source::named(Some("lrclib")), Source::Lrclib);
+        assert_eq!(Source::named(Some("netease")), Source::Netease);
+        assert_eq!(Source::named(None), Source::Any);
+        assert_eq!(Source::named(Some("somewhere")), Source::Any);
+        // Each is its own answer in the cache: asking NetEase must not hand
+        // back what LRCLIB said.
+        assert_ne!(Source::Lrclib.name(), Source::Netease.name());
+        assert_ne!(Source::Any.name(), Source::Lrclib.name());
     }
 
     #[test]

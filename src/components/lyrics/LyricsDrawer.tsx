@@ -49,6 +49,8 @@ export function LyricsDrawer({
   const status = useLyricsStore((s) => s.status);
   const lookup = useLyricsStore((s) => s.lookup);
   const retry = useLyricsStore((s) => s.retry);
+  const chosen = useLyricsStore((s) => s.source);
+  const pickSource = useLyricsStore((s) => s.pickSource);
   const left = side === 'left';
 
   const record = useRef<HTMLDivElement | null>(null);
@@ -80,7 +82,11 @@ export function LyricsDrawer({
   }, [track?.id]);
 
   const result = status === 'done' ? lookup?.result : undefined;
-  const source = lookup?.matched?.via.split(':')[0];
+  // Where these came from: what answered, or — when the source asked by name
+  // had nothing — that source. The other one is a press away. With neither
+  // known, the usual order asked both and there is nowhere else to go.
+  const source = lookup?.matched?.via.split(':')[0] ?? chosen ?? undefined;
+  const other = source === 'netease' ? 'lrclib' : source ? 'netease' : null;
   const lines = result?.status === 'Synced' ? result.data : null;
 
   const sungEl = useRef<HTMLButtonElement | null>(null);
@@ -94,6 +100,8 @@ export function LyricsDrawer({
   if (!track) quiet = t('lyrics.nothingPlaying');
   else if (status === 'loading' || status === 'idle') quiet = t('lyrics.loading');
   else if (status === 'error') quiet = t('lyrics.error');
+  else if (result?.status === 'NotFound' && chosen)
+    quiet = t('lyrics.notFoundIn', { source: SOURCES[chosen] ?? chosen });
   else if (result?.status === 'NotFound') quiet = t('lyrics.notFound');
   else if (result?.status === 'Instrumental') quiet = t('lyrics.instrumental');
 
@@ -112,10 +120,32 @@ export function LyricsDrawer({
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
           {t('lyrics.title')}
-          {source && (
-            <span lang="en" className="ml-2 tracking-normal normal-case text-cream-400/70">
+          {source && other && status === 'done' && (
+            // The name of where these came from is also the way to the other
+            // source: a record can be timed wrongly, and the listener is the
+            // only one who can hear it.
+            <button
+              type="button"
+              onClick={() => pickSource(other)}
+              title={t('lyrics.trySource', { source: SOURCES[other] ?? other })}
+              aria-label={t('lyrics.trySource', { source: SOURCES[other] ?? other })}
+              className="ml-2 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 tracking-normal normal-case text-cream-400/70 transition-colors hover:bg-shell-600 hover:text-cream-50"
+            >
               {t('lyrics.source', { source: SOURCES[source] ?? source })}
-            </span>
+              <svg
+                viewBox="0 0 12 12"
+                className="h-2.5 w-2.5"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Two arrows passing: one source for the other. */}
+                <path d="M2 4h7.5M7.5 2 9.5 4 7.5 6M10 8H2.5M4.5 6 2.5 8l2 2" />
+              </svg>
+            </button>
           )}
         </span>
         {/* On a dark pill: on the right the record's label is under these, and

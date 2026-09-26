@@ -53,6 +53,8 @@ export const en = {
   'lyrics.retry': 'Try again',
   'lyrics.nothingPlaying': 'Play something to see its lyrics.',
   'lyrics.source': 'from {source}',
+  'lyrics.trySource': 'Words out of time? Get them from {source} instead',
+  'lyrics.notFoundIn': '{source} has no lyrics for this song.',
   'lyrics.expand': 'Open in the drawer',
   'lyrics.toCompact': 'Move to the player',
 

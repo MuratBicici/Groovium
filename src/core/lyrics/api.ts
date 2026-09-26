@@ -1,6 +1,7 @@
 import type { TrackMetadata } from '@/core/types';
 import { isTauri } from '@/core/utils/env';
 import type { LyricLine } from './activeLine';
+import type { LyricsSource } from './sourceChoice';
 
 /** What LRCLIB had for a song. The shape is Rust's `LyricsResult`. */
 export type LyricsResult =
@@ -24,8 +25,15 @@ export interface LyricsLookup {
   matched: LyricsMatch | null;
 }
 
-/** The lyrics for a track, from Rust, which asks LRCLIB and keeps the answer. */
-export async function getLyrics(track: TrackMetadata): Promise<LyricsLookup | null> {
+/**
+ * The lyrics for a track, from Rust, which asks LRCLIB and keeps the answer.
+ *
+ * `source` asks one source only; without it, the usual order.
+ */
+export async function getLyrics(
+  track: TrackMetadata,
+  source: LyricsSource | null = null,
+): Promise<LyricsLookup | null> {
   if (!isTauri()) {
     // The lookup lives in Rust. A development build in a browser gets made-up
     // lyrics instead, so the views can be seen without the app around them.
@@ -39,5 +47,6 @@ export async function getLyrics(track: TrackMetadata): Promise<LyricsLookup | nu
     artistName: track.artist,
     albumName: track.album,
     durationMs: Math.round(track.duration),
+    source,
   });
 }
