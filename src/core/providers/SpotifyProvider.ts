@@ -21,6 +21,7 @@ import {
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
 import { currentPlayback, playOnDevice } from './spotifyApi';
+import { errorText } from '@/core/utils/errorText';
 
 /**
  * Spotify playback through the Web Playback SDK.
@@ -643,14 +644,20 @@ export class SpotifyProvider extends BaseProvider {
     this.startedAt = performance.now();
   }
 
-  /** The sound came, or waiting for it is over. */
-  private heard(): void {
+  /**
+   * The sound came, or waiting for it is over.
+   *
+   * Only the first is worth a line saying how long it took. A wait given up
+   * on had already said so, and a "sound after 20171 ms" under it read as
+   * music that came, when what came next was the watchdog finding none.
+   */
+  private heard(came = true): void {
     if (this.startingFrom === null) return;
     const took = Math.round(performance.now() - this.startedAt);
     this.startingFrom = null;
     this.leaving = null;
     this.stopListening();
-    log('info', 'playback', `sound after ${took} ms`);
+    if (came) log('info', 'playback', `sound after ${took} ms`);
   }
 
   /**
@@ -674,7 +681,7 @@ export class SpotifyProvider extends BaseProvider {
       }
       if (performance.now() - this.startedAt > SOUND_PATIENCE_MS) {
         log('warn', 'playback', 'no sound from a start; handing it to the watchdog');
-        this.heard();
+        this.heard(false);
         this.setState('PLAYING');
         this.startTicker();
         this.emitProgress();
@@ -1131,5 +1138,5 @@ function loadSdk(): Promise<void> {
 }
 
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
