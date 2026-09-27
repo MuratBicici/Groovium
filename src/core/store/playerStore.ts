@@ -54,6 +54,7 @@ import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
 import { log } from '@/platform/log';
+import { errorText } from '@/core/utils/errorText';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
@@ -715,7 +716,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     try {
       return await action();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: errorText(err) });
       return fallback;
     }
   }
@@ -731,7 +732,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     try {
       await action(provider);
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : String(err) });
+      set({ error: errorText(err) });
     }
   }
 
@@ -950,7 +951,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       } catch (err) {
         set({
           error: say('error.startup', {
-            message: err instanceof Error ? err.message : String(err),
+            message: errorText(err),
           }),
         });
       } finally {

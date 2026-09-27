@@ -23,8 +23,7 @@ import {
 } from '@/core/providers/spotifyPlaylists';
 import { forgetSpotlight } from '@/core/providers/spotifySpotlight';
 import { usePlayerStore } from '@/core/store';
-import { describeAuthError } from '@/core/security/authErrors';
-import { account, isSpotifyAuthError, onAccountChange } from '@/core/security/spotifyAuth';
+import { account, onAccountChange } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
 import { log } from '@/platform/log';
 import {
@@ -40,6 +39,7 @@ import {
 } from './cache';
 import { clearCache, loadCache, loadCacheAfterWrites, updateCache } from './cacheFile';
 import { copiesOf, moveRequest, withMove, withoutSong, withSongAdded } from './crateEdits';
+import { errorText } from '@/core/utils/errorText';
 
 /**
  * What to put on screen when a request did not happen.
@@ -52,8 +52,7 @@ import { copiesOf, moveRequest, withMove, withoutSong, withSongAdded } from './c
  * which is what a crate that would not play used to say.
  */
 function describe(err: unknown): string {
-  if (isSpotifyAuthError(err)) return describeAuthError(err);
-  return err instanceof Error ? err.message : String(err);
+  return errorText(err);
 }
 
 /**
