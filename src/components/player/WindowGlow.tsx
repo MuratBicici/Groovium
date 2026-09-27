@@ -124,6 +124,26 @@ const BAND =
     ),
   ) + 2;
 
+/**
+ * Empty a canvas, every pixel of it.
+ *
+ * In its own pixels, not the scaled ones everything is drawn in. The backing
+ * store is `BAND` times the display scale, rounded, and at a scale that is not
+ * a whole number the two disagree: clearing `BAND` scaled pixels stopped part
+ * of the way into the last column, and left the rest of it standing. The
+ * lights are added rather than painted, so what was left was added to on
+ * every frame — and the outermost column of the right-hand edge, where the
+ * light is strongest, crept to white over the length of a song. A one-pixel
+ * line down the window's side, which started with the music and began again
+ * whenever anything resized the canvas.
+ */
+function wipe(context: CanvasRenderingContext2D): void {
+  context.save();
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+  context.restore();
+}
+
 /** One edge: the canvas down it, and which way it faces. */
 interface Edge {
   context: CanvasRenderingContext2D;
@@ -433,12 +453,12 @@ export function WindowGlow({
       // open, with nothing playing.
       if (showing <= FLOOR && motes.length === 0) {
         if (blank) return;
-        for (const edge of edges) edge.context.clearRect(0, 0, BAND, height);
+        for (const edge of edges) wipe(edge.context);
         blank = true;
         return;
       }
       blank = false;
-      for (const edge of edges) edge.context.clearRect(0, 0, BAND, height);
+      for (const edge of edges) wipe(edge.context);
 
       // Added rather than painted over each other: where two lights overlap the
       // edge should be brighter, which is what an aura does.
@@ -492,7 +512,7 @@ export function WindowGlow({
     if (prefersReducedMotion()) {
       measure();
       for (const edge of edges) {
-        edge.context.clearRect(0, 0, BAND, height);
+        wipe(edge.context);
         edge.context.globalCompositeOperation = 'lighter';
         haze(edge, colours.low, HAZE, HAZE_AT_REST);
         edge.context.globalAlpha = 1;
