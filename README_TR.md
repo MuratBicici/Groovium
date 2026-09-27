@@ -19,7 +19,7 @@
 </p>
 
 <!-- 1. Küçük bir ritüel. — başlık görselin içinde yer alır. -->
-<p align="center"><img src="docs/images/main-text-turkish.png" width="960" alt="Her açılışta küçük bir ritüel. Masaüstünde Groovium."></p>
+<p align="center"><img src="docs/images/main-text-turkish.png" width="960" alt="Her dinleyişte küçük bir ritüel. Masaüstünde Groovium."></p>
 <p align="center">Dönen bir plak, müziği takip eden bir kol. Her şey elinin altında.<br>Plağı kaldır, yeniden yerine bırak. Dinlemenin keyfine küçük bir dokunuş kat.</p>
 
 <!-- 2. Tek koleksiyon. Dinlemenin pek çok yolu. -->

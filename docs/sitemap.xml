@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://muratbicici.github.io/Groovium/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://muratbicici.github.io/Groovium/" />
+    <xhtml:link rel="alternate" hreflang="tr" href="https://muratbicici.github.io/Groovium/tr/" />
+  </url>
+  <url>
+    <loc>https://muratbicici.github.io/Groovium/tr/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://muratbicici.github.io/Groovium/" />
+    <xhtml:link rel="alternate" hreflang="tr" href="https://muratbicici.github.io/Groovium/tr/" />
+  </url>
+</urlset>

@@ -1,0 +1,317 @@
+/*
+ * Groovium's page, in the app's own colours: espresso ground, brass accent,
+ * cream type. No web fonts and no scripts — a page that is fast to load is
+ * also one search engines rank better.
+ */
+
+:root {
+  --ground: #16110d;
+  --surface: #211912;
+  --raised: #2c221a;
+  --edge: rgba(224, 176, 113, 0.18);
+  --brass: #e0b071;
+  --brass-deep: #c8945a;
+  --cream: #f6efe4;
+  --muted: #cbbba4;
+  --faint: #9a8a74;
+  --radius: 18px;
+  --wide: 1100px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 50% -200px, rgba(200, 148, 90, 0.18), transparent 70%),
+    var(--ground);
+  color: var(--cream);
+  font:
+    17px/1.6 'Segoe UI Variable Text',
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--brass);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--cream);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.wrap {
+  width: min(var(--wide), 100% - 32px);
+  margin-inline: auto;
+}
+
+/* The bar across the top: the name, and the other language. */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cream);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.brand img {
+  width: 28px;
+  height: 28px;
+}
+
+.lang {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.lang a {
+  color: var(--muted);
+}
+
+.lang strong {
+  color: var(--cream);
+  font-weight: 600;
+}
+
+/* The opening: what it is, and the way to get it. */
+.hero {
+  text-align: center;
+  padding-block: 48px 32px;
+}
+
+.hero .icon {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 20px;
+  filter: drop-shadow(0 10px 30px rgba(200, 148, 90, 0.35));
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 64px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  margin: 14px auto 0;
+  font-size: clamp(20px, 3vw, 26px);
+  font-weight: 600;
+  color: var(--brass);
+}
+
+.lede {
+  max-width: 620px;
+  margin: 14px auto 0;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 24px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button.primary {
+  background: linear-gradient(180deg, var(--brass), var(--brass-deep));
+  color: #1b130c;
+  box-shadow: 0 8px 24px rgba(200, 148, 90, 0.3);
+}
+
+.button.primary:hover {
+  color: #1b130c;
+}
+
+.button.secondary {
+  border: 1px solid var(--edge);
+  color: var(--cream);
+  background: var(--surface);
+}
+
+.button svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.note {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--faint);
+}
+
+/* The three screenshots, each with the words that go with it. */
+.shot {
+  /* A figure comes with 40px either side; the screenshots want the width. */
+  margin: 56px 0;
+  text-align: center;
+}
+
+.shot img {
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--edge);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.shot p {
+  max-width: 680px;
+  margin: 22px auto 0;
+  color: var(--muted);
+}
+
+.fiction {
+  text-align: center;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* What else it does, a card each. */
+h2 {
+  margin: 0 0 8px;
+  font-size: clamp(24px, 3.4vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.section {
+  padding-block: 56px;
+}
+
+.section > .intro {
+  max-width: 680px;
+  color: var(--muted);
+  margin: 0 0 28px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  padding: 22px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--edge);
+}
+
+.card h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  color: var(--cream);
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.facts {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.facts li {
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+}
+
+.facts strong {
+  color: var(--cream);
+}
+
+/* The last word: get it. */
+.closing {
+  text-align: center;
+  padding-block: 64px;
+}
+
+footer {
+  border-top: 1px solid var(--edge);
+  padding-block: 28px 40px;
+  font-size: 14px;
+  color: var(--faint);
+}
+
+footer .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 12px;
+}
+
+footer p {
+  margin: 6px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .button {
+    transition: none;
+  }
+  .button:hover {
+    transform: none;
+  }
+}
