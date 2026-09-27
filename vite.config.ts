@@ -16,15 +16,27 @@ const { version } = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
 ) as { version: string };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // The demo (`npm run demo`) answers the app's own commands itself —
+      // made-up songs, no Spotify account, nothing read from or written to
+      // the real library — so every call to Rust goes through its switchboard
+      // first. Only in that mode: no other build has this module in it.
+      ...(mode === 'demo'
+        ? [
+            {
+              find: /^@tauri-apps\/api\/core$/,
+              replacement: fileURLToPath(new URL('./src/demo/tauriCore.ts', import.meta.url)),
+            },
+          ]
+        : []),
+    ],
   },
   // Tauri prints its own diagnostics to the terminal; don't wipe them.
   clearScreen: false,
@@ -44,4 +56,4 @@ export default defineConfig({
     // Vite 8 minifies with oxc; esbuild is no longer bundled.
     minify: process.env.TAURI_ENV_DEBUG ? false : 'oxc',
   },
-});
+}));

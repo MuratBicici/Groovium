@@ -920,8 +920,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       starting = true;
 
       try {
-        registerProvider(new LocalAudioProvider());
-        registerProvider(new SpotifyProvider());
+        if (import.meta.env.MODE === 'demo') {
+          // The demo's players keep time and make no sound: see `src/demo`.
+          const { DemoProvider } = await import('@/demo/provider');
+          registerProvider(new DemoProvider('local'));
+          registerProvider(new DemoProvider('spotify'));
+        } else {
+          registerProvider(new LocalAudioProvider());
+          registerProvider(new SpotifyProvider());
+        }
         registerProvider(new YTMusicProvider());
         registerProvider(new AppleMusicProvider());
 

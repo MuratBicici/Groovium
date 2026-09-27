@@ -29,8 +29,18 @@ if (import.meta.env.DEV) {
   });
 }
 
-createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+async function start(root: HTMLElement): Promise<void> {
+  // `npm run demo`: made-up records instead of anybody's own. The condition is
+  // a constant, so no other build contains the demo at all.
+  if (import.meta.env.MODE === 'demo') {
+    const { installDemo } = await import('./demo');
+    installDemo();
+  }
+  createRoot(root).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void start(container);

@@ -7,6 +7,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
+    "demo": "tauri dev --config src-tauri/tauri.demo.conf.json",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
