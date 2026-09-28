@@ -4,6 +4,108 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.2.1 — 2026-09-28
+
+Everything you can play, in one drawer.
+
+The library, the playlists and Spotify had a button each, for what is one
+question: what to play next. Now there is one Library button in the row at the
+bottom right, and one drawer beside the player with two sides, Local and
+Spotify, chosen at the top. The drawer opens on the side you left it on, and
+each side keeps its place while you look at the other.
+
+The local side is the songs on this computer, laid out as records on a shelf,
+and your Groovium playlists as crates on the shelf beneath them, drawn, opened
+and played exactly as Spotify's are. Open one and its records come out of the
+crate. Press a record to play it, carry it to the deck, or carry it onto
+another crate to file it there. The pencil on an open playlist renames it,
+gives it a cover of its own, or deletes it, and in edit mode its records can be
+put in a new order. The pencil on a song renames it, title, artist and album,
+and gives it a cover. Only Groovium's record of the song changes; the file
+itself is left as it was.
+
+The whole window can be made larger or smaller now, from 80% to 150%, with a
+slider in Settings. Everything grows together, and the size is kept.
+
+The rest is small. At the end of what there is to play, Next can take a few
+seconds to find a song, and the window now says it is searching, with a light
+that parts from the middle of the progress bar. When a song's lyrics are out of
+time, the source's name in the lyrics drawer switches to the other source, and
+the choice is kept for that song. A thin line that crept down the right edge of
+the window at 125% and 150% display scaling is gone, the records in an open
+crate no longer have arcs of a larger record drawn across them, and the
+settings gear has even teeth.
+
+HIGHLIGHTS
+· One Library button, and one drawer with a Local side and a Spotify side.
+· Your Groovium playlists are crates on a shelf, opened and played exactly
+  like Spotify's.
+· Rename a playlist, give it a cover, or put its songs in a new order.
+· Rename a song on this computer and give it a cover.
+· A window size slider in Settings, from 80% to 150%.
+· "Searching" while Next is finding a song.
+· Lyrics that are out of time can come from the other source.
+· The line down the window's right edge at 125% and 150% scaling is gone.
+
+ALL CHANGES
+
+The drawer
+· One Library button takes the place of the separate library, playlists and
+  Spotify buttons.
+· The drawer has two sides, Local and Spotify, switched at the top. The brass
+  under the chosen side slides to the other, and the side coming in slides in
+  from its direction.
+· The drawer opens on the side it was left on. Both sides keep their scroll and
+  what they have loaded while the other is showing.
+
+This computer
+· The songs on this computer are records on a shelf. Press one to play the
+  library from it. Music is added from files or from a whole folder, as
+  before.
+· The pencil on a song opens its details: title, artist, album and cover. A
+  song on the deck shows the change at once. The audio file's own tags are not
+  touched.
+
+Groovium playlists
+· Groovium playlists are crates on a shelf, showing their songs' covers, or a
+  cover of their own. A new one is made from the empty sleeve at the start of
+  the shelf.
+· Opening one works as a Spotify playlist does: the records fly out of the
+  crate onto a page, and back into it when it closes.
+· Press a record to play the playlist from it, or carry it to the deck by hand.
+  Carry a record onto a crate to add it to that playlist, and carry a crate to
+  the deck to play the whole playlist.
+· The pencil on an open playlist opens its details: its name, its cover, cropped
+  to a square as a Spotify playlist's is, and deleting it.
+· In edit mode a song can be taken out, or held and moved to a new place.
+
+Window size
+· A Window size slider in Settings, from 80% to 150%. It is applied when the
+  slider is let go of, and kept between launches.
+· The sliders in Settings glide between their stops instead of jumping.
+
+Playback
+· While Next waits for the station to find a song, the status says
+  "Searching" and a light parts from the middle of the progress bar to both
+  ends. A song ending with nothing lined up does the same.
+· A second press of Next during that wait no longer skips past the song found.
+· A playlist started during that wait is no longer started over from its first
+  song when the station comes back with nothing.
+
+Lyrics
+· The source's name in the lyrics drawer is a switch to the other source, for
+  lyrics that are out of time. The choice is kept for that song, and a source
+  with nothing for the song says so, with the way back beside it.
+
+Fixes
+· A one-pixel line down the right edge of the window, which crept to white as
+  a song played, at 125% and 150% display scaling.
+· Records in an open crate, drawn with arcs of a larger record across them
+  when the drawer was wide.
+· A failure that could be reported as "[object Object]". Every error now says
+  what went wrong.
+· The settings gear, which was drawn with teeth of four different sizes.
+
 ## 1.2.0 — 2026-09-25
 
 The words, in time with the record.

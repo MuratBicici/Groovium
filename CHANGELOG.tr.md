@@ -13,6 +13,40 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.2.1 — 2026-09-28
+
+Çalabileceğiniz her şey tek bir çekmecede.
+
+Kitaplığın, çalma listelerinin ve Spotify'ın ayrı ayrı düğmeleri vardı. Oysa
+üçü de aynı soruya cevap veriyordu: sırada ne çalsın? Artık sağ alttaki
+düğmelerin arasında tek bir Kitaplık düğmesi var. Oynatıcının yanında açılan
+çekmecenin de iki yüzü var: Yerel ve Spotify. Hangisini istediğinizi en üstten
+seçersiniz. Çekmece, bıraktığınız yüzle açılır. Öbür yüze geçip döndüğünüzde de
+her şey kaldığı yerde durur.
+
+Yerel yüzde bu bilgisayardaki şarkılarınız bir rafta plak olarak durur. Altındaki
+rafta da Groovium çalma listeleriniz kasalar halinde durur. Bu kasalar
+Spotify'dakilerle birebir aynı çizilir, aynı açılır, aynı çalınır. Bir kasayı
+açınca plaklar kasadan çıkar. Bir plağa basıp çalabilir, onu elle pikaba
+taşıyabilir ya da başka bir kasaya götürüp o listeye ekleyebilirsiniz. Açık bir
+listenin kalemi, listenin adını değiştirir, ona kendi kapağını verir ya da
+listeyi siler. Düzenleme modunda plakların sırasını da değiştirebilirsiniz. Bir
+şarkının kalemi de şarkının adını, sanatçısını ve albümünü değiştirir, ona bir
+kapak verir. Yalnızca Groovium'daki kaydı değişir. Dosyanın kendisine
+dokunulmaz.
+
+Pencerenin tamamını da artık büyütüp küçültebilirsiniz. Ayarlar'daki kaydırıcı
+%80 ile %150 arasında gider. Her şey birlikte büyür, seçiminiz de hatırlanır.
+
+Gerisi küçük şeyler. Çalacak şey bittiğinde İleri'ye basarsanız, yeni bir şarkı
+bulmak birkaç saniye sürebilir. Pencere artık bu sırada "Aranıyor" der. Süre
+çubuğunun ortasında bir ışık doğar ve iki yana ayrılır. Bir şarkının sözleri
+müzikle aynı anda gitmiyorsa, sözler çekmecesindeki kaynak adına basın. Sözler
+öbür kaynaktan gelir, seçiminiz de o şarkı için saklanır. Ekran ölçeği %125 ya da
+%150 iken pencerenin sağ kenarında beliren ince çizgi artık yok. Açık bir
+kasadaki plakların üstüne yayılan yanlış halkalar düzeldi. Ayarlar dişlisinin
+dişleri de artık eşit.
+
 ## 1.2.0 — 2026-09-25
 
 Şarkı sözleri, plakla aynı anda.
