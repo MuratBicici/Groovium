@@ -6,6 +6,7 @@ import {
   saveSettings,
   type DrawerSide,
   type GlowKnob,
+  type LibraryTab,
   type Language,
   type Settings,
 } from '@/core/settings';
@@ -58,6 +59,7 @@ interface SettingsStore extends Settings {
   setWindowGlow: (on: boolean) => void;
   setSleepWhenHidden: (on: boolean) => void;
   setScale: (scale: number) => void;
+  setLibraryTab: (tab: LibraryTab) => void;
   setThemeFromCover: (on: boolean) => void;
   /** The palette taken from the cover on the deck, or null for none. */
   coverPalette: CoverPalette | null;
@@ -322,7 +324,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare } = get();
-    const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace } = get();
+    const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
     // stops being saved.
@@ -352,6 +354,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       declinedVersion,
       lyricsOn,
       lyricsPlace,
+      libraryTab,
     };
     return settings;
   };
@@ -407,6 +410,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setWindowGlow: (windowGlow) => commit({ windowGlow }),
     setSleepWhenHidden: (sleepWhenHidden) => commit({ sleepWhenHidden }),
     setScale: (scale) => commit({ scale: nearestScale(scale) }),
+    setLibraryTab: (libraryTab) => commit({ libraryTab }),
     setThemeFromCover: (themeFromCover) => commit({ themeFromCover }),
 
     /**

@@ -53,6 +53,10 @@ pub struct Playlist {
     pub created_at: u64,
     #[serde(default)]
     pub items: Vec<PlaylistItem>,
+    /// A cover chosen by hand, in the library's store folder where the
+    /// webview can show it. Without one the crate wears its songs' covers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_file: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -140,6 +144,7 @@ pub fn playlist_create(app: AppHandle, name: String) -> Result<Playlist, String>
         name: clean_name(&name)?,
         created_at: now_secs(),
         items: Vec::new(),
+        cover_file: None,
     };
 
     playlists.push(playlist.clone());
@@ -151,8 +156,79 @@ pub fn playlist_create(app: AppHandle, name: String) -> Result<Playlist, String>
 pub fn playlist_delete(app: AppHandle, id: String) -> Result<(), String> {
     let path = playlists_path(&app)?;
     let mut playlists = read_all(&path);
+    let cover = playlists
+        .iter()
+        .find(|p| p.id == id)
+        .and_then(|p| p.cover_file.clone());
     playlists.retain(|p| p.id != id);
+    write_all(&path, &playlists)?;
+    // Best effort: a cover left behind costs a few kilobytes, not the delete.
+    if let Some(cover) = cover {
+        if let Err(e) = crate::library::store(&app).and_then(|store| store.discard(&cover)) {
+            log::warn!("[playlists] {e}");
+        }
+    }
+    Ok(())
+}
+
+/// Give a playlist a new name.
+#[tauri::command(async)]
+pub fn playlist_rename(app: AppHandle, id: String, name: String) -> Result<Playlist, String> {
+    let path = playlists_path(&app)?;
+    let mut playlists = read_all(&path);
+    let Some(playlist) = playlists.iter_mut().find(|p| p.id == id) else {
+        return Err("That playlist no longer exists.".into());
+    };
+    playlist.name = clean_name(&name)?;
+    let renamed = playlist.clone();
+    write_all(&path, &playlists)?;
+    Ok(renamed)
+}
+
+/// Move the item at `from` to `to`, the others closing up and making room.
+///
+/// Out-of-range positions change nothing rather than failing: the list on
+/// screen and the file can be a moment apart, and a move that no longer
+/// applies is simply not made.
+fn move_item(items: &mut Vec<PlaylistItem>, from: usize, to: usize) {
+    if from >= items.len() || to >= items.len() || from == to {
+        return;
+    }
+    let item = items.remove(from);
+    items.insert(to, item);
+}
+
+/// Change a playlist's order, one item at a time.
+#[tauri::command(async)]
+pub fn playlist_move_item(app: AppHandle, id: String, from: usize, to: usize) -> Result<(), String> {
+    let path = playlists_path(&app)?;
+    let mut playlists = read_all(&path);
+    let Some(playlist) = playlists.iter_mut().find(|p| p.id == id) else {
+        return Err("That playlist no longer exists.".into());
+    };
+    move_item(&mut playlist.items, from, to);
     write_all(&path, &playlists)
+}
+
+/// Give a playlist a cover chosen by hand.
+#[tauri::command(async)]
+pub fn playlist_set_cover(app: AppHandle, id: String, jpeg: String) -> Result<Playlist, String> {
+    let path = playlists_path(&app)?;
+    let mut playlists = read_all(&path);
+    let Some(playlist) = playlists.iter_mut().find(|p| p.id == id) else {
+        return Err("That playlist no longer exists.".into());
+    };
+    let store = crate::library::store(&app)?;
+    let name = store.put_cover(&format!("playlist-{}", playlist.id), &jpeg)?;
+    let old = playlist.cover_file.replace(name);
+    let updated = playlist.clone();
+    write_all(&path, &playlists)?;
+    if let Some(old) = old {
+        if let Err(e) = store.discard(&old) {
+            log::warn!("[playlists] {e}");
+        }
+    }
+    Ok(updated)
 }
 
 /// Whether two entries stand for the same song.
@@ -235,6 +311,28 @@ pub fn forget_library_track(app: &AppHandle, library_id: &str) -> Result<(), Str
 mod tests {
     use super::*;
 
+    fn local(id: &str) -> PlaylistItem {
+        PlaylistItem::Local { library_id: id.into() }
+    }
+
+    #[test]
+    fn a_move_takes_one_item_and_the_rest_make_room() {
+        let mut items = vec![local("a"), local("b"), local("c"), local("d")];
+        move_item(&mut items, 0, 2);
+        assert_eq!(items, vec![local("b"), local("c"), local("a"), local("d")]);
+        move_item(&mut items, 3, 0);
+        assert_eq!(items, vec![local("d"), local("b"), local("c"), local("a")]);
+    }
+
+    #[test]
+    fn a_move_that_no_longer_applies_changes_nothing() {
+        let mut items = vec![local("a"), local("b")];
+        move_item(&mut items, 5, 0);
+        move_item(&mut items, 0, 9);
+        assert_eq!(items, vec![local("a"), local("b")]);
+    }
+
+
     struct TempDir(PathBuf);
 
     impl TempDir {
@@ -273,6 +371,7 @@ mod tests {
             id: "p1".into(),
             name: "Mixed".into(),
             created_at: 0,
+            cover_file: None,
             items: vec![
                 PlaylistItem::Local { library_id: "lib1".into() },
                 spotify_item("spotify:track:abc"),
@@ -346,6 +445,7 @@ mod tests {
             id: "p1".into(),
             name: "Mixed".into(),
             created_at: 0,
+            cover_file: None,
             items: vec![
                 PlaylistItem::Local { library_id: "gone".into() },
                 PlaylistItem::Local { library_id: "kept".into() },
@@ -433,6 +533,7 @@ mod tests {
             id: "p1".into(),
             name: "Mixed".into(),
             created_at: 0,
+            cover_file: None,
             items: vec![
                 PlaylistItem::Local { library_id: "a".into() },
                 PlaylistItem::Local { library_id: "b".into() },

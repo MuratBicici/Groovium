@@ -178,9 +178,14 @@ export interface Settings {
   lyricsOn: boolean;
   /** Where lyrics show while the drawer is out; see `src/core/lyrics/layout.ts`. */
   lyricsPlace: LyricsPlace;
+  /** Which side of the library drawer is showing. */
+  libraryTab: LibraryTab;
 }
 
 export type DrawerSide = 'left' | 'right';
+
+/** The library drawer's two sides: this computer and Groovium's playlists, or Spotify. */
+export type LibraryTab = 'groovium' | 'spotify';
 
 /** Which of the edge light's dials the settings panel is moving. */
 export const GLOW_KNOBS = [
@@ -219,6 +224,7 @@ export const DEFAULT_SETTINGS: Settings = {
   declinedVersion: null,
   lyricsOn: false,
   lyricsPlace: 'compact',
+  libraryTab: 'groovium',
 };
 
 /** The sizes the window can be drawn at. */
@@ -245,6 +251,7 @@ export async function loadSettings(): Promise<Settings> {
     // a word nobody recognises would leave it growing in neither.
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
     if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
+    if (settings.libraryTab !== 'spotify') settings.libraryTab = 'groovium';
     settings.lyricsOn = settings.lyricsOn === true;
     settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a

@@ -361,21 +361,26 @@ export function DetailsSheet({
  * afraid of it.
  */
 export function RemoveSheet({
-  playlist,
+  label,
+  title,
+  body,
   onRemove,
   onClose,
 }: {
-  playlist: SpotifyPlaylist;
+  /** What the sheet is, for a screen reader. */
+  label: string;
+  /** The question: this playlist, gone? */
+  title: string;
+  /** What happens to it, said before it happens. */
+  body: string;
   onRemove: () => void;
   onClose: () => void;
 }) {
   const t = useT();
   return (
-    <Sheet label={t('spotify.removeFromLibrary')} onClose={onClose}>
-      <p className="text-body text-cream-100">
-        {t('spotify.removeConfirmTitle', { name: playlist.name })}
-      </p>
-      <p className="text-meta leading-snug text-cream-400">{t('spotify.removeConfirmBody')}</p>
+    <Sheet label={label} onClose={onClose}>
+      <p className="text-body text-cream-100">{title}</p>
+      <p className="text-meta leading-snug text-cream-400">{body}</p>
       <div className="mt-1 flex justify-end gap-2">
         <button
           type="button"
@@ -390,6 +395,183 @@ export function RemoveSheet({
           className="rounded-full bg-red-700 px-3 py-1 text-label font-medium tracking-wide text-red-50 uppercase transition-colors hover:bg-red-600"
         >
           {t('common.remove')}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * A Groovium playlist's details: its name and its cover.
+ *
+ * Laid out like a Spotify playlist's, with the two things a Groovium playlist
+ * has of them — there is no description and no profile to be public on. The
+ * cover is saved the moment it is cropped; the name with Save.
+ */
+export function ListDetailsSheet({
+  name: current,
+  coverUrl,
+  onSave,
+  onCover,
+  onRemove,
+  coverProblem,
+  onClose,
+}: {
+  name: string;
+  coverUrl: string | undefined;
+  onSave: (name: string) => void;
+  onCover?: () => void;
+  onRemove: () => void;
+  coverProblem?: string | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [name, setName] = useState(current);
+  const trimmed = name.trim();
+  const canSave = trimmed !== '' && trimmed !== current;
+
+  return (
+    <Sheet label={t('library.listDetails')} onClose={onClose}>
+      <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        {t('library.listDetails')}
+      </p>
+      <div className="flex items-end gap-3">
+        <CoverThumb
+          url={coverUrl}
+          label={t('spotify.changeCover')}
+          {...(onCover && { onPress: onCover })}
+        />
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-meta text-cream-400">{t('spotify.playlistName')}</span>
+          <input
+            type="text"
+            value={name}
+            maxLength={NAME_MAX}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && canSave) onSave(trimmed);
+            }}
+            className="groove-inset rounded px-2 py-1 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+          />
+        </label>
+      </div>
+      {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
+
+      <div className="mt-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onRemove}
+          className="mr-auto rounded-full px-2 py-1 text-label tracking-wide text-red-300 uppercase transition-colors hover:bg-red-950/60 hover:text-red-200"
+        >
+          {t('library.deleteList')}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full px-3 py-1 text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-cream-100"
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          disabled={!canSave}
+          onClick={() => onSave(trimmed)}
+          className="rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/** What a song on this computer is called, as the sheet below edits it. */
+export interface SongNames {
+  title: string;
+  artist: string;
+  album: string;
+}
+
+/**
+ * A song on this computer: what it is called, and its cover.
+ *
+ * The library's own record of it. The file keeps its tags; what changes is
+ * what Groovium shows, which is the name somebody would rather see.
+ */
+export function SongDetailsSheet({
+  names,
+  coverUrl,
+  onSave,
+  onCover,
+  coverProblem,
+  onClose,
+}: {
+  names: SongNames;
+  coverUrl: string | undefined;
+  onSave: (names: SongNames) => void;
+  onCover?: () => void;
+  coverProblem?: string | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [title, setTitle] = useState(names.title);
+  const [artist, setArtist] = useState(names.artist);
+  const [album, setAlbum] = useState(names.album);
+  const next = { title: title.trim(), artist: artist.trim(), album: album.trim() };
+  const canSave =
+    next.title !== '' &&
+    (next.title !== names.title || next.artist !== names.artist || next.album !== names.album);
+
+  const field = (label: string, value: string, set: (v: string) => void) => (
+    <label className="flex flex-col gap-1">
+      <span className="text-meta text-cream-400">{label}</span>
+      <input
+        type="text"
+        value={value}
+        maxLength={200}
+        onChange={(e) => set(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && canSave) onSave(next);
+        }}
+        className="groove-inset rounded px-2 py-1 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+      />
+    </label>
+  );
+
+  return (
+    <Sheet label={t('library.songDetails')} onClose={onClose}>
+      <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        {t('library.songDetails')}
+      </p>
+      <div className="flex items-start gap-3">
+        <CoverThumb
+          url={coverUrl}
+          label={t('spotify.changeCover')}
+          {...(onCover && { onPress: onCover })}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {field(t('library.songTitle'), title, setTitle)}
+          {field(t('library.songArtist'), artist, setArtist)}
+        </div>
+      </div>
+      {field(t('library.songAlbum'), album, setAlbum)}
+      {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
+
+      <div className="mt-1 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full px-3 py-1 text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-cream-100"
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          disabled={!canSave}
+          onClick={() => onSave(next)}
+          className="rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500 disabled:opacity-40"
+        >
+          {t('common.save')}
         </button>
       </div>
     </Sheet>

@@ -30,6 +30,13 @@ import {
   playlistItemToMetadata,
   removeFromLibrary,
   removeFromPlaylist as removeFromPlaylistFile,
+  attachPlaylistCovers,
+  movePlaylistItemFile,
+  renamePlaylistFile,
+  setLibraryTrackCover,
+  setPlaylistCoverFile,
+  updateLibraryTrack,
+  type TrackNames,
   type ImportProgress,
   type LibraryTrack,
   type Playlist,
@@ -300,6 +307,15 @@ export interface PlayerActions {
   /** Resolves false when the track was already in that playlist. */
   addTrackToPlaylist: (playlistId: string, track: TrackMetadata) => Promise<boolean>;
   removePlaylistItem: (playlistId: string, index: number) => Promise<void>;
+  /** Move an item of a Groovium playlist, by its place in the file. */
+  movePlaylistItem: (playlistId: string, from: number, to: number) => Promise<void>;
+  renamePlaylist: (playlistId: string, name: string) => Promise<void>;
+  /** A cover for a Groovium playlist, as base64 JPEG. */
+  setPlaylistCover: (playlistId: string, jpeg: string) => Promise<void>;
+  /** Rename a song on this computer. */
+  renameTrack: (libraryId: string, names: TrackNames) => Promise<void>;
+  /** A cover for a song on this computer, as base64 JPEG. */
+  setTrackCover: (libraryId: string, jpeg: string) => Promise<void>;
 }
 
 export type PlayerStore = PlayerState & PlayerActions;
@@ -733,6 +749,20 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * user confirms an irreversible delete, the call fails, the row stays put and
    * nothing is said.
    */
+  /**
+   * Read the library again after a song was renamed or given a cover, and if
+   * that song is on the deck, show it as it now is: its title under the
+   * record and its cover on the label, without waiting for it to play again.
+   */
+  async function refreshTrackOnDeck(libraryId: string): Promise<void> {
+    await get().refreshLibrary();
+    await get().refreshPlaylists();
+    const onDeck = get().currentTrack;
+    if (onDeck?.id !== `library:${libraryId}`) return;
+    const changed = get().library.find((track) => track.id === libraryId);
+    if (changed) set({ currentTrack: libraryTrackToMetadata(changed) });
+  }
+
   async function reporting<T>(action: () => Promise<T>, fallback: T): Promise<T> {
     try {
       return await action();
@@ -1006,7 +1036,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async refreshPlaylists() {
-      set({ playlists: await loadPlaylists() });
+      set({ playlists: await attachPlaylistCovers(await loadPlaylists(), get().storeDir) });
       reconcilePlayback();
     },
 
@@ -1318,6 +1348,41 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         if (added) await get().refreshPlaylists();
         return added;
       }, false);
+    },
+
+    async movePlaylistItem(playlistId, from, to) {
+      await reporting(async () => {
+        await movePlaylistItemFile(playlistId, from, to);
+        await get().refreshPlaylists();
+      }, undefined);
+    },
+
+    async renamePlaylist(playlistId, name) {
+      await reporting(async () => {
+        await renamePlaylistFile(playlistId, name);
+        await get().refreshPlaylists();
+      }, undefined);
+    },
+
+    async setPlaylistCover(playlistId, jpeg) {
+      await reporting(async () => {
+        await setPlaylistCoverFile(playlistId, jpeg);
+        await get().refreshPlaylists();
+      }, undefined);
+    },
+
+    async renameTrack(libraryId, names) {
+      await reporting(async () => {
+        await updateLibraryTrack(libraryId, names);
+        await refreshTrackOnDeck(libraryId);
+      }, undefined);
+    },
+
+    async setTrackCover(libraryId, jpeg) {
+      await reporting(async () => {
+        await setLibraryTrackCover(libraryId, jpeg);
+        await refreshTrackOnDeck(libraryId);
+      }, undefined);
     },
 
     async removePlaylistItem(playlistId, index) {

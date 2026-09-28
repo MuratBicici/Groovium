@@ -2,16 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DiskPlatter } from '@/components/player/DiskPlatter';
 import { TrackDisplay } from '@/components/player/TrackDisplay';
 import { ProgressBar } from '@/components/player/ProgressBar';
-import { LibraryPanel } from '@/components/library/LibraryPanel';
+import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
-import { PlaylistsPanel } from '@/components/playlists/PlaylistsPanel';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
 import { WindowGlow } from '@/components/player/WindowGlow';
 import { CoverTheme } from '@/components/player/CoverTheme';
-import { SpotifyDrawer } from '@/components/spotify/SpotifyDrawer';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { LyricsDrawer } from '@/components/lyrics/LyricsDrawer';
 import { CompactLyrics } from '@/components/lyrics/CompactLyrics';
@@ -59,8 +57,6 @@ import { syncTrayLabels } from '@/platform/tray';
 import { PLAYER_WIDTH, setWindowZoom } from '@/platform/window';
 
 const PANEL_IDS = {
-  library: 'groovium-library',
-  playlists: 'groovium-playlists',
   settings: 'groovium-settings',
 } as const;
 
@@ -150,6 +146,7 @@ export default function App() {
   const lyricsOn = useSettingsStore((s) => s.lyricsOn);
   const lyricsPlace = useSettingsStore((s) => s.lyricsPlace);
   const setLyricsLayout = useSettingsStore((s) => s.setLyricsLayout);
+  const setLibraryTab = useSettingsStore((s) => s.setLibraryTab);
   /** The drawer and the lyrics together — see `src/core/lyrics/layout.ts`. */
   const layout = { drawerOpen, lyricsOn, lyricsPlace };
   const lyricsInDrawer = fullShown(layout);
@@ -482,21 +479,14 @@ export default function App() {
             </div>
           </div>
 
-          <LibraryPanel
-            id={PANEL_IDS.library}
-            open={shown === 'library'}
-            onClose={() => setOverlay('none')}
-          />
-          <PlaylistsPanel
-            id={PANEL_IDS.playlists}
-            open={shown === 'playlists'}
-            onClose={() => setOverlay('none')}
-          />
           <SettingsPanel
             id={PANEL_IDS.settings}
             open={shown === 'settings'}
             onClose={() => setOverlay('none')}
-            onSetUpSpotify={() => setLyricsLayout(showSpotify(layout))}
+            onSetUpSpotify={() => {
+              setLibraryTab('spotify');
+              setLyricsLayout(showSpotify(layout));
+            }}
             onSetUpStation={() => setStationSetup(true)}
             onPickColour={setPickingColour}
             onShowWhatsNew={summary ? () => setReopened(true) : undefined}
@@ -522,32 +512,19 @@ export default function App() {
         >
           <VolumeKnob />
           <div className="flex items-center gap-1.5">
-            <PanelButton
-              panel="library"
-              open={shown === 'library'}
-              onToggle={() => toggle('library')}
-              controls={PANEL_IDS.library}
-            />
-            <PanelButton
-              panel="playlists"
-              open={shown === 'playlists'}
-              onToggle={() => toggle('playlists')}
-              controls={PANEL_IDS.playlists}
-            />
-            {/* Spotify needs the loopback listener and the OS credential store,
-                neither of which exists in a plain browser.
+            {/* The library: this computer's music, Groovium's playlists and
+                Spotify, in the drawer beside the player. One button for what
+                used to be three.
 
                 Lit while the drawer is out, whatever is in it: lyrics taking it
                 over do not put it away, and a light that went out for them
                 would be saying they had. */}
-            {isTauri() && (
-              <PanelButton
-                panel="spotify"
-                open={drawerOut(layout)}
-                onToggle={() => setLyricsLayout(pressSpotify(layout))}
-                controls={DRAWER_ID}
-              />
-            )}
+            <PanelButton
+              panel="library"
+              open={drawerOut(layout)}
+              onToggle={() => setLyricsLayout(pressSpotify(layout))}
+              controls={DRAWER_ID}
+            />
             {/* The lookup is Rust's, so like Spotify this is the app's alone —
                 apart from a development build, which has made-up lyrics. */}
             {(isTauri() || import.meta.env.DEV) && (
@@ -573,7 +550,7 @@ export default function App() {
         <DrawerSlot
           lyrics={lyricsInDrawer}
           spotify={
-            <SpotifyDrawer id={DRAWER_ID} onClose={() => setLyricsLayout(closeDrawer(layout))} />
+            <LibraryDrawer id={DRAWER_ID} onClose={() => setLyricsLayout(closeDrawer(layout))} />
           }
           lyricsView={
             <LyricsDrawer

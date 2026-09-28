@@ -50,6 +50,10 @@ export interface Playlist {
   name: string;
   createdAt: number;
   items: PlaylistItem[];
+  /** A cover chosen by hand, in the store directory. */
+  coverFile?: string;
+  /** Renderable URL for it, derived on load. Client-only. */
+  coverArtUrl?: string;
 }
 
 /** What a scan found, so the user can be asked before anything is copied. */
@@ -97,6 +101,38 @@ export async function attachCoverArtUrls(
       ? { ...track, coverArtUrl: convertFileSrc(joinPath(storeDir, track.coverFile)) }
       : track,
   );
+}
+
+/** The same for playlists: a cover chosen by hand lives in the store too. */
+export async function attachPlaylistCovers(
+  playlists: Playlist[],
+  storeDir: string,
+): Promise<Playlist[]> {
+  if (!isTauri() || !storeDir) return playlists;
+
+  const { convertFileSrc } = await import('@tauri-apps/api/core');
+  return playlists.map((playlist) =>
+    playlist.coverFile
+      ? { ...playlist, coverArtUrl: convertFileSrc(joinPath(storeDir, playlist.coverFile)) }
+      : playlist,
+  );
+}
+
+/** What a song is called, as a person can change it. */
+export interface TrackNames {
+  title: string;
+  artist: string;
+  album: string;
+}
+
+/** Rename a song in the library. The audio file's own tags are left alone. */
+export async function updateLibraryTrack(id: string, names: TrackNames): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_update_track', { id, ...names });
+}
+
+/** Give a song a cover, as base64 JPEG. */
+export async function setLibraryTrackCover(id: string, jpeg: string): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_set_cover', { id, jpeg });
 }
 
 /** Absolute path of the store directory, fetched once and cached. */
@@ -201,6 +237,21 @@ export async function addToPlaylist(id: string, item: PlaylistItem): Promise<boo
 export async function removeFromPlaylist(id: string, index: number): Promise<void> {
   if (!isTauri()) return;
   await invoke('playlist_remove_item', { id, index });
+}
+
+export async function renamePlaylistFile(id: string, name: string): Promise<Playlist> {
+  return invoke<Playlist>('playlist_rename', { id, name });
+}
+
+/** Move the item at `from` to `to`, by position in the file. */
+export async function movePlaylistItemFile(id: string, from: number, to: number): Promise<void> {
+  if (!isTauri()) return;
+  await invoke('playlist_move_item', { id, from, to });
+}
+
+/** Give a playlist a cover, as base64 JPEG. */
+export async function setPlaylistCoverFile(id: string, jpeg: string): Promise<Playlist> {
+  return invoke<Playlist>('playlist_set_cover', { id, jpeg });
 }
 
 // --- Mapping onto the shared track shape ------------------------------------

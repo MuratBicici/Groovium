@@ -115,6 +115,22 @@ export const en = {
   'library.confirmRemove':
     'Delete this song from your library? The copy this app keeps is removed for good.',
   'library.importing': 'Adding {done} of {total}',
+  'library.onThisComputer': 'On this computer · {count}',
+  'library.lists': 'Groovium playlists',
+  'library.addMusic': 'Add music',
+  'library.files': 'Files',
+  'library.folder': 'Folder',
+  'library.sides': 'Library source',
+  'library.local': 'Local',
+  'library.deleteListTitle': 'Delete {name}?',
+  'library.deleteListBody': 'The playlist goes; the songs in it stay in your library and on Spotify.',
+  'library.listDetails': 'Playlist details',
+  'library.deleteList': 'Delete playlist',
+  'library.songDetails': 'Song details',
+  'library.songTitle': 'Title',
+  'library.songArtist': 'Artist',
+  'library.songAlbum': 'Album',
+  'library.editSong': 'Edit {title}',
   'library.cancelImport': 'Cancel import',
 
   // Playlists

@@ -13,6 +13,7 @@ import { isTauri } from '@/core/utils/env';
 import {
   CoverCrop,
   DetailsSheet,
+  ListDetailsSheet,
   RemoveSheet,
   SHEET_AWAY,
   SHEET_IN_EASING,
@@ -24,7 +25,7 @@ import {
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
-const COVER_FAILURES = {
+export const COVER_FAILURES = {
   unsupported: 'spotify.coverUnsupported',
   too_large: 'spotify.coverTooLarge',
   unreadable: 'spotify.coverUnreadable',
@@ -123,15 +124,106 @@ function refuse(card: HTMLElement | null): void {
   );
 }
 
-interface OpenCrateProps {
-  playlist: SpotifyPlaylist;
-  /** Where the crate was on screen, so the page can grow out of it. */
-  origin: { x: number; y: number; width: number; height: number };
+/** Where the crate was on screen, so the page can grow out of it. */
+type Origin = { x: number; y: number; width: number; height: number };
+
+/**
+ * What an opened crate holds, and what can be done to it.
+ *
+ * The page — the records flying out of the sleeve and back, the grid, taking
+ * one to the deck by hand, edit mode — is the same whoever's playlist it is.
+ * What differs is where the records come from and what changing them means,
+ * and that is this: Spotify's playlists come from its store and are changed
+ * through its Web API, Groovium's are the app's own file.
+ */
+export interface CrateSource {
+  name: string;
+  trackCount: number;
+  tracks: TrackMetadata[];
+  loading: boolean;
+  /** More records to come, as Spotify hands them over a page at a time. */
+  cursor: string | null;
+  error: string | null;
+  more: () => void;
+  editing: boolean;
+  /** Edit mode read only the first part of a very long playlist. */
+  editCapped: boolean;
+  setEditing: (on: boolean) => unknown;
+  /** Take out the record at `index`. */
+  takeOut: (track: TrackMetadata, index: number) => unknown;
+  /** Move a record to a new place, where the order can be changed at all. */
+  move?: (from: number, to: number) => unknown;
+  /** Play the record at `index`, the way this crate's records play. */
+  play: (track: TrackMetadata, index: number) => Promise<unknown>;
+  writeError: string | null;
+  clearWriteError: () => void;
+  /** A Spotify playlist, for its details, its cover and its removal. */
+  spotify?: SpotifyPlaylist;
+  /** A Groovium playlist, deleted from the app. */
+  deleteCrate?: () => unknown;
+  /** A Groovium playlist, renamed. Its details sheet is there when this is. */
+  rename?: (name: string) => unknown;
+  /** A Groovium playlist's cover, as base64 JPEG. */
+  setCover?: (jpeg: string) => unknown;
+  /** The cover the details sheet shows. */
+  coverUrl?: string;
+}
+
+interface CrateLayerProps {
+  source: CrateSource;
+  origin: Origin;
   onClose: () => void;
 }
 
+interface OpenCrateProps {
+  playlist: SpotifyPlaylist;
+  origin: Origin;
+  onClose: () => void;
+}
+
+/** A Spotify playlist opened: the page, fed from Spotify's store. */
+export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
+  return <CrateLayer source={useSpotifyCrate(playlist)} origin={origin} onClose={onClose} />;
+}
+
+function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
+  const tracks = useSpotifyPlaylistsStore((s) => s.tracks);
+  const loading = useSpotifyPlaylistsStore((s) => s.tracksLoading);
+  const cursor = useSpotifyPlaylistsStore((s) => s.tracksCursor);
+  const error = useSpotifyPlaylistsStore((s) => s.tracksError);
+  const moreTracks = useSpotifyPlaylistsStore((s) => s.moreTracks);
+  const editing = useSpotifyPlaylistsStore((s) => s.editing);
+  const editCapped = useSpotifyPlaylistsStore((s) => s.editCapped);
+  const setEditing = useSpotifyPlaylistsStore((s) => s.setEditing);
+  const removeFromCrate = useSpotifyPlaylistsStore((s) => s.removeFromCrate);
+  const moveInCrate = useSpotifyPlaylistsStore((s) => s.moveInCrate);
+  const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
+  const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
+  const playSingle = usePlayerStore((s) => s.playSingle);
+  return {
+    name: playlist.name,
+    trackCount: playlist.trackCount,
+    tracks,
+    loading,
+    cursor,
+    error,
+    more: moreTracks,
+    editing,
+    editCapped,
+    setEditing,
+    // Spotify takes a song out by its address, every copy of it at once.
+    takeOut: (track) => removeFromCrate(playlist.id, track.id),
+    move: (from, to) => moveInCrate(playlist.id, from, to),
+    // One song at a time, as a record taken out of a sleeve is.
+    play: (track) => playSingle(track),
+    writeError,
+    clearWriteError,
+    spotify: playlist,
+  };
+}
+
 /** The transform that takes this element's box onto the crate's. */
-function ontoCrate(el: HTMLElement, origin: OpenCrateProps['origin']): string | null {
+function ontoCrate(el: HTMLElement, origin: Origin): string | null {
   const box = el.getBoundingClientRect();
   if (box.width === 0) return null;
   // The crate is square and so is a record, so one ratio covers both axes.
@@ -146,7 +238,7 @@ function ontoCrate(el: HTMLElement, origin: OpenCrateProps['origin']): string | 
  * the crate that was opened, kept inside the layer so a crate at the very edge
  * of the shelf still reads as the source rather than as a corner.
  */
-function growsFrom(layer: HTMLElement, origin: OpenCrateProps['origin']): string {
+function growsFrom(layer: HTMLElement, origin: Origin): string {
   const box = layer.getBoundingClientRect();
   const clamp = (v: number, max: number) => Math.min(max, Math.max(0, v));
   const x = clamp(origin.x + origin.width / 2 - box.left, box.width);
@@ -154,23 +246,32 @@ function growsFrom(layer: HTMLElement, origin: OpenCrateProps['origin']): string
   return `${x}px ${y}px`;
 }
 
-export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
+/**
+ * A crate opened: its records out of the sleeve and laid out on a page.
+ *
+ * Whose crate it is comes in as `source`; everything the page does with its
+ * records — the flight out and back, carrying one to the deck, edit mode — is
+ * the same for Spotify's playlists and Groovium's.
+ */
+export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   const t = useT();
-  const tracks = useSpotifyPlaylistsStore((s) => s.tracks);
-  const loading = useSpotifyPlaylistsStore((s) => s.tracksLoading);
-  const cursor = useSpotifyPlaylistsStore((s) => s.tracksCursor);
-  const error = useSpotifyPlaylistsStore((s) => s.tracksError);
-  const moreTracks = useSpotifyPlaylistsStore((s) => s.moreTracks);
-  const editing = useSpotifyPlaylistsStore((s) => s.editing);
-  const editCapped = useSpotifyPlaylistsStore((s) => s.editCapped);
-  const setEditing = useSpotifyPlaylistsStore((s) => s.setEditing);
-  const removeFromCrate = useSpotifyPlaylistsStore((s) => s.removeFromCrate);
-  const moveInCrate = useSpotifyPlaylistsStore((s) => s.moveInCrate);
+  const { tracks, loading, cursor, error, editing, editCapped, writeError, spotify } = source;
+  const {
+    more: moreTracks,
+    setEditing,
+    clearWriteError,
+    takeOut: takeOutOf,
+    move: moveRecord,
+    play,
+    deleteCrate: deleteOwn,
+    rename,
+    setCover,
+  } = source;
+  /** Whether the pencil opens anything: Spotify's details, or a Groovium playlist's. */
+  const hasDetails = spotify !== undefined || rename !== undefined;
   const setCrateDetails = useSpotifyPlaylistsStore((s) => s.setCrateDetails);
   const deleteCrate = useSpotifyPlaylistsStore((s) => s.deleteCrate);
   const setCrateCover = useSpotifyPlaylistsStore((s) => s.setCrateCover);
-  const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
-  const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
 
   /** The ⋯ menu, or one of the sheets it opens. One at a time. */
   const [surface, setSurface] = useState<'details' | 'remove' | null>(null);
@@ -206,7 +307,6 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     return counted;
   }, [tracks]);
 
-  const playSingle = usePlayerStore((s) => s.playSingle);
   /**
    * What is on the deck, so its sleeve here can be empty.
    *
@@ -241,9 +341,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     (taken: TrackMetadata) => {
       setHandedOver(taken.id);
       const done = () => setHandedOver((id) => (id === taken.id ? null : id));
-      void playSingle(taken).then(done, done);
+      void play(taken, Math.max(0, tracks.indexOf(taken))).then(done, done);
     },
-    [playSingle],
+    [play, tracks],
   );
 
   /**
@@ -420,7 +520,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         return;
       }
       if (surface === 'remove') {
-        setSurface('details');
+        // Spotify's removal is asked from its details; a Groovium crate's is
+        // asked straight from the header.
+        setSurface(hasDetails ? 'details' : null);
         return;
       }
       if (surface) {
@@ -436,7 +538,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [requestClose, surface, coverImage, editing, setEditing]);
+  }, [requestClose, surface, coverImage, editing, setEditing, hasDetails]);
 
   // The unpacking. A layout effect so the first frame is never the finished
   // grid — by the time anything is painted the records are already back at the
@@ -534,7 +636,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     (down: React.PointerEvent, from: number, key: string, card: HTMLElement) => {
       const inner = gridInnerRef.current;
       const scroller = gridRef.current;
-      if (down.button !== 0 || !inner || !scroller || loading) return;
+      // Not in a crate whose order cannot be changed.
+      if (!moveRecord || down.button !== 0 || !inner || !scroller || loading) return;
 
       const count = tracks.length;
       const start = { x: down.clientX, y: down.clientY };
@@ -597,7 +700,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
         held.current = null;
 
         setOrder(null);
-        if (commit && to !== from) void moveInCrate(playlist.id, from, to);
+        if (commit && to !== from) void moveRecord(from, to);
       };
       const up = () => end(true);
       const cancelled = () => end(false);
@@ -606,12 +709,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', cancelled);
     },
-    [loading, moveInCrate, playlist.id, tracks.length],
+    [loading, moveRecord, tracks.length],
   );
 
   /** Take a record out of the playlist: it leaves, then the others close up. */
   const takeOut = useCallback(
-    async (track: TrackMetadata, card: HTMLElement | null) => {
+    async (track: TrackMetadata, index: number, card: HTMLElement | null) => {
       if (card && !prefersReducedMotion()) {
         await card
           .animate(
@@ -623,9 +726,9 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
           )
           .finished.catch(() => undefined);
       }
-      void removeFromCrate(playlist.id, track.id);
+      void takeOutOf(track, index);
     },
-    [playlist.id, removeFromCrate],
+    [takeOutOf],
   );
 
   const sentinel = useRef<HTMLDivElement | null>(null);
@@ -647,7 +750,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
     <div
       ref={layerRef}
       role="dialog"
-      aria-label={playlist.name}
+      aria-label={source.name}
       // The whole drawer, and only the drawer. `inset-0` is the drawer's box
       // because this is rendered as its child — which is the point: an opened
       // crate *is* the Spotify side of the window for as long as it is open,
@@ -691,7 +794,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             </button>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-                {playlist.name}
+                {source.name}
               </span>
               <span className="block truncate text-meta text-cream-400">
                 {t('spotify.editSongs')}
@@ -730,19 +833,21 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
               </svg>
               <span className="min-w-0">
                 <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-                  {playlist.name}
+                  {source.name}
                 </span>
                 <span className="block truncate text-meta text-cream-400">
-                  {t('spotify.trackCount', { count: playlist.trackCount })}
+                  {t('spotify.trackCount', { count: source.trackCount })}
                 </span>
               </span>
             </button>
             <div className="flex shrink-0 items-center gap-1">
-              <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
-                {/* A pencil: the playlist itself — name, cover, description. */}
-                <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
-                <path d="M7.5 3l1.5 1.5" />
-              </HeaderIcon>
+              {hasDetails && (
+                <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
+                  {/* A pencil: the playlist itself — name, cover, description. */}
+                  <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
+                  <path d="M7.5 3l1.5 1.5" />
+                </HeaderIcon>
+              )}
               <HeaderIcon
                 label={t('spotify.editSongs')}
                 onPress={() => {
@@ -754,6 +859,12 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
                 <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
                 <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
               </HeaderIcon>
+              {deleteOwn && !hasDetails && (
+                <HeaderIcon label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
+                  {/* A bin: the playlist, not the songs in it. */}
+                  <path d="M2 3.5h8M4.5 3.5V2.3h3v1.2M3.2 3.5l.6 6.2h4.4l.6-6.2" />
+                </HeaderIcon>
+              )}
               <button
                 type="button"
                 aria-label={t('common.close')}
@@ -824,7 +935,7 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
                 editing={editing}
                 copies={copies.get(track.id) ?? 1}
                 onReorder={(down, card) => reorder(down, index, key, card)}
-                onTakeOut={(card) => void takeOut(track, card)}
+                onTakeOut={(card) => void takeOut(track, index, card)}
                 discSize={cardWidth}
                 absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
                 onCarry={carry}
@@ -846,10 +957,30 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
 
       {/* Under the removal question too, so Cancel there comes back to it
           with nothing lost. */}
-      <SheetPresence show={surface !== null}>
-        {surface && (
+      <SheetPresence show={rename !== undefined && !spotify && surface !== null}>
+        {rename && !spotify && surface && (
+          <ListDetailsSheet
+            name={source.name}
+            coverUrl={source.coverUrl}
+            onRemove={() => setSurface('remove')}
+            {...(isTauri() && setCover && { onCover: chooseCover })}
+            coverProblem={coverNotice}
+            onClose={() => {
+              setSurface(null);
+              setCoverNotice(null);
+            }}
+            onSave={(name) => {
+              setSurface(null);
+              setCoverNotice(null);
+              void rename(name);
+            }}
+          />
+        )}
+      </SheetPresence>
+      <SheetPresence show={spotify !== undefined && surface !== null}>
+        {spotify && surface && (
           <DetailsSheet
-            playlist={playlist}
+            playlist={spotify}
             onRemove={() => setSurface('remove')}
             {...(isTauri() && { onCover: chooseCover })}
             coverProblem={coverNotice}
@@ -860,15 +991,15 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             onSave={(details) => {
               setSurface(null);
               setCoverNotice(null);
-              void setCrateDetails(playlist.id, details);
+              void setCrateDetails(spotify.id, details);
             }}
           />
         )}
       </SheetPresence>
       {/* Over the details sheet, and back to it: the new cover shows there at
           once, beside whatever else is being changed. */}
-      <SheetPresence show={surface === 'details' && coverImage !== null}>
-        {surface === 'details' && coverImage && (
+      <SheetPresence show={hasDetails && surface === 'details' && coverImage !== null}>
+        {hasDetails && surface === 'details' && coverImage && (
           <CoverCrop
             image={coverImage}
             onClose={() => setCoverImage(null)}
@@ -878,7 +1009,8 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
             }}
             onUpload={(base64, preview) => {
               setCoverImage(null);
-              void setCrateCover(playlist.id, base64, preview);
+              if (spotify) void setCrateCover(spotify.id, base64, preview);
+              else void setCover?.(base64);
             }}
           />
         )}
@@ -886,14 +1018,23 @@ export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
       <SheetPresence show={surface === 'remove'}>
         {surface === 'remove' && (
           <RemoveSheet
-            playlist={playlist}
-            onClose={() => setSurface('details')}
+            label={spotify ? t('spotify.removeFromLibrary') : t('playlists.deleteTitle')}
+            title={
+              spotify
+                ? t('spotify.removeConfirmTitle', { name: source.name })
+                : t('library.deleteListTitle', { name: source.name })
+            }
+            body={spotify ? t('spotify.removeConfirmBody') : t('library.deleteListBody')}
+            onClose={() => setSurface(hasDetails ? 'details' : null)}
             onRemove={() => {
               setSurface(null);
               // The records go back into the crate first, and only then does the
               // crate leave the shelf. Removing it at once would unmount this
               // layer mid-thought, with nothing to show where it went.
-              requestClose(() => void deleteCrate(playlist.id));
+              requestClose(() => {
+                if (spotify) void deleteCrate(spotify.id);
+                else void deleteOwn?.();
+              });
             }}
           />
         )}

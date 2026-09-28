@@ -83,6 +83,7 @@ describe('remembering that a version has been shown', () => {
       declinedVersion: '2.0.0',
       lyricsOn: true,
       lyricsPlace: 'full',
+      libraryTab: 'groovium',
     });
   });
 

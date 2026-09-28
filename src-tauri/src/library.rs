@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -216,6 +216,34 @@ impl Store {
         Ok(stored_file)
     }
 
+    /// Write a cover chosen by hand, and return its name in the store.
+    ///
+    /// `owner` is what it belongs to — a track's id, or `playlist-` and a
+    /// playlist's — and it must be a bare name like every other file here.
+    /// Each cover gets a new name rather than overwriting the last: the
+    /// webview caches an image by its address, and a new picture at the old
+    /// address was the old picture for as long as the cache kept it.
+    pub fn put_cover(&self, owner: &str, jpeg_base64: &str) -> Result<String, String> {
+        let bytes = cover_bytes(jpeg_base64)?;
+        let name = format!("{owner}.cover-{}.jpg", new_id());
+        if !is_bare_name(&name) {
+            return Err("That is not something a cover can belong to.".into());
+        }
+        fs::create_dir_all(&self.root)
+            .map_err(|e| format!("Could not create the library folder: {e}"))?;
+        let path = self.root.join(&name);
+        let temp = self.root.join(format!("{name}.partial"));
+        fs::write(&temp, bytes).map_err(|e| {
+            let _ = fs::remove_file(&temp);
+            format!("Could not save the cover: {e}")
+        })?;
+        fs::rename(&temp, &path).map_err(|e| {
+            let _ = fs::remove_file(&temp);
+            format!("Could not save the cover: {e}")
+        })?;
+        Ok(name)
+    }
+
     pub fn discard(&self, stored_file: &str) -> Result<(), String> {
         let Some(path) = self.path_of(stored_file) else {
             return Err(format!("{stored_file} is not a name this store wrote."));
@@ -227,6 +255,25 @@ impl Store {
             Err(e) => Err(format!("Could not delete {}: {e}", path.display())),
         }
     }
+}
+
+/// The largest cover accepted. The crop sends a JPEG of a quarter of a
+/// megabyte; this is room for anything sensible and nothing absurd.
+const COVER_MAX_BYTES: usize = 4 * 1024 * 1024;
+
+/// A cover as sent from the webview: base64 JPEG, checked before it is kept.
+fn cover_bytes(jpeg_base64: &str) -> Result<Vec<u8>, String> {
+    let bytes = STANDARD
+        .decode(jpeg_base64.trim())
+        .map_err(|_| String::from("That picture could not be read."))?;
+    if bytes.len() > COVER_MAX_BYTES {
+        return Err("That picture is too large.".into());
+    }
+    // Every JPEG starts with this, and the crop only ever makes JPEGs.
+    if !bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Err("That picture is not a JPEG.".into());
+    }
+    Ok(bytes)
 }
 
 fn new_id() -> String {
@@ -318,7 +365,7 @@ fn library_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_dir(app)?.join(LIBRARY_FILE))
 }
 
-fn store(app: &AppHandle) -> Result<Store, String> {
+pub(crate) fn store(app: &AppHandle) -> Result<Store, String> {
     Ok(Store::new(app_dir(app)?.join(STORE_DIR)))
 }
 
@@ -594,6 +641,67 @@ pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
     crate::playlists::forget_library_track(&app, &id)
 }
 
+/// A text field as a person typed it: trimmed, and not too long to show.
+fn clean_field(value: &str, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return fallback.to_string();
+    }
+    trimmed.chars().take(200).collect()
+}
+
+/// Change what a song is called: its title, artist and album.
+///
+/// The app's own record only. The audio file's tags are left alone — this is
+/// the library's copy, and the name shown is the library's business.
+#[tauri::command(async)]
+pub fn library_update_track(
+    app: AppHandle,
+    id: String,
+    title: String,
+    artist: String,
+    album: String,
+) -> Result<LibraryTrack, String> {
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    if title.trim().is_empty() {
+        return Err("A song needs a title.".into());
+    }
+    track.title = clean_field(&title, &track.title);
+    track.artist = artist.trim().chars().take(200).collect();
+    track.album = album.trim().chars().take(200).collect();
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    Ok(updated)
+}
+
+/// Give a song a cover chosen by hand, in place of whatever it had.
+#[tauri::command(async)]
+pub fn library_set_cover(app: AppHandle, id: String, jpeg: String) -> Result<LibraryTrack, String> {
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    let store = store(&app)?;
+    let name = store.put_cover(&track.id, &jpeg)?;
+    let old = track.cover_file.replace(name);
+    track.has_cover_art = true;
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    // After the record points at the new one, so a failure here costs a few
+    // kilobytes and never a song without a cover.
+    if let Some(old) = old {
+        if let Err(e) = store.discard(&old) {
+            log::warn!("[library] {e}");
+        }
+    }
+    Ok(updated)
+}
+
 /// Absolute path of the store directory.
 ///
 /// Asked for once at startup; the frontend joins `storedFile` onto it rather
@@ -694,6 +802,29 @@ mod tests {
 
         store.discard(&stored).expect("discard");
         assert!(!store.path_of(&stored).expect("a bare name").exists());
+    }
+
+    #[test]
+    fn a_cover_is_kept_only_when_it_is_a_jpeg_of_sensible_size() {
+        let jpeg = STANDARD.encode([0xFF, 0xD8, 0xFF, 0xE0, 0, 1, 2, 3]);
+        assert!(cover_bytes(&jpeg).is_ok());
+        let png = STANDARD.encode([0x89, b'P', b'N', b'G']);
+        assert!(cover_bytes(&png).is_err());
+        assert!(cover_bytes("not base64 at all!").is_err());
+        let huge = STANDARD.encode(vec![0xFFu8; COVER_MAX_BYTES + 1]);
+        assert!(cover_bytes(&huge).is_err());
+    }
+
+    #[test]
+    fn a_cover_gets_a_new_name_each_time_inside_the_store() {
+        let dir = TempDir::new();
+        let store = Store::new(dir.0.clone());
+        let jpeg = STANDARD.encode([0xFF, 0xD8, 0xFF, 0xE0]);
+        let first = store.put_cover("abc", &jpeg).expect("written");
+        let second = store.put_cover("abc", &jpeg).expect("written");
+        assert_ne!(first, second, "a new address, so no cache shows the old one");
+        assert!(store.path_of(&first).is_some_and(|p| p.exists()));
+        assert!(store.put_cover("../escape", &jpeg).is_err());
     }
 
     #[test]

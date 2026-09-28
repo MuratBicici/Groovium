@@ -24,6 +24,10 @@ type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
 interface SpotifyDrawerProps {
   onClose: () => void;
   id: string;
+  /** The library's Groovium | Spotify choice, drawn where the heading was. */
+  switcher?: React.ReactNode;
+  /** Whether this side is the one showing. Typing opens its search only then. */
+  active?: boolean;
 }
 
 /**
@@ -41,7 +45,7 @@ interface SpotifyDrawerProps {
  * Four states, because the setup has genuinely distinct stages and collapsing
  * them would leave the user guessing which part failed.
  */
-export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
+export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyDrawerProps) {
   const t = useT();
   /**
    * The search, which is a layer over this rather than a box inside it.
@@ -193,7 +197,7 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
    * what counts as typing lives.
    */
   useEffect(() => {
-    if (stage !== 'connected' || searching !== null) return;
+    if (!active || stage !== 'connected' || searching !== null) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -215,7 +219,7 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [stage, searching]);
+  }, [active, stage, searching]);
 
   return (
     <aside
@@ -245,18 +249,31 @@ export function SpotifyDrawer({ onClose, id }: SpotifyDrawerProps) {
       // actually reached by then.
       style={{ width: `${DRAWER_WIDTH}px`, ['--fade-colour' as string]: 'var(--color-shell-900)' }}
     >
-      <div className="flex shrink-0 items-center justify-between px-3 py-2">
+      {/* Marked, so changing sides moves what is under it and not this. */}
+      <div data-drawer-head className="flex shrink-0 items-center justify-between px-3 py-2">
         {/* A brand and, once connected, someone's name. Neither is a Turkish
             word, and uppercasing under Turkish rules turned "Spotify" into
             "SPOTİFY". */}
-        <span
-          lang="en"
-          className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase"
-        >
-          {stage === 'connected' && account
-            ? t('spotify.heading', { name: account.displayName })
-            : t('panel.spotify')}
-        </span>
+        {switcher ? (
+          <span className="flex min-w-0 items-center gap-2">
+            {switcher}
+            {/* Whose Spotify it is, now that the brand is on the switch. */}
+            {stage === 'connected' && account && (
+              <span className="min-w-0 truncate text-label text-cream-400">
+                {account.displayName}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span
+            lang="en"
+            className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase"
+          >
+            {stage === 'connected' && account
+              ? t('spotify.heading', { name: account.displayName })
+              : t('panel.spotify')}
+          </span>
+        )}
         <div className="flex shrink-0 items-center gap-2">
           {stage === 'connected' && (
             <button

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
+import { useSpotifyPlaylistsStore, type AddOutcome } from '@/core/spotify/store';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
 import { useDiscFlight } from '@/components/player/DiscFlight';
@@ -20,7 +20,7 @@ const DRAG_THRESHOLD = 5;
  * the drawer's height has two other rows in it. Wide enough that the artwork
  * is still the thing being read and the name under it is still a name.
  */
-const CRATE_SIZE = 84;
+export const CRATE_SIZE = 84;
 
 /**
  * Putting a record into a crate on the shelf.
@@ -82,16 +82,103 @@ function shake(el: HTMLElement | null): void {
  * collide with a track's, and nothing downstream tries to play it: the crate's
  * own code hears about the drop and starts the crate.
  */
-function asCargo(playlist: SpotifyPlaylist): TrackMetadata {
+function asCargo(face: CrateFace): TrackMetadata {
+  const cover = face.covers[0];
   return {
-    id: `crate:${playlist.id}`,
-    title: playlist.name,
-    artist: playlist.ownerName,
+    id: `crate:${face.id}`,
+    title: face.name,
+    artist: '',
     album: '',
     duration: 0,
     source: 'spotify',
-    ...(playlist.coverArtUrl ? { coverArtUrl: playlist.coverArtUrl } : {}),
+    ...(cover ? { coverArtUrl: cover } : {}),
   };
+}
+
+/**
+ * What a crate shows, wherever its songs come from.
+ *
+ * A Spotify playlist has a cover of its own; a Groovium one is dressed in the
+ * covers of the songs in it. Either way the sleeve is the same sleeve, so the
+ * two shelves in the library read as one kind of thing.
+ */
+export interface CrateFace {
+  id: string;
+  name: string;
+  trackCount: number;
+  /** One printed cover, or four to lay out as a mosaic, or none for a blank sleeve. */
+  covers: string[];
+}
+
+/** A Spotify playlist, as the sleeve draws it. */
+function faceOf(playlist: SpotifyPlaylist): CrateFace {
+  return {
+    id: playlist.id,
+    name: playlist.name,
+    trackCount: playlist.trackCount,
+    covers: playlist.coverArtUrl ? [playlist.coverArtUrl] : [],
+  };
+}
+
+/**
+ * The deck's own carry gesture, holding a crate.
+ *
+ * There are no buttons on a sleeve. A record is played by taking it to the
+ * deck, so a crate is too — the gesture is the one the app already has, and
+ * the only difference is what ends up in the hand. `onDelivered` is what
+ * playing the whole crate means where it came from.
+ */
+export function useCrateCarry(onDelivered: (face: CrateFace) => void) {
+  const { platterEl } = useDiscFlight();
+  const { grab, moveTo, release, cancel } = useDiscHold();
+  return useCallback(
+    (face: CrateFace, down: React.PointerEvent, sleeve: HTMLElement | null, lift: () => void) => {
+      if (down.button !== 0 || !sleeve) return;
+      const from = { x: down.clientX, y: down.clientY };
+      let holding = false;
+
+      const move = (e: PointerEvent) => {
+        if (holding) {
+          moveTo(e.clientX, e.clientY);
+          return;
+        }
+        if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
+        holding = true;
+        lift();
+        grab({
+          track: asCargo(face),
+          look: 'sleeve',
+          homeEl: sleeve,
+          homeSize: sleeve.getBoundingClientRect().width,
+          pointer: { x: e.clientX, y: e.clientY },
+          // Straight back to its place on the shelf if it is put down anywhere
+          // else. No mouth to come out of and none to go back into: a crate is
+          // the sleeve, and there is nothing behind it to be hidden by.
+          visiting: {
+            deckEl: platterEl(),
+            onDelivered: () => onDelivered(face),
+            // A crate does not land on the deck. It opens out over it and is
+            // gone, and what it was carrying starts playing.
+            dissolves: true,
+          },
+        });
+      };
+
+      const drop = (e: PointerEvent) => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', drop);
+        window.removeEventListener('pointercancel', drop);
+        if (!holding) return;
+        if (e.type === 'pointerup') release();
+        else cancel();
+      };
+
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', drop);
+      window.addEventListener('pointercancel', drop);
+    },
+    [cancel, grab, moveTo, platterEl, onDelivered, release],
+  );
 }
 
 /**
@@ -133,67 +220,9 @@ export function SpotifyCrates() {
   const arrived = useCallback(() => setJustMade(null), []);
   const playError = useSpotifyPlaylistsStore((s) => s.playError);
 
-  const { platterEl } = useDiscFlight();
-  /**
-   * The deck's own carry gesture again, this time holding a crate.
-   *
-   * There are no buttons on a sleeve. A record is played by taking it to the
-   * deck, so a crate is too — the gesture is the one the app already has, and
-   * the only difference is what ends up in the hand. Shuffling is not a
-   * property of a crate and never was: it is the transport's own switch, and
-   * it applies to whatever is on the deck.
-   */
-  const { grab, moveTo, release, cancel } = useDiscHold();
   const inHand = useCarriedTrack();
-
-  const carry = useCallback(
-    (playlist: SpotifyPlaylist, down: React.PointerEvent, sleeve: HTMLElement | null, lift: () => void) => {
-      if (down.button !== 0 || !sleeve) return;
-      const from = { x: down.clientX, y: down.clientY };
-      let holding = false;
-
-      const move = (e: PointerEvent) => {
-        if (holding) {
-          moveTo(e.clientX, e.clientY);
-          return;
-        }
-        if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_THRESHOLD) return;
-        holding = true;
-        lift();
-        grab({
-          track: asCargo(playlist),
-          look: 'sleeve',
-          homeEl: sleeve,
-          homeSize: sleeve.getBoundingClientRect().width,
-          pointer: { x: e.clientX, y: e.clientY },
-          // Straight back to its place on the shelf if it is put down anywhere
-          // else. No mouth to come out of and none to go back into: a crate is
-          // the sleeve, and there is nothing behind it to be hidden by.
-          visiting: {
-            deckEl: platterEl(),
-            onDelivered: () => void playCrate(playlist.id),
-            // A crate does not land on the deck. It opens out over it and is
-            // gone, and what it was carrying starts playing.
-            dissolves: true,
-          },
-        });
-      };
-
-      const drop = (e: PointerEvent) => {
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', drop);
-        window.removeEventListener('pointercancel', drop);
-        if (!holding) return;
-        if (e.type === 'pointerup') release();
-        else cancel();
-      };
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', drop);
-      window.addEventListener('pointercancel', drop);
-    },
-    [cancel, grab, moveTo, platterEl, playCrate, release],
-  );
+  const playWhole = useCallback((face: CrateFace) => void playCrate(face.id), [playCrate]);
+  const carry = useCrateCarry(playWhole);
 
   useEffect(() => {
     void open();
@@ -268,7 +297,11 @@ export function SpotifyCrates() {
           playlists.map((playlist) => (
             <Crate
               key={playlist.id}
-              playlist={playlist}
+              face={faceOf(playlist)}
+              // Only a Spotify song: a file on this computer has nothing to
+              // add to a Spotify playlist, and a crate is not a record.
+              accepts={(track) => track.source === 'spotify' && !track.id.startsWith('crate:')}
+              add={(track) => useSpotifyPlaylistsStore.getState().addToCrate(playlist.id, track)}
               arriving={justMade === playlist.id}
               onArrived={arrived}
               starting={starting === playlist.id}
@@ -321,7 +354,7 @@ export function SpotifyCrates() {
  * arrives beside it. Escape puts the label back — and keeps the key to itself,
  * or the shell would close the whole drawer with it.
  */
-function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
+export function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
   const t = useT();
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState('');
@@ -386,8 +419,10 @@ function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boolean> }
   );
 }
 
-function Crate({
-  playlist,
+export function Crate({
+  face,
+  accepts,
+  add,
   arriving,
   onArrived,
   starting,
@@ -395,7 +430,11 @@ function Crate({
   onCarry,
   onOpen,
 }: {
-  playlist: SpotifyPlaylist;
+  face: CrateFace;
+  /** Whether a record held over this sleeve may go in. */
+  accepts: (track: TrackMetadata) => boolean;
+  /** Put a song in the playlist; the sleeve says what came of it. */
+  add: (track: TrackMetadata) => Promise<AddOutcome>;
   /** Just made: it arrives on the shelf instead of simply appearing. */
   arriving: boolean;
   onArrived: () => void;
@@ -404,7 +443,7 @@ function Crate({
   /** It is in somebody's hand, so its place on the shelf is empty. */
   away: boolean;
   onCarry: (
-    playlist: SpotifyPlaylist,
+    face: CrateFace,
     down: React.PointerEvent,
     sleeve: HTMLElement | null,
     lift: () => void,
@@ -430,18 +469,25 @@ function Crate({
   const incomingEl = useRef<HTMLSpanElement | null>(null);
   const rim = useRef<HTMLSpanElement | null>(null);
   const countEl = useRef<HTMLSpanElement | null>(null);
-  const shownCount = useRef(playlist.trackCount);
+  const shownCount = useRef(face.trackCount);
+  // Read when a record arrives rather than when the sleeve was set up: the
+  // shelf hands a new function on every render.
+  const accepting = useRef(accepts);
+  const adding = useRef(add);
+  useLayoutEffect(() => {
+    accepting.current = accepts;
+    adding.current = add;
+  });
   const [said, setSaid] = useState<string | null>(null);
 
-  // Somewhere a record can be put. Only a Spotify song: a file on this computer
-  // has nothing to add, and a crate is not a record.
+  // Somewhere a record can be put, if this playlist will have it.
   useEffect(() => {
     const el = art.current;
     if (!el) return;
     let key = 0;
     return registerReceiver({
       el,
-      accepts: (track) => track.source === 'spotify' && !track.id.startsWith('crate:'),
+      accepts: (track) => accepting.current(track),
       onHover: setOffered,
       refuse: () => shake(card.current),
       approach: MOUTH_APPROACH,
@@ -482,10 +528,7 @@ function Crate({
       setIncoming(null);
     };
     const add = () => {
-      void useSpotifyPlaylistsStore
-        .getState()
-        .addToCrate(playlist.id, job.track)
-        .then((outcome) => {
+      void adding.current(job.track).then((outcome) => {
           if (outcome === 'already') {
             setSaid(t('spotify.alreadyHere'));
             setTimeout(() => setSaid(null), SAID_MS);
@@ -543,19 +586,19 @@ function Crate({
       });
 
     return () => handBack();
-  }, [incoming, playlist.id, t]);
+  }, [incoming, face.id, t]);
 
   /** The count ticks over when it changes, rather than simply being a different number. */
   useLayoutEffect(() => {
     const el = countEl.current;
-    if (el && shownCount.current !== playlist.trackCount && !prefersReducedMotion()) {
+    if (el && shownCount.current !== face.trackCount && !prefersReducedMotion()) {
       el.animate([{ transform: 'translateY(70%)', opacity: 0 }, { transform: 'none', opacity: 1 }], {
         duration: 260,
         easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
       });
     }
-    shownCount.current = playlist.trackCount;
-  }, [playlist.trackCount]);
+    shownCount.current = face.trackCount;
+  }, [face.trackCount]);
 
   /**
    * A crate that has just been made settles onto the shelf.
@@ -588,7 +631,7 @@ function Crate({
       type="button"
       onPointerDown={(e) => {
         lifted.current = false;
-        onCarry(playlist, e, art.current, () => {
+        onCarry(face, e, art.current, () => {
           lifted.current = true;
         });
       }}
@@ -645,9 +688,25 @@ function Crate({
           </span>
         )}
         <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900">
-          {playlist.coverArtUrl ? (
+          {face.covers.length >= 4 ? (
+            // A playlist of Groovium's has no cover of its own: the first four
+            // of its songs' make one, as a compilation's sleeve does.
+            <span className="grid h-full w-full grid-cols-2 grid-rows-2">
+              {face.covers.slice(0, 4).map((cover) => (
+                <img
+                  key={cover}
+                  src={cover}
+                  crossOrigin="anonymous"
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ))}
+            </span>
+          ) : face.covers[0] ? (
             <img
-              src={playlist.coverArtUrl}
+              src={face.covers[0]}
+              crossOrigin="anonymous"
               alt=""
               loading="lazy"
               className="h-full w-full object-cover"
@@ -660,7 +719,7 @@ function Crate({
               aria-hidden="true"
               className="flex h-full w-full items-center justify-center text-title font-medium text-brass-400/50"
             >
-              {playlist.name.trim().charAt(0).toUpperCase() || '♪'}
+              {face.name.trim().charAt(0).toUpperCase() || '♪'}
             </span>
           )}
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
@@ -676,11 +735,11 @@ function Crate({
           away ? 'opacity-0' : ''
         }`}
       >
-        <span className="truncate text-meta text-cream-100" title={playlist.name}>
-          {playlist.name}
+        <span className="truncate text-meta text-cream-100" title={face.name}>
+          {face.name}
         </span>
         <span ref={countEl} className="truncate text-label text-cream-400">
-          {t('spotify.trackCount', { count: playlist.trackCount })}
+          {t('spotify.trackCount', { count: face.trackCount })}
         </span>
       </span>
     </button>

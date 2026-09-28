@@ -166,6 +166,10 @@ pub struct Settings {
     /// Anything unrecognised reads as compact on the way in.
     #[serde(default = "compact_place")]
     pub lyrics_place: String,
+    /// Which side of the library drawer is showing: `"groovium"` for this
+    /// computer's music and Groovium's playlists, `"spotify"` for Spotify.
+    #[serde(default = "groovium_side")]
+    pub library_tab: String,
 }
 
 /// What a fresh installation is, spelled out.
@@ -203,6 +207,7 @@ impl Default for Settings {
             declined_version: None,
             lyrics_on: false,
             lyrics_place: compact_place(),
+            library_tab: groovium_side(),
         }
     }
 }
@@ -238,6 +243,10 @@ fn right_side() -> String {
 
 fn as_designed() -> f64 {
     1.0
+}
+
+fn groovium_side() -> String {
+    "groovium".to_owned()
 }
 
 fn compact_place() -> String {
@@ -384,6 +393,7 @@ mod tests {
             declined_version: Some("1.0.5".into()),
             lyrics_on: true,
             lyrics_place: "full".into(),
+            library_tab: "spotify".into(),
         };
 
         let written = serde_json::to_string(&config).expect("serializes");
