@@ -1,4 +1,4 @@
-import { useCurrentTrack, useIsPlaying, usePlaybackState } from '@/core/store';
+import { useCurrentTrack, useIsPlaying, usePlaybackState, usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { VinylDisc } from './VinylDisc';
 
@@ -16,6 +16,10 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   const track = useCurrentTrack();
   const playbackState = usePlaybackState();
   const isPlaying = useIsPlaying();
+  // Next was pressed and the station is still finding what comes next. The
+  // song on the deck plays on meanwhile, so its own state would say "Now
+  // Playing" to somebody who has just asked for it to stop being.
+  const finding = usePlayerStore((s) => s.findingNext);
 
   if (compact) {
     return (
@@ -42,7 +46,7 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   return (
     <div className="px-4 text-center">
       <p className="text-label font-medium tracking-[0.2em] text-brass-400/70 uppercase">
-        {t(`status.${playbackState}`)}
+        {finding ? t('status.searching') : t(`status.${playbackState}`)}
       </p>
 
       {/* Nothing sits beside the title on purpose: the block is centred, and a

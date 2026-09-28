@@ -32,6 +32,15 @@ export function ProgressBar() {
    * truth, and on a cold start it is the truth for several seconds.
    */
   const loading = usePlayerStore((s) => s.playbackState === 'LOADING');
+  /**
+   * Next was pressed and what follows is still being looked for.
+   *
+   * A different light from loading's, because it is a different wait: that one
+   * is a song on its way, crossing the bar the way the song will; this is no
+   * song yet, only a search, so the light starts in the middle and goes out
+   * both ways at once — looking, rather than arriving.
+   */
+  const finding = usePlayerStore((s) => s.findingNext);
 
   const [scrubMs, setScrubMs] = useState<number | null>(null);
   // A ref, not state: pointerup must see what pointerdown wrote in the same
@@ -98,7 +107,11 @@ export function ProgressBar() {
             className="h-full rounded-full bg-gradient-to-r from-brass-600 to-brass-400"
             style={{ width: `${fraction * 100}%` }}
           />
-          {loading && <span aria-hidden="true" className="progress-waiting" />}
+          {finding ? (
+            <span aria-hidden="true" className="progress-searching" />
+          ) : (
+            loading && <span aria-hidden="true" className="progress-waiting" />
+          )}
         </div>
 
         {/* Handle, shown on hover or while scrubbing. */}

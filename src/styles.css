@@ -837,6 +837,82 @@ body {
 }
 
 /*
+ * Looking for the next song: one light born in the middle of the bar that
+ * parts into two and runs out to both ends. The same brass and the same beat
+ * as the loading light, so the two read as one family, and a different shape
+ * because they are different waits — that one crosses the bar the way a song
+ * will, this one searches outwards from where it stands.
+ *
+ * The halves start on top of each other and fade up there, so the middle is
+ * where the light appears rather than where two lights collide.
+ */
+.progress-searching {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.progress-searching::before,
+.progress-searching::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 35%;
+  width: 30%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-brass-400) 70%, transparent),
+    transparent
+  );
+  animation: progress-searching 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.progress-searching::before {
+  --part: -1;
+}
+.progress-searching::after {
+  --part: 1;
+}
+/* From the middle to wholly past its end: 35% of the bar to cross and its own
+   30% to clear, which is about 220% of a half's width. */
+@keyframes progress-searching {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(calc(var(--part) * 220%));
+    opacity: 1;
+  }
+}
+/* Still, it is the loading light's still form: one dim bar, not two on top of
+   each other twice as bright. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-searching::before {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.35;
+  }
+  .progress-searching::after {
+    display: none;
+  }
+}
+:root[data-motion='off'] .progress-searching::before {
+  animation: none;
+  left: 0;
+  width: 100%;
+  opacity: 0.35;
+}
+:root[data-motion='off'] .progress-searching::after {
+  display: none;
+}
+
+/*
  * A stretch of the song with no words: a wave where the words would be.
  *
  * One swell rather than a row of even ripples — quiet at both ends and fullest

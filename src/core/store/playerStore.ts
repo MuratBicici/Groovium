@@ -185,6 +185,13 @@ export interface PlayerState {
   /** True while a suggestion is being looked up. */
   stationSearching: boolean;
   /**
+   * Somebody is waiting on that lookup: Next was pressed, or a track ended,
+   * with nothing lined up to follow. `stationSearching` is also true for the
+   * lookup made quietly ahead of time, which nobody is waiting for; this is
+   * only the one where the music has been asked to move on and cannot yet.
+   */
+  findingNext: boolean;
+  /**
    * Suggestions lined up to follow, found while the current track still plays.
    *
    * A queue rather than a single track because one Last.fm call answers with
@@ -323,6 +330,7 @@ const initialState: PlayerState = {
   importing: null,
   station: false,
   stationSearching: false,
+  findingNext: false,
   stationQueue: [],
   stationSeeds: [],
   stationHistory: [],
@@ -576,7 +584,20 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // Nothing queued — a very short track, or a press that arrived before the
       // lookup finished. Look it up now and accept the gap. Asked for, because
       // reaching here at all is somebody wanting a successor.
-      await prefetchStationTrack(true);
+      //
+      // The gap is said out loud: a press that does nothing for several seconds
+      // reads as a press that was lost.
+      const seed = get().currentTrack?.id ?? null;
+      set({ findingNext: true });
+      try {
+        await prefetchStationTrack(true);
+      } finally {
+        set({ findingNext: false });
+      }
+      // Somebody chose something else while this was looking. That choice is
+      // the answer to the press, and playing the find now would take it away
+      // from them — or, finding nothing, starting the collection over would.
+      if ((get().starting ?? get().currentTrack)?.id !== seed) return true;
     }
     const [track, ...rest] = get().stationQueue;
     if (!track) return false;
@@ -1045,6 +1066,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async next() {
+      // Already being answered. A second press while the station looks would
+      // take the first find and then skip straight past it to a second one.
+      if (get().findingNext) return;
       const index = neighborIndex(1);
       if (index !== null) {
         await startTrack(index);

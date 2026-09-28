@@ -96,6 +96,7 @@ export const en = {
   'status.PLAYING': 'Now Playing',
   'status.PAUSED': 'Paused',
   'status.ERROR': 'Error',
+  'status.searching': 'Searching',
   'track.none': 'Nothing playing yet',
   'track.hint': 'Open a song to get started',
 
