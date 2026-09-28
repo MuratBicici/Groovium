@@ -34,11 +34,15 @@ const ICONS: Record<PanelId, React.ReactNode> = {
       <path d="M19 17V9l2 1" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
+  // A gear. Worked out rather than drawn by hand: six teeth at even angles,
+  // each a flat-topped trapezoid between two circles. The hand-drawn one had
+  // teeth of four different sizes, and at fourteen pixels that read as a
+  // crumpled star rather than as anything that turns.
   settings: (
     <>
-      <circle cx="12" cy="12" r="3.2" />
+      <circle cx="12" cy="12" r="2.8" />
       <path
-        d="M12 2.8l1.4 2.3 2.7-.5.5 2.7 2.3 1.4-1.4 2.3 1.4 2.3-2.3 1.4-.5 2.7-2.7-.5L12 21.2l-1.4-2.3-2.7.5-.5-2.7-2.3-1.4L6.5 13 5.1 10.7l2.3-1.4.5-2.7 2.7.5z"
+        d="M9.72 5.38L9.92 2.63A9.6 9.6 0 0 1 14.08 2.63L14.28 5.38A7 7 0 0 1 16.59 6.72L19.08 5.51A9.6 9.6 0 0 1 21.16 9.11L18.87 10.66A7 7 0 0 1 18.87 13.34L21.16 14.89A9.6 9.6 0 0 1 19.08 18.49L16.59 17.28A7 7 0 0 1 14.28 18.62L14.08 21.37A9.6 9.6 0 0 1 9.92 21.37L9.72 18.62A7 7 0 0 1 7.41 17.28L4.92 18.49A9.6 9.6 0 0 1 2.84 14.89L5.13 13.34A7 7 0 0 1 5.13 10.66L2.84 9.11A9.6 9.6 0 0 1 4.92 5.51L7.41 6.72A7 7 0 0 1 9.72 5.38Z"
         strokeLinejoin="round"
       />
     </>
