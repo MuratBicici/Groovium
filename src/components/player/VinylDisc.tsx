@@ -122,7 +122,14 @@ export function VinylDisc({
       style={{
         width: size,
         height: size,
-        background: detailed && texture ? `url(${texture}), ${body}` : body,
+        // Both longhands, never `background` with `backgroundSize` beside it.
+        // React writes only what changed, and a new texture — the record
+        // resized, as a crate's are the moment their cards are measured — was
+        // written through the shorthand, which resets the size to `auto`
+        // without the unchanged size being written back. The texture was then
+        // drawn at its own pixel size, twice the record's, and what showed was
+        // one corner of it: arcs of somebody else's circle across the disc.
+        backgroundImage: detailed && texture ? `url(${texture}), ${body}` : body,
         backgroundSize: '100% 100%',
         // No rim highlight here any more: a glow on all sides at once is light
         // arriving from everywhere, which is what made the edge read as drawn
