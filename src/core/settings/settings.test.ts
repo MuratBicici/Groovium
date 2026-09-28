@@ -72,6 +72,7 @@ describe('remembering that a version has been shown', () => {
       visualizer: false,
       windowGlow: true,
       sleepWhenHidden: false,
+      scale: 1,
       themeFromCover: true,
       glowStrength: 3,
       glowSensitivity: -2,

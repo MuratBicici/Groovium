@@ -122,6 +122,11 @@ pub struct Settings {
     /// on at every launch.
     #[serde(default = "on_unless_turned_off")]
     pub sleep_when_hidden: bool,
+    /// How large the whole window is drawn, as a multiple of its designed
+    /// size: 1 is as designed. The webview is zoomed by it and the window
+    /// sized by it, so everything grows and shrinks together.
+    #[serde(default = "as_designed")]
+    pub scale: f64,
     /// Take the palette from the cover of whatever is playing.
     ///
     /// Off unless asked for. A window that repaints itself every few minutes is
@@ -187,6 +192,7 @@ impl Default for Settings {
             visualizer: on_unless_turned_off(),
             window_glow: false,
             sleep_when_hidden: true,
+            scale: as_designed(),
             theme_from_cover: false,
             glow_strength: 0,
             glow_sensitivity: 0,
@@ -228,6 +234,10 @@ where
 
 fn right_side() -> String {
     "right".to_owned()
+}
+
+fn as_designed() -> f64 {
+    1.0
 }
 
 fn compact_place() -> String {
@@ -363,6 +373,7 @@ mod tests {
             visualizer: true,
             window_glow: true,
             sleep_when_hidden: false,
+            scale: 1.25,
             theme_from_cover: true,
             glow_strength: 3,
             glow_sensitivity: -2,
@@ -388,6 +399,7 @@ mod tests {
         assert!(written.contains(r#""lastSeenVersion":"1.0.4""#));
         assert!(written.contains(r#""declinedVersion":"1.0.5""#));
         assert!(written.contains(r#""sleepWhenHidden":false"#));
+        assert!(written.contains(r#""scale":1.25"#));
     }
 
     #[test]

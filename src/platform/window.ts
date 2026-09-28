@@ -98,15 +98,83 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
  */
 let clickable = 'none';
 
-export async function setClickArea(
+/**
+ * How large the window is drawn: see `Settings.scale`.
+ *
+ * Everything the page asks of the window is in the page's own pixels, and the
+ * page is zoomed by this. So the window's size and its clickable area are
+ * multiplied by it on the way out, here, and nowhere else has to know.
+ */
+let zoom = 1;
+/** The last size asked for, in the page's pixels, to redo when the zoom changes. */
+let lastSize: { width: number; height: number } | null = null;
+/** The last clickable area asked for, likewise; undefined before the first. */
+let lastArea: { x: number; y: number; width: number; height: number } | null | undefined;
+
+/**
+ * Everything that changes the window, one at a time and in the order asked.
+ *
+ * Sizing the window is several round trips — set, read back, maybe set again —
+ * and two of them at once raced. At startup the first size (for the designed
+ * scale) and the zoom's own resize (for the stored one) ran side by side; the
+ * first finished last, read back the second's size, took it for a failed
+ * resize, and put its own back. The page was then zoomed in a window sized for
+ * no zoom at all: stretched, the player off to one side, and the clickable area
+ * — worked out for the zoom — somewhere the player was not. Queued, each job
+ * reads the zoom when it runs, not when it was asked for.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+function inOrder(job: () => Promise<void>): Promise<void> {
+  const run = queue.then(job, job);
+  queue = run.catch(() => {});
+  return run;
+}
+
+/** Draw the whole window at `scale` times its designed size. */
+export function setWindowZoom(scale: number): Promise<void> {
+  if (!isTauri()) return Promise.resolve();
+  return inOrder(async () => {
+    if (scale === zoom) return;
+    zoom = scale;
+    try {
+      const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+      await getCurrentWebview().setZoom(scale);
+    } catch (err) {
+      log('warn', 'window', 'could not zoom the page', err);
+    }
+    // The same page at the new size: the window follows, and so does the
+    // part of it that takes clicks.
+    if (lastSize) await applySize(lastSize.width, lastSize.height, 0);
+    if (lastArea !== undefined) {
+      clickable = 'unknown';
+      await applyArea(lastArea);
+    }
+  });
+}
+
+export function setClickArea(
   rect: { x: number; y: number; width: number; height: number } | null,
 ): Promise<void> {
-  if (!isTauri()) return;
+  if (!isTauri()) return Promise.resolve();
+  lastArea = rect;
+  return inOrder(() => applyArea(rect));
+}
+
+async function applyArea(
+  rect: { x: number; y: number; width: number; height: number } | null,
+): Promise<void> {
+  const scaled = rect && {
+    x: rect.x * zoom,
+    y: rect.y * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
+  };
 
   // Skipped when it would change nothing. Every animation asks for the whole
   // window before it starts, which on the right is what it always had.
-  const wanted = rect
-    ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',')
+  const wanted = scaled
+    ? [scaled.x, scaled.y, scaled.width, scaled.height].map(Math.round).join(',')
     : 'none';
   if (wanted === clickable) return;
   clickable = wanted;
@@ -114,11 +182,11 @@ export async function setClickArea(
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     await invoke('set_click_area', {
-      x: Math.round(rect?.x ?? 0),
-      y: Math.round(rect?.y ?? 0),
+      x: Math.round(scaled?.x ?? 0),
+      y: Math.round(scaled?.y ?? 0),
       // Negative for "all of it".
-      width: rect ? Math.round(rect.width) : -1,
-      height: rect ? Math.round(rect.height) : -1,
+      width: scaled ? Math.round(scaled.width) : -1,
+      height: scaled ? Math.round(scaled.height) : -1,
     });
   } catch (err) {
     // Forgotten again, so the next attempt is not skipped as a repeat of
@@ -150,11 +218,15 @@ export async function setClickArea(
  * from a `void` call site with nothing to catch it, over a window that is
  * merely the wrong size.
  */
-export async function setWindowSize(width: number, height: number, dx = 0): Promise<void> {
-  if (!isTauri()) return;
+export function setWindowSize(width: number, height: number, dx = 0): Promise<void> {
+  if (!isTauri()) return Promise.resolve();
+  lastSize = { width, height };
+  return inOrder(() => applySize(width, height, dx));
+}
 
-  const w = Math.round(width);
-  const h = Math.round(height);
+async function applySize(width: number, height: number, dx: number): Promise<void> {
+  const w = Math.round(width * zoom);
+  const h = Math.round(height * zoom);
 
   // Anything that moves the window goes through Rust, where the resize and the
   // move happen microseconds apart inside one command rather than across two
@@ -164,7 +236,7 @@ export async function setWindowSize(width: number, height: number, dx = 0): Prom
   if (dx !== 0) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('set_window_box', { width: w, height: h, dx: Math.round(dx) });
+      await invoke('set_window_box', { width: w, height: h, dx: Math.round(dx * zoom) });
       return;
     } catch (err) {
       // Falling through to the plain resize. A window at the right size in the

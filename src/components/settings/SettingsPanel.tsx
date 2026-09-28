@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { NOTCHES } from '@/core/visualizer';
+import { SCALES } from '@/core/settings';
 import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
 import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
 import { hasClientId } from '@/core/security/spotifyAuth';
@@ -77,6 +78,8 @@ export function SettingsPanel({
   const setGlow = useSettingsStore((s) => s.setGlow);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
+  const scale = useSettingsStore((s) => s.scale);
+  const setScale = useSettingsStore((s) => s.setScale);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
   const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
@@ -268,6 +271,8 @@ export function SettingsPanel({
             on={boostContrast}
             onChange={setBoostContrast}
           />
+
+          <ScaleSlider label={t('settings.scale')} scale={scale} onChange={setScale} />
 
           <Toggle
             label={t('settings.windowBorder')}
@@ -686,16 +691,13 @@ function Slider({
   return (
     <label className="block">
       <span className="text-meta text-cream-300">{label}</span>
-      <input
-        type="range"
+      <SteppedRange
         min={-NOTCHES}
         max={NOTCHES}
-        step={1}
         value={notch}
-        aria-label={label}
-        aria-valuetext={notch > 0 ? `+${notch}` : String(notch)}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="groove-range mt-1 h-3 w-full cursor-pointer appearance-none rounded-full bg-shell-600 ring-1 ring-[var(--color-edge)]"
+        label={label}
+        valueText={notch > 0 ? `+${notch}` : String(notch)}
+        onChange={onChange}
       />
       {/* One mark per notch, the middle one taller: where the slider came from
           is the thing worth being able to find again without thinking. */}
@@ -710,6 +712,111 @@ function Slider({
         ))}
       </span>
     </label>
+  );
+}
+
+/**
+ * How large the window is drawn: one stop per size in `SCALES`.
+ *
+ * Unlike the edge light's dials this one says its number. A size is something
+ * people think of as a number, and 110% is an answer to "how much bigger".
+ */
+function ScaleSlider({
+  label,
+  scale,
+  onChange,
+}: {
+  label: string;
+  scale: number;
+  onChange: (next: number) => void;
+}) {
+  // Where the thumb is while it is being moved, which is not yet the size.
+  // Every stop resizes the window, and doing that under a moving thumb made
+  // the window lurch through each size on the way to the one wanted — so the
+  // number follows the thumb, and the window changes once, on letting go.
+  const [held, setHeld] = useState<number | null>(null);
+  const shown = held ?? scale;
+  const at = Math.max(0, SCALES.findIndex((step) => step === shown));
+  const percent = `${Math.round(shown * 100)}%`;
+  const settle = () => {
+    if (held !== null && held !== scale) onChange(held);
+    setHeld(null);
+  };
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between">
+        <span className="text-meta text-cream-300">{label}</span>
+        <span className="text-meta text-cream-400 tabular-nums">{percent}</span>
+      </span>
+      <SteppedRange
+        min={0}
+        max={SCALES.length - 1}
+        value={at}
+        label={label}
+        valueText={percent}
+        onChange={(stop) => setHeld(SCALES[stop] ?? 1)}
+        onSettle={settle}
+      />
+    </label>
+  );
+}
+
+/**
+ * A slider with a handful of stops, whose knob glides between them.
+ *
+ * The native range is kept for everything it does — pointer, keyboard, what a
+ * screen reader hears — but drawn invisibly over the rail; the knob on show is
+ * a sibling that moves to the stop over a moment (`.groove-stepped-knob`). The
+ * native thumb jumps, and on a slider of five or nine stops a jump is a knob
+ * teleporting a fifth of the rail at a time.
+ *
+ * `onSettle` is for a change that should wait for the hand to let go.
+ */
+function SteppedRange({
+  min,
+  max,
+  value,
+  label,
+  valueText,
+  onChange,
+  onSettle,
+}: {
+  min: number;
+  max: number;
+  value: number;
+  label: string;
+  valueText: string;
+  onChange: (next: number) => void;
+  onSettle?: () => void;
+}) {
+  const fraction = max > min ? (value - min) / (max - min) : 0;
+  return (
+    <span className="relative mt-1 flex h-4 items-center">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        aria-label={label}
+        aria-valuetext={valueText}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={onSettle}
+        onKeyUp={onSettle}
+        onBlur={onSettle}
+        className="groove-range peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none opacity-0"
+      />
+      {/* The rail, and the ring the keyboard sees: the input itself is clear. */}
+      <span
+        aria-hidden="true"
+        className="h-3 w-full rounded-full bg-shell-600 ring-1 ring-[var(--color-edge)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brass-400"
+      />
+      <span
+        aria-hidden="true"
+        className="groove-stepped-knob pointer-events-none absolute top-0"
+        style={{ left: `calc(${fraction} * (100% - 16px))` }}
+      />
+    </span>
   );
 }
 

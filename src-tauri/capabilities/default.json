@@ -14,6 +14,7 @@
     "core:window:allow-inner-size",
     "core:window:allow-scale-factor",
     "core:window:allow-set-resizable",
+    "core:webview:allow-set-webview-zoom",
     "updater:default",
     "process:allow-restart",
     "log:default"

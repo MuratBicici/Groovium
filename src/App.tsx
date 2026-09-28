@@ -56,7 +56,7 @@ import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
-import { PLAYER_WIDTH } from '@/platform/window';
+import { PLAYER_WIDTH, setWindowZoom } from '@/platform/window';
 
 const PANEL_IDS = {
   library: 'groovium-library',
@@ -155,6 +155,12 @@ export default function App() {
   const lyricsInDrawer = fullShown(layout);
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
+  const scale = useSettingsStore((s) => s.scale);
+  // The whole window at the size somebody chose: the page zoomed, and the
+  // window sized to match. Once the stored choice has arrived, not before.
+  useEffect(() => {
+    if (settingsReady) void setWindowZoom(scale);
+  }, [scale, settingsReady]);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
   const glowStrength = useSettingsStore((s) => s.glowStrength);

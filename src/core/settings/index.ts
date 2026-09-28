@@ -114,6 +114,13 @@ export interface Settings {
    */
   sleepWhenHidden: boolean;
   /**
+   * How large the whole window is drawn, as a multiple of its designed size.
+   *
+   * One of `SCALES`. The webview is zoomed by it and the window sized by it,
+   * so the record, the type and the drawer all grow and shrink together.
+   */
+  scale: number;
+  /**
    * Take the palette from the cover of whatever is playing.
    *
    * The two colours come out of the artwork the same way a person picks them
@@ -201,6 +208,7 @@ export const DEFAULT_SETTINGS: Settings = {
   visualizer: true,
   windowGlow: false,
   sleepWhenHidden: true,
+  scale: 1,
   themeFromCover: false,
   glowStrength: 0,
   glowSensitivity: 0,
@@ -212,6 +220,15 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsOn: false,
   lyricsPlace: 'compact',
 };
+
+/** The sizes the window can be drawn at. */
+export const SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const;
+
+/** The allowed size nearest to `value`, or the designed one for nonsense. */
+export function nearestScale(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return SCALES.reduce((best, step) => (Math.abs(step - value) < Math.abs(best - value) ? step : best), 1);
+}
 
 export async function loadSettings(): Promise<Settings> {
   if (!isTauri()) return DEFAULT_SETTINGS;
@@ -229,6 +246,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
     if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
     settings.lyricsOn = settings.lyricsOn === true;
+    settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a
     // fraction among them, since these were fractions for one afternoon.
     for (const knob of GLOW_KNOBS) {

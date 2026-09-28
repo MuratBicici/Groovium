@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
+  nearestScale,
   saveSettings,
   type DrawerSide,
   type GlowKnob,
@@ -56,6 +57,7 @@ interface SettingsStore extends Settings {
   setVisualizer: (on: boolean) => void;
   setWindowGlow: (on: boolean) => void;
   setSleepWhenHidden: (on: boolean) => void;
+  setScale: (scale: number) => void;
   setThemeFromCover: (on: boolean) => void;
   /** The palette taken from the cover on the deck, or null for none. */
   coverPalette: CoverPalette | null;
@@ -318,7 +320,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   const settingsNow = (): Settings => {
     const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
-    const { visualizer, windowGlow, sleepWhenHidden, themeFromCover } = get();
+    const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -339,6 +341,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       visualizer,
       windowGlow,
       sleepWhenHidden,
+      scale,
       themeFromCover,
       glowStrength,
       glowSensitivity,
@@ -403,6 +406,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setVisualizer: (visualizer) => commit({ visualizer }),
     setWindowGlow: (windowGlow) => commit({ windowGlow }),
     setSleepWhenHidden: (sleepWhenHidden) => commit({ sleepWhenHidden }),
+    setScale: (scale) => commit({ scale: nearestScale(scale) }),
     setThemeFromCover: (themeFromCover) => commit({ themeFromCover }),
 
     /**

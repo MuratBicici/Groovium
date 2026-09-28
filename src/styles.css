@@ -982,6 +982,37 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * The settings' stepped sliders, whose knob glides from stop to stop.
+ *
+ * A native range's thumb jumps: the browser puts it at the new stop in one
+ * frame, and nothing about it can be transitioned. So on these the native
+ * input is kept — it is what the pointer and the keyboard work — but made
+ * invisible over the rail, and the knob is drawn here, where its position can
+ * move over a fifth of a second instead of teleporting.
+ *
+ * Same size, colour and shadow as the native thumb above, so the colour
+ * picker's continuous sliders and these read as one kind of control.
+ */
+.groove-stepped-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-cream-50);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / calc(0.4 * var(--shade))),
+    0 1px 4px rgb(0 0 0 / calc(0.55 * var(--shade)));
+  transition: left 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+:root[data-motion='off'] .groove-stepped-knob {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-stepped-knob {
+    transition: none;
+  }
+}
+
 /* A recess: the well behind the platter, an input, a progress track. */
 .groove-inset {
   background: var(--color-shell-900);
