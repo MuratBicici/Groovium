@@ -24,4 +24,13 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
     },
   },
+  {
+    // The website's own scripts: plain browser JavaScript, served as they are
+    // by GitHub Pages, so the browser's globals are theirs to use.
+    files: ['docs/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { window: 'readonly', document: 'readonly', fetch: 'readonly' },
+    },
+  },
 );
