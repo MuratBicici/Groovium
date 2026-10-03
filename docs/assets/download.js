@@ -4,8 +4,9 @@
 // there is no fixed address for "the newest .exe" to write into the page. The
 // buttons are written pointing at the latest release's page, which always
 // works; this asks GitHub which file that release has and, if it answers,
-// swaps each button over to the file itself. No answer — offline, rate limited,
-// a release without an installer — leaves the buttons where they were.
+// swaps each button over to the file itself and writes its version on it.
+// No answer — offline, rate limited, a release without an installer — leaves
+// the buttons where they were, with no version on them.
 (function () {
   var buttons = document.querySelectorAll('a[data-download]');
   if (!buttons.length || !window.fetch) return;
@@ -30,7 +31,15 @@
       var version = String(release.tag_name || '').replace(/^v/, '');
       for (var j = 0; j < buttons.length; j++) {
         buttons[j].href = installer.browser_download_url;
-        if (version) buttons[j].title = 'Groovium ' + version;
+        if (!version) continue;
+        buttons[j].title = 'Groovium ' + version;
+        // Said on the button as well, once it is known: what you get is the
+        // newest, and this is which that is.
+        var shown = buttons[j].querySelector('[data-download-version]');
+        if (shown) {
+          shown.textContent = 'v' + version;
+          shown.hidden = false;
+        }
       }
     })
     .catch(function () {

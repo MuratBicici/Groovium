@@ -179,6 +179,15 @@ h1 {
   background: var(--surface);
 }
 
+/* The version the button downloads, once GitHub has said which it is. */
+.button .version {
+  padding-left: 10px;
+  border-left: 1px solid rgba(27, 19, 12, 0.25);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
 .button svg {
   width: 18px;
   height: 18px;
