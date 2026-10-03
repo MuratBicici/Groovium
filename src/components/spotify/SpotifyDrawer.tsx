@@ -20,6 +20,7 @@ import { OpenCrate } from './OpenCrate';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
+import { useOnline } from '@/platform/online';
 
 type Stage = 'loading' | 'setup' | 'disconnected' | 'connecting' | 'connected';
 
@@ -77,6 +78,17 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
   const playlists = useSpotifyPlaylistsStore((s) => s.playlists);
   const closeCrate = useSpotifyPlaylistsStore((s) => s.closeCrate);
   const opened = playlists.find((p) => p.id === openId) ?? null;
+
+  /**
+   * Whether there is a network to reach Spotify over.
+   *
+   * Without one, nothing on this side can do anything: the songs are streamed,
+   * the shelves are Spotify's answers, and so is the search. So the side says
+   * that and only that, rather than a shelf of records that each fail when
+   * pressed. The local side is not touched — what is on this computer plays
+   * the same with or without a network.
+   */
+  const online = useOnline();
 
   /** Which stage the drawer should show, asked without touching state. */
   const stageFor = useCallback(async (): Promise<Stage> => {
@@ -186,6 +198,25 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
     });
   }, [stageFor]);
 
+  // Back on a network, the name that could not be fetched without one. The
+  // shelves need nothing of the sort: they were not mounted while offline, and
+  // ask Spotify again as they come back.
+  useEffect(() => {
+    if (!online || stage !== 'connected' || account) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const who = await fetchAccount();
+        if (!cancelled && who) setAccount(who);
+      } catch {
+        /* the drawer works without a name */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [online, stage, account]);
+
   /**
    * Opening the search from the keyboard.
    *
@@ -201,7 +232,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
   useEffect(() => {
     // Nor over an open crate: a letter typed there is not the start of a search
     // of the shelf it is covering.
-    if (!active || stage !== 'connected' || searching !== null || openId !== null) return;
+    if (!active || !online || stage !== 'connected' || searching !== null || openId !== null) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -223,7 +254,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, stage, searching, openId]);
+  }, [active, online, stage, searching, openId]);
 
   return (
     <aside
@@ -279,10 +310,10 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           </span>
         )}
         <div className="flex shrink-0 items-center gap-2">
-          {stage === 'connected' && (
+          {online && stage === 'connected' && (
             <SearchButton label={t('spotify.searchHeading')} onPress={() => setSearching('')} />
           )}
-          {stage === 'connected' && (
+          {online && stage === 'connected' && (
             <button
               type="button"
               onClick={() => void disconnect()}
@@ -306,15 +337,16 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {stage === 'loading' && <Centered>{t('spotify.checking')}</Centered>}
+        {!online && <Offline />}
+        {online && stage === 'loading' && <Centered>{t('spotify.checking')}</Centered>}
 
-        {stage === 'setup' && (
+        {online && stage === 'setup' && (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <SetupSteps onConfigured={() => void refresh()} />
           </div>
         )}
 
-        {stage === 'connecting' && (
+        {online && stage === 'connecting' && (
           <Centered>
             {t('spotify.waiting')}
             <span className="mt-1 block text-meta text-cream-400/70">
@@ -323,7 +355,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           </Centered>
         )}
 
-        {stage === 'disconnected' && (
+        {online && stage === 'disconnected' && (
           <div className="space-y-3 px-4 py-3 text-center">
             <p className="text-body text-cream-400">
               {t('spotify.savedId')}
@@ -350,7 +382,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           </div>
         )}
 
-        {stage === 'connected' && (
+        {online && stage === 'connected' && (
           <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2">
             {/* Three shelves, or the reason there are none. Nothing that
                 already worked is taken away to ask: search needs no scope at
@@ -398,15 +430,48 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
       {/* Two layers over the drawer, never both: opening a crate is not
           something that happens while a search is on screen, and the search
           closes itself the moment a result is played. */}
-      {searching !== null && (
+      {online && searching !== null && (
         <SearchLayer heading={t('spotify.searchHeading')} onClose={() => setSearching(null)}>
           <SpotifySearch opensWith={searching} onChosen={() => setSearching(null)} />
         </SearchLayer>
       )}
-      {opened && openOrigin && (
+      {online && opened && openOrigin && (
         <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
       )}
     </aside>
+  );
+}
+
+/**
+ * No network, said once and plainly, with the way out of it.
+ *
+ * A Wi-Fi sign struck through, because that is the picture everybody already
+ * reads as this; and a line underneath saying the other side still plays, so
+ * that nobody concludes the whole app has stopped.
+ */
+function Offline() {
+  const t = useT();
+  return (
+    <div role="status" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+      <svg
+        viewBox="0 0 24 24"
+        className="h-9 w-9 text-brass-400/80"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M2.5 8.8a15 15 0 0 1 19 0" />
+        <path d="M5.6 12.2a10.4 10.4 0 0 1 12.8 0" />
+        <path d="M8.8 15.6a5.6 5.6 0 0 1 6.4 0" />
+        <circle cx="12" cy="19" r="0.9" fill="currentColor" stroke="none" />
+        <path d="M3.5 3.5l17 17" />
+      </svg>
+      <p className="text-body leading-relaxed text-cream-100">{t('spotify.offline')}</p>
+      <p className="text-meta leading-relaxed text-cream-400">{t('spotify.offlineLocal')}</p>
+    </div>
   );
 }
 

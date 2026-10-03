@@ -179,6 +179,8 @@ export const en = {
   'spotify.reauthorise': 'Grant Access',
   'spotify.connect': 'Connect Spotify Account',
   'spotify.changeId': 'Use a different Client ID',
+  'spotify.offline': 'Connect to the internet to listen.',
+  'spotify.offlineLocal': 'The songs on this computer play as usual, on the Local side.',
   'spotify.searchHeading': 'Search Spotify',
   'spotify.searchPlaceholder': 'A song on Spotify, or one of your playlists',
   'spotify.searching': 'Searching…',
