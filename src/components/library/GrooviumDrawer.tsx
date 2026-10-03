@@ -13,6 +13,9 @@ import { RecordCard, RECORD_SIZE } from '@/components/spotify/RecordCard';
 import { Crate, NewCrate, useCrateCarry, type CrateFace } from '@/components/spotify/SpotifyCrates';
 import { COVER_FAILURES, CrateLayer, type CrateSource } from '@/components/spotify/OpenCrate';
 import { CoverCrop, SheetPresence, SongDetailsSheet } from '@/components/spotify/CrateSheets';
+import { SearchLayer, opensSearch } from '@/components/spotify/SearchLayer';
+import { SearchButton } from '@/components/spotify/SearchParts';
+import { LocalSearch } from './LocalSearch';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
 import { useCarriedTrack } from '@/components/player/DiscHold';
@@ -33,11 +36,14 @@ import { useT } from '@/core/i18n';
 export function GrooviumDrawer({
   id,
   switcher,
+  active = true,
   onClose,
 }: {
   id: string;
-  /** The Groovium | Spotify choice, drawn where a heading would be. */
+  /** The Local | Spotify choice, drawn where a heading would be. */
   switcher: React.ReactNode;
+  /** This side is the one showing, so typing at the drawer is typing at it. */
+  active?: boolean;
   onClose: () => void;
 }) {
   const t = useT();
@@ -120,6 +126,37 @@ export function GrooviumDrawer({
   const [open, setOpen] = useState<{ id: string; origin: Origin } | null>(null);
   const opened = open ? (playlists.find((p) => p.id === open.id) ?? null) : null;
 
+  /**
+   * The search over the shelves: null for shut, or the letter that opened it —
+   * empty when it was opened by the magnifier or Ctrl+F.
+   */
+  const [searching, setSearching] = useState<string | null>(null);
+
+  // Opened from the keyboard the way Spotify's is: Ctrl+F, or simply starting
+  // to type at the drawer. Not while anything is already over the shelves — a
+  // crate, a song's details, a question — since a letter typed there is not
+  // the start of a search of what they cover.
+  const covered = open !== null || editingSong !== null || pending !== null || confirmRemove !== null;
+  useEffect(() => {
+    if (!active || searching !== null || covered) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      const onto =
+        tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable ? 'field' : 'elsewhere';
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearching('');
+        return;
+      }
+      if (!opensSearch(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }, onto)) return;
+      e.preventDefault();
+      setSearching(e.key);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [active, searching, covered]);
+
   async function choose(which: 'files' | 'folder') {
     const summary = which === 'folder' ? await chooseFolder() : await chooseFiles();
     if (!summary || summary.paths.length === 0) return;
@@ -141,7 +178,10 @@ export function GrooviumDrawer({
       {/* Marked, so changing sides moves what is under it and not this. */}
       <div data-drawer-head className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         {switcher}
-        <CloseButton label={t('library.close')} onPress={onClose} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SearchButton label={t('library.searchHeading')} onPress={() => setSearching('')} />
+          <CloseButton label={t('library.close')} onPress={onClose} />
+        </div>
       </div>
 
       {/* Copying duplicates the audio on disk, so the size is shown before it
@@ -273,6 +313,18 @@ export function GrooviumDrawer({
         )}
       </SheetPresence>
 
+      {searching !== null && (
+        <SearchLayer heading={t('library.searchHeading')} onClose={() => setSearching(null)}>
+          <LocalSearch
+            library={library}
+            playlists={playlists}
+            coverOf={(playlist) => faceOf(playlist, library).covers[0]}
+            opensWith={searching}
+            onOpenPlaylist={(playlistId, origin) => setOpen({ id: playlistId, origin })}
+            onChosen={() => setSearching(null)}
+          />
+        </SearchLayer>
+      )}
       {opened && open && (
         <GrooviumCrate
           playlist={opened}

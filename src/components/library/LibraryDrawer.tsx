@@ -73,7 +73,12 @@ export function LibraryDrawer({ id, onClose }: { id: string; onClose: () => void
         }}
         className={showing === 'groovium' ? 'flex h-full' : 'hidden'}
       >
-        <GrooviumDrawer id={`${id}-groovium`} switcher={switcher} onClose={onClose} />
+        <GrooviumDrawer
+          id={`${id}-groovium`}
+          switcher={switcher}
+          active={showing === 'groovium'}
+          onClose={onClose}
+        />
       </div>
       {spotifyHere && (
         <div

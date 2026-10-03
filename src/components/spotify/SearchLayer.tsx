@@ -1,13 +1,12 @@
 import { useEffect } from 'react';
-import { SpotifySearch } from './SpotifySearch';
-import { useT } from '@/core/i18n';
 
 /**
- * Searching Spotify, over the drawer rather than inside it.
+ * A search, over the drawer rather than inside it — Spotify's on one side, the
+ * local one on the other.
  *
- * The same layer an opened crate uses, for the same reason: this *is* the
- * Spotify side of the window for as long as it is open, and the deck beside it
- * stays visible and reachable — a result is meant to be played onto it.
+ * The same layer an opened crate uses, for the same reason: this *is* that side
+ * of the window for as long as it is open, and the deck beside it stays visible
+ * and reachable — a result is meant to be played onto it.
  *
  * What it replaces was a box that lived in the drawer permanently. It and the
  * crates were both `flex-1`, so they split the height evenly: half the drawer
@@ -19,14 +18,14 @@ import { useT } from '@/core/i18n';
  * into, so the way out is where you came in.
  */
 export function SearchLayer({
-  opensWith,
+  heading,
   onClose,
+  children,
 }: {
-  /** The letter that opened it, when it was opened by typing. */
-  opensWith?: string | undefined;
+  heading: string;
   onClose: () => void;
+  children: React.ReactNode;
 }) {
-  const t = useT();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -65,12 +64,12 @@ export function SearchLayer({
               fill="none"
             />
           </svg>
-          <span className="truncate">{t('spotify.searchHeading')}</span>
+          <span className="truncate">{heading}</span>
         </button>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
-        <SpotifySearch opensWith={opensWith} onTrackPlayed={onClose} />
+        {children}
       </div>
     </div>
   );

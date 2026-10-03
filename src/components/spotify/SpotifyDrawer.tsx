@@ -12,6 +12,8 @@ import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
 import { SearchLayer, opensSearch } from './SearchLayer';
+import { SearchButton } from './SearchParts';
+import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
 import { OpenCrate } from './OpenCrate';
@@ -197,7 +199,9 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
    * what counts as typing lives.
    */
   useEffect(() => {
-    if (!active || stage !== 'connected' || searching !== null) return;
+    // Nor over an open crate: a letter typed there is not the start of a search
+    // of the shelf it is covering.
+    if (!active || stage !== 'connected' || searching !== null || openId !== null) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -219,7 +223,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, stage, searching]);
+  }, [active, stage, searching, openId]);
 
   return (
     <aside
@@ -276,23 +280,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
         )}
         <div className="flex shrink-0 items-center gap-2">
           {stage === 'connected' && (
-            <button
-              type="button"
-              aria-label={t('spotify.searchHeading')}
-              title={t('spotify.searchHeading')}
-              onClick={() => setSearching('')}
-              className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-            >
-              <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none">
-                <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="1.4" />
-                <path
-                  d="M7.6 7.6 10.5 10.5"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
+            <SearchButton label={t('spotify.searchHeading')} onPress={() => setSearching('')} />
           )}
           {stage === 'connected' && (
             <button
@@ -411,7 +399,9 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           something that happens while a search is on screen, and the search
           closes itself the moment a result is played. */}
       {searching !== null && (
-        <SearchLayer opensWith={searching} onClose={() => setSearching(null)} />
+        <SearchLayer heading={t('spotify.searchHeading')} onClose={() => setSearching(null)}>
+          <SpotifySearch opensWith={searching} onChosen={() => setSearching(null)} />
+        </SearchLayer>
       )}
       {opened && openOrigin && (
         <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />

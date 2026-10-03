@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { searchTracks } from '@/core/providers/spotifyApi';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
-import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
-import { useDiscFlight } from '@/components/player/DiscFlight';
-import { VinylDisc } from '@/components/player/VinylDisc';
+import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
+import { findIn } from '@/core/library/search';
+import { errorText } from '@/core/utils/errorText';
 import { useT } from '@/core/i18n';
+import { CrateResult, Hint, ResultHeading, SearchBox, TrackResult, type Rect } from './SearchParts';
 
 /**
  * Wait for typing to settle before spending a request.
@@ -27,12 +28,14 @@ const DEBOUNCE_MS = 450;
 const SHORTEST_QUERY = 2;
 
 /**
- * Find one song on Spotify.
+ * Find a song on Spotify, or one of your own playlists there.
  *
- * Deliberately just tracks. Browsing albums and playlists belongs to Spotify's
- * own client; keeping music belongs to this app's library and playlists. A
- * result plays on its own and stops — saving it to a playlist is what makes it
- * part of something that keeps going.
+ * Songs are Spotify's whole catalogue, asked for. Playlists are only the ones on
+ * the shelf below — yours and the ones you follow — found by name among what
+ * the drawer has already loaded, so they answer as each letter is typed and cost
+ * nothing. Albums and other people's playlists are not here: browsing those
+ * belongs to Spotify's own client, and keeping music belongs to this app's
+ * library and playlists.
  *
  * This used to sit in the drawer permanently, sharing the height evenly with
  * the crates because both were `flex-1`. That meant a person who was not
@@ -41,9 +44,11 @@ const SHORTEST_QUERY = 2;
  * height of the one they are read in now. It opens on request instead.
  */
 interface SpotifySearchProps {
-  /** Raised when a result starts playing, so the panel can fold away and let
-      the disc's flight to the platter be seen. */
-  onTrackPlayed?: (() => void) | undefined;
+  /**
+   * Raised when a result is chosen — a song played or a playlist opened — so
+   * the search can fold away and let what happens next be seen.
+   */
+  onChosen: () => void;
   /**
    * What to start with, for a search opened by typing rather than by pressing.
    *
@@ -54,24 +59,48 @@ interface SpotifySearchProps {
   opensWith?: string | undefined;
 }
 
-export function SpotifySearch({ onTrackPlayed, opensWith }: SpotifySearchProps) {
+export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
   const t = useT();
   const [query, setQuery] = useState(opensWith ?? '');
-  const box = useRef<HTMLInputElement | null>(null);
   const [results, setResults] = useState<TrackMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
-  const { flyToPlatter } = useDiscFlight();
+
+  const playlists = useSpotifyPlaylistsStore((s) => s.playlists);
+  const cursor = useSpotifyPlaylistsStore((s) => s.cursor);
+  const shelfLoading = useSpotifyPlaylistsStore((s) => s.loading);
+  const more = useSpotifyPlaylistsStore((s) => s.more);
+  const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
+
+  /**
+   * The rest of the shelf, while somebody is searching it.
+   *
+   * The shelf loads a page at a time as it is scrolled to, so a playlist far
+   * along it may not have been read yet — and a search that cannot find
+   * something because nobody scrolled past it is a search that lies. Each page
+   * is asked for once: a page that fails is not asked for again and again while
+   * the box stays open.
+   */
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    if (!cursor || shelfLoading || asked.current === cursor) return;
+    asked.current = cursor;
+    void more();
+  }, [cursor, shelfLoading, more]);
+
+  const lists = useMemo(() => findIn(playlists, query, (p) => [p.name]), [playlists, query]);
 
   // Ignore responses from a query the user has already typed past.
   const requestSeq = useRef(0);
 
   const run = useCallback(async (text: string) => {
     if (text.trim().length < SHORTEST_QUERY) {
+      requestSeq.current += 1;
       setResults([]);
       setProblem(null);
+      setLoading(false);
       return;
     }
 
@@ -83,7 +112,7 @@ export function SpotifySearch({ onTrackPlayed, opensWith }: SpotifySearchProps) 
       if (seq === requestSeq.current) setResults(found);
     } catch (err) {
       if (seq === requestSeq.current) {
-        setProblem(err instanceof Error ? err.message : String(err));
+        setProblem(errorText(err));
         setResults([]);
       }
     } finally {
@@ -96,27 +125,12 @@ export function SpotifySearch({ onTrackPlayed, opensWith }: SpotifySearchProps) 
     return () => clearTimeout(timer);
   }, [query, run]);
 
-  // Opened to be typed into, whichever way it was opened. The caret goes to the
-  // end so a search that began with a letter carries on from it.
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    el.focus();
-    const end = el.value.length;
-    el.setSelectionRange(end, end);
-  }, []);
+  const typed = query.trim().length > 0;
+  const nothing = !loading && results.length === 0 && lists.length === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <input
-        ref={box}
-        type="text"
-        value={query}
-        spellCheck={false}
-        placeholder={t('spotify.searchPlaceholder')}
-        onChange={(e) => setQuery(e.target.value)}
-        className="shrink-0 groove-inset rounded px-2 py-1.5 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
-      />
+      <SearchBox value={query} onChange={setQuery} placeholder={t('spotify.searchPlaceholder')} />
 
       {problem && (
         <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
@@ -130,45 +144,37 @@ export function SpotifySearch({ onTrackPlayed, opensWith }: SpotifySearchProps) 
           dark stripe here: the drawer has no surface, the visualiser is behind
           it, and the one opaque thing in the whole column was the fade. */}
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
-        {!loading && results.length === 0 && (
-          <Hint>{query.trim() ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>
-        )}
+        {nothing && <Hint>{typed ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>}
 
+        {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
+        {lists.map((playlist) => (
+          <CrateResult
+            key={playlist.id}
+            name={playlist.name}
+            cover={playlist.coverArtUrl}
+            trackCount={playlist.trackCount}
+            onOpen={(from: Rect) => {
+              onChosen();
+              void openCrate(playlist.id, from);
+            }}
+          />
+        ))}
+
+        {(results.length > 0 || (loading && typed)) && lists.length > 0 && (
+          <ResultHeading>{t('search.songs')}</ResultHeading>
+        )}
+        {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
         {results.map((track) => (
-          <li key={track.id} className="group/row flex items-center gap-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
-                if (disc) flyToPlatter(disc, track);
-                onTrackPlayed?.();
-                void playSingle(track);
-              }}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-shell-700/60"
-            >
-              <span data-disc className="shrink-0">
-                <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-body text-cream-100">{track.title}</span>
-                <span className="block truncate text-label text-cream-400">{track.artist}</span>
-              </span>
-            </button>
-            <span className="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
-              <AddToPlaylist track={track} />
-            </span>
-          </li>
+          <TrackResult
+            key={track.id}
+            track={track}
+            onPlay={() => {
+              onChosen();
+              void playSingle(track);
+            }}
+          />
         ))}
       </ul>
     </div>
-  );
-}
-
-function Hint({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="px-2 py-4 text-center text-meta leading-relaxed text-cream-400/70">
-      {children}
-    </li>
   );
 }
