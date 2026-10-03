@@ -1,4 +1,5 @@
 import {
+  useAwaitingSound,
   useCurrentTrack,
   usePlaybackState,
   usePlayerStore,
@@ -42,7 +43,9 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const hasQueue = havePlayback && !holdingRecord;
 
   const isPlaying = playbackState === 'PLAYING';
-  const isLoading = playbackState === 'LOADING';
+  // Not only the provider's LOADING: a song on its way through a provider that
+  // is still coming up is a wait too — see `awaitingSound`.
+  const isLoading = useAwaitingSound();
 
   async function onStationClick() {
     // False means there is no API key yet, which is a setup prompt rather than

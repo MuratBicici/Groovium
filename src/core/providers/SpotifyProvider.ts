@@ -370,6 +370,19 @@ export class SpotifyProvider extends BaseProvider {
       await this.player.setVolume(this.volume);
       // State arrives via player_state_changed; PLAYING is not set here.
     } catch (err) {
+      // The connection dropped under the request, which says nothing about
+      // whether Spotify got it. Usually it had: the log of a "Failed to fetch"
+      // here shows the music starting twenty seconds later, by way of the
+      // watchdog — after the window had spent those twenty seconds saying
+      // "Error" over a song that was on its way. So a request that never got
+      // an answer is waited out like any other start, with the window saying
+      // it is loading, and the watchdog decides: it asks Spotify, starts the
+      // song again if nothing is playing, and in the end says so if it cannot.
+      if (err instanceof TypeError) {
+        log('warn', 'playback', 'the play request got no answer; waiting for the sound', err);
+        this.listenForSound();
+        return;
+      }
       this.fail(describe(err));
       throw err;
     }

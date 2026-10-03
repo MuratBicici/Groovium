@@ -1,4 +1,10 @@
-import { useCurrentTrack, useIsPlaying, usePlaybackState, usePlayerStore } from '@/core/store';
+import {
+  useAwaitingSound,
+  useCurrentTrack,
+  useIsPlaying,
+  usePlaybackState,
+  usePlayerStore,
+} from '@/core/store';
 import { useT } from '@/core/i18n';
 import { VinylDisc } from './VinylDisc';
 
@@ -20,6 +26,9 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   // song on the deck plays on meanwhile, so its own state would say "Now
   // Playing" to somebody who has just asked for it to stop being.
   const finding = usePlayerStore((s) => s.findingNext);
+  // A song on its way says so from the moment it is chosen, not from the
+  // moment a provider gets round to it — see `awaitingSound`.
+  const waiting = useAwaitingSound();
 
   if (compact) {
     return (
@@ -46,7 +55,9 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   return (
     <div className="px-4 text-center">
       <p className="text-label font-medium tracking-[0.2em] text-brass-400/70 uppercase">
-        {finding ? t('status.searching') : t(`status.${playbackState}`)}
+        {finding
+          ? t('status.searching')
+          : t(`status.${waiting ? 'LOADING' : playbackState}`)}
       </p>
 
       {/* Nothing sits beside the title on purpose: the block is centred, and a

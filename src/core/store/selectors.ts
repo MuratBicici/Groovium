@@ -37,6 +37,27 @@ export const useHoldingRecord = () => usePlayerStore((s) => s.holdingRecord);
 /** True when there is something to press play on. */
 export const useHasPlayback = () => usePlayerStore((s) => s.playback.tracks.length > 0);
 
+/**
+ * Whether a song has been asked for and nothing is playing it yet.
+ *
+ * The provider saying it is loading is only half of it. Before a song gets
+ * that far there can be a provider to bring up — on the first Spotify song of
+ * a launch that is the SDK loading, a token and a device to claim, seconds of
+ * it — and the store says IDLE through all of that, because no provider is
+ * doing anything yet. The track was already on its way: `starting` said so.
+ * Read from the state alone, the window said "Ready" over a record it had just
+ * been handed and drew no light on the bar.
+ *
+ * A song still playing while the next is fetched is not a wait: the music has
+ * not stopped, and saying "Loading" over it would be wrong for those seconds.
+ */
+export function awaitingSound(s: Pick<PlayerState, 'playbackState' | 'starting'>): boolean {
+  if (s.playbackState === 'LOADING') return true;
+  return s.starting !== null && s.playbackState !== 'PLAYING';
+}
+
+export const useAwaitingSound = () => usePlayerStore(awaitingSound);
+
 /** 0..1 fraction of the current track elapsed. */
 export const useProgressFraction = () =>
   usePlayerStore((s) => (s.durationMs > 0 ? Math.min(s.positionMs / s.durationMs, 1) : 0));

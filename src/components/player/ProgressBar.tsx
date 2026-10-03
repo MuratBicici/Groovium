@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useDurationMs, usePlayerStore, usePositionMs } from '@/core/store';
+import { awaitingSound, useDurationMs, usePlayerStore, usePositionMs } from '@/core/store';
 import { clamp, formatDuration } from '@/core/utils/time';
 import { useT } from '@/core/i18n';
 
@@ -31,7 +31,7 @@ export function ProgressBar() {
    * with a light crossing it reads as something on its way — which is the
    * truth, and on a cold start it is the truth for several seconds.
    */
-  const loading = usePlayerStore((s) => s.playbackState === 'LOADING');
+  const loading = usePlayerStore(awaitingSound);
   /**
    * Next was pressed and what follows is still being looked for.
    *
