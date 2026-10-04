@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { openLogFolder, reportProblem } from '@/platform/report';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { NOTCHES } from '@/core/visualizer';
@@ -414,6 +415,31 @@ export function SettingsPanel({
                 await refresh();
               }}
             />
+          </Section>
+        )}
+
+        {/* For when something went wrong. The log is the most useful thing
+            anybody can send, and it is buried in AppData; this is the way to it
+            and to somewhere to send it. Nothing is sent by either button. */}
+        {isTauri() && (
+          <Section title={t('report.title')}>
+            <p className="text-meta leading-snug text-cream-400">{t('report.hint')}</p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void openLogFolder()}
+                className="rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
+              >
+                {t('report.openLog')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void reportProblem()}
+                className="rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
+              >
+                {t('report.open')}
+              </button>
+            </div>
           </Section>
         )}
 

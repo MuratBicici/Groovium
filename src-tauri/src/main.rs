@@ -13,6 +13,7 @@ mod media;
 mod metadata;
 mod onscreen;
 mod playlists;
+mod report;
 mod session;
 mod shell;
 mod shortcuts;
@@ -144,6 +145,8 @@ fn main() {
             audio::audio_backend_available,
             shell::set_window_box,
             shell::set_click_area,
+            report::logs_open_folder,
+            report::report_problem,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groovium");
