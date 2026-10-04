@@ -8,6 +8,7 @@ import {
   useRepeatMode,
   useShuffle,
   useStation,
+  useStationHeldOff,
   useStationSearching,
 } from '@/core/store';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
@@ -29,6 +30,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const shuffle = useShuffle();
   const station = useStation();
   const stationSearching = useStationSearching();
+  const stationHeldOff = useStationHeldOff();
 
   const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
   const next = usePlayerStore((s) => s.next);
@@ -100,9 +102,17 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       {/* Sits beside repeat because the two answer the same question — what
           happens when the track ends — and unlike the rest of the row it stays
           enabled with nothing playing, so it can be armed in advance. */}
+      {/* Held off, and saying why, while a playlist put on whole plays: it
+          was asked for as it is, and the station would add to it. */}
       <ToggleButton
-        label={t('transport.station', { state: station ? t('common.on') : t('common.off') })}
+        label={
+          stationHeldOff
+            ? t('transport.stationHeldOff')
+            : t('transport.station', { state: station ? t('common.on') : t('common.off') })
+        }
         active={station}
+        disabled={stationHeldOff}
+        hint={stationHeldOff}
         onClick={() => void onStationClick()}
       >
         <InfinityIcon searching={stationSearching} armed={station} />
@@ -139,12 +149,15 @@ function ToggleButton({
   label,
   active,
   disabled,
+  hint = false,
   onClick,
   children,
 }: {
   label: string;
   active: boolean;
   disabled?: boolean;
+  /** Show the label on hover too: for a button that is off for a reason. */
+  hint?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -152,6 +165,7 @@ function ToggleButton({
     <button
       type="button"
       aria-label={label}
+      title={hint ? label : undefined}
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}

@@ -83,6 +83,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.pause': 'Duraklat',
   'transport.repeat': 'Tekrar: {mode}',
   'transport.station': 'Sonsuz çalma: {state}',
+  'transport.stationHeldOff': 'Bütün bir çalma listesi çalarken sonsuz çalma kapalı',
   'transport.seek': 'İleri sar',
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',

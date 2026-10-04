@@ -206,6 +206,18 @@ export interface PlayerState {
    * found and played instead of stopping.
    */
   station: boolean;
+  /**
+   * A playlist put on whole — its crate played or carried to the deck — rather
+   * than one song picked out of it.
+   *
+   * The station is switched off when one starts and cannot be switched on
+   * until it has finished or something else is played: somebody who put a
+   * playlist on asked for that playlist, and the station's finds after it are
+   * somebody else's idea of what comes next. A song chosen from inside a
+   * playlist is a different thing — a starting point, which is exactly what
+   * the station is for — and leaves the station as it was.
+   */
+  wholeList: boolean;
   /** True while a suggestion is being looked up. */
   stationSearching: boolean;
   /**
@@ -266,8 +278,11 @@ export interface PlayerActions {
   refreshLibrary: () => Promise<void>;
   refreshPlaylists: () => Promise<void>;
 
-  /** Play a saved collection from the given position. */
-  playFrom: (contextId: ContextId, index: number) => Promise<void>;
+  /**
+   * Play a saved collection from the given position. `whole` when the
+   * playlist itself was put on, not a song in it — see `wholeList`.
+   */
+  playFrom: (contextId: ContextId, index: number, whole?: boolean) => Promise<void>;
   /** Play one track on its own — no continuation. */
   playSingle: (track: TrackMetadata) => Promise<void>;
   /**
@@ -384,6 +399,7 @@ const initialState: PlayerState = {
   skipped: [],
   importing: null,
   station: false,
+  wholeList: false,
   stationSearching: false,
   findingNext: false,
   stationQueue: [],
@@ -707,6 +723,16 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({ stationHistory: history.slice(-STATION_MEMORY) });
   }
 
+  /**
+   * What starting a collection does to the station: a whole playlist switches
+   * it off and holds it off, anything else lets it be.
+   */
+  function wholeListStarting(whole: boolean): Partial<PlayerState> {
+    if (!whole) return { wholeList: false };
+    if (get().station) log('info', 'station', 'off while a whole playlist plays');
+    return { wholeList: true, station: false };
+  }
+
   /** Whether the track at `index` was put there by the station, not by anyone. */
   function isStationTrack(index: number): boolean {
     const id = get().playback.tracks[index]?.id;
@@ -759,7 +785,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       return;
     }
 
-    set({ playbackState: 'IDLE', positionMs: 0 });
+    // Played to the end: a playlist put on whole has had its say, and the
+    // station can be asked for again.
+    set({ playbackState: 'IDLE', positionMs: 0, wholeList: false });
   }
 
   function handleProviderEvent(event: ProviderEvent): void {
@@ -1105,11 +1133,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       reconcilePlayback();
     },
 
-    async playFrom(contextId, index) {
+    async playFrom(contextId, index, whole = false) {
       const tracks = resolveContext(contextId);
       if (tracks.length === 0) return;
 
       set({
+        ...wholeListStarting(whole),
         playback: { id: contextId, tracks, index },
         shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
         // A new collection; the old trail went with it.
@@ -1124,6 +1153,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       const shuffling = shuffle ?? get().shuffle;
       const index = shuffling ? Math.floor(Math.random() * tracks.length) : 0;
       set({
+        // Only ever a whole crate: a song from one is played on its own.
+        ...wholeListStarting(true),
         playback: { id, tracks, index },
         shuffle: shuffling,
         shuffleOrder: shuffling ? shuffledIndices(tracks.length, index) : [],
@@ -1135,6 +1166,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     async playSingle(track) {
       set({
+        wholeList: false,
         playback: { id: 'single', tracks: [track], index: 0 },
         // `[0]`, not `[]`, when shuffle is on. `playbackOrder` needs the order
         // and the track list to be the same length; an empty one could never
@@ -1405,10 +1437,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         stationAdded: [],
         upNext: [],
         skipped: [],
+        wholeList: false,
       });
     },
 
     async toggleStation() {
+      // Not while a playlist put on whole is playing; the button says so.
+      if (!get().station && get().wholeList) return true;
       if (get().station) {
         // The queue stays: with the toggle off the machinery is unchanged, so
         // discarding it would only make the next press pay for a lookup again.

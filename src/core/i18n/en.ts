@@ -84,6 +84,7 @@ export const en = {
   'transport.pause': 'Pause',
   'transport.repeat': 'Repeat: {mode}',
   'transport.station': 'Infinite play: {state}',
+  'transport.stationHeldOff': 'Infinite play is off while a whole playlist plays',
   'transport.seek': 'Seek',
   'transport.volume': 'Volume',
   'transport.mute': 'Mute',
