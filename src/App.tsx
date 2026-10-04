@@ -6,7 +6,7 @@ import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
-import { DiscHoldProvider } from '@/components/player/DiscHold';
+import { DiscHoldProvider, useCarryKind } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
 import { WindowGlow } from '@/components/player/WindowGlow';
 import { CoverTheme } from '@/components/player/CoverTheme';
@@ -708,8 +708,18 @@ function DrawerSlot({
   queue: boolean;
   queueView: React.ReactNode;
 }) {
+  /**
+   * A song carried out of the drawer brings the queue out beside it, so the
+   * hand has both places to go: the deck to play it, the palette to queue it.
+   * Only a song — a crate is a whole playlist and has no place in a queue —
+   * and only one from the drawer: the deck's own record is already playing.
+   * It goes again when the hand is empty, unless it was open already.
+   */
+  const carry = useCarryKind();
+  const carryingSong = carry !== null && carry.visiting && carry.look === 'record';
+  const showQueue = queue || carryingSong;
   const { present, ref } = usePresence(lyrics);
-  const { present: queuePresent, ref: queueRef } = usePresence(queue);
+  const { present: queuePresent, ref: queueRef } = usePresence(showQueue);
   return (
     <div className="relative flex shrink-0">
       <div
@@ -729,7 +739,7 @@ function DrawerSlot({
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-shell-900 transition-opacity duration-300 ease-out"
-        style={{ opacity: queue ? 0.32 : 0 }}
+        style={{ opacity: showQueue ? 0.32 : 0 }}
       />
       {queuePresent && (
         <div ref={queueRef} className="pointer-events-none absolute inset-0 flex">

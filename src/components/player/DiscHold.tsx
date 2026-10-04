@@ -342,6 +342,23 @@ const HeldContext = createContext<string | null>(null);
  */
 const CarriedContext = createContext<string | null>(null);
 
+/**
+ * What is in the hand, as far as anything outside it needs to know: whether it
+ * came from somewhere other than the deck, and whether it is a record or a
+ * crate. Null when the hand is empty.
+ */
+export interface CarryKind {
+  visiting: boolean;
+  look: 'record' | 'sleeve';
+}
+
+const CarryKindContext = createContext<CarryKind | null>(null);
+
+/** What kind of thing is being carried, for something that opens to take it. */
+export function useCarryKind(): CarryKind | null {
+  return useContext(CarryKindContext);
+}
+
 export function useDiscHold(): DiscHoldActions {
   return useContext(ActionsContext);
 }
@@ -1020,6 +1037,18 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     [finishSeat, finishThrow, paint, syncSpin],
   );
 
+  // Kept the same object while the kind is the same, so what reads it is not
+  // told of a change on every frame of a carry.
+  const heldVisiting = held?.visiting;
+  const heldLook = held?.look;
+  const carryKind = useMemo<CarryKind | null>(
+    () =>
+      heldVisiting === undefined || heldLook === undefined
+        ? null
+        : { visiting: heldVisiting, look: heldLook },
+    [heldVisiting, heldLook],
+  );
+
   const actions = useMemo(
     () => ({
       grab,
@@ -1039,6 +1068,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     <ActionsContext.Provider value={actions}>
       <HeldContext.Provider value={held && !held.visiting ? held.track.id : null}>
         <CarriedContext.Provider value={held?.track.id ?? null}>
+        <CarryKindContext.Provider value={carryKind}>
           {children}
 
         {/* z-10, the disc-motion layer — the same one the flight uses, for the
@@ -1097,6 +1127,7 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
             </div>
             )}
           </div>
+        </CarryKindContext.Provider>
         </CarriedContext.Provider>
       </HeldContext.Provider>
     </ActionsContext.Provider>
