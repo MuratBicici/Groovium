@@ -8,7 +8,7 @@ import { useT } from '@/core/i18n';
  * point the icon lookup starts missing in Turkish and every button turns into
  * the library. The id is the id now; the label is looked up from it.
  */
-export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings' | 'lyrics';
+export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings' | 'lyrics' | 'queue';
 
 const ICONS: Record<PanelId, React.ReactNode> = {
   library: <path d="M4 5v14M8 5v14M12 6l6 13" strokeLinecap="round" />,
@@ -24,6 +24,15 @@ const ICONS: Record<PanelId, React.ReactNode> = {
       fill="currentColor"
       stroke="none"
     />
+  ),
+  // Records stacked one behind another, the front one turned to face you: what
+  // is coming, in order.
+  queue: (
+    <>
+      <circle cx="9" cy="12" r="5.5" />
+      <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" />
+      <path d="M15 7.2a6.5 6.5 0 0 1 0 9.6M18.5 5a9.5 9.5 0 0 1 0 14" strokeLinecap="round" />
+    </>
   ),
   // A speech line with a note: words to a song. The panel is a development
   // build's alone for now.
@@ -62,6 +71,10 @@ interface PanelButtonProps {
    * text in it would have to resize when the language changes.
    */
   badge?: string | undefined;
+  /** The button itself, for something that has to know where it is on screen. */
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  /** A carried record is over this and would be taken. */
+  offered?: boolean;
 }
 
 /**
@@ -71,12 +84,21 @@ interface PanelButtonProps {
  * tooltip carries the name — which also means the row does not resize when the
  * language changes, since none of these labels are drawn.
  */
-export function PanelButton({ panel, open, onToggle, controls, badge }: PanelButtonProps) {
+export function PanelButton({
+  panel,
+  open,
+  onToggle,
+  controls,
+  badge,
+  buttonRef,
+  offered = false,
+}: PanelButtonProps) {
   const t = useT();
   const name = t(`panel.${panel}`);
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       // The badge joins the label rather than being drawn and left unsaid: a
       // dot is not something a screen reader can report on its own.
@@ -87,7 +109,9 @@ export function PanelButton({ panel, open, onToggle, controls, badge }: PanelBut
       aria-controls={controls}
       title={badge ? `${name} — ${badge}` : name}
       onClick={onToggle}
-      className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+      className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-[color,background-color,transform,box-shadow] ${
+        offered ? 'groove-queue-offered ' : ''
+      }${
         open
           ? 'bg-brass-600 text-on-accent'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'

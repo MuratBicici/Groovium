@@ -25,6 +25,9 @@ import {
   showSpotify,
   toCompact,
 } from '@/core/lyrics/layout';
+import { pressQueue, queueHidden } from '@/core/queue/view';
+import { QueueDrawer } from '@/components/queue/QueueDrawer';
+import { QueueButton } from '@/components/queue/QueueButton';
 import { useLyricsStore } from '@/core/lyrics/store';
 import { followPlayer } from '@/core/lyrics/playhead';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
@@ -70,6 +73,7 @@ const PANEL_IDS = {
  */
 const DRAWER_ID = 'groovium-spotify';
 const LYRICS_ID = 'groovium-lyrics';
+const QUEUE_ID = 'groovium-queue';
 
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
 type Overlay = 'none' | keyof typeof PANEL_IDS;
@@ -150,6 +154,18 @@ export default function App() {
   /** The drawer and the lyrics together — see `src/core/lyrics/layout.ts`. */
   const layout = { drawerOpen, lyricsOn, lyricsPlace };
   const lyricsInDrawer = fullShown(layout);
+  /**
+   * The queue's palette, over whatever the drawer holds. Not remembered
+   * between launches: it is looked at, not lived in. Only shown while the
+   * drawer is out — anything that puts the drawer away puts it away too.
+   */
+  const [queue, setQueue] = useState(queueHidden);
+  const queueShown = queue.shown && drawerOpen;
+  /** The drawer's own close, from any of its three faces. */
+  const shutDrawer = () => {
+    setQueue(queueHidden);
+    setLyricsLayout(closeDrawer(layout));
+  };
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const scale = useSettingsStore((s) => s.scale);
@@ -521,8 +537,13 @@ export default function App() {
                 would be saying they had. */}
             <PanelButton
               panel="library"
-              open={drawerOut(layout)}
-              onToggle={() => setLyricsLayout(pressSpotify(layout))}
+              open={drawerOut(layout) && !queueShown}
+              onToggle={() => {
+                // Over the queue, the library is a press away and the drawer
+                // stays out; otherwise this is the drawer, out or away.
+                if (queueShown) setQueue(queueHidden);
+                else setLyricsLayout(pressSpotify(layout));
+              }}
               controls={DRAWER_ID}
             />
             {/* The lookup is Rust's, so like Spotify this is the app's alone —
@@ -531,10 +552,23 @@ export default function App() {
               <PanelButton
                 panel="lyrics"
                 open={lyricsOn}
-                onToggle={() => setLyricsLayout(pressLyrics(layout))}
+                onToggle={() => {
+                  setQueue(queueHidden);
+                  setLyricsLayout(pressLyrics(layout));
+                }}
                 controls={LYRICS_ID}
               />
             )}
+            <QueueButton
+              open={queueShown}
+              controls={QUEUE_ID}
+              onToggle={() => {
+                const next = pressQueue(queueShown ? queue : queueHidden, drawerOpen);
+                setQueue(next.view);
+                if (next.drawerOpen === drawerOpen) return;
+                setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
+              }}
+            />
             <PanelButton
               panel="settings"
               open={shown === 'settings'}
@@ -549,14 +583,16 @@ export default function App() {
       {drawerPresent && (
         <DrawerSlot
           lyrics={lyricsInDrawer}
+          queue={queueShown}
+          queueView={<QueueDrawer id={QUEUE_ID} side={drawerSide} onClose={shutDrawer} />}
           spotify={
-            <LibraryDrawer id={DRAWER_ID} onClose={() => setLyricsLayout(closeDrawer(layout))} />
+            <LibraryDrawer id={DRAWER_ID} onClose={shutDrawer} />
           }
           lyricsView={
             <LyricsDrawer
               id={LYRICS_ID}
               side={drawerSide}
-              onClose={() => setLyricsLayout(closeDrawer(layout))}
+              onClose={shutDrawer}
               onCompact={() => setLyricsLayout(toCompact(layout))}
             />
           }
@@ -662,24 +698,40 @@ function DrawerSlot({
   lyrics,
   spotify,
   lyricsView,
+  queue,
+  queueView,
 }: {
   lyrics: boolean;
   spotify: React.ReactNode;
   lyricsView: React.ReactNode;
+  /** The queue's palette is over everything else in the drawer. */
+  queue: boolean;
+  queueView: React.ReactNode;
 }) {
   const { present, ref } = usePresence(lyrics);
+  const { present: queuePresent, ref: queueRef } = usePresence(queue);
   return (
     <div className="relative flex shrink-0">
       <div
-        inert={lyrics}
+        inert={lyrics || queue}
         className="flex transition-opacity duration-300 ease-out"
-        style={{ opacity: lyrics ? 0 : 1 }}
+        style={{ opacity: lyrics || queue ? 0 : 1 }}
       >
         {spotify}
       </div>
       {present && (
-        <div ref={ref} className="absolute inset-0 flex">
+        <div
+          ref={ref}
+          inert={queue}
+          className="absolute inset-0 flex transition-opacity duration-300 ease-out"
+          style={{ opacity: queue ? 0 : undefined }}
+        >
           {lyricsView}
+        </div>
+      )}
+      {queuePresent && (
+        <div ref={queueRef} className="absolute inset-0 flex">
+          {queueView}
         </div>
       )}
     </div>

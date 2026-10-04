@@ -44,6 +44,7 @@ import {
   type ScanSummary,
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
+import { moved, nextUnskipped, stepWithin, type QueuedTrack, type Upcoming } from './order';
 import {
   isAuthenticated as spotifyIsAuthenticated,
   signOut as spotifySignOut,
@@ -181,6 +182,22 @@ export interface PlayerState {
   starting: TrackMetadata | null;
   /** Playback order when shuffle is on. Indices into `playback.tracks`. */
   shuffleOrder: number[];
+  /**
+   * Songs queued by hand, to play before the collection carries on.
+   *
+   * Each is played as an interjection: the collection's place is left where it
+   * was, so when the queue is empty again it carries on from there. Kept when
+   * a different collection is chosen — that is what a queue is for — and
+   * emptied only by clearing it or throwing the record away.
+   */
+  upNext: QueuedTrack[];
+  /**
+   * Places in the collection taken off the queue for this time round.
+   *
+   * The song stays in its playlist; it is only stepped over once, and the skip
+   * is spent when the order passes it.
+   */
+  skipped: number[];
   /** Non-null while files are being copied in. */
   importing: ImportProgress | null;
 
@@ -264,6 +281,26 @@ export interface PlayerActions {
    */
   playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean) => Promise<void>;
 
+  /** Put a song at the end of the queue. */
+  queueLast: (track: TrackMetadata) => void;
+  /** Put a song at the front of the queue, to play when this one ends. */
+  queueNext: (track: TrackMetadata) => void;
+  /** Put a song at a place in the queue — where a record was dropped on it. */
+  queueAt: (track: TrackMetadata, at: number) => void;
+  /** Move a queued song to another place in the queue. */
+  moveQueued: (from: number, to: number) => void;
+  /**
+   * Something still to come, to the front of the queue. A queued song moves;
+   * a song of the collection or a station pick is taken from its place and
+   * queued instead.
+   */
+  promoteUpcoming: (entry: Upcoming) => void;
+  /** Something still to come, not played: out of the queue, or skipped once. */
+  skipUpcoming: (entry: Upcoming) => void;
+  /** Something still to come, played now. */
+  playUpcoming: (entry: Upcoming) => Promise<void>;
+  clearQueue: () => void;
+
   togglePlayPause: () => Promise<void>;
   next: () => Promise<void>;
   previous: () => Promise<void>;
@@ -343,6 +380,8 @@ const initialState: PlayerState = {
   playback: EMPTY_CONTEXT,
   starting: null,
   shuffleOrder: [],
+  upNext: [],
+  skipped: [],
   importing: null,
   station: false,
   stationSearching: false,
@@ -355,39 +394,31 @@ const initialState: PlayerState = {
   holdingRecord: false,
 };
 
-/**
- * Where a step lands in a playback order, or null when it runs off the end.
- *
- * Pulled out of the store so it can be tested: every Next, every Previous and
- * every natural track end routes through this, and it was reachable only by
- * instantiating the store, its four providers and a DOM.
- */
-export function stepWithin(
-  order: number[],
-  currentIndex: number,
-  step: number,
-  wrap: boolean,
-): number | null {
-  if (order.length === 0) return null;
-
-  const current = order.indexOf(currentIndex);
-  // An index outside the order — a collection that changed under a stale
-  // position. Step from the edge the move is coming *from*, so Previous still
-  // goes back; taking 0 for both directions made Previous move forward.
-  const position = current === -1 ? (step > 0 ? 0 : order.length - 1) : current + step;
-
-  if (position < 0 || position >= order.length) {
-    if (!wrap) return null;
-    const wrapped = ((position % order.length) + order.length) % order.length;
-    return order[wrapped] ?? null;
-  }
-  return order[position] ?? null;
-}
+export { stepWithin } from './order';
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
   function outputAmplitude(): number {
     const { muted, volume } = get();
     return muted ? 0 : volumeToAmplitude(volume);
+  }
+
+  /** A key for a newly queued song, unique for the life of the window. */
+  let queuedSoFar = 0;
+  const queueKey = () => `queued:${(queuedSoFar += 1)}`;
+
+  /**
+   * Whether the song on the deck came from the queue rather than the
+   * collection. Repeat-one replays it rather than the collection's song, and
+   * Previous goes back to the collection's song rather than before it.
+   */
+  let interjecting = false;
+
+  /** The first queued song, taken off the queue. */
+  function takeQueued(): QueuedTrack | null {
+    const [first, ...rest] = get().upNext;
+    if (!first) return null;
+    set({ upNext: rest });
+    return first;
   }
 
   function playbackOrder(): number[] {
@@ -397,7 +428,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   }
 
   function neighborIndex(step: number): number | null {
-    const { playback, repeat } = get();
+    const { playback, repeat, skipped } = get();
+    if (step > 0 && skipped.length > 0) {
+      const { index, passed } = nextUnskipped(playbackOrder(), playback.index, repeat === 'all', skipped);
+      if (passed.length > 0) set({ skipped: skipped.filter((at) => !passed.includes(at)) });
+      return index;
+    }
     return stepWithin(playbackOrder(), playback.index, step, repeat === 'all');
   }
 
@@ -686,7 +722,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     if (trackId !== null && currentTrack !== null && trackId !== currentTrack.id) return;
 
     if (repeat === 'one' && playback.index >= 0) {
-      await startTrack(playback.index);
+      if (interjecting && currentTrack) await startQueued(currentTrack);
+      else await startTrack(playback.index);
+      return;
+    }
+
+    // Songs queued by hand come before the rest of the collection.
+    const queued = takeQueued();
+    if (queued) {
+      await startQueued(queued.track);
       return;
     }
 
@@ -801,7 +845,28 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   async function startTrack(index: number, continuingStation = false): Promise<void> {
     const track = get().playback.tracks[index];
     if (!track) return;
+    interjecting = false;
+    await begin(track, index, continuingStation);
+  }
 
+  /**
+   * Play a song from the queue, as an interjection.
+   *
+   * The collection's place is not moved: when this ends, Next and a track
+   * ending both carry on with the collection from where it was. The station's
+   * run is not ended either — a song queued by hand is a detour in it, not a
+   * different run.
+   */
+  async function startQueued(track: TrackMetadata): Promise<void> {
+    interjecting = true;
+    await begin(track, get().playback.index, true);
+  }
+
+  async function begin(
+    track: TrackMetadata,
+    index: number,
+    continuingStation: boolean,
+  ): Promise<void> {
     if (!continuingStation) discardStationQueue();
     // From here to the end, however it ends: this track is on its way. The
     // record flying to the deck rests until this clears rather than until a
@@ -1049,6 +1114,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         shuffleOrder: get().shuffle ? shuffledIndices(tracks.length, index) : [],
         // A new collection; the old trail went with it.
         stationAdded: [],
+        skipped: [],
       });
       await startTrack(index);
     },
@@ -1062,6 +1128,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         shuffle: shuffling,
         shuffleOrder: shuffling ? shuffledIndices(tracks.length, index) : [],
         stationAdded: [],
+        skipped: [],
       });
       await startTrack(index);
     },
@@ -1075,8 +1142,76 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         // rest of its life sequential with the shuffle button still lit.
         shuffleOrder: get().shuffle ? [0] : [],
         stationAdded: [],
+        skipped: [],
       });
       await startTrack(0);
+    },
+
+    queueLast(track) {
+      set({ upNext: [...get().upNext, { key: queueKey(), track }] });
+    },
+
+    queueNext(track) {
+      get().queueAt(track, 0);
+    },
+
+    queueAt(track, at) {
+      const list = [...get().upNext];
+      list.splice(Math.max(0, Math.min(at, list.length)), 0, { key: queueKey(), track });
+      set({ upNext: list });
+    },
+
+    moveQueued(from, to) {
+      set({ upNext: moved(get().upNext, from, to) });
+    },
+
+    promoteUpcoming(entry) {
+      if (entry.kind === 'queued') {
+        const at = get().upNext.findIndex((q) => q.key === entry.key);
+        if (at > 0) set({ upNext: moved(get().upNext, at, 0) });
+        return;
+      }
+      get().skipUpcoming(entry);
+      get().queueNext(entry.track);
+    },
+
+    skipUpcoming(entry) {
+      if (entry.kind === 'queued') {
+        set({ upNext: get().upNext.filter((q) => q.key !== entry.key) });
+      } else if (entry.kind === 'station') {
+        set({ stationQueue: get().stationQueue.filter((t) => t.id !== entry.track.id) });
+      } else if (!get().skipped.includes(entry.index)) {
+        set({ skipped: [...get().skipped, entry.index] });
+      }
+    },
+
+    async playUpcoming(entry) {
+      if (entry.kind === 'queued') {
+        // What was queued before it is played past, as it would have been.
+        const at = get().upNext.findIndex((q) => q.key === entry.key);
+        if (at < 0) return;
+        set({ upNext: get().upNext.slice(at + 1) });
+        await startQueued(entry.track);
+        return;
+      }
+      if (entry.kind === 'station') {
+        // To the front of what the station found, and played the way the
+        // station plays its own: appended to the collection, the run going on.
+        set({
+          stationQueue: [
+            entry.track,
+            ...get().stationQueue.filter((t) => t.id !== entry.track.id),
+          ],
+        });
+        await playStationTrack();
+        return;
+      }
+      set({ skipped: [] });
+      await startTrack(entry.index, isStationTrack(entry.index));
+    },
+
+    clearQueue() {
+      set({ upNext: [] });
     },
 
     async togglePlayPause() {
@@ -1099,6 +1234,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // Already being answered. A second press while the station looks would
       // take the first find and then skip straight past it to a second one.
       if (get().findingNext) return;
+      const queued = takeQueued();
+      if (queued) {
+        await startQueued(queued.track);
+        return;
+      }
       const index = neighborIndex(1);
       if (index !== null) {
         await startTrack(index);
@@ -1123,6 +1263,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     async previous() {
       if (get().positionMs > RESTART_THRESHOLD_MS) {
         await get().seek(0);
+        return;
+      }
+      // A queued song was a detour; back is the collection's song it
+      // interrupted, which is where the collection still is.
+      if (interjecting && get().playback.index >= 0) {
+        await startTrack(get().playback.index);
         return;
       }
       const index = neighborIndex(-1);
@@ -1257,6 +1403,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         playback: EMPTY_CONTEXT,
         shuffleOrder: [],
         stationAdded: [],
+        upNext: [],
+        skipped: [],
       });
     },
 

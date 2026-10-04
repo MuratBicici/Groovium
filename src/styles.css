@@ -1235,3 +1235,55 @@ body {
 :root[data-motion='off'] .groove-spin {
   animation: none;
 }
+
+/*
+ * The queue's palette: a felt mat in the window's own colour, a brass rim, and
+ * a hub. The fibres are an image laid over this colour (see `feltTexture`); the
+ * shadows are what make it a mat lying in the drawer rather than a disc printed
+ * on it — sunk a little at its edge, lifted a little by its rim.
+ */
+.groove-palette-felt {
+  background-color: color-mix(in srgb, var(--color-shell-800) 82%, black);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-brass-600) 70%, transparent),
+    0 0 0 3px rgb(0 0 0 / 0.45),
+    0 18px 40px rgb(0 0 0 / 0.45),
+    inset 0 0 40px rgb(0 0 0 / 0.55),
+    inset 0 2px 0 rgb(255 255 255 / 0.04);
+}
+
+/* Light from above, the same side the deck is lit from, and still as it turns. */
+.groove-palette-light {
+  background: radial-gradient(
+    circle at 50% 18%,
+    rgb(var(--sheen) / 0.07),
+    rgb(var(--sheen) / 0) 55%
+  );
+}
+
+.groove-palette-hub {
+  background: radial-gradient(
+    circle at 35% 30%,
+    var(--color-brass-400),
+    var(--color-brass-600) 60%,
+    color-mix(in srgb, var(--color-brass-600) 60%, black)
+  );
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.6),
+    inset 0 1px 1px rgb(255 255 255 / 0.25);
+}
+
+/* A record put on the queue by hand: a brass ring round it. */
+.groove-queued-ring {
+  box-shadow:
+    0 0 0 2px var(--color-brass-500),
+    0 0 12px color-mix(in srgb, var(--color-brass-400) 40%, transparent);
+}
+
+/* The Sıra button while a carried record is over it and would go on the queue. */
+.groove-queue-offered {
+  box-shadow:
+    0 0 0 2px var(--color-brass-400),
+    0 0 14px color-mix(in srgb, var(--color-brass-400) 50%, transparent);
+  transform: scale(1.12);
+}

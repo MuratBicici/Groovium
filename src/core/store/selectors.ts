@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { stepWithin, usePlayerStore, type PlayerState } from './playerStore';
+import { upcoming, type Upcoming } from './order';
 
 /**
  * Narrow selector hooks.
@@ -88,4 +91,29 @@ export function upcomingCovers(s: PlayerState): string {
   ];
   const covers = near.map((track) => track?.coverArtUrl).filter((url): url is string => !!url);
   return [...new Set(covers)].join('\n');
+}
+
+/**
+ * The songs still to come, in the order they will play.
+ *
+ * Picked as a shallow slice and worked out once per change: `upcoming` builds a
+ * new list every time it runs, and handed straight to the store as a selector
+ * that would be a new answer on every read — which React takes as the store
+ * never settling.
+ */
+export function useUpcoming(limit = 40): Upcoming[] {
+  const slice = usePlayerStore(
+    useShallow((s) => ({
+      upNext: s.upNext,
+      playback: s.playback,
+      shuffle: s.shuffle,
+      shuffleOrder: s.shuffleOrder,
+      repeat: s.repeat,
+      skipped: s.skipped,
+      station: s.station,
+      stationQueue: s.stationQueue,
+      stationAdded: s.stationAdded,
+    })),
+  );
+  return useMemo(() => upcoming(slice, limit), [slice, limit]);
 }
