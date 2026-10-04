@@ -6,6 +6,7 @@ import {
   usePlayerStore,
 } from '@/core/store';
 import { useT } from '@/core/i18n';
+import { useSlowConnection } from '@/core/providers/connectionHealth';
 import { VinylDisc } from './VinylDisc';
 
 /**
@@ -29,6 +30,10 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   // A song on its way says so from the moment it is chosen, not from the
   // moment a provider gets round to it — see `awaitingSound`.
   const waiting = useAwaitingSound();
+  // Said beside the state rather than instead of it: the song is still
+  // playing, or still loading, and the connection is why it keeps stopping.
+  // Only over a Spotify song — a local one does not stream.
+  const slow = useSlowConnection() && track?.source === 'spotify';
 
   if (compact) {
     return (
@@ -58,6 +63,7 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
         {finding
           ? t('status.searching')
           : t(`status.${waiting ? 'LOADING' : playbackState}`)}
+        {slow && <span className="text-cream-400/70"> · {t('status.slowConnection')}</span>}
       </p>
 
       {/* Nothing sits beside the title on purpose: the block is centred, and a

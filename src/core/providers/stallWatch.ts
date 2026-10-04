@@ -402,3 +402,49 @@ export const OUTAGE_CHECKS = 2;
 export function outOfReach(missed: number, lastAnsweredAt: number, now: number): boolean {
   return missed >= OUTAGE_CHECKS && now - lastAnsweredAt >= OUTAGE_AFTER_MS;
 }
+
+/**
+ * How often the player is asked where it is, to notice the sound stopping in
+ * the middle of a song.
+ *
+ * The SDK's own state, not a request to anyone: free, so once a second. What it
+ * is for is a slow connection, where the music streams in bursts and stops
+ * whenever the buffer runs dry — Spotify's servers go on saying it is playing,
+ * so the watchdog above never hears of it, and the bar went on filling over the
+ * silence until a check put it two seconds back.
+ */
+export const BUFFER_POLL_MS = 1_000;
+
+/** Readings in a row without the position moving before the sound counts as stopped. */
+export const BUFFER_STILL_POLLS = 2;
+
+/** What the last readings of the player's position were. */
+export interface BufferTrack {
+  position: number | null;
+  at: number;
+  still: number;
+}
+
+export const freshBufferTrack: BufferTrack = { position: null, at: 0, still: 0 };
+
+/**
+ * One reading of the player, and whether the sound has run dry.
+ *
+ * Moving means at least half as far as the time that passed: a position that
+ * crawls is not music playing. Backwards is a seek and counts as moving. The
+ * player saying it is still loading is believed on its own.
+ */
+export function bufferStep(
+  track: BufferTrack,
+  reading: { position: number; loading: boolean; at: number },
+): { track: BufferTrack; dry: boolean } {
+  const moved =
+    track.position === null ||
+    reading.position < track.position ||
+    reading.position - track.position >= (reading.at - track.at) * 0.5;
+  const still = reading.loading || !moved ? track.still + 1 : 0;
+  return {
+    track: { position: reading.position, at: reading.at, still },
+    dry: reading.loading || still >= BUFFER_STILL_POLLS,
+  };
+}

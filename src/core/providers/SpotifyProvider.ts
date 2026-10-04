@@ -18,7 +18,12 @@ import {
   watchingFrom,
   type Watch,
   outOfReach,
+  BUFFER_POLL_MS,
+  bufferStep,
+  freshBufferTrack,
+  type BufferTrack,
 } from './stallWatch';
+import { noteSlow } from './connectionHealth';
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
 import { currentPlayback, playOnDevice } from './spotifyApi';
@@ -62,6 +67,17 @@ const SOUND_LISTEN_MS = 250;
  * it is not coming, and that is what the watchdog is for.
  */
 const SOUND_PATIENCE_MS = 20_000;
+
+/**
+ * Past these, a start or a check is a sign of a slow connection.
+ *
+ * A start usually makes its sound in about two seconds — the average over
+ * every start in the log of early October — and a check comes back well inside
+ * one. On the morning starts took nine to seventeen seconds, the songs also
+ * stopped in the middle; these are what notice that kind of morning.
+ */
+const SLOW_START_MS = 6_000;
+const SLOW_ANSWER_MS = 3_000;
 
 /**
  * How near the end the clock must be for a reset to zero to mean the track
@@ -248,6 +264,11 @@ export class SpotifyProvider extends BaseProvider {
   /** Checks in a row that got no answer at all, and when the last one did. */
   private missed = 0;
   private lastAnsweredAt = 0;
+  /** The once-a-second look at the player's own position, while a song plays. */
+  private bufferWatch: ReturnType<typeof setInterval> | null = null;
+  private bufferTrack: BufferTrack = freshBufferTrack;
+  /** When the sound ran dry in the middle of the song, while it is still dry. */
+  private dryingSince: number | null = null;
 
   /**
    * A fast path, not the mechanism.
@@ -625,6 +646,10 @@ export class SpotifyProvider extends BaseProvider {
       this.stopTicker();
       this.setState('LOADING');
       this.listenForSound();
+    } else if (this.dryingSince !== null) {
+      // The sound ran dry mid-song. The SDK says playing throughout — it is,
+      // in its own view — and the buffer watch is what says when it is back.
+      this.setState('LOADING');
     } else {
       this.heard();
       this.setState('PLAYING');
@@ -674,7 +699,9 @@ export class SpotifyProvider extends BaseProvider {
     this.startingFrom = null;
     this.leaving = null;
     this.stopListening();
-    if (came) log('info', 'playback', `sound after ${took} ms`);
+    if (!came) return;
+    log('info', 'playback', `sound after ${took} ms`);
+    if (took > SLOW_START_MS) noteSlow('slow start', `${took} ms`);
   }
 
   /**
@@ -723,6 +750,7 @@ export class SpotifyProvider extends BaseProvider {
 
   private startTicker(): void {
     this.startVerifier();
+    this.startBufferWatch();
     if (this.ticker) return;
     this.lastTickAt = performance.now();
     this.ticker = setInterval(() => {
@@ -761,9 +789,88 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   private stopTicker(): void {
+    this.stopBufferWatch();
+    this.stopClock();
+  }
+
+  /** The clock alone, leaving the buffer watch to notice the sound coming back. */
+  private stopClock(): void {
     if (!this.ticker) return;
     clearInterval(this.ticker);
     this.ticker = null;
+  }
+
+  private startBufferWatch(): void {
+    if (this.bufferWatch) return;
+    this.bufferTrack = freshBufferTrack;
+    this.bufferWatch = setInterval(() => void this.checkBuffer(), BUFFER_POLL_MS);
+  }
+
+  private stopBufferWatch(): void {
+    if (this.bufferWatch) clearInterval(this.bufferWatch);
+    this.bufferWatch = null;
+    this.bufferTrack = freshBufferTrack;
+    this.dryingSince = null;
+  }
+
+  /**
+   * Whether the sound has run dry in the middle of the song, or come back.
+   *
+   * On a slow connection the music streams in bursts and stops whenever the
+   * buffer empties. Spotify's servers go on saying it is playing, so the
+   * watchdog never hears of it; the bar went on filling over the silence and a
+   * later check pulled it two seconds back, with the words ahead of the song
+   * all the while. The player's own position does stop, and this is what
+   * reads it: the clock and the words wait, the window says it is loading, and
+   * both carry on from where the sound is when it comes back. The player is
+   * left alone — it is already doing the one thing that helps, which is
+   * waiting for more of the song.
+   */
+  private async checkBuffer(): Promise<void> {
+    const player = this.player;
+    if (!player || this.stalled || this.startingFrom !== null) return;
+    const state = await player.getCurrentState().catch(() => null);
+    // Asked again after the wait: any of these can have changed under it.
+    if (!state || state.paused || !this.bufferWatch || this.stalled || this.startingFrom !== null) {
+      return;
+    }
+    if (this.fromBefore(state)) return;
+
+    const now = performance.now();
+    const { track, dry } = bufferStep(this.bufferTrack, {
+      position: state.position,
+      loading: state.loading === true,
+      at: now,
+    });
+    this.bufferTrack = track;
+
+    // The last second of a song stands still on its way to the end; that is
+    // the song finishing, not the sound running out.
+    const ending = state.duration > 0 && state.duration - state.position < ENDING_GRACE_MS;
+
+    if (dry && this.dryingSince === null && this.state === 'PLAYING' && !ending) {
+      this.dryingSince = now;
+      this.stopClock();
+      this.positionMs = state.position;
+      this.setState('LOADING');
+      this.emitProgress();
+      log('warn', 'playback', `the sound ran dry at ${Math.round(state.position / 1000)} s`, {
+        loading: state.loading ?? null,
+      });
+      noteSlow('sound ran dry');
+      return;
+    }
+
+    if (!dry && this.dryingSince !== null) {
+      const took = Math.round(now - this.dryingSince);
+      this.dryingSince = null;
+      this.positionMs = state.position;
+      this.lastTickAt = now;
+      this.setState('PLAYING');
+      this.startTicker();
+      this.emitProgress();
+      log('info', 'playback', `sound back after ${took} ms`);
+    }
   }
 
   private startVerifier(): void {
@@ -969,6 +1076,7 @@ export class SpotifyProvider extends BaseProvider {
     }
     this.missed = 0;
     this.lastAnsweredAt = performance.now();
+    if (trip > SLOW_ANSWER_MS) noteSlow('slow answer', `${Math.round(trip)} ms`);
 
     // Spotify is reachable again but says nothing is playing. It does not
     // resume on its own after an outage — the device it was playing to is gone
@@ -1011,7 +1119,16 @@ export class SpotifyProvider extends BaseProvider {
         this.positionMs = Math.min(right, this.durationMs || right);
         this.lastTickAt = performance.now();
         this.emitProgress();
-        log('info', 'playback', `clock put right by ${by} ms`);
+        // With what the player itself said at the same moment, so a drift can
+        // be told apart in the log: the sound stopping (the player stood still
+        // too) or the clock running fast (the player kept up with Spotify).
+        const sdk = await this.player?.getCurrentState().catch(() => null);
+        log('info', 'playback', `clock put right by ${by} ms`, {
+          spotify: reported,
+          player: sdk?.position ?? null,
+          loading: sdk?.loading ?? null,
+          tripMs: Math.round(trip),
+        });
       }
     }
 

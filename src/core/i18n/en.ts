@@ -97,6 +97,7 @@ export const en = {
   'status.PAUSED': 'Paused',
   'status.ERROR': 'Error',
   'status.searching': 'Searching',
+  'status.slowConnection': 'Slow connection',
   'track.none': 'Nothing playing yet',
   'track.hint': 'Open a song to get started',
 
