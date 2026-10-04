@@ -14,22 +14,29 @@ import type { DrawerSide } from '@/core/settings';
  * hundred tall under its header.
  */
 
-/** The palette's radius. Smaller than the lyrics record: a tray, not a record. */
-export const PALETTE_RADIUS = 300;
+/**
+ * The palette's radius. Smaller than the lyrics record — a tray, not a record —
+ * and less than half the drawer, so what the drawer was showing stays in view
+ * beside it.
+ */
+export const PALETTE_RADIUS = 330;
 /** How far in from the outer edge its centre is, so the hub shows. */
 export const CENTER_INSET = 14;
 /** Where the records' centres stand, measured from the palette's centre. */
-export const RIM_RADIUS = 238;
+export const RIM_RADIUS = 270;
 /** A record on the palette. */
 export const RECORD_SIZE = 84;
 /** Degrees between one record and the next: room for a record and a gap. */
 export const STEP_DEG = 27;
 /** Records drawn either side of the level; the furthest are half out of sight. */
 export const REACH = 3;
-/** Where a record's words begin, out along its spoke. */
-export const WORDS_RADIUS = RIM_RADIUS + RECORD_SIZE / 2 + 12;
-/** The room the words have before the player's side of the drawer. */
-export const WORDS_ROOM = 300;
+/**
+ * Where a record's words end, in along its spoke: on the felt, between the
+ * record and the hub, so nothing of the queue lies over the drawer beside it.
+ */
+export const WORDS_EDGE = RIM_RADIUS - RECORD_SIZE / 2 - 12;
+/** The room the words have, from there towards the hub. */
+export const WORDS_ROOM = 170;
 
 function sign(side: DrawerSide): 1 | -1 {
   return side === 'left' ? 1 : -1;

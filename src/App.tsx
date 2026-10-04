@@ -537,12 +537,12 @@ export default function App() {
                 would be saying they had. */}
             <PanelButton
               panel="library"
-              open={drawerOut(layout) && !queueShown}
+              open={drawerOut(layout)}
               onToggle={() => {
-                // Over the queue, the library is a press away and the drawer
-                // stays out; otherwise this is the drawer, out or away.
-                if (queueShown) setQueue(queueHidden);
-                else setLyricsLayout(pressSpotify(layout));
+                // The drawer, out or away. The queue lies over it and goes
+                // with it.
+                if (drawerOpen) setQueue(queueHidden);
+                setLyricsLayout(pressSpotify(layout));
               }}
               controls={DRAWER_ID}
             />
@@ -713,24 +713,26 @@ function DrawerSlot({
   return (
     <div className="relative flex shrink-0">
       <div
-        inert={lyrics || queue}
+        inert={lyrics}
         className="flex transition-opacity duration-300 ease-out"
-        style={{ opacity: lyrics || queue ? 0 : 1 }}
+        style={{ opacity: lyrics ? 0 : 1 }}
       >
         {spotify}
       </div>
       {present && (
-        <div
-          ref={ref}
-          inert={queue}
-          className="absolute inset-0 flex transition-opacity duration-300 ease-out"
-          style={{ opacity: queue ? 0 : undefined }}
-        >
+        <div ref={ref} className="absolute inset-0 flex">
           {lyricsView}
         </div>
       )}
+      {/* The queue lies over whatever the drawer shows, which stays in view
+          and in reach under a light shade, rather than being put away. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-shell-900 transition-opacity duration-300 ease-out"
+        style={{ opacity: queue ? 0.32 : 0 }}
+      />
       {queuePresent && (
-        <div ref={queueRef} className="absolute inset-0 flex">
+        <div ref={queueRef} className="pointer-events-none absolute inset-0 flex">
           {queueView}
         </div>
       )}

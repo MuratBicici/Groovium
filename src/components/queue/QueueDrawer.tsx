@@ -4,7 +4,6 @@ import type { DrawerSide } from '@/core/settings';
 import { useCurrentTrack, usePlayerStore, useUpcoming, type Upcoming } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { DRAWER_WIDTH } from '@/platform/window';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
@@ -23,7 +22,7 @@ import {
   slotAngle,
   slotAt,
   slotLook,
-  WORDS_RADIUS,
+  WORDS_EDGE,
   WORDS_ROOM,
 } from './palette';
 
@@ -41,6 +40,12 @@ interface Slot {
 /**
  * The queue, opened over the drawer: a round palette with the records still to
  * come standing on its rim, in the order they will play.
+ *
+ * Over the drawer, not instead of it. The library or the lyrics stay where they
+ * are, a little shaded, and can still be used: the palette takes the outer half
+ * and nothing else, so a record can be carried from a shelf straight onto it.
+ * Everything of the queue — the records, their names, its own small controls —
+ * is on the palette.
  *
  * Turned with the wheel, a record a notch, and back to the next song a few
  * seconds after — the lyrics wheel's rules, so the two feel like one machine.
@@ -70,7 +75,7 @@ export function QueueDrawer({
   const queueAt = usePlayerStore((s) => s.queueAt);
   const queueLast = usePlayerStore((s) => s.queueLast);
   const { flyToPlatter, platterEl } = useDiscFlight();
-  const { grab, moveTo, release, cancel, registerReceiver } = useDiscHold();
+  const { grab, moveTo, release, cancel, registerReceiver, subscribeCarry } = useDiscHold();
   const inHand = useCarriedTrack();
 
   const slots = useMemo<Slot[]>(() => {
@@ -109,6 +114,18 @@ export function QueueDrawer({
    * back to where it came from, the way one filed in a crate does.
    */
   const [offered, setOffered] = useState(false);
+  // The spot sits over the record on the level, and is only something the
+  // pointer can find while a record is being carried: then it has to be what
+  // is under the hand to take it, and any other time the record under it has
+  // to be pressable. Written straight to the element, because the hand looks
+  // for what is under it in the same moment it says where it is.
+  useEffect(
+    () =>
+      subscribeCarry((point) => {
+        if (spot.current) spot.current.style.pointerEvents = point ? 'auto' : 'none';
+      }),
+    [subscribeCarry],
+  );
   useEffect(() => {
     const el = spot.current;
     if (!el) return;
@@ -232,54 +249,12 @@ export function QueueDrawer({
   const nothingComing = coming.length === 0;
 
   return (
-    <div
-      id={id}
-      className="relative isolate flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
-      style={{ width: `${DRAWER_WIDTH}px` }}
-    >
-      <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-            {t('queue.title')}
-          </span>
-          {!nothingComing && (
-            <span className="truncate text-label text-cream-400">
-              {t('queue.count', { count: coming.length })}
-            </span>
-          )}
-        </span>
-        <div className="flex shrink-0 items-center gap-2">
-          {upNext.length > 0 && (
-            <button
-              type="button"
-              onClick={clearQueue}
-              className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
-            >
-              {t('queue.clear')}
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            onClick={onClose}
-            className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-          >
-            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref={body}
-        className="relative min-h-0 flex-1 overflow-hidden"
-        onWheel={slots.length > 1 ? (e) => browse.onWheel(e.deltaY) : undefined}
-      >
+    <div id={id} className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div ref={body} className="absolute inset-0">
         <div
           ref={palette}
-          className="absolute"
+          className="pointer-events-auto absolute rounded-full"
+          onWheel={slots.length > 1 ? (e) => browse.onWheel(e.deltaY) : undefined}
           style={{
             width: PALETTE_RADIUS * 2,
             height: PALETTE_RADIUS * 2,
@@ -354,6 +329,21 @@ export function QueueDrawer({
               ) : null,
             )}
           </div>
+
+          {nothingComing && (
+            <p
+              className={`pointer-events-none absolute text-meta leading-relaxed text-cream-400 ${
+                left ? 'text-right' : 'text-left'
+              }`}
+              style={{
+                width: WORDS_ROOM,
+                top: current ? `calc(50% + ${RECORD_SIZE / 2 + 14}px)` : '50%',
+                [left ? 'left' : 'right']: PALETTE_RADIUS + WORDS_EDGE - WORDS_ROOM,
+              }}
+            >
+              {t('queue.empty')}
+            </p>
+          )}
         </div>
 
         {/* The place the next song stands, where a record from elsewhere can be
@@ -361,7 +351,7 @@ export function QueueDrawer({
         <div
           ref={spot}
           aria-hidden="true"
-          className={`pointer-events-none absolute rounded-full transition-shadow ${
+          className={`pointer-events-none absolute z-10 rounded-full transition-shadow ${
             offered ? 'groove-queue-offered' : ''
           }`}
           style={{
@@ -372,19 +362,40 @@ export function QueueDrawer({
           }}
         />
 
-        {nothingComing && (
-          <p
-            className={`absolute max-w-[300px] text-meta leading-relaxed text-cream-400 ${
-              left ? 'text-left' : 'text-right'
-            }`}
-            style={{
-              top: current ? `calc(50% + ${RECORD_SIZE / 2 + 18}px)` : '50%',
-              [left ? 'left' : 'right']: CENTER_INSET + WORDS_RADIUS,
-            }}
+        {/* The queue's own few controls, on a pill at the palette's foot: the
+            drawer's header is the drawer's, and stays as it was. */}
+        <div
+          className={`pointer-events-auto absolute bottom-3 flex items-center gap-2 rounded-full bg-shell-900/75 py-1 pr-1 pl-3 shadow ring-1 ring-[var(--color-edge)] backdrop-blur-sm ${
+            left ? 'left-3' : 'right-3'
+          }`}
+        >
+          <span className="text-label font-medium tracking-[0.18em] text-brass-400/90 uppercase">
+            {t('queue.title')}
+          </span>
+          {!nothingComing && (
+            <span className="text-label text-cream-400">{t('queue.count', { count: coming.length })}</span>
+          )}
+          {upNext.length > 0 && (
+            <button
+              type="button"
+              onClick={clearQueue}
+              className="rounded-full px-1.5 text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
+            >
+              {t('queue.clear')}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            onClick={onClose}
+            className="flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
           >
-            {t('queue.empty')}
-          </p>
-        )}
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
 
         {ghost && (
           <div
@@ -410,10 +421,11 @@ export function QueueDrawer({
 }
 
 /**
- * One record on the palette's rim, and its words out along its spoke.
+ * One record on the palette's rim, and its words in along its spoke.
  *
  * The record is turned back by the palette's own angle, so its cover stays
- * upright as it goes round; the words lie along the spoke, as the lyrics do.
+ * upright as it goes round; the words lie along the spoke on the felt, between
+ * the record and the hub, as the lyrics lie along theirs.
  */
 function PaletteRecord({
   slot,
@@ -509,26 +521,27 @@ function PaletteRecord({
         </div>
       </div>
 
-      {/* Its words, out along the spoke towards the player. */}
+      {/* Its words, in along the spoke on the felt: ending just short of the
+          record and reading towards the hub. */}
       <div
         className="pointer-events-none absolute top-0 left-0"
         style={{
           transform: left
-            ? `translate(${WORDS_RADIUS}px, -50%)`
-            : `translate(${-WORDS_RADIUS}px, -50%) translateX(-100%)`,
+            ? `translate(${WORDS_EDGE}px, -50%) translateX(-100%)`
+            : `translate(${-WORDS_EDGE}px, -50%)`,
           width: WORDS_ROOM,
           opacity: hidden ? 0 : look.opacity,
           transition: 'opacity 300ms ease',
         }}
       >
-        <div className={left ? 'text-left' : 'text-right'}>
+        <div className={left ? 'text-right' : 'text-left'}>
           {kind !== 'collection' && (
             <p className="text-[10px] font-medium tracking-[0.18em] text-brass-400/80 uppercase">
               {kind === 'playing' ? t('queue.playing') : kind === 'queued' ? t('queue.queued') : t('queue.station')}
             </p>
           )}
           <p
-            className={`truncate leading-snug ${level ? 'text-[16px] font-semibold text-cream-50' : 'text-body text-cream-200'}`}
+            className={`truncate leading-snug ${level ? 'text-[15px] font-semibold text-cream-50' : 'text-body text-cream-200'}`}
           >
             {slot.track.title}
           </p>
