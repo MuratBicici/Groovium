@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEAD_ZONE_PX,
-  SWEEP_DEGREES,
-  accumulate,
+  STOP_DEGREES,
   angleAt,
-  angleDelta,
+  grip,
   inDeadZone,
   rotationFor,
-  volumeAfter,
+  turnTo,
+  volumeFor,
+  wrap,
+  type Grip,
 } from './knob';
 
 /**
  * The volume knob is turned rather than dragged up and down, and everything
  * that makes that feel right or wrong is here: where the hand is, how far it
- * has come round, and what happens when it reaches the end.
+ * is pointing, and what happens when it reaches the end.
  */
 
 describe('where the hand is', () => {
@@ -27,7 +29,7 @@ describe('where the hand is', () => {
 
   it('never reports a negative angle', () => {
     // A hand a hair anticlockwise of twelve is at 359, not at -1: the wrap has
-    // one place to happen and `angleDelta` is where it is dealt with.
+    // one place to happen and `wrap` is where it is dealt with.
     expect(angleAt(-1, -100)).toBeGreaterThan(350);
     expect(angleAt(-1, -100)).toBeLessThan(360);
   });
@@ -40,68 +42,91 @@ describe('where the hand is', () => {
   });
 });
 
-describe('how far it has come round', () => {
-  it('takes the short way over the bottom of the knob', () => {
-    // The one this function exists for. The sweep is centred on twelve, so its
-    // dead band is at six — exactly where the raw angle wraps. Subtracting
-    // gives -358, and the volume would slam shut because the hand passed six.
-    expect(angleDelta(359, 1)).toBeCloseTo(2, 6);
-    expect(angleDelta(1, 359)).toBeCloseTo(-2, 6);
-    expect(angleDelta(350, 10)).toBeCloseTo(20, 6);
-    expect(angleDelta(10, 350)).toBeCloseTo(-20, 6);
+/**
+ * A gesture, move by move: `points` are the hand's angles (null for the dead
+ * zone), and what comes back is where the indicator was after each.
+ */
+function gesture(start: number, points: Array<number | null>): number[] {
+  let held: Grip = grip();
+  let rotation = start;
+  const seen: number[] = [];
+  for (const point of points) {
+    const moved = turnTo(held, rotation, point === null ? null : (point + 360) % 360);
+    held = moved.grip;
+    rotation = moved.rotation;
+    seen.push(rotation);
+  }
+  return seen;
+}
+
+describe('an angle brought round', () => {
+  it('lies within half a turn of twelve', () => {
+    expect(wrap(0)).toBe(0);
+    expect(wrap(190)).toBe(-170);
+    expect(wrap(-190)).toBe(170);
+    expect(wrap(359)).toBe(-1);
+    expect(wrap(180)).toBe(180);
+  });
+});
+
+describe('the indicator keeps to the hand', () => {
+  it('does not jump when it is taken hold of', () => {
+    // Pressed at three o'clock with the knob at twelve: nothing moves.
+    expect(gesture(0, [90])).toEqual([0]);
   });
 
-  it('reads an ordinary move as itself', () => {
-    expect(angleDelta(90, 120)).toBeCloseTo(30, 6);
-    expect(angleDelta(120, 90)).toBeCloseTo(-30, 6);
-    expect(angleDelta(45, 45)).toBeCloseTo(0, 6);
+  it('stays the same angle from the hand however it moves', () => {
+    // Taken at the tip and turned: the indicator is under the hand.
+    expect(gesture(0, [0, 30, 60, -20])).toEqual([0, 30, 60, -20]);
+    // Taken a quarter turn off: a quarter turn off all the way.
+    expect(gesture(0, [90, 120, 60])).toEqual([0, 30, -30]);
   });
 
-  it('stays inside half a turn, whichever way it is asked', () => {
-    // Exactly opposite is the one place either answer is as good; what matters
-    // is that nothing ever comes back bigger than half a turn.
-    const pairs: Array<[number, number]> = [
-      [0, 180],
-      [180, 0],
-      [270, 90],
-      [90, 270],
-    ];
-    for (const [from, to] of pairs) {
-      expect(Math.abs(angleDelta(from, to))).toBeLessThanOrEqual(180);
-    }
+  it('follows a hand that jumps, as one coming back into the window does', () => {
+    // Nothing in between was seen, and none of it is needed: where the hand
+    // is now says where the knob is.
+    expect(gesture(0, [0, 100])).toEqual([0, 100]);
+    expect(gesture(0, [0, -100, 40])).toEqual([0, -100, 40]);
+  });
+
+  it('starts once the hand is out of the middle, if it pressed there', () => {
+    expect(gesture(0, [null, 45, 75])).toEqual([0, 0, 30]);
   });
 });
 
 describe('what happens at the ends', () => {
-  it('stops rather than winding up', () => {
-    // Turning past full must not bank degrees nobody can see. Clamped on the
-    // volume instead of the angle, the hand would have to unwind every one of
-    // them before the knob moved back — which is not what a stop feels like.
-    const turned = accumulate(0, 10_000, 0.5);
-    expect(turned).toBeCloseTo(0.5 * SWEEP_DEGREES, 6);
-    expect(volumeAfter(0.5, turned)).toBeCloseTo(1, 6);
+  it('stops rather than winding round', () => {
+    expect(gesture(0, [0, 120, 160, 200])).toEqual([0, 120, STOP_DEGREES, STOP_DEGREES]);
   });
 
-  it('comes back the instant the hand does', () => {
-    let turned = accumulate(0, 10_000, 0.5); // jammed against the top stop
-    turned = accumulate(turned, -27, 0.5); // a tenth of the sweep back
-    expect(volumeAfter(0.5, turned)).toBeCloseTo(0.9, 6);
+  it('is in step again the moment the hand comes back past the stop', () => {
+    // Over the top stop, round the bottom a way, and back: the knob picks up
+    // where the hand comes out, the same angle from it as ever.
+    expect(gesture(0, [0, 160, 190, 150, 100])).toEqual([0, STOP_DEGREES, STOP_DEGREES, STOP_DEGREES, 100]);
+  });
+
+  it('does not leap to silence when the hand comes round the bottom', () => {
+    // Past the top stop and on round to the other side of six o'clock: the
+    // knob stays at full until the hand has come all the way back up to it,
+    // not slam to the bottom of the volume because the hand is there now.
+    const seen = gesture(0, [0, 160, 200, 230, 250, 0, 100]);
+    expect(seen.slice(1, 6)).toEqual([STOP_DEGREES, STOP_DEGREES, STOP_DEGREES, STOP_DEGREES, STOP_DEGREES]);
   });
 
   it('stops at silence the same way', () => {
-    const turned = accumulate(0, -10_000, 0.5);
-    expect(turned).toBeCloseTo(-0.5 * SWEEP_DEGREES, 6);
-    expect(volumeAfter(0.5, turned)).toBeCloseTo(0, 6);
+    expect(gesture(0, [0, -120, -170])).toEqual([0, -120, -STOP_DEGREES]);
+  });
+});
+
+describe('across the middle', () => {
+  it('waits rather than swinging half a turn', () => {
+    // Out the other side of the middle the hand is half a turn from where it
+    // went in. The knob stays put until the hand comes back to it.
+    expect(gesture(0, [0, 40, null, -140 + 360, 220 - 360])).toEqual([0, 40, 40, 40, 40]);
   });
 
-  it('has nowhere to go when it starts against a stop', () => {
-    expect(accumulate(0, 50, 1)).toBeCloseTo(0, 6);
-    expect(accumulate(0, -50, 0)).toBeCloseTo(0, 6);
-  });
-
-  it('crosses the whole range in one sweep and no more', () => {
-    expect(volumeAfter(0, SWEEP_DEGREES)).toBeCloseTo(1, 6);
-    expect(volumeAfter(0, SWEEP_DEGREES / 2)).toBeCloseTo(0.5, 6);
+  it('is picked up again by passing it', () => {
+    expect(gesture(0, [0, 40, null, -60, 0, 50, 70])).toEqual([0, 40, 40, 40, 40, 50, 70]);
   });
 });
 
@@ -112,13 +137,13 @@ describe('where the indicator points', () => {
     expect(rotationFor(1)).toBeCloseTo(135, 6);
   });
 
-  it('agrees with the angle the hand would be at', () => {
-    // Turning from silence by `d` degrees should leave the indicator `d`
-    // degrees further round than it started. The two halves of the control —
-    // what the hand does and what the eye sees — have to be the same number.
-    for (const degrees of [0, 45, 135, 200, 270]) {
-      const volume = volumeAfter(0, accumulate(0, degrees, 0));
-      expect(rotationFor(volume) - rotationFor(0), String(degrees)).toBeCloseTo(degrees, 6);
+  it('is the volume it stands for, both ways', () => {
+    // The two halves of the control — what the hand does and what the eye
+    // sees — have to be the same number.
+    for (const volume of [0, 0.1, 0.5, 0.83, 1]) {
+      expect(volumeFor(rotationFor(volume)), String(volume)).toBeCloseTo(volume, 6);
     }
+    expect(volumeFor(STOP_DEGREES + 20)).toBe(1);
+    expect(volumeFor(-STOP_DEGREES - 20)).toBe(0);
   });
 });

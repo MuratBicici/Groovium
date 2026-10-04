@@ -1,14 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMuted, usePlayerStore, useVolume } from '@/core/store';
 import { useT } from '@/core/i18n';
-import {
-  accumulate,
-  angleAt,
-  angleDelta,
-  inDeadZone,
-  rotationFor,
-  volumeAfter,
-} from './knob';
+import { angleAt, grip, inDeadZone, rotationFor, turnTo, volumeFor, type Grip } from './knob';
 
 /**
  * Current volume read straight from the store rather than from a render
@@ -24,15 +17,14 @@ function liveVolume(): number {
 /** What one gesture needs to remember. */
 interface Turn {
   centre: { x: number; y: number };
+  /** Where the hand is on the knob; see `Grip`. */
+  grip: Grip;
   /**
-   * The angle the pointer was last at, or null while it is too near the middle
-   * to have one. Null again on the way out, so leaving the dead zone resumes
-   * from wherever the hand is instead of applying the sweep it made inside.
+   * Where the indicator is, kept here rather than read back from the volume:
+   * the volume is rounded and stored on its way, and the next move has to
+   * start from the exact angle this one left.
    */
-  from: number | null;
-  /** Degrees turned so far, stopped at both ends of the sweep. */
-  turned: number;
-  startVolume: number;
+  rotation: number;
 }
 
 /**
@@ -45,8 +37,10 @@ interface Turn {
  * arm grows with the distance. Small movements far out are fine adjustments,
  * which is how a rotary in any audio application behaves.
  *
- * Relative rather than absolute: the turn is measured from wherever the hand
- * started, so grabbing the body does not snap the indicator under the pointer.
+ * The indicator keeps to the hand: wherever it is taken hold of, it stays that
+ * far round from the pointer for the whole gesture, however far the pointer
+ * goes and wherever it comes back from — see `Grip`. Taking hold does not
+ * snap it under the pointer.
  * Keyboard access goes through the standard slider role, so this is not
  * pointer-only, and the wheel still works.
  */
@@ -70,43 +64,29 @@ export function VolumeKnob() {
     if (e.button !== 0) return;
     const box = e.currentTarget.getBoundingClientRect();
     const centre = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    const dx = e.clientX - centre.x;
-    const dy = e.clientY - centre.y;
-
     // Captured so the hand can leave the knob and keep turning it — which is
     // the point, since the further out it goes the finer the control gets.
     e.currentTarget.setPointerCapture(e.pointerId);
-    turn.current = {
-      centre,
-      from: inDeadZone(dx, dy) ? null : angleAt(dx, dy),
-      turned: 0,
-      startVolume: effectiveVolume,
-    };
+    turn.current = { centre, grip: grip(), rotation: rotationFor(effectiveVolume) };
+    follow(e.clientX, e.clientY);
     setTurning(true);
   }
 
-  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+  /** The hand at a point: the knob goes where it says, if it is holding it. */
+  function follow(x: number, y: number) {
     const gesture = turn.current;
     if (!gesture) return;
+    const dx = x - gesture.centre.x;
+    const dy = y - gesture.centre.y;
+    const moved = turnTo(gesture.grip, gesture.rotation, inDeadZone(dx, dy) ? null : angleAt(dx, dy));
+    gesture.grip = moved.grip;
+    if (moved.rotation === gesture.rotation) return;
+    gesture.rotation = moved.rotation;
+    void setVolume(volumeFor(moved.rotation));
+  }
 
-    const dx = e.clientX - gesture.centre.x;
-    const dy = e.clientY - gesture.centre.y;
-    if (inDeadZone(dx, dy)) {
-      // Passing through the middle is not a turn. Forgetting the reference
-      // angle here is what stops the knob spinning on the way across.
-      gesture.from = null;
-      return;
-    }
-
-    const angle = angleAt(dx, dy);
-    if (gesture.from === null) {
-      gesture.from = angle;
-      return;
-    }
-
-    gesture.turned = accumulate(gesture.turned, angleDelta(gesture.from, angle), gesture.startVolume);
-    gesture.from = angle;
-    void setVolume(volumeAfter(gesture.startVolume, gesture.turned));
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    follow(e.clientX, e.clientY);
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -155,6 +135,7 @@ export function VolumeKnob() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onLostPointerCapture={onPointerUp}
         onKeyDown={onKeyDown}
         onWheel={(e) => void setVolume(liveVolume() - Math.sign(e.deltaY) * 0.05)}
         className={`relative h-8 w-8 touch-none rounded-full bg-gradient-to-b from-shell-600 to-shell-800 shadow-[0_2px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-shell-900 outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${

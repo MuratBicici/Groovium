@@ -40,41 +40,107 @@ export function inDeadZone(dx: number, dy: number): boolean {
   return Math.hypot(dx, dy) < DEAD_ZONE_PX;
 }
 
+/** Either stop, in degrees from twelve o'clock: the sweep is centred on it. */
+export const STOP_DEGREES = SWEEP_DEGREES / 2;
+
 /**
- * The shortest signed way round from one angle to another, in -180..180.
- *
- * The whole reason the drag accumulates differences rather than reading an
- * absolute angle. The knob's sweep is centred on twelve o'clock, so its dead
- * band sits at the bottom — exactly where the raw angle wraps between 359 and
- * 0. Subtracting those gives -359, and the volume would slam from full to
- * silent because the hand passed six o'clock.
+ * How near the indicator the hand has to come to take hold of it again, after
+ * it let go at a stop or in the middle.
  */
-export function angleDelta(from: number, to: number): number {
-  let delta = (to - from) % 360;
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return delta;
+export const PICKUP_DEGREES = 12;
+
+/** An angle brought into -180..180, twelve o'clock at nought. */
+export function wrap(degrees: number): number {
+  let d = degrees % 360;
+  if (d > 180) d -= 360;
+  if (d <= -180) d += 360;
+  return d;
 }
 
 /**
- * Add a turn to the one so far, and stop at the ends.
+ * A hand on the knob.
  *
- * The clamp is on the *angle*, not on the volume it produces, and the
- * difference is what a stop feels like. Clamped on the volume, over-turning
- * past full would keep piling up degrees nobody can see, and turning back
- * would do nothing until every one of them had been unwound. Clamped here, the
- * knob hits something — as it would if it were real — and comes back the
- * instant the hand does.
+ * The knob points where the hand is, give or take where on it the hand took
+ * hold: the angle between the two is fixed when the gesture starts, so a press
+ * does not snap the indicator under the pointer, and from then on the
+ * indicator is always that same angle from the hand. It used to add up the
+ * hand's movements instead, and every movement the knob could not follow —
+ * past a stop, across the middle, out of the window and back — was a step the
+ * two fell out of line by, for good.
+ *
+ * Twice the knob cannot follow, and lets go. Past a stop, it stays at the stop
+ * while the hand goes on round the bottom; and across the middle, where the
+ * hand's angle swings half a turn in a pixel. Either way it waits where it is
+ * until the hand comes back to it — at the stop it was left at, or by passing
+ * the indicator — rather than jumping to wherever the hand has got to, which
+ * past the bottom stop is the other end of the volume.
  */
-export function accumulate(turned: number, delta: number, startVolume: number): number {
-  const lowest = -startVolume * SWEEP_DEGREES;
-  const highest = (1 - startVolume) * SWEEP_DEGREES;
-  return clamp(turned + delta, lowest, highest);
+export interface Grip {
+  /** The indicator's angle less the hand's. Null until the hand is out of the middle. */
+  offset: number | null;
+  /** Where the hand last was on the dial, offset included; null after the middle. */
+  last: number | null;
+  /** Whether the knob is in the hand, or waiting to be picked up again. */
+  holding: boolean;
 }
 
-/** Where a turn of `turned` degrees leaves a knob that started at `startVolume`. */
-export function volumeAfter(startVolume: number, turned: number): number {
-  return clamp(startVolume + turned / SWEEP_DEGREES, 0, 1);
+/** A hand that has only just pressed the knob. */
+export function grip(): Grip {
+  return { offset: null, last: null, holding: true };
+}
+
+/**
+ * One move of the hand. `pointer` is its angle from `angleAt`, or null while
+ * it is in the dead zone; `rotation` is where the indicator is now. Returns
+ * the grip after the move and where the indicator goes.
+ */
+export function turnTo(
+  held: Grip,
+  rotation: number,
+  pointer: number | null,
+): { grip: Grip; rotation: number } {
+  if (pointer === null) {
+    // Through the middle: the angle on the far side has nothing to do with the
+    // one before it. Only once there is an offset to lose.
+    return {
+      grip: { ...held, last: null, holding: held.offset === null && held.holding },
+      rotation,
+    };
+  }
+  if (held.offset === null) {
+    return { grip: { offset: wrap(rotation - pointer), last: rotation, holding: true }, rotation };
+  }
+
+  const at = wrap(pointer + held.offset);
+  let holding = held.holding;
+  if (!holding) {
+    // Passing the indicator picks it up — but not by going round the bottom,
+    // where the angle wraps and a move of a few degrees reads as most of a
+    // turn.
+    const last = held.last;
+    const passed =
+      last !== null &&
+      Math.abs(at - last) <= 180 &&
+      Math.min(last, at) <= rotation &&
+      rotation <= Math.max(last, at);
+    holding = passed || Math.abs(at - rotation) <= PICKUP_DEGREES;
+  }
+
+  let next = rotation;
+  if (holding) {
+    if (Math.abs(at) <= STOP_DEGREES) next = at;
+    else {
+      // Past a stop: against the one the knob was nearer, and let go.
+      next = rotation >= 0 ? STOP_DEGREES : -STOP_DEGREES;
+      holding = false;
+    }
+  }
+  return { grip: { offset: held.offset, last: at, holding }, rotation: next };
+}
+
+/** The volume an indicator at `rotation` stands for. */
+export function volumeFor(rotation: number): number {
+  return clamp((rotation + STOP_DEGREES) / SWEEP_DEGREES, 0, 1);
 }
 
 /** The angle the indicator points at for a given volume. */
