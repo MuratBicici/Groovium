@@ -30,16 +30,21 @@ export const SCENE_MS = 300;
  * A wheel arriving: turned in from the deck's side and growing to its size, as
  * it fades up. The queue's palette and the lyrics record open the same way, so
  * the two read as parts of one machine.
+ *
+ * Added to whatever turn the element already has rather than replacing it. The
+ * lyrics' lines stand at the angle of the line being sung, and that angle is
+ * only known a frame after they appear: an animation that ended on a fixed
+ * angle held them at the top of the song for its whole length and then let
+ * them jump to where the song was. Added, the turn-in rides on top of the
+ * wheel's own angle, wherever that goes meanwhile.
  */
-export function turnIn(el: HTMLElement | null, left: boolean, restsAt = 0): void {
+export function turnIn(el: HTMLElement | null, left: boolean): void {
   if (!el || prefersReducedMotion()) return;
+  const timing = { duration: ARRIVE_MS + 260, easing: ARRIVE_EASING };
   el.animate(
-    [
-      { transform: `rotate(${restsAt + (left ? -70 : 70)}deg) scale(0.7)`, opacity: 0 },
-      // Where it rests: its own turn, for something that is already turned —
-      // the lyrics' lines stand at the angle of the line being sung.
-      { transform: restsAt ? `rotate(${restsAt}deg)` : 'none', opacity: 1 },
-    ],
-    { duration: ARRIVE_MS + 260, easing: ARRIVE_EASING },
+    [{ transform: `rotate(${left ? -70 : 70}deg) scale(0.7)` }, { transform: 'rotate(0deg) scale(1)' }],
+    { ...timing, composite: 'add' },
   );
+  // Apart, because adding a fade to an opacity of one is still one.
+  el.animate([{ opacity: 0 }, { opacity: 1 }], timing);
 }

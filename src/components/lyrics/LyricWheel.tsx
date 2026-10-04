@@ -89,10 +89,10 @@ export function LyricWheel({
   const layer = useRef<HTMLDivElement | null>(null);
   const turning = useRef<HTMLDivElement | null>(null);
   // The lines come in with the record: turned in from the player's side to
-  // where they stand, as the record is. Once, as they appear — a turn from
-  // line to line after that is the wheel's own.
+  // wherever they stand, as the record is. Once, as they appear — a turn from
+  // line to line after that is the wheel's own, and goes on under this one.
   useLayoutEffect(() => {
-    turnIn(turning.current, side === 'left', angle);
+    turnIn(turning.current, side === 'left');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const range = visibleRange(view, lines.length);
