@@ -157,9 +157,12 @@ export function LyricsDrawer({
         </div>
       </div>
 
+      {/* The whole drawer, under the header rather than below it, so the
+          record's centre is the drawer's centre — the same point the queue's
+          palette turns on, and the two read as one machine opened two ways. */}
       <div
         ref={body}
-        className="relative min-h-0 flex-1"
+        className="absolute inset-0"
         onWheel={lines ? (e) => browse.onWheel(e.deltaY) : undefined}
       >
         {/* The record, centred on the same point as the lines. It turns with
@@ -224,7 +227,7 @@ export function LyricsDrawer({
 
         {result?.status === 'Plain' && (
           <div
-            className="lyric-scroll-fade absolute inset-y-0 overflow-y-auto py-6"
+            className="lyric-scroll-fade absolute top-10 bottom-0 overflow-y-auto py-6"
             style={{
               [left ? 'left' : 'right']: TEXT_START,
               width: DRAWER_WIDTH - TEXT_START - 24,
