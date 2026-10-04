@@ -31,12 +31,14 @@ export const SCENE_MS = 300;
  * it fades up. The queue's palette and the lyrics record open the same way, so
  * the two read as parts of one machine.
  */
-export function turnIn(el: HTMLElement | null, left: boolean): void {
+export function turnIn(el: HTMLElement | null, left: boolean, restsAt = 0): void {
   if (!el || prefersReducedMotion()) return;
   el.animate(
     [
-      { transform: `rotate(${left ? -70 : 70}deg) scale(0.7)`, opacity: 0 },
-      { transform: 'none', opacity: 1 },
+      { transform: `rotate(${restsAt + (left ? -70 : 70)}deg) scale(0.7)`, opacity: 0 },
+      // Where it rests: its own turn, for something that is already turned —
+      // the lyrics' lines stand at the angle of the line being sung.
+      { transform: restsAt ? `rotate(${restsAt}deg)` : 'none', opacity: 1 },
     ],
     { duration: ARRIVE_MS + 260, easing: ARRIVE_EASING },
   );

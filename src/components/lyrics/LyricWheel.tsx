@@ -15,7 +15,7 @@ import {
 } from './arc';
 import type { Move } from './browse';
 import { LineText } from './LineText';
-import { ARRIVE_EASING, LOOK_MS, TURN_EASING, TURN_MS } from './motion';
+import { ARRIVE_EASING, LOOK_MS, TURN_EASING, TURN_MS, turnIn } from './motion';
 
 /**
  * The CSS transition for a turn of the wheel — and of the record, which turns
@@ -87,6 +87,14 @@ export function LyricWheel({
   onPick: (line: LyricLine) => void;
 }) {
   const layer = useRef<HTMLDivElement | null>(null);
+  const turning = useRef<HTMLDivElement | null>(null);
+  // The lines come in with the record: turned in from the player's side to
+  // where they stand, as the record is. Once, as they appear — a turn from
+  // line to line after that is the wheel's own.
+  useLayoutEffect(() => {
+    turnIn(turning.current, side === 'left', angle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const range = visibleRange(view, lines.length);
   const left = side === 'left';
 
@@ -151,7 +159,7 @@ export function LyricWheel({
 
   return (
     <div ref={layer} className="lyric-edge-fade absolute inset-0 overflow-hidden" aria-hidden="true">
-      <div style={wheel}>
+      <div ref={turning} style={wheel}>
         {lines.map((line, index) => {
           const singing = index === sung;
           const near = range !== null && index >= range[0] && index <= range[1];
