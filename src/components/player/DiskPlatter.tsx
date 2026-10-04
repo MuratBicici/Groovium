@@ -154,6 +154,12 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
     // an empty deck through that window.
     dropRef.current?.getAnimations().forEach((a) => a.cancel());
 
+    // Put away, the deck has no change to show: its record is hidden by
+    // opacity, and an entrance that fades it in from nothing would put the
+    // whole record back up over the collapsed bar for the length of it. The
+    // bar's own small record changes there instead.
+    if (stowed) return;
+
     // The old record lifts away. Also during a flight: watching it leave while
     // the new one arcs in is the record-changer read.
     //
