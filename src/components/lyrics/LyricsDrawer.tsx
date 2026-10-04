@@ -13,7 +13,7 @@ import { DiscOrbit } from './DiscOrbit';
 import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
-import { ARRIVE_EASING, ARRIVE_MS, SCENE_MS } from './motion';
+import { ARRIVE_EASING, SCENE_MS, turnIn } from './motion';
 
 /**
  * Lyrics in the drawer: the big view.
@@ -56,17 +56,9 @@ export function LyricsDrawer({
   const record = useRef<HTMLDivElement | null>(null);
   const body = useRef<HTMLDivElement | null>(null);
 
-  // The record rolls in from outside as the view opens.
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    record.current?.animate(
-      [
-        { transform: `translateX(${left ? -160 : 160}px)`, opacity: 0 },
-        { transform: 'none', opacity: 1 },
-      ],
-      { duration: ARRIVE_MS + 200, easing: ARRIVE_EASING },
-    );
-  }, [left]);
+  // The record turns in from the deck's side as the view opens, the way the
+  // queue's palette does.
+  useEffect(() => turnIn(record.current, left), [left]);
 
   // Another song: its lines come in fresh, rather than the last song's turning
   // into them.

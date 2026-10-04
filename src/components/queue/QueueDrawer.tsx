@@ -7,9 +7,9 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
-import { useBrowse } from '@/components/lyrics/useBrowse';
+import { useTurn } from './useTurn';
 import { turnTransition } from '@/components/lyrics/LyricWheel';
-import { ARRIVE_EASING, ARRIVE_MS, TURN_EASING, TURN_MS } from '@/components/lyrics/motion';
+import { TURN_EASING, TURN_MS, turnIn } from '@/components/lyrics/motion';
 import { PaletteSurface } from './PaletteSurface';
 import {
   CENTER_INSET,
@@ -25,6 +25,9 @@ import {
   WORDS_EDGE,
   WORDS_ROOM,
 } from './palette';
+
+/** The window's title bar, which the palette carries on under. `h-8` in `WindowChrome`. */
+const TITLE_BAR_HEIGHT = 32;
 
 /** How far the pointer travels before a press on a record becomes a drag. */
 const DRAG_THRESHOLD = 5;
@@ -87,7 +90,7 @@ export function QueueDrawer({
   }, [current, coming]);
   const firstComing = current ? 1 : 0;
 
-  const browse = useBrowse(slots.length, current ? restingSlot(coming.length) : 0, current?.id);
+  const browse = useTurn(slots.length, current ? restingSlot(coming.length) : 0, current?.id);
   const view = browse.view;
   const angle = paletteAngle(view, side);
   const turn = turnTransition(browse.move);
@@ -97,16 +100,7 @@ export function QueueDrawer({
   const spot = useRef<HTMLDivElement | null>(null);
 
   // The palette turns in from the deck's side as the drawer shows it.
-  useLayoutEffect(() => {
-    if (prefersReducedMotion()) return;
-    palette.current?.animate(
-      [
-        { transform: `rotate(${left ? -70 : 70}deg) scale(0.7)`, opacity: 0 },
-        { transform: 'none', opacity: 1 },
-      ],
-      { duration: ARRIVE_MS + 260, easing: ARRIVE_EASING },
-    );
-  }, [left]);
+  useLayoutEffect(() => turnIn(palette.current, left), [left]);
 
   /**
    * Somewhere on the palette a record can be dropped from elsewhere: the place
@@ -249,7 +243,14 @@ export function QueueDrawer({
   const nothingComing = coming.length === 0;
 
   return (
-    <div id={id} className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      id={id}
+      className="pointer-events-none absolute inset-0"
+      // Cut off at the drawer's sides and foot, but not at its head: the
+      // palette goes on up under the window's title bar, as the lyrics record
+      // does, instead of stopping in a straight line where the bar begins.
+      style={{ clipPath: `inset(-${TITLE_BAR_HEIGHT}px 0 0 0)` }}
+    >
       <div ref={body} className="absolute inset-0">
         <div
           ref={palette}

@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from '@/core/utils/motion';
+
 /**
  * How lyrics move, in one place.
  *
@@ -23,3 +25,19 @@ export const TURN_MS = 450;
 export const LOOK_MS = 300;
 /** How long the view takes to cross to another song, or to come and go. */
 export const SCENE_MS = 300;
+
+/**
+ * A wheel arriving: turned in from the deck's side and growing to its size, as
+ * it fades up. The queue's palette and the lyrics record open the same way, so
+ * the two read as parts of one machine.
+ */
+export function turnIn(el: HTMLElement | null, left: boolean): void {
+  if (!el || prefersReducedMotion()) return;
+  el.animate(
+    [
+      { transform: `rotate(${left ? -70 : 70}deg) scale(0.7)`, opacity: 0 },
+      { transform: 'none', opacity: 1 },
+    ],
+    { duration: ARRIVE_MS + 260, easing: ARRIVE_EASING },
+  );
+}
