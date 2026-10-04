@@ -17,6 +17,7 @@ import {
   verifyGap,
   watchingFrom,
   type Watch,
+  outOfReach,
 } from './stallWatch';
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
@@ -244,6 +245,9 @@ export class SpotifyProvider extends BaseProvider {
   private stalls: number[] = [];
   /** Whether the silence was this provider's doing, and so is its to undo. */
   private pausedByStall = false;
+  /** Checks in a row that got no answer at all, and when the last one did. */
+  private missed = 0;
+  private lastAnsweredAt = 0;
 
   /**
    * A fast path, not the mechanism.
@@ -767,6 +771,10 @@ export class SpotifyProvider extends BaseProvider {
     this.watching = true;
     this.watch = freshWatch;
     this.stalled = false;
+    // Counted from now: a watch that has just begun has not been unanswered
+    // for any time at all.
+    this.missed = 0;
+    this.lastAnsweredAt = performance.now();
     // Fast to begin with: the first answer is the one that establishes there
     // is nothing to worry about, and until it lands there is no ground for
     // being relaxed.
@@ -935,17 +943,32 @@ export class SpotifyProvider extends BaseProvider {
     const playback = await currentPlayback();
     const trip = performance.now() - asked;
 
-    // No answer is not ambiguous, and waiting for a second opinion is what
-    // made this arrive too late: audio runs on out of the buffer for five or
-    // six seconds after the network goes, so a verdict that needed two checks
-    // landed after the silence rather than before it.
+    // No answer is not a verdict on its own. A slow network still streams the
+    // song while this separate request misses its deadline, and acting on one
+    // miss stopped music that was playing — see `outOfReach`. Spotify refusing
+    // to say is not the network at all, and changes nothing.
     this.reachable = playback.answered;
     if (!playback.answered) {
       this.alert = true;
-      this.report('Spotify did not answer', null);
-      this.enterStall('no route to Spotify');
+      if (playback.reachable) {
+        this.report('Spotify answered without a position', null);
+        log('info', 'playback', 'a check was answered without a position; carrying on');
+        return;
+      }
+      this.missed += 1;
+      const now = performance.now();
+      log('warn', 'playback', `a check went unanswered (${this.missed} in a row, ${Math.round(trip)} ms)`);
+      if (!outOfReach(this.missed, this.lastAnsweredAt, now)) {
+        this.report(`Spotify did not answer (${this.missed})`, null);
+        return;
+      }
+      // The music is not stopped for this: whatever is left in the buffer
+      // plays out, and a network that is only slow keeps it coming.
+      this.enterStall('no route to Spotify', false);
       return;
     }
+    this.missed = 0;
+    this.lastAnsweredAt = performance.now();
 
     // Spotify is reachable again but says nothing is playing. It does not
     // resume on its own after an outage — the device it was playing to is gone
@@ -1081,7 +1104,13 @@ export class SpotifyProvider extends BaseProvider {
     }
   }
 
-  private enterStall(why: string): void {
+  /**
+   * `cutSound` stops the SDK as well as the picture. Right when Spotify says
+   * nothing is playing, or the machine is plainly offline; wrong when it is
+   * only that Spotify could not be asked, which on a slow network it often
+   * cannot while the music streams on regardless.
+   */
+  private enterStall(why: string, cutSound = true): void {
     if (this.stalled || this.state !== 'PLAYING') return;
     this.stalled = true;
     this.stalledSince = Date.now();
@@ -1100,8 +1129,10 @@ export class SpotifyProvider extends BaseProvider {
     // and then the music dies anyway a moment later, which is the confusing
     // half of what this was meant to fix. Local to the SDK, so it works with
     // the network already gone.
-    this.pausedByStall = true;
-    void this.player?.pause().catch(() => {});
+    if (cutSound) {
+      this.pausedByStall = true;
+      void this.player?.pause().catch(() => {});
+    }
 
     this.setState('LOADING');
     this.report(`stalled: ${why}`);

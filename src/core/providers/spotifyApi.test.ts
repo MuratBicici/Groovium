@@ -402,7 +402,26 @@ describe('when Spotify goes quiet without saying so', () => {
 
     const pending = currentPlayback();
     await vi.advanceTimersByTimeAsync(REQUEST_DEADLINE_MS + 1);
-    expect(await pending).toEqual({ answered: false });
+    expect(await pending).toEqual({ answered: false, reachable: false });
+  });
+
+  it('tells it apart from Spotify answering without a position', async () => {
+    // A fault on Spotify's side is Spotify there and talking. It says nothing
+    // about whether the music is coming out, and the watchdog must not stop a
+    // song for it.
+    const { currentPlayback } = await freshApi();
+    stubFetch([answer(503)]);
+
+    const pending = currentPlayback();
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual({ answered: false, reachable: true });
+  });
+
+  it('counts a request that never got through as the network', async () => {
+    const { currentPlayback } = await freshApi();
+    stubFetch([() => Promise.reject(new TypeError('Failed to fetch'))]);
+
+    expect(await currentPlayback()).toEqual({ answered: false, reachable: false });
   });
 
   it('leaves an answer that arrives in time alone', async () => {

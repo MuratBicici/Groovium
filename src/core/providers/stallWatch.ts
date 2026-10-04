@@ -379,3 +379,26 @@ export interface Running {
 export function clockUnwatched(running: Running): boolean {
   return running.clock && running.watching && !running.booked && !running.checking;
 }
+
+/**
+ * How long Spotify has to have been out of reach before it counts as gone.
+ *
+ * One unanswered check used to be enough, on the reasoning that the buffer
+ * runs dry in five or six seconds and a slower verdict lands after the
+ * silence. What that missed is a network that is slow rather than gone: the
+ * music still streams, the check — a separate request with a deadline of its
+ * own — does not come back in time, and the watchdog stopped a song that was
+ * playing perfectly well, then started it again seven seconds later. Every
+ * forty seconds, on the night of 3 October.
+ *
+ * So it takes two misses in a row, at least this long after the last answer.
+ * A real outage is past the buffer by then, so there is nothing left to cut;
+ * a slow network has usually answered by the second check.
+ */
+export const OUTAGE_AFTER_MS = 8_000;
+export const OUTAGE_CHECKS = 2;
+
+/** Whether checks that went unanswered add up to Spotify being out of reach. */
+export function outOfReach(missed: number, lastAnsweredAt: number, now: number): boolean {
+  return missed >= OUTAGE_CHECKS && now - lastAnsweredAt >= OUTAGE_AFTER_MS;
+}

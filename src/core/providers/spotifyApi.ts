@@ -596,8 +596,18 @@ export async function tracksLikeArtist(name: string): Promise<TrackMetadata[]> {
  * different patience: no route to Spotify means the music has already stopped
  * or is about to, while a "not playing" can be a moment between tracks.
  */
+/**
+ * What Spotify said is playing, or why it said nothing.
+ *
+ * `reachable` is the difference that matters to the watchdog. A request that
+ * never arrived or never came back is the network; a refusal — slow down, a
+ * fault on Spotify's side, this app's own gate holding the request back — is
+ * Spotify there and answering, only not with a position. The second says
+ * nothing about whether music is coming out, and stopping it for one was the
+ * watchdog cutting songs that were playing.
+ */
 export type Playback =
-  | { answered: false }
+  | { answered: false; reachable: boolean }
   | { answered: true; isPlaying: boolean; progressMs: number };
 
 export async function currentPlayback(): Promise<Playback> {
@@ -606,9 +616,21 @@ export async function currentPlayback(): Promise<Playback> {
     // 204 means nothing is playing anywhere, and `request` returns null for it.
     if (!state) return { answered: true, isPlaying: false, progressMs: 0 };
     return { answered: true, isPlaying: state.is_playing, progressMs: state.progress_ms ?? 0 };
-  } catch {
-    return { answered: false };
+  } catch (err) {
+    return { answered: false, reachable: !unreachable(err) };
   }
+}
+
+/**
+ * Whether a failure is the network rather than Spotify.
+ *
+ * `fetch` rejects with a TypeError when nothing came back at all, and the
+ * deadline above turns a request that hung into a 408 of this app's own.
+ * Everything else is an answer of some kind.
+ */
+export function unreachable(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  return err instanceof SpotifyError && err.status === 408;
 }
 
 /**

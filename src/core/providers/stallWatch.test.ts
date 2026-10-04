@@ -27,6 +27,8 @@ import {
   TRUSTED_TRIP_MS,
   heardFrom,
   resync,
+  outOfReach,
+  OUTAGE_AFTER_MS,
 } from './stallWatch';
 
 /**
@@ -352,5 +354,22 @@ describe('hearing a start', () => {
   it('is never while Spotify says it is still loading', () => {
     expect(heardFrom(0, 400, true)).toBe(false);
     expect(heardFrom(0, 400, false)).toBe(true);
+  });
+});
+
+describe('a check that goes unanswered', () => {
+  // A slow network still streams; it is the separate check that misses its
+  // deadline. Stopping the music on one miss stopped songs that were playing.
+  it('is not an outage on its own', () => {
+    expect(outOfReach(1, 0, OUTAGE_AFTER_MS * 3)).toBe(false);
+  });
+
+  it('is not an outage twice in quick succession either', () => {
+    expect(outOfReach(2, 10_000, 10_000 + OUTAGE_AFTER_MS - 1)).toBe(false);
+  });
+
+  it('is one when it keeps happening for long enough', () => {
+    expect(outOfReach(2, 10_000, 10_000 + OUTAGE_AFTER_MS)).toBe(true);
+    expect(outOfReach(5, 0, 60_000)).toBe(true);
   });
 });
