@@ -22,7 +22,11 @@ import {
   bufferStep,
   freshBufferTrack,
   type BufferTrack,
+  freshEars,
+  hear,
+  type Ears,
 } from './stallWatch';
+import { overhearBars } from '@/core/visualizer';
 import { noteSlow } from './connectionHealth';
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
@@ -78,6 +82,9 @@ const SOUND_PATIENCE_MS = 20_000;
  */
 const SLOW_START_MS = 6_000;
 const SLOW_ANSWER_MS = 3_000;
+
+/** A pull back further than this, mid-song, is the sound having stopped. */
+const BACK_JUMP_MS = 1_500;
 
 /**
  * How near the end the clock must be for a reset to zero to mean the track
@@ -269,6 +276,15 @@ export class SpotifyProvider extends BaseProvider {
   private bufferTrack: BufferTrack = freshBufferTrack;
   /** When the sound ran dry in the middle of the song, while it is still dry. */
   private dryingSince: number | null = null;
+  /**
+   * What noticed it. The player's own position can only be trusted to say the
+   * sound is back when it was what said it had gone: through a real stall it
+   * goes on counting regardless, so a silence heard has to be heard ending.
+   */
+  private dryBy: 'player' | 'ears' | null = null;
+  /** Listening to what actually comes out, while a song plays. */
+  private ears: Ears = freshEars(0);
+  private stopHearing: (() => void) | null = null;
 
   /**
    * A fast path, not the mechanism.
@@ -598,6 +614,31 @@ export class SpotifyProvider extends BaseProvider {
     const wasAt = this.positionMs;
     this.durationMs = state.duration;
     this.positionMs = state.position;
+    // While the sound is out, the player's word is only taken when it is
+    // further back than the clock: it counts on through the silence.
+    if (this.dryingSince !== null) this.positionMs = Math.min(wasAt, state.position);
+
+    // The player pulling the clock back, mid-song and of its own accord, is the
+    // sound having stopped without anything here noticing — the bar ran on and
+    // is being put right. Said, so it is in the log the next time it happens.
+    const sameSong = state.track_window.current_track?.uri === this.playing;
+    const back = wasAt - state.position;
+    if (
+      this.state === 'PLAYING' &&
+      this.dryingSince === null &&
+      this.startingFrom === null &&
+      !state.paused &&
+      sameSong &&
+      state.position > 0 &&
+      back > BACK_JUMP_MS
+    ) {
+      log('warn', 'playback', `the player put the clock back by ${Math.round(back)} ms`, {
+        from: Math.round(wasAt / 1000),
+        to: Math.round(state.position / 1000),
+        loading: state.loading ?? null,
+      });
+      noteSlow('sound ran dry', 'the player went back');
+    }
     this.lastTickAt = performance.now();
 
     // What the player says it is on. The store owns the metadata — it came from
@@ -804,6 +845,8 @@ export class SpotifyProvider extends BaseProvider {
     if (this.bufferWatch) return;
     this.bufferTrack = freshBufferTrack;
     this.bufferWatch = setInterval(() => void this.checkBuffer(), BUFFER_POLL_MS);
+    this.ears = freshEars(performance.now());
+    this.stopHearing = overhearBars((bars) => this.listen(bars));
   }
 
   private stopBufferWatch(): void {
@@ -811,6 +854,57 @@ export class SpotifyProvider extends BaseProvider {
     this.bufferWatch = null;
     this.bufferTrack = freshBufferTrack;
     this.dryingSince = null;
+    this.dryBy = null;
+    this.stopHearing?.();
+    this.stopHearing = null;
+  }
+
+  /**
+   * One frame of what the app is actually playing out.
+   *
+   * The only evidence there is that sound has stopped: the player's position
+   * counts on through a stall. Silence while a song should be playing freezes
+   * the clock where the sound was last plainly heard — that is where the song
+   * really is — and sound coming back carries on from there. Not while the
+   * volume is down, when silence is what was asked for, nor near either end of
+   * the song, where quiet is the song.
+   */
+  private listen(bars: number[]): void {
+    const now = performance.now();
+    const { ears, loud, silent } = hear(this.ears, bars, now);
+    const lastLoudAt = this.ears.lastLoudAt;
+    this.ears = ears;
+    if (!this.bufferWatch || this.stalled || this.startingFrom !== null) return;
+
+    if (this.dryingSince !== null) {
+      if (!loud) return;
+      const took = Math.round(now - this.dryingSince);
+      this.dryingSince = null;
+      this.dryBy = null;
+      this.lastTickAt = now;
+      this.setState('PLAYING');
+      this.startTicker();
+      this.emitProgress();
+      log('info', 'playback', `sound back after ${took} ms, at ${Math.round(this.positionMs / 1000)} s`);
+      return;
+    }
+
+    if (!silent || this.state !== 'PLAYING' || this.volume < 0.02) return;
+    const ending = this.durationMs > 0 && this.durationMs - this.positionMs < ENDING_GRACE_MS;
+    const opening = this.positionMs < ENDING_GRACE_MS;
+    if (ending || opening) return;
+
+    // Back to where it was last heard: the bar ran on through the second or
+    // two it took to be sure, and none of that was played.
+    const unheard = Math.max(0, now - lastLoudAt);
+    this.positionMs = Math.max(0, this.positionMs - unheard);
+    this.dryingSince = now;
+    this.dryBy = 'ears';
+    this.stopClock();
+    this.setState('LOADING');
+    this.emitProgress();
+    log('warn', 'playback', `no sound coming out at ${Math.round(this.positionMs / 1000)} s; waiting for it`);
+    noteSlow('sound ran dry');
   }
 
   /**
@@ -850,6 +944,7 @@ export class SpotifyProvider extends BaseProvider {
 
     if (dry && this.dryingSince === null && this.state === 'PLAYING' && !ending) {
       this.dryingSince = now;
+      this.dryBy = 'player';
       this.stopClock();
       this.positionMs = state.position;
       this.setState('LOADING');
@@ -861,9 +956,10 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
 
-    if (!dry && this.dryingSince !== null) {
+    if (!dry && this.dryingSince !== null && this.dryBy === 'player') {
       const took = Math.round(now - this.dryingSince);
       this.dryingSince = null;
+      this.dryBy = null;
       this.positionMs = state.position;
       this.lastTickAt = now;
       this.setState('PLAYING');

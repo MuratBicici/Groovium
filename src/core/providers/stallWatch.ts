@@ -448,3 +448,55 @@ export function bufferStep(
     dry: reading.loading || still >= BUFFER_STILL_POLLS,
   };
 }
+
+/**
+ * Hearing whether sound is coming out, from the visualiser's own measure of it.
+ *
+ * The player's position is no evidence: through a stall it goes on counting as
+ * confidently as anything else here, so a song could go silent at 0:31, the
+ * bar run on to 0:45, and the player only own up — by jumping back to 0:31 —
+ * once the sound came back. What the app actually plays out is measured thirty
+ * times a second for the visualiser, and silence there is silence.
+ *
+ * Levels are the visualiser's bars, 0..1 above a floor of −66 dB. Loud enough
+ * to count as sound is well clear of that; silent is all of them all but empty
+ * for half a second — a bar takes about two seconds to fall from full, so this
+ * is not tripped by a beat's gap, and a quiet passage is still far above it.
+ */
+export const LOUD_LEVEL = 0.08;
+export const QUIET_LEVEL = 0.02;
+export const QUIET_HOLD_MS = 500;
+/** Frames further apart than this mean the measure has stopped, not the sound. */
+export const FRAME_GAP_MS = 250;
+
+export interface Ears {
+  lastFrameAt: number;
+  /** When there was last plainly sound — where a silence is taken to have begun. */
+  lastLoudAt: number;
+  quietSince: number | null;
+}
+
+export function freshEars(now: number): Ears {
+  return { lastFrameAt: now, lastLoudAt: now, quietSince: null };
+}
+
+/** One frame of levels: whether it is sound, and whether the silence has lasted. */
+export function hear(
+  ears: Ears,
+  bars: readonly number[],
+  now: number,
+): { ears: Ears; loud: boolean; silent: boolean } {
+  const peak = bars.reduce((a, b) => Math.max(a, b), 0);
+  const loud = peak >= LOUD_LEVEL;
+  const quiet = peak < QUIET_LEVEL;
+  // A gap in the frames is the measure stopping — the window put away — and
+  // says nothing about the sound; the count starts again from here.
+  const steady = now - ears.lastFrameAt < FRAME_GAP_MS;
+  const quietSince = quiet ? (steady ? (ears.quietSince ?? now) : now) : null;
+  const next: Ears = {
+    lastFrameAt: now,
+    lastLoudAt: loud ? now : ears.lastLoudAt,
+    quietSince,
+  };
+  return { ears: next, loud, silent: quietSince !== null && now - quietSince >= QUIET_HOLD_MS };
+}

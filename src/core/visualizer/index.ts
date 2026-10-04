@@ -19,6 +19,13 @@ const EVENT = 'visualizer:bars';
 type Watcher = (bars: number[]) => void;
 
 const watchers = new Set<Watcher>();
+/**
+ * Those that hear the frames when there are any, but are no reason for there
+ * to be. The player listens this way for whether sound is coming out: worth
+ * knowing while the visualiser is running anyway, and not worth running the
+ * capture for on its own, behind a window nobody is looking at.
+ */
+const overhearers = new Set<Watcher>();
 let stop: (() => void) | null = null;
 /**
  * Which run of the capture is the current one.
@@ -37,6 +44,7 @@ async function begin(mine: number): Promise<void> {
 
   const unlisten = await listen<number[]>(EVENT, (event) => {
     for (const watcher of watchers) watcher(event.payload);
+    for (const watcher of overhearers) watcher(event.payload);
   });
 
   if (mine !== run) {
@@ -65,6 +73,7 @@ async function begin(mine: number): Promise<void> {
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__grooviumBars = (bars: number[]) => {
     for (const watcher of watchers) watcher(bars);
+    for (const watcher of overhearers) watcher(bars);
   };
 }
 
@@ -83,6 +92,14 @@ export function watchBars(watcher: Watcher): () => void {
     run += 1;
     stop?.();
     stop = null;
+  };
+}
+
+/** Hear the frames while something else has them running, without starting them. */
+export function overhearBars(watcher: Watcher): () => void {
+  overhearers.add(watcher);
+  return () => {
+    overhearers.delete(watcher);
   };
 }
 

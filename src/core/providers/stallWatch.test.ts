@@ -29,6 +29,8 @@ import {
   resync,
   outOfReach,
   OUTAGE_AFTER_MS,
+  freshEars,
+  hear,
 } from './stallWatch';
 
 /**
@@ -371,5 +373,43 @@ describe('a check that goes unanswered', () => {
   it('is one when it keeps happening for long enough', () => {
     expect(outOfReach(2, 10_000, 10_000 + OUTAGE_AFTER_MS)).toBe(true);
     expect(outOfReach(5, 0, 60_000)).toBe(true);
+  });
+});
+
+describe('hearing whether sound comes out', () => {
+  const run = (frames: Array<[number, number]>) => {
+    let ears = freshEars(0);
+    let last = { loud: false, silent: false };
+    for (const [at, level] of frames) {
+      const out = hear(ears, [level, level / 2], at);
+      ears = out.ears;
+      last = out;
+    }
+    return { ...last, ears };
+  };
+
+  it('calls it silent once the levels have been all but empty for long enough', () => {
+    const frames: Array<[number, number]> = [[0, 0.5]];
+    for (let t = 33; t <= 33 * 20; t += 33) frames.push([t, 0]);
+    expect(run(frames).silent).toBe(true);
+  });
+
+  it('does not call a short gap silent', () => {
+    expect(run([[0, 0.5], [33, 0], [66, 0], [99, 0], [132, 0.4]]).silent).toBe(false);
+  });
+
+  it('does not count a quiet passage as silence', () => {
+    const frames: Array<[number, number]> = [];
+    for (let t = 0; t <= 2000; t += 33) frames.push([t, 0.04]);
+    expect(run(frames).silent).toBe(false);
+  });
+
+  it('remembers when there was last plainly sound', () => {
+    expect(run([[0, 0.5], [33, 0.5], [66, 0], [99, 0]]).ears.lastLoudAt).toBe(33);
+  });
+
+  it('starts the count again after the frames stopped coming', () => {
+    const frames: Array<[number, number]> = [[0, 0], [33, 0], [66, 0], [1500, 0]];
+    expect(run(frames).silent).toBe(false);
   });
 });
