@@ -84,6 +84,28 @@ export function withIntro(lines: readonly LyricLine[]): LyricLine[] {
 }
 
 /**
+ * The song without the silence after its last words.
+ *
+ * Plenty of timers end a song with an empty line where the singing stops, and
+ * that was drawn as a wave — a wave at the end of the lyrics, filling for the
+ * whole of the outro, standing for nothing coming next. A wave between two
+ * lines says the words come back; after the last one there is nothing for it
+ * to say. Taken off here, the last words stay lit until the song ends.
+ *
+ * A song that is all silence is left as it is: that is an instrumental, timed,
+ * and there is nothing else to show.
+ */
+export function withoutOutro(lines: readonly LyricLine[]): LyricLine[] {
+  let end = lines.length;
+  while (end > 0 && unsung(lines[end - 1])) end -= 1;
+  return end === 0 ? [...lines] : lines.slice(0, end);
+}
+
+function unsung(line: LyricLine | undefined): boolean {
+  return !!line && !(line.words && line.words.length > 0) && isSilence(line.text);
+}
+
+/**
  * How far into each word the light has got, from how far into the line it is.
  *
  * A line the eye reads left to right is not a box the light can cross left to

@@ -7,6 +7,7 @@ import {
   isSilence,
   lineSweep,
   withIntro,
+  withoutOutro,
 } from './activeLine';
 
 const lines = [1000, 2000, 2000, 5000].map((timeMs, i) => ({ timeMs, text: `${i}` }));
@@ -177,5 +178,39 @@ describe('a line with no words on it', () => {
   it('is never a line with a word in it, however short', () => {
     for (const words of ['I', 'oh ♪', '♪ la la ♪', 'Instrumental', '1, 2', 'N’olur'])
       expect(isSilence(words), words).toBe(false);
+  });
+});
+
+describe("the song's end", () => {
+  const words = (timeMs: number) => ({ timeMs, text: 'a word' });
+  const quiet = (timeMs: number, text = '') => ({ timeMs, text });
+
+  it('has no wave after the last words', () => {
+    expect(withoutOutro([words(1_000), words(4_000), quiet(9_000)])).toEqual([
+      words(1_000),
+      words(4_000),
+    ]);
+  });
+
+  it('loses every mark of silence at the end, written however', () => {
+    expect(withoutOutro([words(1_000), quiet(5_000, '♪'), quiet(9_000, '...')])).toEqual([
+      words(1_000),
+    ]);
+  });
+
+  it('keeps the silences between the words', () => {
+    const song = [words(1_000), quiet(4_000), words(9_000)];
+    expect(withoutOutro(song)).toEqual(song);
+  });
+
+  it('keeps a last line timed by syllable, whatever its text', () => {
+    const song = [words(1_000), { timeMs: 4_000, text: '', words: [{ timeMs: 4_000, text: 'oh' }] }];
+    expect(withoutOutro(song)).toEqual(song);
+  });
+
+  it('leaves a song that is all silence as it is', () => {
+    const song = [quiet(0), quiet(30_000)];
+    expect(withoutOutro(song)).toEqual(song);
+    expect(withoutOutro([])).toEqual([]);
   });
 });
