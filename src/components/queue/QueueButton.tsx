@@ -13,10 +13,13 @@ import { usePlayerStore } from '@/core/store';
  */
 export function QueueButton({
   open,
+  disabled = false,
   onToggle,
   controls,
 }: {
   open: boolean;
+  /** Nothing on the deck, so nothing for a queue to follow. */
+  disabled?: boolean;
   onToggle: () => void;
   controls: string;
 }) {
@@ -27,7 +30,7 @@ export function QueueButton({
 
   useEffect(() => {
     const el = button.current;
-    if (!el) return;
+    if (!el || disabled) return;
     return registerReceiver({
       el,
       // A crate in the hand is a whole playlist, not a song.
@@ -41,7 +44,7 @@ export function QueueButton({
         handBack({ x: 0, y: 0 });
       },
     });
-  }, [registerReceiver, queueLast]);
+  }, [registerReceiver, queueLast, disabled]);
 
   return (
     <PanelButton
@@ -50,7 +53,8 @@ export function QueueButton({
       onToggle={onToggle}
       controls={controls}
       buttonRef={button}
-      offered={offered}
+      offered={offered && !disabled}
+      disabled={disabled}
     />
   );
 }

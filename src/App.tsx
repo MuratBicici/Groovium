@@ -160,7 +160,16 @@ export default function App() {
    * drawer is out — anything that puts the drawer away puts it away too.
    */
   const [queue, setQueue] = useState(queueHidden);
-  const queueShown = queue.shown && drawerOpen;
+  /**
+   * Whether there is a song on the deck — playing, paused, or on its way. The
+   * palette is the order of what follows it, and with nothing on the deck
+   * there is nothing for anything to follow.
+   */
+  const deckHasSong = usePlayerStore((s) => (s.currentTrack ?? s.starting) !== null);
+  // An empty deck puts the palette away for good, rather than leaving it to
+  // come back by itself with whatever song is put on next.
+  if (!deckHasSong && queue.shown) setQueue(queueHidden);
+  const queueShown = queue.shown && drawerOpen && deckHasSong;
   /** The drawer's own close, from any of its three faces. */
   const shutDrawer = () => {
     setQueue(queueHidden);
@@ -561,6 +570,7 @@ export default function App() {
             )}
             <QueueButton
               open={queueShown}
+              disabled={!deckHasSong}
               controls={QUEUE_ID}
               onToggle={() => {
                 const next = pressQueue(queueShown ? queue : queueHidden, drawerOpen);
@@ -584,6 +594,7 @@ export default function App() {
         <DrawerSlot
           lyrics={lyricsInDrawer}
           queue={queueShown}
+          deckHasSong={deckHasSong}
           queueView={<QueueDrawer id={QUEUE_ID} side={drawerSide} onClose={shutDrawer} />}
           spotify={
             <LibraryDrawer id={DRAWER_ID} onClose={shutDrawer} />
@@ -700,6 +711,7 @@ function DrawerSlot({
   lyricsView,
   queue,
   queueView,
+  deckHasSong,
 }: {
   lyrics: boolean;
   spotify: React.ReactNode;
@@ -707,6 +719,7 @@ function DrawerSlot({
   /** The queue's palette is over everything else in the drawer. */
   queue: boolean;
   queueView: React.ReactNode;
+  deckHasSong: boolean;
 }) {
   /**
    * A song carried out of the drawer brings the queue out beside it, so the
@@ -717,7 +730,7 @@ function DrawerSlot({
    */
   const carry = useCarryKind();
   const carryingSong = carry !== null && carry.visiting && carry.look === 'record';
-  const showQueue = queue || carryingSong;
+  const showQueue = queue || (carryingSong && deckHasSong);
   const { present, ref } = usePresence(lyrics);
   const { present: queuePresent, ref: queueRef } = usePresence(showQueue);
   return (

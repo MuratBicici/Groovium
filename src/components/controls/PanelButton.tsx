@@ -75,6 +75,8 @@ interface PanelButtonProps {
   buttonRef?: React.Ref<HTMLButtonElement>;
   /** A carried record is over this and would be taken. */
   offered?: boolean;
+  /** Nothing for it to open onto just now. */
+  disabled?: boolean;
 }
 
 /**
@@ -92,6 +94,7 @@ export function PanelButton({
   badge,
   buttonRef,
   offered = false,
+  disabled = false,
 }: PanelButtonProps) {
   const t = useT();
   const name = t(`panel.${panel}`);
@@ -100,6 +103,7 @@ export function PanelButton({
     <button
       ref={buttonRef}
       type="button"
+      disabled={disabled}
       // The badge joins the label rather than being drawn and left unsaid: a
       // dot is not something a screen reader can report on its own.
       aria-label={`${open ? t('panel.close', { name }) : t('panel.open', { name })}${
@@ -111,7 +115,7 @@ export function PanelButton({
       onClick={onToggle}
       className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-[color,background-color,transform,box-shadow] ${
         offered ? 'groove-queue-offered ' : ''
-      }${
+      }${disabled ? 'cursor-default opacity-35 ' : ''}${
         open
           ? 'bg-brass-600 text-on-accent'
           : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
