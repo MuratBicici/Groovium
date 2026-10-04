@@ -1287,3 +1287,22 @@ body {
     0 0 14px color-mix(in srgb, var(--color-brass-400) 50%, transparent);
   transform: scale(1.12);
 }
+
+/* The two places on the queue's palette a carried song can be put down. */
+.groove-queue-well {
+  animation: groove-queue-well-in 220ms ease-out both;
+}
+.groove-queue-well + .groove-queue-well {
+  animation-delay: 50ms;
+}
+@keyframes groove-queue-well-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-queue-well {
+    animation: none;
+  }
+}

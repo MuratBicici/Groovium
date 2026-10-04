@@ -86,8 +86,6 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
   const playlists = usePlaylists();
   const addTrackToPlaylist = usePlayerStore((s) => s.addTrackToPlaylist);
   const newPlaylist = usePlayerStore((s) => s.newPlaylist);
-  const queueNext = usePlayerStore((s) => s.queueNext);
-  const queueLast = usePlayerStore((s) => s.queueLast);
 
   const spotifyPlaylists = useSpotifyPlaylistsStore((s) => s.playlists);
   const spotifyStarted = useSpotifyPlaylistsStore((s) => s.started);
@@ -251,36 +249,6 @@ export function PlaylistPickerProvider({ children }: { children: React.ReactNode
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
-              {/* The queue first: the quickest thing to do with a song, and the
-                  one that is about now rather than about keeping it. */}
-              <ul className="mb-1 border-b border-[var(--color-edge)] pb-1">
-                <li>
-                  <Row
-                    name={t('queue.playNext')}
-                    detail=""
-                    muted={false}
-                    disabled={false}
-                    onPress={() => {
-                      queueNext(showing);
-                      close();
-                      say(t('queue.addedNext'));
-                    }}
-                  />
-                </li>
-                <li>
-                  <Row
-                    name={t('queue.addLast')}
-                    detail=""
-                    muted={false}
-                    disabled={false}
-                    onPress={() => {
-                      queueLast(showing);
-                      close();
-                      say(t('queue.addedLast'));
-                    }}
-                  />
-                </li>
-              </ul>
               {spotifyReady && <SectionLabel>{t('playlists.sectionGroovium')}</SectionLabel>}
               <ul>
                 {playlists.length === 0 && (

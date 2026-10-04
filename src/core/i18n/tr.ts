@@ -61,8 +61,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'queue.addLast': 'Sıraya ekle',
   'queue.remove': 'Sıradan çıkar',
   'queue.skip': 'Bu sefer atla',
-  'queue.addedNext': 'Sıradaki şarkı oldu',
-  'queue.addedLast': 'Sıraya eklendi',
   'panel.lyrics': 'Şarkı sözleri',
   'lyrics.title': 'Şarkı sözleri',
   'lyrics.loading': 'Sözler aranıyor…',

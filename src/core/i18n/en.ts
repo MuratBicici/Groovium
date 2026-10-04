@@ -61,8 +61,6 @@ export const en = {
   'queue.addLast': 'Add to queue',
   'queue.remove': 'Take out',
   'queue.skip': 'Skip this time',
-  'queue.addedNext': 'Plays next',
-  'queue.addedLast': 'Added to the queue',
   'panel.lyrics': 'Lyrics',
   'lyrics.title': 'Lyrics',
   'lyrics.loading': 'Looking for the lyrics…',

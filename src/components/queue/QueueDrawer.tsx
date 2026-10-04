@@ -6,7 +6,7 @@ import { useT } from '@/core/i18n';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { useDiscFlight } from '@/components/player/DiscFlight';
-import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { useCarriedTrack, useCarryKind, useDiscHold } from '@/components/player/DiscHold';
 import { useTurn } from './useTurn';
 import { turnTransition } from '@/components/lyrics/LyricWheel';
 import { TURN_EASING, TURN_MS, turnIn } from '@/components/lyrics/motion';
@@ -50,8 +50,12 @@ interface Slot {
  * Everything of the queue — the records, their names, its own small controls —
  * is on the palette.
  *
- * Turned with the wheel, a record a notch, and back to the next song a few
- * seconds after — the lyrics wheel's rules, so the two feel like one machine.
+ * A song carried out of the drawer is queued here too: two places open on the
+ * felt while it is in the hand, one to play it next and one to put it at the
+ * end, and it goes into whichever it is let go over.
+ *
+ * Turned with the wheel, a record a notch, as the lyrics wheel is, and left
+ * where it was turned to.
  * A record pressed plays now; held, it can be moved round the palette to a new
  * place, or carried off the drawer and put on the deck. The light arrows behind
  * the records point the way the queue runs.
@@ -76,10 +80,21 @@ export function QueueDrawer({
   const skipUpcoming = usePlayerStore((s) => s.skipUpcoming);
   const moveQueued = usePlayerStore((s) => s.moveQueued);
   const queueAt = usePlayerStore((s) => s.queueAt);
+  const queueNext = usePlayerStore((s) => s.queueNext);
   const queueLast = usePlayerStore((s) => s.queueLast);
   const { flyToPlatter, platterEl } = useDiscFlight();
-  const { grab, moveTo, release, cancel, registerReceiver, subscribeCarry } = useDiscHold();
+  const { grab, moveTo, release, cancel } = useDiscHold();
   const inHand = useCarriedTrack();
+  const carry = useCarryKind();
+
+  /**
+   * A record of the palette's own, carried off it to the deck. It is a song
+   * from elsewhere as far as the hand is concerned, but it is already queued,
+   * so it is not offered the places to queue it.
+   */
+  const [own, setOwn] = useState<string | null>(null);
+  if (own !== null && inHand === null) setOwn(null);
+  const offering = carry !== null && carry.visiting && carry.look === 'record' && inHand !== own;
 
   const slots = useMemo<Slot[]>(() => {
     const list: Slot[] = [];
@@ -97,45 +112,9 @@ export function QueueDrawer({
 
   const body = useRef<HTMLDivElement | null>(null);
   const palette = useRef<HTMLDivElement | null>(null);
-  const spot = useRef<HTMLDivElement | null>(null);
 
   // The palette turns in from the deck's side as the drawer shows it.
   useLayoutEffect(() => turnIn(palette.current, left), [left]);
-
-  /**
-   * Somewhere on the palette a record can be dropped from elsewhere: the place
-   * the next song stands. It goes on the end of the queue, and the record goes
-   * back to where it came from, the way one filed in a crate does.
-   */
-  const [offered, setOffered] = useState(false);
-  // The spot sits over the record on the level, and is only something the
-  // pointer can find while a record is being carried: then it has to be what
-  // is under the hand to take it, and any other time the record under it has
-  // to be pressable. Written straight to the element, because the hand looks
-  // for what is under it in the same moment it says where it is.
-  useEffect(
-    () =>
-      subscribeCarry((point) => {
-        if (spot.current) spot.current.style.pointerEvents = point ? 'auto' : 'none';
-      }),
-    [subscribeCarry],
-  );
-  useEffect(() => {
-    const el = spot.current;
-    if (!el) return;
-    return registerReceiver({
-      el,
-      accepts: (track) => !track.id.startsWith('crate:'),
-      onHover: (state) => setOffered(state === 'accept'),
-      refuse: () => {},
-      approach: { x: 0, y: -30 },
-      handOverAt: 0,
-      takeIn: (track, _from, handBack) => {
-        queueLast(track);
-        handBack({ x: 0, y: 0 });
-      },
-    });
-  }, [registerReceiver, queueLast]);
 
   /** A record being moved round the palette, drawn where the pointer is. */
   const [ghost, setGhost] = useState<{ track: TrackMetadata; x: number; y: number } | null>(null);
@@ -195,6 +174,7 @@ export function QueueDrawer({
       mode = 'carry';
       setGhost(null);
       setMoving(null);
+      setOwn(slot.track.id);
       grab({
         track: slot.track,
         homeEl: disc,
@@ -265,6 +245,9 @@ export function QueueDrawer({
         >
           <PaletteSurface angle={angle} transition={turn} />
 
+          {/* Faded back while a song is carried in, so the two places to put it
+              are what stands out on the felt. */}
+          <div className="transition-opacity duration-200 ease-out" style={{ opacity: offering ? 0.15 : 1 }}>
           <div style={wheel}>
             {/* The way the queue runs: a faint ring through the records and an
                 arrow between each pair, turning with them. */}
@@ -345,23 +328,15 @@ export function QueueDrawer({
               {t('queue.empty')}
             </p>
           )}
+          </div>
         </div>
 
-        {/* The place the next song stands, where a record from elsewhere can be
-            dropped onto the queue. Still, while the palette turns. */}
-        <div
-          ref={spot}
-          aria-hidden="true"
-          className={`pointer-events-none absolute z-10 rounded-full transition-shadow ${
-            offered ? 'groove-queue-offered' : ''
-          }`}
-          style={{
-            width: RECORD_SIZE,
-            height: RECORD_SIZE,
-            top: `calc(50% - ${RECORD_SIZE / 2}px)`,
-            [left ? 'left' : 'right']: CENTER_INSET + RIM_RADIUS - RECORD_SIZE / 2,
-          }}
-        />
+        {offering && (
+          <>
+            <Well where="next" label={t('queue.playNext')} side={side} onTake={queueNext} />
+            <Well where="last" label={t('queue.addLast')} side={side} onTake={queueLast} />
+          </>
+        )}
 
         {/* The queue's own few controls, on a pill at the palette's foot: the
             drawer's header is the drawer's, and stays as it was. */}
@@ -587,5 +562,98 @@ function Chip({
         {children}
       </svg>
     </button>
+  );
+}
+
+/** How far in from the palette's centre the two places to drop a song stand. */
+const WELL_FROM_HUB = 165;
+/** How far above and below the level they are. */
+const WELL_APART = 78;
+
+/**
+ * A place on the felt to put a song carried from the drawer: the top one plays
+ * it next, the bottom one puts it at the end. Up and down because that is the
+ * way the queue runs round the rim — sooner above, later below — and the
+ * arrows inside say the same.
+ *
+ * The record is set down in it, as one filed in a crate is, and goes back to
+ * where it came from.
+ */
+function Well({
+  where,
+  label,
+  side,
+  onTake,
+}: {
+  where: 'next' | 'last';
+  label: string;
+  side: DrawerSide;
+  onTake: (track: TrackMetadata) => void;
+}) {
+  const left = side === 'left';
+  const el = useRef<HTMLDivElement | null>(null);
+  const [offered, setOffered] = useState(false);
+  const { registerReceiver } = useDiscHold();
+
+  useEffect(() => {
+    const node = el.current;
+    if (!node) return;
+    return registerReceiver({
+      el: node,
+      accepts: (track) => !track.id.startsWith('crate:'),
+      onHover: (state) => setOffered(state === 'accept'),
+      refuse: () => {},
+      approach: { x: 0, y: -30 },
+      handOverAt: 0,
+      takeIn: (track, _from, handBack) => {
+        onTake(track);
+        handBack({ x: 0, y: 0 });
+      },
+    });
+  }, [registerReceiver, onTake]);
+
+  return (
+    <div
+      // Its name on the side away from the other, so the two read apart and
+      // the next song's own words can still be made out between them.
+      className={`groove-queue-well pointer-events-none absolute z-10 flex items-center gap-1.5 ${
+        where === 'next' ? 'flex-col-reverse' : 'flex-col'
+      }`}
+      style={{
+        width: RECORD_SIZE + 40,
+        [where === 'next' ? 'bottom' : 'top']: `calc(50% + ${WELL_APART - RECORD_SIZE / 2}px)`,
+        [left ? 'left' : 'right']: CENTER_INSET + WELL_FROM_HUB - (RECORD_SIZE + 40) / 2,
+      }}
+    >
+      <div
+        ref={el}
+        aria-hidden="true"
+        className={`pointer-events-auto flex items-center justify-center rounded-full border-[1.5px] border-dashed transition-[transform,box-shadow,background-color,border-color] duration-150 ease-out ${
+          offered
+            ? 'groove-queue-offered border-transparent bg-brass-600/30 text-brass-300'
+            : 'border-brass-400/55 bg-shell-900/55 text-brass-400/80'
+        }`}
+        style={{ width: RECORD_SIZE, height: RECORD_SIZE }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          className="h-6 w-6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {where === 'next' ? <path d="M6 4h12M12 20V8M7 13l5-5 5 5" /> : <path d="M6 20h12M12 4v12M7 11l5 5 5-5" />}
+        </svg>
+      </div>
+      <span
+        className={`text-label font-medium tracking-[0.18em] uppercase transition-colors ${
+          offered ? 'text-brass-300' : 'text-cream-200'
+        }`}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
