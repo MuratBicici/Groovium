@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EARS_ENDING_MS,
+  EARS_GONE_MS,
+  earsGone,
+  earsMayJudge,
+  finishedHere,
   GIVE_UP_AFTER_MS,
   STALLS_ALLOWED,
   STALL_WINDOW_MS,
@@ -411,5 +416,76 @@ describe('hearing whether sound comes out', () => {
   it('starts the count again after the frames stopped coming', () => {
     const frames: Array<[number, number]> = [[0, 0], [33, 0], [66, 0], [1500, 0]];
     expect(run(frames).silent).toBe(false);
+  });
+});
+
+describe('silence the ears may judge', () => {
+  const song = 264_000;
+
+  it('is in the middle of a song', () => {
+    expect(earsMayJudge(120_000, song)).toBe(true);
+  });
+
+  it('is not a fade at the end, however long', () => {
+    // 4:20 of 4:24, which was taken for the sound running out.
+    expect(earsMayJudge(260_000, song)).toBe(false);
+    expect(earsMayJudge(song - EARS_ENDING_MS + 1, song)).toBe(false);
+    expect(earsMayJudge(song - EARS_ENDING_MS - 1, song)).toBe(true);
+  });
+
+  it('is not the first moments of a song', () => {
+    expect(earsMayJudge(2_000, song)).toBe(false);
+  });
+
+  it('is any time in a song of no known length, but its start', () => {
+    expect(earsMayJudge(260_000, 0)).toBe(true);
+  });
+});
+
+describe('ears that have stopped hearing', () => {
+  it('are frames that stopped coming', () => {
+    expect(earsGone(1_000, 1_000 + EARS_GONE_MS + 1)).toBe(true);
+    expect(earsGone(1_000, 1_000 + 300)).toBe(false);
+  });
+});
+
+describe('a song finishing', () => {
+  const seen = {
+    playing: true,
+    starved: false,
+    position: 0,
+    clockAt: 262_000,
+    playerAt: 262_000,
+    duration: 264_000,
+    grace: 5_000,
+    stalled: false,
+    reachable: true,
+  };
+
+  it('is paused at nought from its end', () => {
+    expect(finishedHere(seen)).toBe(true);
+  });
+
+  it('is still that when its sound had run out on the way', () => {
+    // The case that rewound a song to its start and left it there: loading,
+    // not playing, and the clock stood still a while before the end — but
+    // the player went on to it.
+    expect(
+      finishedHere({ ...seen, playing: false, starved: true, clockAt: 250_000, playerAt: 263_500 }),
+    ).toBe(true);
+  });
+
+  it('is not a pause in the middle', () => {
+    expect(finishedHere({ ...seen, clockAt: 120_000, playerAt: 120_000 })).toBe(false);
+    expect(finishedHere({ ...seen, position: 262_000 })).toBe(false);
+  });
+
+  it('is not a connection dropping', () => {
+    expect(finishedHere({ ...seen, stalled: true })).toBe(false);
+    expect(finishedHere({ ...seen, reachable: false })).toBe(false);
+  });
+
+  it('is not anything while nothing was playing', () => {
+    expect(finishedHere({ ...seen, playing: false })).toBe(false);
   });
 });

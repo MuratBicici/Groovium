@@ -25,6 +25,9 @@ import {
   freshEars,
   hear,
   type Ears,
+  earsGone,
+  earsMayJudge,
+  finishedHere,
 } from './stallWatch';
 import { overhearBars } from '@/core/visualizer';
 import { noteSlow } from './connectionHealth';
@@ -276,6 +279,12 @@ export class SpotifyProvider extends BaseProvider {
   private bufferTrack: BufferTrack = freshBufferTrack;
   /** When the sound ran dry in the middle of the song, while it is still dry. */
   private dryingSince: number | null = null;
+  /**
+   * Where the player itself last said it was. Apart from the clock, which
+   * stands still while the sound is out; the player's goes on, and near the
+   * end of a song that is what says the song is ending.
+   */
+  private playerAt = 0;
   /**
    * What noticed it. The player's own position can only be trusted to say the
    * sound is back when it was what said it had gone: through a real stall it
@@ -607,6 +616,9 @@ export class SpotifyProvider extends BaseProvider {
     }
 
     const wasPlaying = this.state === 'PLAYING';
+    const wasStarved = this.dryingSince !== null;
+    const playerWasAt = this.playerAt;
+    this.playerAt = state.position;
     // Read before the incoming state overwrites it. Where the clock had got to
     // is the whole of the evidence for whether a track finished, and this line
     // is the difference between having it and reading back the zero that is
@@ -665,8 +677,19 @@ export class SpotifyProvider extends BaseProvider {
       // reachable is the honest question but it can be a second out of date,
       // and the reset can arrive first. Where the clock had got to cannot be
       // out of date: a track that ended was at its end.
-      const nearTheEnd = this.durationMs > 0 && wasAt >= this.durationMs - ENDING_GRACE_MS;
-      if (wasPlaying && state.position === 0 && nearTheEnd && !this.stalled && this.reachable) {
+      const ended = finishedHere({
+        playing: wasPlaying,
+        starved: wasStarved,
+        position: state.position,
+        clockAt: wasAt,
+        playerAt: playerWasAt,
+        duration: this.durationMs,
+        grace: ENDING_GRACE_MS,
+        stalled: this.stalled,
+        reachable: this.reachable,
+      });
+      if (ended) {
+        if (wasStarved) log('info', 'playback', 'the song ended while its sound was out');
         this.setState('IDLE');
         // From the player's own state, not from `this.currentTrack` — which
         // this provider never assigns, so the payload was always null and the
@@ -725,6 +748,8 @@ export class SpotifyProvider extends BaseProvider {
   private expectSound(from: number): void {
     this.startingFrom = from;
     this.startedAt = performance.now();
+    // The last song's place says nothing about this one's end.
+    this.playerAt = from;
   }
 
   /**
@@ -890,9 +915,7 @@ export class SpotifyProvider extends BaseProvider {
     }
 
     if (!silent || this.state !== 'PLAYING' || this.volume < 0.02) return;
-    const ending = this.durationMs > 0 && this.durationMs - this.positionMs < ENDING_GRACE_MS;
-    const opening = this.positionMs < ENDING_GRACE_MS;
-    if (ending || opening) return;
+    if (!earsMayJudge(this.positionMs, this.durationMs)) return;
 
     // Back to where it was last heard: the bar ran on through the second or
     // two it took to be sure, and none of that was played.
@@ -929,8 +952,25 @@ export class SpotifyProvider extends BaseProvider {
       return;
     }
     if (this.fromBefore(state)) return;
+    this.playerAt = state.position;
 
     const now = performance.now();
+
+    // Waiting on the ears for a sound they can no longer hear: the frames have
+    // stopped, so the player's word is the only one left, and it says playing.
+    if (this.dryBy === 'ears' && this.dryingSince !== null && earsGone(this.ears.lastFrameAt, now)) {
+      const took = Math.round(now - this.dryingSince);
+      this.dryingSince = null;
+      this.dryBy = null;
+      this.positionMs = state.position;
+      this.lastTickAt = now;
+      this.setState('PLAYING');
+      this.startTicker();
+      this.emitProgress();
+      log('info', 'playback', `stopped hearing after ${took} ms; going by the player again`);
+      return;
+    }
+
     const { track, dry } = bufferStep(this.bufferTrack, {
       position: state.position,
       loading: state.loading === true,

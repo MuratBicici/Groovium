@@ -500,3 +500,62 @@ export function hear(
   };
   return { ears: next, loud, silent: quietSince !== null && now - quietSince >= QUIET_HOLD_MS };
 }
+
+/**
+ * How near either end of a song a silence is taken for the song's own.
+ *
+ * Songs fade out, and a fade takes longer than the five seconds the clock is
+ * allowed for slack: one went quiet at 4:20 of 4:24, was taken for the sound
+ * running out, and the window said it was loading through the last of the
+ * song. Fifteen seconds covers a long fade. The opening keeps the clock's
+ * five, since a quiet start is shorter and a slow start is common.
+ */
+export const EARS_ENDING_MS = 15_000;
+export const EARS_OPENING_MS = 5_000;
+
+/** Whether silence at `position` could be the sound running out, rather than the song. */
+export function earsMayJudge(position: number, duration: number): boolean {
+  if (position < EARS_OPENING_MS) return false;
+  return !(duration > 0 && duration - position < EARS_ENDING_MS);
+}
+
+/**
+ * How long without a frame before the ears are taken to have stopped.
+ *
+ * Waiting for the sound to come back can only be done by hearing it, and the
+ * frames stop when the visualiser does — the window put away, or the setting
+ * switched off. Waiting on would be waiting for ever, with the music playing.
+ */
+export const EARS_GONE_MS = 1_500;
+
+export function earsGone(lastFrameAt: number, now: number): boolean {
+  return now - lastFrameAt > EARS_GONE_MS;
+}
+
+/**
+ * Whether a state saying paused at zero is the track having finished.
+ *
+ * Spotify has no "ended" event; a track that ends lands paused at nought, and
+ * so does a connection dropping in the middle of one. Three things tell them
+ * apart. It was playing — and a song whose sound had run out was still
+ * playing, only starved: that was missed, and a song that went quiet near its
+ * end and then finished was taken for a pause, rewound to its start, and left
+ * there. It was near the end — by the clock, or by the player's own position,
+ * since the clock stands still while the sound is out and the player's goes
+ * on. And Spotify is there to be playing at all.
+ */
+export function finishedHere(seen: {
+  playing: boolean;
+  starved: boolean;
+  position: number;
+  clockAt: number;
+  playerAt: number;
+  duration: number;
+  grace: number;
+  stalled: boolean;
+  reachable: boolean;
+}): boolean {
+  if (!(seen.playing || seen.starved) || seen.position !== 0) return false;
+  if (seen.stalled || !seen.reachable || seen.duration <= 0) return false;
+  return Math.max(seen.clockAt, seen.playerAt) >= seen.duration - seen.grace;
+}
