@@ -151,7 +151,7 @@ export interface Settings {
   glowFlare: number;
   /**
    * What the edge light listens to: the whole of the music, or the bass alone
-   * — the bottom fifth of the spectrum, about 45–150Hz, where the kick is.
+   * — the bottom third of the spectrum, about 45–300Hz, where the kick is.
    */
   glowListens: GlowListens;
   /**

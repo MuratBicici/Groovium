@@ -428,9 +428,18 @@ describe('listening to the bass alone', () => {
     ...Array.from({ length: 8 }, () => frames.at(-1) ?? []),
   ];
 
-  it('hears a kick in the bottom fifth', () => {
+  it('hears a kick in the bottom third', () => {
     const heard = bassOnly(
       settle([...runUp(only(0, 5, 0.4, 0.4)), only(0, 5, 0.95, 0.4)]),
+    );
+    expect(Math.max(...heard.map((h) => h.hit))).toBeGreaterThan(0.3);
+  });
+
+  it('hears a kick whose body lands near the top of it, around 200–300Hz', () => {
+    // The kicks a fifth of the spectrum let by: struck hardest just past where
+    // a fifth stopped.
+    const heard = bassOnly(
+      settle([...runUp(only(0, 8, 0.4, 0.4)), only(6, 8, 0.95, 0.4)]),
     );
     expect(Math.max(...heard.map((h) => h.hit))).toBeGreaterThan(0.3);
   });

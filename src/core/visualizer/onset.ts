@@ -180,7 +180,7 @@ export const SPECTRUM_REGIONS: readonly Part[] = [
 ];
 
 /**
- * The bass and nothing else: the bottom fifth of the bands, about 45–150Hz,
+ * The bass and nothing else: the bottom third of the bands, about 45–300Hz,
  * as one part — the edge light's "Bass" setting.
  *
  * Everything above it is not heard at all, so a snare or a voice cannot win a

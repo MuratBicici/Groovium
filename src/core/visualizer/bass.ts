@@ -3,9 +3,14 @@
  * listen to the bass and nothing else.
  *
  * The bands arrive low to high across roughly forty-five hertz to fourteen
- * thousand on a log scale, so the bottom fifth of them is about 45–150Hz —
- * the kick and the bass line, and the left-hand fifth of the visualiser,
+ * thousand on a log scale, so the bottom third of them is about 45–300Hz —
+ * the kick and the bass line, and the left-hand third of the visualiser,
  * which is where the music visibly jumps.
+ *
+ * A third rather than the fifth it started as. A fifth stops near 150Hz, and
+ * a kick is not only its thump: the body of it reaches past 200, and in some
+ * mixes that is where it lands hardest. Tried with real music, the fifth let
+ * those kicks by.
  *
  * Read as a level, though, the low end says very little. On anything mastered
  * in the last twenty years it sits near the top of its range for the length
@@ -18,7 +23,7 @@
  */
 
 /** The share of the bands, from the bottom, that is the bass. */
-export const BASS_SHARE = 0.2;
+export const BASS_SHARE = 1 / 3;
 
 /** How many of `bands` that is: never none, so a short frame still has a bass. */
 export function bassBands(bands: number): number {
@@ -29,7 +34,7 @@ export function bassBands(bands: number): number {
  * The loudest band of the bass in a frame.
  *
  * The loudest rather than the mean: a kick lands in one or two bands, and
- * averaged against the rest of the bottom fifth it is half lost.
+ * averaged against the rest of the bottom third it is half lost.
  */
 export function bassPeak(bars: readonly number[]): number {
   const to = Math.min(bars.length, bassBands(bars.length));

@@ -23,9 +23,9 @@ const kicks = (frames: number, kick: number, under: number) =>
   Array.from({ length: frames }, (_, at) => (at % 30 < 3 ? kick : under));
 
 describe('where the bass is', () => {
-  it('is the bottom fifth of the bands: five of twenty-four, about 45–150Hz', () => {
-    expect(bassBands(24)).toBe(5);
-    expect(bassBands(72)).toBe(14);
+  it('is the bottom third of the bands: eight of twenty-four, about 45–300Hz', () => {
+    expect(bassBands(24)).toBe(8);
+    expect(bassBands(72)).toBe(24);
     // Never none, however few bands arrive.
     expect(bassBands(2)).toBe(1);
   });
@@ -34,6 +34,10 @@ describe('where the bass is', () => {
     const bars = frame(0.3, 0.9);
     bars[2] = 0.7;
     expect(bassPeak(bars)).toBeCloseTo(0.7, 6);
+    // The top of the bass is in it — where a fifth used to stop short.
+    const body = frame(0.3, 0.3);
+    body[7] = 0.9;
+    expect(bassPeak(body)).toBeCloseTo(0.9, 6);
     // A loud snare above the bass is not the bass.
     const snare = frame(0.2, 0.2);
     snare[10] = 1;
