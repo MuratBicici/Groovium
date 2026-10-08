@@ -190,6 +190,7 @@ export default function App() {
   const glowSpeed = useSettingsStore((s) => s.glowSpeed);
   const glowFlash = useSettingsStore((s) => s.glowFlash);
   const glowFlare = useSettingsStore((s) => s.glowFlare);
+  const glowListens = useSettingsStore((s) => s.glowListens);
   const lastSeenVersion = useSettingsStore((s) => s.lastSeenVersion);
   const markVersionSeen = useSettingsStore((s) => s.markVersionSeen);
   const declinedVersion = useSettingsStore((s) => s.declinedVersion);
@@ -683,6 +684,7 @@ export default function App() {
         speed={glowSpeed}
         flash={glowFlash}
         flare={glowFlare}
+        listens={glowListens}
       />
       <div
         aria-hidden="true"

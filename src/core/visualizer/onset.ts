@@ -1,3 +1,5 @@
+import { BASS_SHARE } from './bass';
+
 /**
  * Hearing the hits in the music rather than its shape.
  *
@@ -170,12 +172,31 @@ export const NO_BEAT: Beat = {
  * struck. The lowest is not quite nought — a kick should still read as a flare
  * rather than as the edge's own colour getting briefly stronger.
  */
-const REGIONS = [
+export const SPECTRUM_REGIONS: readonly Part[] = [
   { until: 0.25, worth: 1, tone: 0.1 },
   { until: 0.5, worth: 0.85, tone: 0.4 },
   { until: 0.75, worth: 0.7, tone: 0.7 },
   { until: 1, worth: 0.45, tone: 1 },
-] as const;
+];
+
+/**
+ * The bass and nothing else: the bottom fifth of the bands, about 45–150Hz,
+ * as one part — the edge light's "Bass" setting.
+ *
+ * Everything above it is not heard at all, so a snare or a voice cannot win a
+ * cluster, and what the window keeps time with is the kick. The rest of this
+ * file works unchanged on one part: a bass line that holds is a part that is
+ * not stepping, and only the kick on top of it is a step. The tone is the
+ * lowest one, so the flare is always the deep brass.
+ */
+export const BASS_REGIONS: readonly Part[] = [{ until: BASS_SHARE, worth: 1, tone: 0.1 }];
+
+/** One part of the spectrum: where it ends, what a hit in it is worth, its colour. */
+export interface Part {
+  until: number;
+  worth: number;
+  tone: number;
+}
 
 /**
  * How far above its usual step a part has to climb to be a hit.
@@ -329,16 +350,16 @@ function peakIn(bars: number[], from: number, to: number): number {
 }
 
 /** Where a region's bands start and end, for a frame of `bands` of them. */
-function edges(bands: number, at: number): [number, number] {
+function edges(regions: readonly Part[], bands: number, at: number): [number, number] {
   const cut = (fraction: number) => Math.round(bands * fraction);
-  const from = at === 0 ? 0 : Math.max(1, cut(REGIONS[at - 1]?.until ?? 0));
-  return [from, Math.max(from + 1, cut(REGIONS[at]?.until ?? 1))];
+  const from = at === 0 ? 0 : Math.max(1, cut(regions[at - 1]?.until ?? 0));
+  return [from, Math.max(from + 1, cut(regions[at]?.until ?? 1))];
 }
 
 /**
  * One frame on: how hard it was hit, where, and what to remember.
  *
- * `hit` is nought for nothing and otherwise how hard the loudest of the four
+ * `hit` is nought for nothing and otherwise how hard the loudest of the
  * parts was struck, weighted by which part it was and capped at one. `tone`
  * says which part that was, as nought for the bottom of the spectrum and one
  * for the top, and means nothing when there was no hit.
@@ -348,6 +369,8 @@ export function listen(
   bars: number[],
   seconds: number,
   over = OVER,
+  /** The parts heard: the whole spectrum unless asked otherwise. */
+  parts: readonly Part[] = SPECTRUM_REGIONS,
 ): { beat: Beat; hit: number; tone: number } {
   const since = beat.since + seconds;
   if (bars.length === 0) return { beat: { ...beat, since }, hit: 0, tone: 0 };
@@ -359,9 +382,9 @@ export function listen(
   const settling = 1 - Math.exp(-seconds / CARRYING);
 
   /** Every part's level and its history, before anything is judged against it. */
-  const seen = REGIONS.map((_, at) => {
+  const seen = parts.map((_, at) => {
     const was = beat.regions[at] ?? { level: 0, usually: 0, carrying: 0 };
-    const [from, to] = edges(bars.length, at);
+    const [from, to] = edges(parts, bars.length, at);
     const now = peakIn(bars, from, to);
     // How loud this part has been, not how loud this frame is. Which frame a
     // beat is caught in is luck, and reading the moment off that one frame made
@@ -379,7 +402,7 @@ export function listen(
   let hardest = 0;
   let hardestTone = 0;
 
-  for (let at = 0; at < REGIONS.length; at++) {
+  for (let at = 0; at < parts.length; at++) {
     const part = seen[at];
     if (!part) continue;
     const { was, now, step, carrying } = part;
@@ -389,10 +412,10 @@ export function listen(
       // lately been this part is now, and an absolute word about silence.
       const moment =
         Math.max(0, 1 - (fullest - carrying) / QUIET_BY) * Math.min(1, carrying / SOFTEST);
-      const worth = Math.min(1, step / FULL_STEP) * (REGIONS[at]?.worth ?? 1) * moment;
+      const worth = Math.min(1, step / FULL_STEP) * (parts[at]?.worth ?? 1) * moment;
       if (worth > hardest) {
         hardest = worth;
-        hardestTone = REGIONS[at]?.tone ?? 0;
+        hardestTone = parts[at]?.tone ?? 0;
       }
     }
 

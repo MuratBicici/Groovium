@@ -148,6 +148,10 @@ pub struct Settings {
     pub glow_flash: i32,
     #[serde(default, deserialize_with = "notch")]
     pub glow_flare: i32,
+    /// What the edge light listens to: `"all"` of the music, or the `"bass"`
+    /// alone. Anything unrecognised reads as all of it on the way in.
+    #[serde(default = "all_of_it")]
+    pub glow_listens: String,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -203,6 +207,7 @@ impl Default for Settings {
             glow_speed: 0,
             glow_flash: 0,
             glow_flare: 0,
+            glow_listens: all_of_it(),
             last_seen_version: None,
             declined_version: None,
             lyrics_on: false,
@@ -251,6 +256,10 @@ fn groovium_side() -> String {
 
 fn compact_place() -> String {
     "compact".to_owned()
+}
+
+fn all_of_it() -> String {
+    "all".to_owned()
 }
 
 fn on_unless_turned_off() -> bool {
@@ -389,6 +398,7 @@ mod tests {
             glow_speed: 0,
             glow_flash: -1,
             glow_flare: 2,
+            glow_listens: "bass".into(),
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
             lyrics_on: true,
@@ -410,6 +420,19 @@ mod tests {
         assert!(written.contains(r#""declinedVersion":"1.0.5""#));
         assert!(written.contains(r#""sleepWhenHidden":false"#));
         assert!(written.contains(r#""scale":1.25"#));
+        assert!(written.contains(r#""glowListens":"bass""#));
+    }
+
+    #[test]
+    fn a_config_from_before_the_edge_light_could_listen_to_the_bass_hears_all_of_it() {
+        // What it always did. The field has to exist here as well, or a save
+        // through this struct drops the choice and it is back to all of it at
+        // the next launch.
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert_eq!(config.settings.glow_listens, "all");
+        let chosen: AppConfig =
+            serde_json::from_str(r#"{"settings":{"glowListens":"bass"}}"#).expect("parses");
+        assert_eq!(chosen.settings.glow_listens, "bass");
     }
 
     #[test]

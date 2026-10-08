@@ -361,6 +361,10 @@ export const en = {
   'settings.glowSpeed': 'Speed',
   'settings.glowFlash': 'Flash',
   'settings.glowFlare': 'Decay',
+  'settings.glowListens': 'Listens to',
+  'settings.glowListensAll': 'All of it',
+  'settings.glowListensBass': 'Bass',
+  'settings.glowListensHint': 'Bass: only the kick and the bass line, about 45–150 Hz.',
   'settings.drawerSide': 'Drawer side',
   'settings.drawerSideHint':
     'Which side of the player the Spotify drawer opens on. The window grows that way to make room, so pick the side with space next to it.',

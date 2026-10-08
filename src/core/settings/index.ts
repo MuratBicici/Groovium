@@ -150,6 +150,11 @@ export interface Settings {
   glowFlash: number;
   glowFlare: number;
   /**
+   * What the edge light listens to: the whole of the music, or the bass alone
+   * — the bottom fifth of the spectrum, about 45–150Hz, where the kick is.
+   */
+  glowListens: GlowListens;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -187,6 +192,9 @@ export type DrawerSide = 'left' | 'right';
 /** The library drawer's two sides: this computer and Groovium's playlists, or Spotify. */
 export type LibraryTab = 'groovium' | 'spotify';
 
+/** What the edge light listens to; see `glowListens`. */
+export type GlowListens = 'all' | 'bass';
+
 /** Which of the edge light's dials the settings panel is moving. */
 export const GLOW_KNOBS = [
   'glowStrength',
@@ -220,6 +228,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glowSpeed: 0,
   glowFlash: 0,
   glowFlare: 0,
+  glowListens: 'all',
   lastSeenVersion: null,
   declinedVersion: null,
   lyricsOn: false,
@@ -252,6 +261,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
     if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
     if (settings.libraryTab !== 'spotify') settings.libraryTab = 'groovium';
+    if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     settings.lyricsOn = settings.lyricsOn === true;
     settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a

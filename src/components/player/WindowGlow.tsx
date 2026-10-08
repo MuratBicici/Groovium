@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { GLOW, NOTCHES, levelFrom, settleLevel, watchBars } from '@/core/visualizer';
 import { advance, brightness, launch, type Mote } from '@/core/visualizer/motes';
-import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
+import { BASS_REGIONS, NO_BEAT, SPECTRUM_REGIONS, listen, type Beat } from '@/core/visualizer/onset';
+import { NO_BASS, bassPeak, meterBass, type BassMeter } from '@/core/visualizer/bass';
+import type { GlowListens } from '@/core/settings';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
@@ -107,6 +109,17 @@ const PUNCH_WEIGHT = 0.55;
 
 /** The lowest level worth drawing anything for. */
 const FLOOR = 0.004;
+
+/**
+ * Whether, listening to the bass, the bass is also what the haze and the bolts
+ * breathe with — or only what sets off the hits.
+ *
+ * On for now, to be tried: the whole edge answers to the low end, swelling on
+ * each kick and falling back between them. The way it is meant to end up is
+ * off — the room lit by the whole of the music as it always was, and only the
+ * hits taken from the bass — and that is this one word.
+ */
+const BASS_FEEDS_LEVEL = true;
 
 /**
  * How wide a strip of the window the light can ever touch.
@@ -280,6 +293,8 @@ export function WindowGlow({
   flash,
   /** How long a hit is still felt. */
   flare,
+  /** What it listens to: the whole of the music, or the bass alone. */
+  listens,
 }: {
   on: boolean;
   strength: number;
@@ -287,6 +302,7 @@ export function WindowGlow({
   speed: number;
   flash: number;
   flare: number;
+  listens: GlowListens;
 }) {
   const shown = useShown();
   const leftEdge = useRef<HTMLCanvasElement | null>(null);
@@ -303,10 +319,10 @@ export function WindowGlow({
    * every light in the air — which is the opposite of what somebody dragging
    * one wants to see.
    */
-  const tuning = useRef({ strength, sensitivity, speed, flash, flare });
+  const tuning = useRef({ strength, sensitivity, speed, flash, flare, listens });
   useEffect(() => {
-    tuning.current = { strength, sensitivity, speed, flash, flare };
-  }, [strength, sensitivity, speed, flash, flare]);
+    tuning.current = { strength, sensitivity, speed, flash, flare, listens };
+  }, [strength, sensitivity, speed, flash, flare, listens]);
 
   useEffect(() => {
     if (!on || !shown) return;
@@ -394,6 +410,9 @@ export function WindowGlow({
     let owed = 0;
     let showing = 0;
     let beat: Beat = NO_BEAT;
+    let bass: BassMeter = NO_BASS;
+    /** What the hits were last listened for in, so a change starts them over. */
+    let listening: GlowListens = tuning.current.listens;
     let punch = 0;
     /** Where the hit the flare is still showing was struck. */
     let struckAt = 0;
@@ -423,16 +442,39 @@ export function WindowGlow({
       last = now;
       measure();
 
-      const { strength, sensitivity, speed, flash, flare } = tuning.current;
+      const { strength, sensitivity, speed, flash, flare, listens } = tuning.current;
       const felt_ms = GLOW.flare(flare);
       const climb = GLOW.speed(speed);
       const force = GLOW.strength(strength);
 
-      showing = settleLevel(showing, measured.current);
+      // A different set of parts has a different history, and the old one says
+      // nothing about the new: both start over, and the lights in the air stay.
+      if (listens !== listening) {
+        listening = listens;
+        beat = NO_BEAT;
+        bass = NO_BASS;
+      }
+      const onBass = listens === 'bass';
+      let level = measured.current;
+      if (onBass) {
+        // Every frame, whether or not it feeds the level, so the meter has the
+        // song's recent range ready the moment it is asked for.
+        const metered = meterBass(bass, bassPeak(spectrum.current), seconds);
+        bass = metered.meter;
+        if (BASS_FEEDS_LEVEL) level = metered.level;
+      }
+
+      showing = settleLevel(showing, level);
       ({ motes, owed } = advance(motes, showing, seconds, owed, Math.random, climb));
 
       // The hits, which are what the edge is actually keeping time with.
-      const heard = listen(beat, spectrum.current, seconds, GLOW.threshold(sensitivity));
+      const heard = listen(
+        beat,
+        spectrum.current,
+        seconds,
+        GLOW.threshold(sensitivity),
+        onBass ? BASS_REGIONS : SPECTRUM_REGIONS,
+      );
       beat = heard.beat;
       punch = Math.max(0, punch - (seconds * 1000) / felt_ms);
       if (heard.hit > 0) {

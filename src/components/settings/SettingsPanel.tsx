@@ -69,6 +69,7 @@ export function SettingsPanel({
   const glowSpeed = useSettingsStore((s) => s.glowSpeed);
   const glowFlash = useSettingsStore((s) => s.glowFlash);
   const glowFlare = useSettingsStore((s) => s.glowFlare);
+  const glowListens = useSettingsStore((s) => s.glowListens);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
@@ -77,6 +78,7 @@ export function SettingsPanel({
   const setWindowGlow = useSettingsStore((s) => s.setWindowGlow);
   const setThemeFromCover = useSettingsStore((s) => s.setThemeFromCover);
   const setGlow = useSettingsStore((s) => s.setGlow);
+  const setGlowListens = useSettingsStore((s) => s.setGlowListens);
   const setVisualizer = useSettingsStore((s) => s.setVisualizer);
   const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
   const scale = useSettingsStore((s) => s.scale);
@@ -327,6 +329,23 @@ export function SettingsPanel({
           >
             <div className="min-h-0">
               <div className="flex flex-col gap-2 border-l border-shell-600 pt-1 pl-2.5">
+                {/* What it listens to, first: it changes what every slider
+                    under it is moving. Two buttons, as the drawer's side is —
+                    neither is the absence of the other. */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-meta text-cream-300">{t('settings.glowListens')}</span>
+                  <div className="flex gap-1.5">
+                    <Choice active={glowListens === 'all'} onClick={() => setGlowListens('all')}>
+                      {t('settings.glowListensAll')}
+                    </Choice>
+                    <Choice active={glowListens === 'bass'} onClick={() => setGlowListens('bass')}>
+                      {t('settings.glowListensBass')}
+                    </Choice>
+                  </div>
+                  <span className="text-meta leading-snug text-cream-400">
+                    {t('settings.glowListensHint')}
+                  </span>
+                </div>
                 <Slider
                   label={t('settings.glowStrength')}
                   notch={glowStrength}

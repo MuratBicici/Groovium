@@ -50,6 +50,7 @@ describe('remembering that a version has been shown', () => {
       glowSpeed: 0,
       glowFlash: -1,
       glowFlare: 2,
+      glowListens: 'bass',
       declinedVersion: '2.0.0',
       lyricsOn: true,
       lyricsPlace: 'full',
@@ -79,6 +80,7 @@ describe('remembering that a version has been shown', () => {
       glowSpeed: 0,
       glowFlash: -1,
       glowFlare: 2,
+      glowListens: 'bass',
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
       lyricsOn: true,
@@ -99,6 +101,18 @@ describe('remembering that a version has been shown', () => {
     useSettingsStore.setState({ lastSeenVersion: '0.9.0' });
     useSettingsStore.getState().markVersionSeen();
     expect(lastWrite().lastSeenVersion).toBe(APP_VERSION);
+  });
+});
+
+describe('what the edge light listens to', () => {
+  it('is all of the music until somebody chooses the bass', () => {
+    expect(useSettingsStore.getState().glowListens).toBe('all');
+  });
+
+  it('is written to disk when it is chosen', () => {
+    useSettingsStore.getState().setGlowListens('bass');
+    expect(useSettingsStore.getState().glowListens).toBe('bass');
+    expect(lastWrite().glowListens).toBe('bass');
   });
 });
 

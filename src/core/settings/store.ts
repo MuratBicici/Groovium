@@ -6,6 +6,7 @@ import {
   saveSettings,
   type DrawerSide,
   type GlowKnob,
+  type GlowListens,
   type LibraryTab,
   type Language,
   type Settings,
@@ -65,6 +66,7 @@ interface SettingsStore extends Settings {
   coverPalette: CoverPalette | null;
   setCoverPalette: (palette: CoverPalette | null) => void;
   setGlow: (knob: GlowKnob, notch: number) => void;
+  setGlowListens: (listens: GlowListens) => void;
   /** Record that this version's summary has been shown, so it is not shown again. */
   markVersionSeen: () => void;
   /** Record that an offer to install this version was turned down. */
@@ -323,7 +325,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { theme, language, reduceMotion, alwaysOnTop, compact, drawerOpen, drawerSide } = get();
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
-    const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare } = get();
+    const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare, glowListens } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
@@ -350,6 +352,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       glowSpeed,
       glowFlash,
       glowFlare,
+      glowListens,
       lastSeenVersion,
       declinedVersion,
       lyricsOn,
@@ -429,6 +432,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     },
     setGlow: (knob, notch) =>
       commit({ [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
+    setGlowListens: (glowListens) => commit({ glowListens }),
     // Through `commit` like everything else: it is the one place that knows the
     // whole shape of what goes to disk, and going around it is how a write ends
     // up dropping a field. Re-applying the palette on the way is wasted work

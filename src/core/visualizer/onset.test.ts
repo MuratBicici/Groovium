@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_BEAT, listen, type Beat } from './onset';
+import { BASS_REGIONS, NO_BEAT, OVER, listen, type Beat } from './onset';
 
 const FRAME = 1 / 60;
 const BANDS = 24;
@@ -410,5 +410,55 @@ describe('saying where it was struck', () => {
 
     expect(both.length).toBe(1);
     expect(both[0]?.tone).toBeLessThan(0.25);
+  });
+});
+
+describe('listening to the bass alone', () => {
+  /** Every frame through the bass-only parts, returning how hard each was hit. */
+  const bassOnly = (frames: number[][]) => {
+    let beat: Beat = NO_BEAT;
+    return frames.map((bars) => {
+      const heard = listen(beat, bars, FRAME, OVER, BASS_REGIONS);
+      beat = heard.beat;
+      return heard;
+    });
+  };
+  const settle = (frames: number[][]) => [
+    ...frames,
+    ...Array.from({ length: 8 }, () => frames.at(-1) ?? []),
+  ];
+
+  it('hears a kick in the bottom fifth', () => {
+    const heard = bassOnly(
+      settle([...runUp(only(0, 5, 0.4, 0.4)), only(0, 5, 0.95, 0.4)]),
+    );
+    expect(Math.max(...heard.map((h) => h.hit))).toBeGreaterThan(0.3);
+  });
+
+  it('does not hear a snare above it, however hard', () => {
+    // The whole point of the setting: the window keeps time with the kick, and
+    // nothing in the middle of the mix can win a cluster.
+    const heard = bassOnly(
+      settle([...runUp(only(0, 5, 0.4, 0.4)), only(8, 12, 1, 0.4)]),
+    );
+    expect(Math.max(...heard.map((h) => h.hit))).toBe(0);
+  });
+
+  it('flares in the deep tone, always', () => {
+    const heard = bassOnly(
+      settle([...runUp(only(0, 5, 0.4, 0.4)), only(0, 5, 0.95, 0.4)]),
+    ).filter((h) => h.hit > 0);
+    expect(heard.length).toBeGreaterThan(0);
+    for (const h of heard) expect(h.tone).toBeCloseTo(0.1, 6);
+  });
+
+  it('hears a bass line that holds as nothing, and the kick on top of it', () => {
+    const line = Array.from({ length: 240 }, (_, at) =>
+      only(0, 5, at % 30 < 3 ? 0.95 : 0.6, 0.4),
+    );
+    const hits = bassOnly(line).filter((h) => h.hit > 0).length;
+    // Eight kicks in four seconds, give or take the first while it learns.
+    expect(hits).toBeGreaterThanOrEqual(6);
+    expect(hits).toBeLessThanOrEqual(8);
   });
 });

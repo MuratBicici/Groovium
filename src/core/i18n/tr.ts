@@ -346,6 +346,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.glowSpeed': 'Hız',
   'settings.glowFlash': 'Parlama',
   'settings.glowFlare': 'Sönüm',
+  'settings.glowListens': 'Dinlediği',
+  'settings.glowListensAll': 'Tüm müzik',
+  'settings.glowListensBass': 'Bas',
+  'settings.glowListensHint': 'Bas: yalnızca kick ve bas, yaklaşık 45–150 Hz.',
   'settings.drawerSide': 'Çekmece yönü',
   'settings.drawerSideHint':
     'Spotify çekmecesinin oynatıcının hangi yanından açılacağı. Pencere yer açmak için o yöne doğru büyür, bu yüzden yanında boşluk olan tarafı seçin.',
