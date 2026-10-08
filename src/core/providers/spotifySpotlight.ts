@@ -6,7 +6,13 @@ import { request, toTrackMetadata, type ApiTrack } from './spotifyApi';
  *
  * Everything else in the drawer is somebody's playlists — things they made.
  * This is the other half: what they have actually been listening to, and what
- * they listen to most. One request per row, and never more than one: neither
+ * they listen to most.
+ *
+ * "Most" is Spotify's word for it, not a count: the top row is its ranking of
+ * roughly the last four weeks, by an affinity it does not explain or say how
+ * often it recomputes. It is not Spotify's own On Repeat playlist, which an
+ * app in development mode has not been able to read since November 2024 — so
+ * the row is not called that. One request per row, and never more than one: neither
  * row pages, so fifty entries and thirty are one call each and that is the
  * whole of it.
  *
@@ -151,8 +157,19 @@ export function spotlight(which: Lit): Promise<TrackMetadata[]> {
   return going;
 }
 
+/**
+ * Asked past the webview's own cache, every time.
+ *
+ * `fetch` keeps what it is given and may hand it back again, depending on
+ * what the answer's headers say. These two rows are about what somebody has
+ * been listening to, and the top row once held songs not heard for weeks:
+ * whatever Spotify's ranking does, an old copy of it is not to be one of the
+ * reasons. The hour above is all the keeping these need, and it is ours.
+ */
+const FRESH: RequestInit = { cache: 'no-store' };
+
 async function ask(which: Lit, when: number): Promise<TrackMetadata[]> {
-  const data = await request<ApiRow>(PATHS[which](ASK_FOR[which]));
+  const data = await request<ApiRow>(PATHS[which](ASK_FOR[which]), FRESH);
   const tracks = oneEach(
     (data?.items ?? [])
       .map(trackIn)

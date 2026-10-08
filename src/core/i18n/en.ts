@@ -245,7 +245,7 @@ export const en = {
   'spotify.trackCount_plural': '{count} songs',
 
   'spotlight.recent': 'Recently played',
-  'spotlight.top': 'On repeat',
+  'spotlight.top': 'Your top tracks lately',
   'spotlight.empty': 'Nothing here yet. Play something and it will show up.',
   'spotlight.failed': 'Could not reach Spotify. Press to try again.',
 

@@ -89,6 +89,17 @@ describe('what the spotlight costs', () => {
     });
   });
 
+  it('asks past the webview cache, so an old copy is never what is shown', () => {
+    asked.mockResolvedValue({ items: [] });
+    return spotlight('top')
+      .then(() => spotlight('recent'))
+      .then(() => {
+        for (const call of asked.mock.calls) {
+          expect(call[1]).toMatchObject({ cache: 'no-store' });
+        }
+      });
+  });
+
   it('remembers an account with nothing to show rather than asking again', () => {
     // Empty is an answer. Treating it as a miss would turn the quietest
     // account into the one that asks the most.

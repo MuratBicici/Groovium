@@ -6,10 +6,10 @@ import { useT } from '@/core/i18n';
 /**
  * One shelf: a name, a row that runs off the side, and the way along it.
  *
- * The drawer is three of these now — what is on repeat, what was played, and
- * the playlists — so what used to be a shelf above a wall of crates is a wall
- * of nothing but shelves, each the same height and read the same way. A record
- * shop rather than a record shop's stockroom.
+ * The drawer is three of these now — what is listened to most, what was
+ * played, and the playlists — so what used to be a shelf above a wall of
+ * crates is a wall of nothing but shelves, each the same height and read the
+ * same way. A record shop rather than a record shop's stockroom.
  *
  * The arrows exist because a row you run along is only a row you *can* run
  * along with a sideways wheel under your fingers. A touchpad has one, and a

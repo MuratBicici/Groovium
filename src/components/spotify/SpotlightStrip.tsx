@@ -9,8 +9,8 @@ import type { TrackMetadata } from '@/core/types';
 /**
  * A shelf of what somebody has been listening to.
  *
- * One row per instance, and the drawer puts two of them up: what is on repeat
- * and what was played last. They used to be one row with the heading as a
+ * One row per instance, and the drawer puts two of them up: what has been
+ * listened to most lately and what was played last. They used to be one row with the heading as a
  * switch between them, which was the right answer while the crates below were
  * a wall — the drawer's height was the scarce thing and a second row cost the
  * crates a whole line of sleeves. The crates are a shelf themselves now, so
