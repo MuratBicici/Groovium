@@ -4,6 +4,160 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.2.2 — 2026-10-08
+
+What comes next, where you can see it.
+
+The new Up next button opens a round palette beside the player. The records
+still to come stand on its rim in the order they will play: the one on the
+deck a step above, the next song level with it, the rest going round below,
+with faint arrows between them showing the way it runs. Scroll to turn it.
+Press a record to play it now, move it to the front or take it out, or hold
+it and move it to another place on the palette, or carry it onto the deck.
+Songs you queue yourself wear a brass ring and play before the rest of what
+is playing; the station's finds come last, marked with an infinity sign. To
+queue a song, pick its record up in the drawer: the palette comes out with two
+places on it, Play next and Add to queue, and the song goes into whichever you
+let it go over. Or drop any record on the Up next button.
+
+Both sides of the library drawer can be searched now: the songs on this
+computer and your Groovium playlists on one, your Spotify playlists and all
+of Spotify on the other. Press the magnifier, Ctrl+F, or just start typing.
+
+On a slow connection, Spotify songs used to stop every so often and start
+again a few seconds later. Part of that was Groovium itself: a check that did
+not come back in time was taken as the connection being gone, and the music
+was stopped while it was still coming in. That no longer happens. When the
+sound really does run out, the bar and the lyrics wait for it instead of
+running on through the silence, and the window says the connection is slow.
+A song now shows as loading from the moment you choose it, and with no
+network at all the Spotify side says so instead of offering shelves that
+cannot play.
+
+The edge light can listen to the bass alone now — Settings, Edge light,
+Listens to: Bass — and the window's border swells on every kick and falls
+back between them.
+
+Putting a whole playlist on now switches infinite play off until it has
+played: it was that playlist you asked for. A song picked out of one leaves
+infinite play as it was.
+
+And if something does go wrong, Settings has a new Report a problem section:
+it opens the folder the log is in, and a report on GitHub ready to attach it
+to. The log stays on your computer unless you send it.
+
+HIGHLIGHTS
+· Up next: a palette of what will play, in order, to turn, reorder and edit.
+· Carry a song from the drawer onto Play next or Add to queue on the palette;
+  or drop a record on the Up next button to queue it.
+· Search both sides of the library drawer.
+· Songs no longer stopped by Groovium on a slow connection.
+· The bar and lyrics wait when the sound runs out, and "Slow connection" says
+  why.
+· Loading shown from the moment a song is chosen.
+· A plain message on the Spotify side when there is no network.
+· Report a problem, in Settings.
+· Infinite play keeps out of a playlist put on whole.
+· The edge light can listen to the bass alone.
+
+ALL CHANGES
+
+Up next
+· An Up next button in the row at the bottom right opens the queue over the
+  drawer, and opens the drawer if it was shut. What the drawer was showing
+  stays in view and in reach beside it, so a record can be carried from a
+  shelf straight onto the palette.
+· The palette is felt with a brass rim, in the window's colours. Records stand
+  on its rim, the one playing a step above the level and the next one on it.
+  Scroll turns it a record a notch, and it stays where it was turned to. It
+  reaches up under the window's title bar, as the lyrics record does.
+· The lyrics record and its lines open the way the palette does, turning in
+  from the player's side, and turn on the same point as the palette.
+· Songs queued by hand play first, then the rest of the collection, then the
+  station's finds when the station is on.
+· Press a record to play it now. Its buttons move it to the front, or take it
+  out; a song of the collection is only skipped this once and stays in its
+  playlist.
+· Hold a record to move it to another place on the palette, or carry it off
+  the drawer and onto the deck to play it.
+· Picking up a song from the drawer brings the palette out beside it, with
+  two places on the felt: Play next above, Add to queue below. Let it go over
+  one to queue it there, or on the deck to play it now. The palette goes again
+  when the record is put down.
+· A record carried from anywhere and let go over the Up next button goes on
+  the end of the queue.
+· A queued song is a detour: what was playing carries on from where it was
+  afterwards. Previous goes back to it; repeat-one repeats the queued song.
+· The queue is kept when you choose something else to play, and cleared with
+  Clear the queue or when the record is thrown away.
+
+Search
+· The local side of the drawer has its own search: songs by title, artist or
+  album, and Groovium playlists by name, answered as you type.
+· Spotify's search also finds your Spotify playlists, above the songs.
+· Opened by the magnifier, Ctrl+F, or typing at the drawer.
+· Case and accents are ignored, words can come in any order, and every I is
+  an i, so a title in capitals is found whatever keyboard typed the search.
+· A playlist found opens from the result; a song plays from it.
+
+Slow connections
+· An unanswered check is no longer enough to stop the music: it takes two in
+  a row, eight seconds apart, and even then the music is not stopped.
+· Spotify answering that it is busy is not taken as the connection failing.
+· When the sound runs out mid-song, the bar and the lyrics wait and the window
+  says it is loading, until the sound comes back. It is heard rather than
+  guessed at: while the visualiser runs, what the app actually plays out is
+  listened to, and the bar goes back to where the sound stopped.
+· "Slow connection" appears beside the state over a Spotify song after two
+  slow starts, stops or answers within three minutes, and goes once fewer
+  than two are left in the last three minutes.
+· A song shows as loading from the moment it is chosen, including the first
+  Spotify song after the app starts.
+· A play request lost to a dropped connection is waited out rather than shown
+  as an error.
+· With no internet, the Spotify side shows a message and the local side plays
+  as usual. Windows is asked whether there is internet, not only whether there
+  is a network: a virtual adapter — VMware's, Hyper-V's, WSL's, a VPN's — is
+  always a network, and on a machine with one the message never showed.
+
+Reporting a problem
+· Settings → Report a problem opens the log's folder, and a new GitHub issue
+  with the version and system filled in, in the app's language.
+· The log is more detailed about playback and the connection, so a report
+  says what actually happened.
+
+Edge light
+· A new Listens to choice: All of it, as before, or Bass. Bass hears only the
+  bottom third of the spectrum, about 45–300 Hz — the kick and the bass line —
+  and reads it against its own last few seconds, so the edge rises on each
+  kick and falls back between them rather than sitting at full under a loud
+  low end. The flare is always the deep brass. Every slider works the same in
+  either.
+
+Infinite play
+· Playing a whole playlist — its crate played, or carried to the deck —
+  switches infinite play off, and its button stays off, saying why, until the
+  playlist has played to its end or something else is played.
+· A song picked out of a playlist, or anywhere else, leaves infinite play as
+  it was.
+
+Fixes
+· In the small window, a song changing no longer flashes the deck's large
+  record over the bar; the bar's own small record drops on instead.
+· The volume knob's line keeps to the pointer for the whole turn, however far
+  the pointer goes and wherever it comes back from. It used to add up the
+  pointer's movements, and drifted from it after a stop, a pass across the
+  middle, or a trip out of the window.
+· No wave after a song's last words: the last line stays lit until the song
+  ends. The waves between lines are as they were.
+· A Spotify song that fades out is no longer taken for the sound running out,
+  and a song that ends while its sound is out goes on to the next one, instead
+  of rewinding to its start and stopping there.
+· The Spotify shelf called On repeat is now Your top tracks lately, which is
+  what it shows: Spotify's own ranking of the last few weeks, not its On
+  Repeat playlist, which apps like this one can no longer read. It is asked
+  for afresh rather than taken from the window's cache.
+
 ## 1.2.1 — 2026-09-28
 
 Everything you can play, in one drawer.

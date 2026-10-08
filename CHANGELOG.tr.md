@@ -13,6 +13,48 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.2.2 — 2026-10-08
+
+Sırada ne var, artık görünüyor.
+
+Yeni Sıra düğmesi oynatıcının yanında yuvarlak bir palet açar. Sıradaki
+plaklar çalacakları sırayla paletin kenarında durur. Çalan plak bir adım
+yukarıda, sıradaki şarkı onun hizasında, gerisi aşağıya doğru dizilir.
+Aralarındaki ince oklar sıranın yönünü gösterir. Paleti fareyle
+döndürebilirsiniz. Bir plağa basarsanız hemen çalar. Plağı en öne alabilir ya
+da sıradan çıkarabilirsiniz. Basılı tutup paletin başka bir yerine
+taşıyabilir ya da pikaba götürebilirsiniz. Kendi eklediğiniz şarkılar pirinç
+bir halkayla görünür ve çalan listenin geri kalanından önce çalar. İstasyonun
+bulduğu şarkılar en sonda, sonsuzluk işaretiyle gelir. Bir şarkıyı sıraya
+koymak için çekmecede plağını tutun. Palet kendiliğinden açılır ve üstünde iki
+yer belirir: Sonra çal ve Sıraya ekle. Plağı hangisine bırakırsanız şarkı
+oraya girer. Pikaba koyarsanız hemen çalar.
+
+Kitaplık çekmecesinin iki tarafında da artık arama var. Bir tarafta bu
+bilgisayardaki şarkılar ve Groovium listeleriniz, öbür tarafta Spotify
+listeleriniz ve bütün Spotify. Büyütece basın, Ctrl+F yapın ya da doğrudan
+yazmaya başlayın.
+
+Zayıf bağlantıda Spotify şarkıları ara ara durup birkaç saniye sonra devam
+ediyordu. Bunun bir kısmı Groovium'un kendisiydi. Zamanında dönmeyen bir
+kontrolü bağlantının koptuğu sanıyor, müzik hâlâ gelirken onu durduruyordu.
+Artık bu olmuyor. Ses gerçekten kesildiğinde de çubuk ve sözler sessizliğin
+içinde ilerlemek yerine sesi bekler. Pencere de bağlantının yavaş olduğunu
+söyler. Bir şarkı artık seçtiğiniz andan itibaren yükleniyor olarak görünür.
+İnternet hiç yoksa Spotify tarafı çalamayacak raflar göstermek yerine bunu
+açıkça söyler.
+
+Kenar ışığı artık yalnızca bası da dinleyebiliyor: Ayarlar, Kenar ışığı,
+Dinlediği: Bas. Pencerenin kenarı her kick'te kabarır, aralarda söner.
+
+Bütün bir çalma listesini çalarsanız sonsuz çalma artık kapanır ve liste
+bitene kadar kapalı kalır. O listeyi istediniz. Listeden tek bir şarkı
+açarsanız sonsuz çalma olduğu gibi kalır.
+
+Bir şeyler ters giderse Ayarlar'da yeni bir Sorun bildir bölümü var. Kayıt
+dosyasının klasörünü açar ve GitHub'da onu ekleyebileceğiniz hazır bir
+bildirim açar. Kayıt siz göndermedikçe bilgisayarınızda kalır.
+
 ## 1.2.1 — 2026-09-28
 
 Çalabileceğiniz her şey tek bir çekmecede.
