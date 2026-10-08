@@ -11,6 +11,7 @@ mod logging;
 mod lyrics;
 mod media;
 mod metadata;
+mod network;
 mod onscreen;
 mod playlists;
 mod report;
@@ -72,6 +73,9 @@ fn main() {
             // Nothing should be drawn for a window buried under something
             // else; the webview cannot see that from the inside.
             onscreen::watch(app.handle().clone());
+            // Nor whether there is any internet: virtual adapters keep the
+            // webview sure there is.
+            network::watch(app.handle().clone());
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
             shortcuts::register(app.handle());
@@ -147,6 +151,7 @@ fn main() {
             shell::set_click_area,
             report::logs_open_folder,
             report::report_problem,
+            network::network_internet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groovium");
