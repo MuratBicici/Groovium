@@ -113,6 +113,29 @@ export const FLARE_TAU = 0.02;
 export const FLARE_FADE = 3.5;
 
 /**
+ * How present the grooves are: whether there is any sound for them to be.
+ *
+ * Without it they went flat when the music stopped or the volume went right
+ * down, sat there as four still lines, and then vanished in one frame when
+ * the canvas was cleared — and came back the same way, all at once, at the
+ * first sound. They sink instead: down past the foot of the window when the
+ * sound goes, and up from below it when it comes back — chosen from moving
+ * previews, over fading, gathering in and being wiped by the light. Down over
+ * the better part of a second, up quicker, so the first beat is not missed.
+ */
+export const SOUNDING = 0.02;
+export const PRESENT_IN = 0.12;
+export const PRESENT_OUT = 0.3;
+/** How far the grooves sink when they go, as a share of the height. */
+export const SINK = 0.75;
+
+/** How present the grooves are a frame on, from whether anything is sounding. */
+export function presence(was: number, bars: readonly number[], seconds: number): number {
+  const sounding = bars.some((bar) => bar > SOUNDING);
+  return ease(was, sounding ? 1 : 0, seconds, sounding ? PRESENT_IN : PRESENT_OUT);
+}
+
+/**
  * How fast the glint travels, as a share of the width each second.
  *
  * Slow in silence, and quicker the louder it is — by the square, so a quiet

@@ -13,7 +13,9 @@ import {
   ease,
   glintAt,
   glintSpeed,
+  presence,
   springStep,
+  SINK,
   spread,
 } from '@/core/visualizer/grooves';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
@@ -353,6 +355,8 @@ export function Visualizer({
     let last = performance.now();
     /** Whether the canvas is already empty, so stillness is not cleared again. */
     let blank = false;
+    /** How present the grooves are, nought to one; see `presence`. */
+    let present = 0;
 
     const drawGrooves = (now: number) => {
       // Capped, so a window hidden for a while does not come back to a leap.
@@ -377,10 +381,11 @@ export function Visualizer({
       flareTo = Math.max(heard.hit, flareTo - seconds * FLARE_FADE);
       flare = ease(flare, flareTo, seconds, FLARE_TAU);
       travelled += seconds * glintSpeed(level, flare);
+      present = presence(present, target, seconds);
 
       // Nothing moving and nothing lit: the canvas is already what it should
       // be, so silence is not a frame's work.
-      if (!moving && flare < STILL && !afresh) {
+      if (present < STILL && !moving && flare < STILL && !afresh) {
         if (!blank) context.clearRect(0, 0, width, height);
         blank = true;
         return;
@@ -391,12 +396,14 @@ export function Visualizer({
       context.globalCompositeOperation = 'lighter';
 
       const scale = height * SWING;
+      // Down past the foot when there is no sound, and back up when there is.
+      const sunk = (1 - present) * height * SINK;
       const depth = Math.max(6, height * GROOVES.depth);
       const hot = hotter(bright);
       // Back to front, so the top groove is laid over the rest.
       for (let layer = GROOVES.layers - 1; layer >= 0; layer--) {
         const down = GROOVES.layers > 1 ? layer / (GROOVES.layers - 1) : 0;
-        const points = curvePoints(pos, width, height * FLOOR_LINE - layer * GROOVES.gap, scale);
+        const points = curvePoints(pos, width, height * FLOOR_LINE - layer * GROOVES.gap + sunk, scale);
 
         // The fill, hanging from the line wherever the line is; see `RIBBONS`.
         const strength = (GROOVES.fill * (1 - down * 0.5) * (1 + 0.4 * flare)) / RIBBONS;

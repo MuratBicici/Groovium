@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvePoints, ease, glintAt, glintSpeed, spread, springStep } from './grooves';
+import { curvePoints, ease, glintAt, glintSpeed, presence, spread, springStep } from './grooves';
 
 /**
  * How the grooves move: with punch on the way up, smoothly on the way down,
@@ -116,5 +116,32 @@ describe('the line through the bands', () => {
 
   it('is flat at its base with nothing playing', () => {
     expect(curvePoints([], 300, 100, 50, 3).every(([, y]) => y === 100)).toBe(true);
+  });
+});
+
+describe('the grooves coming and going', () => {
+  /** How present they are after `seconds` of `bars`, from `from`. */
+  function after(from: number, bars: number[], seconds: number): number {
+    let present = from;
+    for (let t = 0; t < seconds; t += 1 / 60) present = presence(present, bars, 1 / 60);
+    return present;
+  }
+  const playing = [0.4, 0.3, 0.2];
+  const silent = [0, 0, 0];
+
+  it('go when the sound stops, over most of a second rather than at once', () => {
+    expect(after(1, silent, 1 / 60)).toBeGreaterThan(0.9);
+    expect(after(1, silent, 0.25)).toBeGreaterThan(0.2);
+    expect(after(1, silent, 1.5)).toBeLessThan(0.01);
+  });
+
+  it('come back when it starts, quicker than they went', () => {
+    expect(after(0, playing, 1 / 60)).toBeLessThan(0.4);
+    expect(after(0, playing, 0.35)).toBeGreaterThan(0.9);
+    expect(after(0, playing, 0.3)).toBeGreaterThan(1 - after(1, [0, 0, 0], 0.3));
+  });
+
+  it('count a sound too quiet to show as nothing', () => {
+    expect(after(1, [0.01, 0.005], 1.5)).toBeLessThan(0.01);
   });
 });
