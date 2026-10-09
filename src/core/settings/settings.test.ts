@@ -51,6 +51,7 @@ describe('remembering that a version has been shown', () => {
       glowFlash: -1,
       glowFlare: 2,
       glowListens: 'bass',
+      visualizerLook: 'blocks',
       declinedVersion: '2.0.0',
       lyricsOn: true,
       lyricsPlace: 'full',
@@ -81,6 +82,7 @@ describe('remembering that a version has been shown', () => {
       glowFlash: -1,
       glowFlare: 2,
       glowListens: 'bass',
+      visualizerLook: 'blocks',
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
       lyricsOn: true,
@@ -113,6 +115,17 @@ describe('what the edge light listens to', () => {
     useSettingsStore.getState().setGlowListens('bass');
     expect(useSettingsStore.getState().glowListens).toBe('bass');
     expect(lastWrite().glowListens).toBe('bass');
+  });
+});
+
+describe('how the visualiser is drawn', () => {
+  it('is grooves until somebody chooses the blocks', () => {
+    expect(useSettingsStore.getState().visualizerLook).toBe('grooves');
+  });
+
+  it('is written to disk when it is chosen', () => {
+    useSettingsStore.getState().setVisualizerLook('blocks');
+    expect(lastWrite().visualizerLook).toBe('blocks');
   });
 });
 

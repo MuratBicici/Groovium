@@ -1,11 +1,32 @@
 import { useEffect, useRef } from 'react';
-import { watchBars } from '@/core/visualizer';
+import { levelFrom, watchBars } from '@/core/visualizer';
+import {
+  FLARE_FADE,
+  FLARE_TAU,
+  FLOOR_LINE,
+  GROOVES,
+  HALO,
+  GLINT,
+  LEVEL_TAU,
+  SWING,
+  curvePoints,
+  ease,
+  glintAt,
+  glintSpeed,
+  springStep,
+  spread,
+} from '@/core/visualizer/grooves';
+import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
+import type { VisualizerLook } from '@/core/settings';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 
 /**
- * Bars behind the deck, moving to whatever the speakers are playing.
+ * Bars behind the deck, moving to whatever the speakers are playing — or, in
+ * the look that is the default now, grooves: a few thin lines stacked like a
+ * record's, a light fill under each, and a glint travelling along them. See
+ * `core/visualizer/grooves` for how they move and why.
  *
  * Fed from Rust, which listens to the machine's output device — see
  * `src-tauri/src/visualizer`. That is the only place a spectrum could have come
@@ -75,25 +96,85 @@ function palette(root: HTMLElement): Palette {
   };
 }
 
+/** A colour as its three channels, for drawing it at any strength. */
+type Rgb = [number, number, number];
+
 /**
- * One column's height, read across however many bands there are.
+ * The channels of a CSS colour, as the stylesheet hands them back.
  *
- * Rust sends a fixed two dozen; how many columns fit is up to the window. With
- * the drawer out there are three columns per band, so each is read between its
- * two nearest neighbours rather than repeated — repeating draws the same
- * spectrum in steps three blocks wide, which reads as the bars having got fat
- * rather than as there being more of them.
+ * Hex as written, or `rgb()` as the browser reports a colour mid-transition;
+ * anything else is the fallback rather than a thrown error inside the loop.
  */
-function spread(values: number[], column: number, columns: number): number {
-  if (values.length === 0) return 0;
-  if (values.length === 1) return values[0] ?? 0;
-  const at = (column / Math.max(1, columns - 1)) * (values.length - 1);
-  const i = Math.min(values.length - 2, Math.floor(at));
-  const t = at - i;
-  return (values[i] ?? 0) * (1 - t) + (values[i + 1] ?? 0) * t;
+function rgbOf(colour: string, fallback: Rgb): Rgb {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim());
+  if (hex) {
+    const digits = hex[1] ?? '';
+    const full = digits.length === 3 ? digits.replace(/./g, (d) => d + d) : digits;
+    return [0, 2, 4].map((at) => parseInt(full.slice(at, at + 2), 16)) as Rgb;
+  }
+  const parts = /rgba?\(([^)]+)\)/i.exec(colour)?.[1]?.split(/[\s,/]+/).filter(Boolean);
+  if (parts && parts.length >= 3) {
+    const channels = parts.slice(0, 3).map(Number);
+    if (channels.every(Number.isFinite)) return channels as Rgb;
+  }
+  return fallback;
 }
 
-export function Visualizer({ on }: { on: boolean }) {
+/** A colour at a strength, for a gradient stop. */
+const rgba = ([r, g, b]: Rgb, alpha: number) =>
+  `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${Math.max(0, Math.min(1, alpha))})`;
+
+/** The glint's middle: the bright brass most of the way to white. */
+const hotter = ([r, g, b]: Rgb): Rgb => [r + (255 - r) * 0.6, g + (255 - g) * 0.6, b + (255 - b) * 0.6];
+
+/**
+ * A smooth line through points: Catmull-Rom, drawn as the Béziers it is.
+ * `joined` carries on from wherever the path already is, for a shape whose
+ * second edge is a line too.
+ */
+function trace(
+  context: CanvasRenderingContext2D,
+  points: [number, number][],
+  joined = false,
+): void {
+  const first = points[0];
+  if (!first) return;
+  if (joined) context.lineTo(first[0], first[1]);
+  else context.moveTo(first[0], first[1]);
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[Math.max(0, i - 1)] ?? first;
+    const b = points[i] ?? first;
+    const c = points[i + 1] ?? b;
+    const d = points[Math.min(points.length - 1, i + 2)] ?? c;
+    context.bezierCurveTo(
+      b[0] + (c[0] - a[0]) / 6,
+      b[1] + (c[1] - a[1]) / 6,
+      c[0] - (d[0] - b[0]) / 6,
+      c[1] - (d[1] - b[1]) / 6,
+      c[0],
+      c[1],
+    );
+  }
+}
+
+/** Below this nothing is moving, and the grooves can stop being drawn. */
+const STILL = 0.002;
+
+/**
+ * How many ribbons a groove's fill is laid down in.
+ *
+ * The fill hangs from the line and fades over `GROOVES.depth`, following the
+ * line wherever it goes. No one gradient can do that — the line is at a
+ * different height at every point — and strips of one under each point left
+ * seams and steps down the window. So it is ribbons instead: each the groove's
+ * own shape, from the line down to a little further than the last, all added
+ * together. Near the line every ribbon covers it; further down, fewer do. Ten
+ * steps of a fiftieth of the fill each, which at a quarter opacity is a fade
+ * nobody can count.
+ */
+const RIBBONS = 10;
+
+export function Visualizer({ on, look }: { on: boolean; look: VisualizerLook }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /**
    * The latest frame from Rust.
@@ -123,6 +204,12 @@ export function Visualizer({ on }: { on: boolean }) {
     if (!context) return;
 
     let colours = palette(document.documentElement);
+    let deep: Rgb = rgbOf(colours.low, [162, 116, 63]);
+    let bright: Rgb = rgbOf(colours.high, [224, 176, 113]);
+    const recolour = () => {
+      deep = rgbOf(colours.low, [162, 116, 63]);
+      bright = rgbOf(colours.high, [224, 176, 113]);
+    };
     let width = 0;
     let height = 0;
 
@@ -153,12 +240,14 @@ export function Visualizer({ on }: { on: boolean }) {
       // afterwards and not once at the start.
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       colours = palette(document.documentElement);
+      recolour();
     };
     // A theme change rewrites the custom properties on the root and changes no
     // size at all, so nothing watching the element for its size would hear
     // about it.
     const reread = () => {
       colours = palette(document.documentElement);
+      recolour();
       afresh = true;
     };
     const themed = new MutationObserver(reread);
@@ -180,9 +269,7 @@ export function Visualizer({ on }: { on: boolean }) {
     /** Everything down again: the first frame, a resize, a change of palette. */
     let afresh = true;
 
-    const draw = () => {
-      frame = requestAnimationFrame(draw);
-      measure();
+    const drawBlocks = () => {
       const values = bars.current;
       if (values.length === 0) return;
 
@@ -227,6 +314,120 @@ export function Visualizer({ on }: { on: boolean }) {
       afresh = false;
     };
 
+    /** Each band's spring, where it is and how fast it is going. */
+    let pos: number[] = [];
+    let vel: number[] = [];
+    let level = 0;
+    /** A kick's flare: where it is heading, and where it is. */
+    let flareTo = 0;
+    let flare = 0;
+    let beat: Beat = NO_BEAT;
+    /** How far the glint has travelled, in widths. */
+    let travelled = 0;
+    let last = performance.now();
+    /** Whether the canvas is already empty, so stillness is not cleared again. */
+    let blank = false;
+
+    const drawGrooves = (now: number) => {
+      // Capped, so a window hidden for a while does not come back to a leap.
+      const seconds = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      const target = bars.current;
+      if (pos.length !== target.length) {
+        pos = target.map(() => 0);
+        vel = target.map(() => 0);
+      }
+
+      let moving = false;
+      for (let band = 0; band < target.length; band++) {
+        const next = springStep(pos[band] ?? 0, vel[band] ?? 0, target[band] ?? 0, seconds);
+        pos[band] = next.pos;
+        vel[band] = next.vel;
+        if (next.pos > STILL || Math.abs(next.vel) > STILL) moving = true;
+      }
+      level = ease(level, levelFrom(pos.map((at) => Math.min(1, at))), seconds, LEVEL_TAU);
+      const heard = listen(beat, target, seconds);
+      beat = heard.beat;
+      flareTo = Math.max(heard.hit, flareTo - seconds * FLARE_FADE);
+      flare = ease(flare, flareTo, seconds, FLARE_TAU);
+      travelled += seconds * glintSpeed(level, flare);
+
+      // Nothing moving and nothing lit: the canvas is already what it should
+      // be, so silence is not a frame's work.
+      if (!moving && flare < STILL && !afresh) {
+        if (!blank) context.clearRect(0, 0, width, height);
+        blank = true;
+        return;
+      }
+      blank = false;
+      afresh = false;
+      context.clearRect(0, 0, width, height);
+      context.globalCompositeOperation = 'lighter';
+
+      const scale = height * SWING;
+      const depth = Math.max(6, height * GROOVES.depth);
+      const hot = hotter(bright);
+      // Back to front, so the top groove is laid over the rest.
+      for (let layer = GROOVES.layers - 1; layer >= 0; layer--) {
+        const down = GROOVES.layers > 1 ? layer / (GROOVES.layers - 1) : 0;
+        const points = curvePoints(pos, width, height * FLOOR_LINE - layer * GROOVES.gap, scale);
+
+        // The fill, hanging from the line wherever the line is; see `RIBBONS`.
+        const strength = (GROOVES.fill * (1 - down * 0.5) * (1 + 0.4 * flare)) / RIBBONS;
+        context.fillStyle = rgba(deep, 1);
+        context.globalAlpha = Math.min(1, strength);
+        for (let ribbon = 1; ribbon <= RIBBONS; ribbon++) {
+          const drop = (depth * ribbon) / RIBBONS;
+          const below: [number, number][] = [];
+          for (let at = points.length - 1; at >= 0; at--) {
+            const [x, y] = points[at] ?? [0, 0];
+            // Not held to the canvas: past its foot is simply not drawn, and
+            // holding it there piled every ribbon up along the bottom edge.
+            below.push([x, y + drop]);
+          }
+          context.beginPath();
+          trace(context, points);
+          trace(context, below, true);
+          context.closePath();
+          context.fill();
+        }
+
+        // The glint, as a band of light along the line: a halo first, then the
+        // line itself, which is dim away from it.
+        const at = glintAt(travelled, down);
+        const along = (reach: number, rest: number, peak: number) => {
+          const light = context.createLinearGradient(0, 0, width, 0);
+          const clamp = (v: number) => Math.max(0, Math.min(1, v));
+          light.addColorStop(0, rgba(bright, rest));
+          light.addColorStop(clamp(at - reach), rgba(bright, rest));
+          light.addColorStop(clamp(at), rgba(hot, peak));
+          light.addColorStop(clamp(at + reach), rgba(bright, rest));
+          light.addColorStop(1, rgba(bright, rest));
+          return light;
+        };
+        context.globalAlpha = 1 - down * 0.4;
+        context.beginPath();
+        trace(context, points);
+        context.strokeStyle = along(HALO, 0, GROOVES.glow * 0.35 * (1 + flare * 0.8));
+        context.lineWidth = 9;
+        context.stroke();
+        context.beginPath();
+        trace(context, points);
+        context.strokeStyle = along(GLINT, 0.22 + 0.25 * flare, GROOVES.glow);
+        context.lineWidth = layer === 0 ? 1.8 : 1.2;
+        context.stroke();
+      }
+      context.globalAlpha = 1;
+      context.globalCompositeOperation = 'source-over';
+    };
+
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      measure();
+      if (look === 'blocks') drawBlocks();
+      else drawGrooves(now);
+    };
+
     // With motion turned down the bars are drawn once, unlit, and left alone.
     if (prefersReducedMotion()) {
       measure();
@@ -240,7 +441,7 @@ export function Visualizer({ on }: { on: boolean }) {
       themed.disconnect();
       fading();
     };
-  }, [on, shown]);
+  }, [on, shown, look]);
 
   if (!on) return null;
 

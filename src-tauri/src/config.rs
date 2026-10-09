@@ -152,6 +152,10 @@ pub struct Settings {
     /// alone. Anything unrecognised reads as all of it on the way in.
     #[serde(default = "all_of_it")]
     pub glow_listens: String,
+    /// How the visualiser is drawn: `"grooves"`, or the `"blocks"` it used to
+    /// be. Anything unrecognised reads as grooves on the way in.
+    #[serde(default = "grooves")]
+    pub visualizer_look: String,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -208,6 +212,7 @@ impl Default for Settings {
             glow_flash: 0,
             glow_flare: 0,
             glow_listens: all_of_it(),
+            visualizer_look: grooves(),
             last_seen_version: None,
             declined_version: None,
             lyrics_on: false,
@@ -260,6 +265,10 @@ fn compact_place() -> String {
 
 fn all_of_it() -> String {
     "all".to_owned()
+}
+
+fn grooves() -> String {
+    "grooves".to_owned()
 }
 
 fn on_unless_turned_off() -> bool {
@@ -399,6 +408,7 @@ mod tests {
             glow_flash: -1,
             glow_flare: 2,
             glow_listens: "bass".into(),
+            visualizer_look: "blocks".into(),
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
             lyrics_on: true,
@@ -421,6 +431,16 @@ mod tests {
         assert!(written.contains(r#""sleepWhenHidden":false"#));
         assert!(written.contains(r#""scale":1.25"#));
         assert!(written.contains(r#""glowListens":"bass""#));
+        assert!(written.contains(r#""visualizerLook":"blocks""#));
+    }
+
+    #[test]
+    fn a_config_from_before_the_grooves_draws_them() {
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert_eq!(config.settings.visualizer_look, "grooves");
+        let chosen: AppConfig =
+            serde_json::from_str(r#"{"settings":{"visualizerLook":"blocks"}}"#).expect("parses");
+        assert_eq!(chosen.settings.visualizer_look, "blocks");
     }
 
     #[test]

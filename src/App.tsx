@@ -184,6 +184,7 @@ export default function App() {
     if (settingsReady) void setWindowZoom(scale);
   }, [scale, settingsReady]);
   const visualizer = useSettingsStore((s) => s.visualizer);
+  const visualizerLook = useSettingsStore((s) => s.visualizerLook);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
@@ -432,7 +433,7 @@ export default function App() {
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
-      <Visualizer on={visualizer} />
+      <Visualizer on={visualizer} look={visualizerLook} />
 
       <DiscFlightProvider>
       <DiscHoldProvider>

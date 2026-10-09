@@ -155,6 +155,12 @@ export interface Settings {
    */
   glowListens: GlowListens;
   /**
+   * How the visualiser behind the deck is drawn: as grooves — thin lines
+   * stacked like a record's, a glint travelling along them — or as the grid of
+   * blocks it used to be.
+   */
+  visualizerLook: VisualizerLook;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -195,6 +201,9 @@ export type LibraryTab = 'groovium' | 'spotify';
 /** What the edge light listens to; see `glowListens`. */
 export type GlowListens = 'all' | 'bass';
 
+/** How the visualiser is drawn; see `visualizerLook`. */
+export type VisualizerLook = 'grooves' | 'blocks';
+
 /** Which of the edge light's dials the settings panel is moving. */
 export const GLOW_KNOBS = [
   'glowStrength',
@@ -229,6 +238,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glowFlash: 0,
   glowFlare: 0,
   glowListens: 'all',
+  visualizerLook: 'grooves',
   lastSeenVersion: null,
   declinedVersion: null,
   lyricsOn: false,
@@ -262,6 +272,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
     if (settings.libraryTab !== 'spotify') settings.libraryTab = 'groovium';
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
+    if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     settings.lyricsOn = settings.lyricsOn === true;
     settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a

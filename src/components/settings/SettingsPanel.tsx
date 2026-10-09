@@ -70,6 +70,8 @@ export function SettingsPanel({
   const glowFlash = useSettingsStore((s) => s.glowFlash);
   const glowFlare = useSettingsStore((s) => s.glowFlare);
   const glowListens = useSettingsStore((s) => s.glowListens);
+  const visualizerLook = useSettingsStore((s) => s.visualizerLook);
+  const setVisualizerLook = useSettingsStore((s) => s.setVisualizerLook);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
@@ -290,6 +292,37 @@ export function SettingsPanel({
             on={visualizer}
             onChange={setVisualizer}
           />
+
+          {/* How it is drawn, folded away with it — the same as the edge
+              light's dials, for the same reasons. Two buttons: neither look is
+              the absence of the other. */}
+          <div
+            inert={!visualizer}
+            aria-hidden={!visualizer}
+            className={`grid overflow-hidden transition-all duration-200 ease-out ${
+              visualizer ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            }`}
+          >
+            <div className="min-h-0">
+              <div className="flex flex-col gap-1 border-l border-shell-600 pt-1 pl-2.5">
+                <span className="text-meta text-cream-300">{t('settings.visualizerLook')}</span>
+                <div className="flex gap-1.5">
+                  <Choice
+                    active={visualizerLook === 'grooves'}
+                    onClick={() => setVisualizerLook('grooves')}
+                  >
+                    {t('settings.visualizerLookGrooves')}
+                  </Choice>
+                  <Choice
+                    active={visualizerLook === 'blocks'}
+                    onClick={() => setVisualizerLook('blocks')}
+                  >
+                    {t('settings.visualizerLookBlocks')}
+                  </Choice>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <Toggle
             label={t('settings.themeFromCover')}
