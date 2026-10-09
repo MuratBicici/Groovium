@@ -36,6 +36,14 @@ export const GROOVES = {
   punch: 0.9,
   /** How softly a fall settles. */
   fallSoftness: 0.1,
+  /**
+   * How long the springs take, against the preview's: one is what it showed,
+   * and less is quicker by as much. A fifth — tried in the app, the preview's
+   * springs lagged the music, and what was asked for was as little smoothing
+   * as there can be with the punch kept. At this the grooves catch a kick
+   * within a frame and the fall is as quick as the bars' own.
+   */
+  smoothing: 0.2,
 } as const;
 
 /** How high the tallest groove can reach, as a share of the height. */
@@ -51,8 +59,13 @@ export const HALO = 0.12;
 export const GLINT_LAG = 0.07;
 /** How far a spring may go past the top, so a kick at full can still overshoot. */
 const OVERSHOOT = 1.08;
-/** Steps a frame is cut into, so the spring is the same at thirty frames a second as at sixty. */
-const STEPS = 4;
+/**
+ * The longest step a spring is moved in, in seconds. A frame is cut into as
+ * many of these as it takes, so thirty frames a second moves like sixty — and
+ * so springs this stiff stay steady, which a step a quarter of a frame long no
+ * longer kept them.
+ */
+const STEP = 1 / 480;
 
 /**
  * One band's spring, a frame on.
@@ -67,14 +80,16 @@ export function springStep(
   target: number,
   seconds: number,
 ): { pos: number; vel: number } {
-  const step = seconds / STEPS;
+  const steps = Math.max(1, Math.ceil(seconds / STEP));
+  const step = seconds / steps;
+  // Stiffness goes with the square of how quick a spring is.
+  const quicker = 1 / (GROOVES.smoothing * GROOVES.smoothing);
   let p = pos;
   let v = vel;
-  for (let i = 0; i < STEPS; i++) {
+  for (let i = 0; i < steps; i++) {
     const rising = target > p;
-    const stiffness = rising
-      ? 120 + GROOVES.punch * 900
-      : 30 + (1 - GROOVES.fallSoftness) * 260;
+    const stiffness =
+      (rising ? 120 + GROOVES.punch * 900 : 30 + (1 - GROOVES.fallSoftness) * 260) * quicker;
     const damping = rising ? 1 - GROOVES.punch * 0.55 : 1;
     const pull = stiffness * (target - p) - 2 * damping * Math.sqrt(stiffness) * v;
     v += pull * step;

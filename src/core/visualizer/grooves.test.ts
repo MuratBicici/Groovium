@@ -26,6 +26,12 @@ describe('a groove rising', () => {
     expect(run(0.8, 0.06).pos).toBeGreaterThan(0.6);
   });
 
+  it('catches a kick within a frame', () => {
+    // As little smoothing as there can be: the rise is over before the next
+    // frame of sound arrives.
+    expect(run(0.8, 1 / 60).pos).toBeGreaterThan(0.8 * 0.85);
+  });
+
   it('goes a little past it and settles back', () => {
     const rise = run(0.8, 1);
     expect(rise.highest).toBeGreaterThan(0.82);
