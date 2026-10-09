@@ -121,11 +121,12 @@ export const FLARE_FADE = 3.5;
  * first sound. They sink instead: down past the foot of the window when the
  * sound goes, and up from below it when it comes back — chosen from moving
  * previews, over fading, gathering in and being wiped by the light. Down over
- * the better part of a second, up quicker, so the first beat is not missed.
+ * about two seconds, up in under one — both twice what was first tried, which
+ * in the app was too quick to be seen as a movement at all.
  */
 export const SOUNDING = 0.02;
-export const PRESENT_IN = 0.12;
-export const PRESENT_OUT = 0.3;
+export const PRESENT_IN = 0.25;
+export const PRESENT_OUT = 0.6;
 /** How far the grooves sink when they go, as a share of the height. */
 export const SINK = 0.75;
 

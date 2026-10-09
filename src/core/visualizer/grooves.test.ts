@@ -129,19 +129,19 @@ describe('the grooves coming and going', () => {
   const playing = [0.4, 0.3, 0.2];
   const silent = [0, 0, 0];
 
-  it('go when the sound stops, over most of a second rather than at once', () => {
+  it('go when the sound stops, over a couple of seconds rather than at once', () => {
     expect(after(1, silent, 1 / 60)).toBeGreaterThan(0.9);
     expect(after(1, silent, 0.25)).toBeGreaterThan(0.2);
-    expect(after(1, silent, 1.5)).toBeLessThan(0.01);
+    expect(after(1, silent, 3)).toBeLessThan(0.01);
   });
 
   it('come back when it starts, quicker than they went', () => {
     expect(after(0, playing, 1 / 60)).toBeLessThan(0.4);
-    expect(after(0, playing, 0.35)).toBeGreaterThan(0.9);
+    expect(after(0, playing, 0.7)).toBeGreaterThan(0.9);
     expect(after(0, playing, 0.3)).toBeGreaterThan(1 - after(1, [0, 0, 0], 0.3));
   });
 
   it('count a sound too quiet to show as nothing', () => {
-    expect(after(1, [0.01, 0.005], 1.5)).toBeLessThan(0.01);
+    expect(after(1, [0.01, 0.005], 3)).toBeLessThan(0.01);
   });
 });
