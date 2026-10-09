@@ -364,6 +364,7 @@ export const en = {
   'settings.visualizerLook': 'Look',
   'settings.visualizerLookGrooves': 'Grooves',
   'settings.visualizerLookBlocks': 'Blocks',
+  'settings.visualizerBrightness': 'Brightness',
   'settings.glowListens': 'Listens to',
   'settings.glowListensAll': 'All of it',
   'settings.glowListensBass': 'Bass',
@@ -378,7 +379,7 @@ export const en = {
   /** The bars behind the deck. The hint has to say what it listens to. */
   'settings.visualizer': 'Visualiser',
   'settings.visualizerHint':
-    'Bars behind the deck, moving to what Groovium is playing.',
+    'Behind the deck, moving to what Groovium is playing.',
   'settings.connections': 'Connections',
   'settings.configured': 'Set up',
   'settings.notConfigured': 'Not set up',

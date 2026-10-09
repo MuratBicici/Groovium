@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GLOW, NOTCHES, levelFrom, settleLevel, span } from './index';
+import { GLOW, NOTCHES, levelFrom, settleLevel, span, visualizerOpacity } from './index';
 
 describe('how loud it is', () => {
   it('is nothing when there is nothing', () => {
@@ -115,5 +115,23 @@ describe('the sliders', () => {
 
   it('makes a higher sensitivity easier to trigger, not harder', () => {
     expect(GLOW.threshold(NOTCHES)).toBeLessThan(GLOW.threshold(-NOTCHES));
+  });
+});
+
+describe('how strongly the visualiser shows through', () => {
+  it('is the quarter it always was until somebody moves it', () => {
+    expect(visualizerOpacity(0)).toBeCloseTo(0.25, 6);
+  });
+
+  it('goes up and down by the same step to the eye each notch', () => {
+    expect(visualizerOpacity(1) / visualizerOpacity(0)).toBeCloseTo(visualizerOpacity(0) / visualizerOpacity(-1), 6);
+    expect(visualizerOpacity(4)).toBeGreaterThan(0.7);
+    expect(visualizerOpacity(4)).toBeLessThan(0.75);
+    expect(visualizerOpacity(-4)).toBeGreaterThan(0.08);
+  });
+
+  it('is held to the notches, whatever it is handed', () => {
+    expect(visualizerOpacity(99)).toBeCloseTo(visualizerOpacity(4), 6);
+    expect(visualizerOpacity(Number.NaN)).toBeCloseTo(0.25, 6);
   });
 });

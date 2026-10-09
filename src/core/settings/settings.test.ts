@@ -52,6 +52,7 @@ describe('remembering that a version has been shown', () => {
       glowFlare: 2,
       glowListens: 'bass',
       visualizerLook: 'blocks',
+      visualizerBrightness: 2,
       declinedVersion: '2.0.0',
       lyricsOn: true,
       lyricsPlace: 'full',
@@ -83,6 +84,7 @@ describe('remembering that a version has been shown', () => {
       glowFlare: 2,
       glowListens: 'bass',
       visualizerLook: 'blocks',
+      visualizerBrightness: 2,
       lastSeenVersion: APP_VERSION,
       declinedVersion: '2.0.0',
       lyricsOn: true,
@@ -126,6 +128,14 @@ describe('how the visualiser is drawn', () => {
   it('is written to disk when it is chosen', () => {
     useSettingsStore.getState().setVisualizerLook('blocks');
     expect(lastWrite().visualizerLook).toBe('blocks');
+  });
+
+  it('is as bright as it always was until turned up or down, and held to the notches', () => {
+    expect(useSettingsStore.getState().visualizerBrightness).toBe(0);
+    useSettingsStore.getState().setVisualizerBrightness(3);
+    expect(lastWrite().visualizerBrightness).toBe(3);
+    useSettingsStore.getState().setVisualizerBrightness(99);
+    expect(lastWrite().visualizerBrightness).toBe(4);
   });
 });
 

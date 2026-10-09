@@ -185,6 +185,7 @@ export default function App() {
   }, [scale, settingsReady]);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const visualizerLook = useSettingsStore((s) => s.visualizerLook);
+  const visualizerBrightness = useSettingsStore((s) => s.visualizerBrightness);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
@@ -433,7 +434,7 @@ export default function App() {
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
-      <Visualizer on={visualizer} look={visualizerLook} />
+      <Visualizer on={visualizer} look={visualizerLook} brightness={visualizerBrightness} />
 
       <DiscFlightProvider>
       <DiscHoldProvider>

@@ -156,6 +156,10 @@ pub struct Settings {
     /// be. Anything unrecognised reads as grooves on the way in.
     #[serde(default = "grooves")]
     pub visualizer_look: String,
+    /// How brightly the visualiser shows through: a notch from -4 to 4, nought
+    /// being the quarter it has always been drawn at.
+    #[serde(default, deserialize_with = "notch")]
+    pub visualizer_brightness: i32,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -213,6 +217,7 @@ impl Default for Settings {
             glow_flare: 0,
             glow_listens: all_of_it(),
             visualizer_look: grooves(),
+            visualizer_brightness: 0,
             last_seen_version: None,
             declined_version: None,
             lyrics_on: false,
@@ -409,6 +414,7 @@ mod tests {
             glow_flare: 2,
             glow_listens: "bass".into(),
             visualizer_look: "blocks".into(),
+            visualizer_brightness: 2,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
             lyrics_on: true,
@@ -432,6 +438,7 @@ mod tests {
         assert!(written.contains(r#""scale":1.25"#));
         assert!(written.contains(r#""glowListens":"bass""#));
         assert!(written.contains(r#""visualizerLook":"blocks""#));
+        assert!(written.contains(r#""visualizerBrightness":2"#));
     }
 
     #[test]
@@ -441,6 +448,10 @@ mod tests {
         let chosen: AppConfig =
             serde_json::from_str(r#"{"settings":{"visualizerLook":"blocks"}}"#).expect("parses");
         assert_eq!(chosen.settings.visualizer_look, "blocks");
+        assert_eq!(config.settings.visualizer_brightness, 0);
+        let bright: AppConfig =
+            serde_json::from_str(r#"{"settings":{"visualizerBrightness":9}}"#).expect("parses");
+        assert_eq!(bright.settings.visualizer_brightness, 4);
     }
 
     #[test]

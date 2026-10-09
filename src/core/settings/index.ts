@@ -161,6 +161,11 @@ export interface Settings {
    */
   visualizerLook: VisualizerLook;
   /**
+   * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
+   * the quarter it has always been drawn at; see `visualizerOpacity`.
+   */
+  visualizerBrightness: number;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -239,6 +244,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glowFlare: 0,
   glowListens: 'all',
   visualizerLook: 'grooves',
+  visualizerBrightness: 0,
   lastSeenVersion: null,
   declinedVersion: null,
   lyricsOn: false,
@@ -277,7 +283,7 @@ export async function loadSettings(): Promise<Settings> {
     settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a
     // fraction among them, since these were fractions for one afternoon.
-    for (const knob of GLOW_KNOBS) {
+    for (const knob of [...GLOW_KNOBS, 'visualizerBrightness'] as const) {
       const held = Math.round(Number(settings[knob]));
       settings[knob] = Number.isFinite(held) ? Math.max(-NOTCHES, Math.min(NOTCHES, held)) : 0;
     }

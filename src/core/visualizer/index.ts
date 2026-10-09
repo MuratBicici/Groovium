@@ -163,6 +163,21 @@ export const GLOW = {
 } as const;
 
 /**
+ * How strongly the visualiser shows through, from its brightness notch.
+ *
+ * Nought is the quarter it has always been drawn at. Each notch either way is
+ * the same step to the eye — a ratio rather than an amount — so the top is a
+ * little under three times as bright and the bottom a little over a third.
+ */
+export function visualizerOpacity(notch: number): number {
+  const held = Math.max(
+    -NOTCHES,
+    Math.min(NOTCHES, Math.round(Number.isFinite(notch) ? notch : 0)),
+  );
+  return 0.25 * Math.pow(1.3, held);
+}
+
+/**
  * How much more the lowest band counts than the highest.
  *
  * The bands arrive low to high, and this leans the answer onto the low ones:

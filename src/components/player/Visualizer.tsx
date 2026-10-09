@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { levelFrom, watchBars } from '@/core/visualizer';
+import { levelFrom, visualizerOpacity, watchBars } from '@/core/visualizer';
 import {
   FLARE_FADE,
   FLARE_TAU,
@@ -174,7 +174,16 @@ const STILL = 0.002;
  */
 const RIBBONS = 10;
 
-export function Visualizer({ on, look }: { on: boolean; look: VisualizerLook }) {
+export function Visualizer({
+  on,
+  look,
+  brightness,
+}: {
+  on: boolean;
+  look: VisualizerLook;
+  /** A notch from -4 to 4; see `visualizerOpacity`. */
+  brightness: number;
+}) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /**
    * The latest frame from Rust.
@@ -463,7 +472,10 @@ export function Visualizer({ on, look }: { on: boolean; look: VisualizerLook }) 
       // Rounded like the shell, for the same reason the edge light is: a
       // canvas repainting every frame gets a compositor layer of its own, and a
       // promoted layer can escape an ancestor's rounded clip.
-      className="pointer-events-none absolute inset-0 -z-10 h-full w-full rounded-[var(--radius-widget)] opacity-25"
+      // How strongly it shows through is the brightness setting's, a quarter
+      // unless somebody has moved it.
+      style={{ opacity: visualizerOpacity(brightness) }}
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full rounded-[var(--radius-widget)]"
     />
   );
 }

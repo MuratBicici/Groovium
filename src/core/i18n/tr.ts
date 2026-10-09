@@ -349,6 +349,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.visualizerLook': 'Görünüş',
   'settings.visualizerLookGrooves': 'Oluklar',
   'settings.visualizerLookBlocks': 'Bloklar',
+  'settings.visualizerBrightness': 'Parlaklık',
   'settings.glowListens': 'Dinlediği',
   'settings.glowListensAll': 'Tüm müzik',
   'settings.glowListensBass': 'Bas',
@@ -363,7 +364,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   /** The bars behind the deck. The hint has to say what it listens to. */
   'settings.visualizer': 'Görselleştirici',
   'settings.visualizerHint':
-    'Plakçaların arkasında çubuklar, Groovium ne çalıyorsa ona göre.',
+    'Pikabın arkasında, Groovium ne çalıyorsa ona göre hareket eder.',
   'settings.connections': 'Bağlantılar',
   'settings.configured': 'Kurulu',
   'settings.notConfigured': 'Kurulu değil',

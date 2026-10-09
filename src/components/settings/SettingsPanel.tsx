@@ -72,6 +72,8 @@ export function SettingsPanel({
   const glowListens = useSettingsStore((s) => s.glowListens);
   const visualizerLook = useSettingsStore((s) => s.visualizerLook);
   const setVisualizerLook = useSettingsStore((s) => s.setVisualizerLook);
+  const visualizerBrightness = useSettingsStore((s) => s.visualizerBrightness);
+  const setVisualizerBrightness = useSettingsStore((s) => s.setVisualizerBrightness);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
@@ -319,6 +321,13 @@ export function SettingsPanel({
                   >
                     {t('settings.visualizerLookBlocks')}
                   </Choice>
+                </div>
+                <div className="pt-1">
+                  <Slider
+                    label={t('settings.visualizerBrightness')}
+                    notch={visualizerBrightness}
+                    onChange={setVisualizerBrightness}
+                  />
                 </div>
               </div>
             </div>
