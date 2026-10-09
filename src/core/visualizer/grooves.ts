@@ -130,10 +130,43 @@ export const PRESENT_OUT = 0.6;
 /** How far the grooves sink when they go, as a share of the height. */
 export const SINK = 0.75;
 
-/** How present the grooves are a frame on, from whether anything is sounding. */
-export function presence(was: number, bars: readonly number[], seconds: number): number {
-  const sounding = bars.some((bar) => bar > SOUNDING);
-  return ease(was, sounding ? 1 : 0, seconds, sounding ? PRESENT_IN : PRESENT_OUT);
+/** Whether any band of a frame is loud enough to count as sound. */
+export function sounding(bars: readonly number[]): boolean {
+  return bars.some((bar) => bar > SOUNDING);
+}
+
+/** Below this the grooves count as flat, and may sink. */
+export const FLAT = 0.02;
+
+/**
+ * How present the grooves are a frame on.
+ *
+ * In the order it was asked for: when the music stops they flatten first,
+ * where they are, and only once they lie flat do they sink — so going is two
+ * movements that can each be seen, not one that is over before it is noticed.
+ * With sound they rise at once, flat or not.
+ */
+export function presence(
+  was: number,
+  heard: boolean,
+  flat: boolean,
+  seconds: number,
+): number {
+  const to = heard || !flat ? 1 : 0;
+  return ease(was, to, seconds, to > was ? PRESENT_IN : PRESENT_OUT);
+}
+
+/**
+ * How long the grooves take to lie flat when the music stops, in seconds —
+ * chosen against a preview. Their springs are as quick as springs go, which
+ * is right for keeping time and wrong for stopping: a song paused went flat
+ * in one frame. Stopped, every band eases down over this instead.
+ */
+export const FLATTEN = 0.5;
+
+/** One band, a frame further on its way to flat. */
+export function flatten(pos: number, seconds: number): number {
+  return ease(pos, 0, seconds, FLATTEN / 2.5);
 }
 
 /**

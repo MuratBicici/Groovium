@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { levelFrom, visualizerOpacity, watchBars } from '@/core/visualizer';
+import { usePlayerStore } from '@/core/store';
 import {
   FLARE_FADE,
   FLARE_TAU,
@@ -16,6 +17,9 @@ import {
   presence,
   springStep,
   SINK,
+  FLAT,
+  flatten,
+  sounding,
   spread,
 } from '@/core/visualizer/grooves';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
@@ -210,6 +214,19 @@ export function Visualizer({
    */
   const bars = useRef<number[]>([]);
   const shown = useShown();
+  /**
+   * Whether the music is playing, from the player rather than the sound.
+   *
+   * Paused, the capture is sent nothing new and goes on handing over the last
+   * window it had — a frame of music, frozen — so the sound cannot be trusted
+   * to say the song has stopped. A ref, read by the loop, so pausing does not
+   * tear the drawing down.
+   */
+  const playing = useRef(false);
+  const isPlaying = usePlayerStore((s) => s.playbackState === 'PLAYING');
+  useEffect(() => {
+    playing.current = isPlaying;
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!on || !shown) return;
@@ -369,11 +386,18 @@ export function Visualizer({
       }
 
       let moving = false;
+      const stopped = !playing.current;
       for (let band = 0; band < target.length; band++) {
-        const next = springStep(pos[band] ?? 0, vel[band] ?? 0, target[band] ?? 0, seconds);
-        pos[band] = next.pos;
-        vel[band] = next.vel;
-        if (next.pos > STILL || Math.abs(next.vel) > STILL) moving = true;
+        if (stopped) {
+          // Flattening where they are, at the pace chosen for it; see `FLATTEN`.
+          pos[band] = flatten(pos[band] ?? 0, seconds);
+          vel[band] = 0;
+        } else {
+          const next = springStep(pos[band] ?? 0, vel[band] ?? 0, target[band] ?? 0, seconds);
+          pos[band] = next.pos;
+          vel[band] = next.vel;
+        }
+        if ((pos[band] ?? 0) > STILL || Math.abs(vel[band] ?? 0) > STILL) moving = true;
       }
       level = ease(level, levelFrom(pos.map((at) => Math.min(1, at))), seconds, LEVEL_TAU);
       const heard = listen(beat, target, seconds);
@@ -381,7 +405,12 @@ export function Visualizer({
       flareTo = Math.max(heard.hit, flareTo - seconds * FLARE_FADE);
       flare = ease(flare, flareTo, seconds, FLARE_TAU);
       travelled += seconds * glintSpeed(level, flare);
-      present = presence(present, target, seconds);
+      present = presence(
+        present,
+        !stopped && sounding(target),
+        pos.every((at) => at < FLAT),
+        seconds,
+      );
 
       // Nothing moving and nothing lit: the canvas is already what it should
       // be, so silence is not a frame's work.

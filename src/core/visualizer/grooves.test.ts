@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { curvePoints, ease, glintAt, glintSpeed, presence, spread, springStep } from './grooves';
+import {
+  curvePoints,
+  ease,
+  flatten,
+  glintAt,
+  glintSpeed,
+  presence,
+  sounding,
+  spread,
+  springStep,
+} from './grooves';
 
 /**
  * How the grooves move: with punch on the way up, smoothly on the way down,
@@ -120,28 +130,43 @@ describe('the line through the bands', () => {
 });
 
 describe('the grooves coming and going', () => {
-  /** How present they are after `seconds` of `bars`, from `from`. */
-  function after(from: number, bars: number[], seconds: number): number {
+  /** How present they are after `seconds`, from `from`. */
+  function after(from: number, heard: boolean, flat: boolean, seconds: number): number {
     let present = from;
-    for (let t = 0; t < seconds; t += 1 / 60) present = presence(present, bars, 1 / 60);
+    for (let t = 0; t < seconds; t += 1 / 60) present = presence(present, heard, flat, 1 / 60);
     return present;
   }
-  const playing = [0.4, 0.3, 0.2];
-  const silent = [0, 0, 0];
 
-  it('go when the sound stops, over a couple of seconds rather than at once', () => {
-    expect(after(1, silent, 1 / 60)).toBeGreaterThan(0.9);
-    expect(after(1, silent, 0.25)).toBeGreaterThan(0.2);
-    expect(after(1, silent, 3)).toBeLessThan(0.01);
+  it('stay while they are still flattening, whatever the sound', () => {
+    // Flatten first, then sink: not both at once.
+    expect(after(1, false, false, 2)).toBeCloseTo(1, 6);
   });
 
-  it('come back when it starts, quicker than they went', () => {
-    expect(after(0, playing, 1 / 60)).toBeLessThan(0.4);
-    expect(after(0, playing, 0.7)).toBeGreaterThan(0.9);
-    expect(after(0, playing, 0.3)).toBeGreaterThan(1 - after(1, [0, 0, 0], 0.3));
+  it('sink once they lie flat, over a couple of seconds rather than at once', () => {
+    expect(after(1, false, true, 1 / 60)).toBeGreaterThan(0.9);
+    expect(after(1, false, true, 0.25)).toBeGreaterThan(0.2);
+    expect(after(1, false, true, 3)).toBeLessThan(0.01);
+  });
+
+  it('rise when the music comes back, quicker than they went', () => {
+    expect(after(0, true, true, 1 / 60)).toBeLessThan(0.4);
+    expect(after(0, true, true, 0.7)).toBeGreaterThan(0.9);
+    expect(after(0, true, true, 0.3)).toBeGreaterThan(1 - after(1, false, true, 0.3));
   });
 
   it('count a sound too quiet to show as nothing', () => {
-    expect(after(1, [0.01, 0.005], 3)).toBeLessThan(0.01);
+    expect(sounding([0.01, 0.005])).toBe(false);
+    expect(sounding([0.01, 0.3])).toBe(true);
+  });
+});
+
+describe('flattening when the music stops', () => {
+  it('takes about the half second chosen for it, not a frame', () => {
+    let pos = 0.8;
+    pos = flatten(pos, 1 / 60);
+    expect(pos).toBeGreaterThan(0.7);
+    for (let t = 1 / 60; t < 0.5; t += 1 / 60) pos = flatten(pos, 1 / 60);
+    expect(pos).toBeLessThan(0.8 * 0.1);
+    expect(pos).toBeGreaterThan(0);
   });
 });
