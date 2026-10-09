@@ -168,11 +168,25 @@ const STILL = 0.002;
  * different height at every point — and strips of one under each point left
  * seams and steps down the window. So it is ribbons instead: each the groove's
  * own shape, from the line down to a little further than the last, all added
- * together. Near the line every ribbon covers it; further down, fewer do. Ten
- * steps of a fiftieth of the fill each, which at a quarter opacity is a fade
- * nobody can count.
+ * together. Near the line every ribbon covers it; further down, fewer do. Six
+ * steps of a sixth of the fill each, which at a quarter opacity is a fade
+ * nobody can count — and each is a shape filled on every frame, so no more of
+ * them than that.
  */
-const RIBBONS = 10;
+const RIBBONS = 6;
+
+/**
+ * The most pixels the grooves are drawn in, per CSS pixel.
+ *
+ * They are drawn whole on every frame — the blocks only ever redraw a column
+ * that moved — and what that costs is the canvas's area. The window's own
+ * scale and the display's multiply into the device pixel ratio, so at 150% of
+ * each the canvas was five times its size at 100%, and the window felt it.
+ * Soft lines and a fill a quarter seen are not worth those pixels: drawn at
+ * one per CSS pixel and stretched, they look the same, and cost the same at
+ * any scale.
+ */
+const SHARPEST = 1;
 
 export function Visualizer({
   on,
@@ -234,7 +248,10 @@ export function Visualizer({
      * each frame costs one layout read on one element and cannot get stuck.
      */
     const measure = () => {
-      const dpr = window.devicePixelRatio || 1;
+      // The grooves at no more than one pixel to the CSS pixel; see `SHARPEST`.
+      const dpr = look === 'grooves'
+        ? Math.min(SHARPEST, window.devicePixelRatio || 1)
+        : window.devicePixelRatio || 1;
       const w = Math.max(1, el.clientWidth);
       const h = Math.max(1, el.clientHeight);
       if (w === width && h === height && el.width === Math.round(w * dpr)) return;
