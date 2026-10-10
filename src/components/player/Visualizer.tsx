@@ -23,7 +23,8 @@ import {
   spread,
 } from '@/core/visualizer/grooves';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
-import type { VisualizerLook } from '@/core/settings';
+import type { DrawerSide, VisualizerLook } from '@/core/settings';
+import { SQUEEZE, uncovered } from './squeeze';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
@@ -198,11 +199,17 @@ export function Visualizer({
   on,
   look,
   brightness,
+  covered,
 }: {
   on: boolean;
   look: VisualizerLook;
   /** A notch from -4 to 4; see `visualizerOpacity`. */
   brightness: number;
+  /**
+   * The side whose drawer the lyrics record is covering, or null. The grooves
+   * squeeze into what is left of the window; see `squeeze`.
+   */
+  covered: DrawerSide | null;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   /**
@@ -227,6 +234,11 @@ export function Visualizer({
   useEffect(() => {
     playing.current = isPlaying;
   }, [isPlaying]);
+  /** The side covered, for the loop; a ref so the record opening does not restart it. */
+  const covering = useRef<DrawerSide | null>(covered);
+  useEffect(() => {
+    covering.current = covered;
+  }, [covered]);
 
   useEffect(() => {
     if (!on || !shown) return;
@@ -372,6 +384,9 @@ export function Visualizer({
     let last = performance.now();
     /** Whether the canvas is already empty, so stillness is not cleared again. */
     let blank = false;
+    /** Where across the window the grooves are drawn, as it eases; see `squeeze`. */
+    let spanFrom = 0;
+    let spanTo = 0;
     /** How present the grooves are, nought to one; see `presence`. */
     let present = 0;
 
@@ -387,6 +402,19 @@ export function Visualizer({
 
       let moving = false;
       const stopped = !playing.current;
+
+      // Where across the window the grooves go: all of it, or what the lyrics
+      // record leaves — eased there, so they squeeze in and spread back out.
+      const side = covering.current;
+      const [toFrom, toTo] = side ? uncovered(width, height, side) : [0, width];
+      if (spanTo <= spanFrom) {
+        spanFrom = toFrom;
+        spanTo = toTo;
+      }
+      spanFrom = ease(spanFrom, toFrom, seconds, SQUEEZE / 3);
+      spanTo = ease(spanTo, toTo, seconds, SQUEEZE / 3);
+      if (Math.abs(spanFrom - toFrom) > 0.5 || Math.abs(spanTo - toTo) > 0.5) moving = true;
+      const span = Math.max(1, spanTo - spanFrom);
       for (let band = 0; band < target.length; band++) {
         if (stopped) {
           // Flattening where they are, at the pace chosen for it; see `FLATTEN`.
@@ -422,6 +450,8 @@ export function Visualizer({
       blank = false;
       afresh = false;
       context.clearRect(0, 0, width, height);
+      context.save();
+      context.translate(spanFrom, 0);
       context.globalCompositeOperation = 'lighter';
 
       const scale = height * SWING;
@@ -432,7 +462,7 @@ export function Visualizer({
       // Back to front, so the top groove is laid over the rest.
       for (let layer = GROOVES.layers - 1; layer >= 0; layer--) {
         const down = GROOVES.layers > 1 ? layer / (GROOVES.layers - 1) : 0;
-        const points = curvePoints(pos, width, height * FLOOR_LINE - layer * GROOVES.gap + sunk, scale);
+        const points = curvePoints(pos, span, height * FLOOR_LINE - layer * GROOVES.gap + sunk, scale);
 
         // The fill, hanging from the line wherever the line is; see `RIBBONS`.
         const strength = (GROOVES.fill * (1 - down * 0.5) * (1 + 0.4 * flare)) / RIBBONS;
@@ -458,7 +488,7 @@ export function Visualizer({
         // line itself, which is dim away from it.
         const at = glintAt(travelled, down);
         const along = (reach: number, rest: number, peak: number) => {
-          const light = context.createLinearGradient(0, 0, width, 0);
+          const light = context.createLinearGradient(0, 0, span, 0);
           const clamp = (v: number) => Math.max(0, Math.min(1, v));
           light.addColorStop(0, rgba(bright, rest));
           light.addColorStop(clamp(at - reach), rgba(bright, rest));
@@ -479,6 +509,7 @@ export function Visualizer({
         context.lineWidth = layer === 0 ? 1.8 : 1.2;
         context.stroke();
       }
+      context.restore();
       context.globalAlpha = 1;
       context.globalCompositeOperation = 'source-over';
     };

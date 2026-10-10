@@ -434,7 +434,12 @@ export default function App() {
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
-      <Visualizer on={visualizer} look={visualizerLook} brightness={visualizerBrightness} />
+      <Visualizer
+        on={visualizer}
+        look={visualizerLook}
+        brightness={visualizerBrightness}
+        covered={lyricsInDrawer && !compact ? drawerSide : null}
+      />
 
       <DiscFlightProvider>
       <DiscHoldProvider>
