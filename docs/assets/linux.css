@@ -1,11 +1,10 @@
 /*
- * The Linux corner of the page: a terminal that opens over everything from
- * wherever "On Linux?" was pressed. Its own colours rather than the page's —
- * it is meant to feel like another machine — and still no web fonts: the
- * monospace every system already has.
+ * The page in green, for Linux: the same page and the same layout, with the
+ * brass swapped for terminal green and faint scan lines over the ground. Put on
+ * and taken off by linux.js, which spreads the change from the press.
  */
 
-/* The way in, under the Windows button: small and plain until it is pressed. */
+/* The way in, under the Windows button: small and plain. */
 .linux-ask {
   margin: 14px 0 0;
 }
@@ -36,235 +35,75 @@
   margin-right: 4px;
 }
 
-/* The terminal itself, over the whole page. */
-.linux {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: #0d1117;
-  color: #c9d1d9;
-  font:
-    15px/1.65 ui-monospace,
-    'Cascadia Mono',
-    'DejaVu Sans Mono',
-    Menlo,
-    Consolas,
-    monospace;
-  color-scheme: dark;
+/* The colours. `--brass` is the page's accent, whatever colour it is. */
+html.linux {
+  --ground: #0a120d;
+  --surface: #101c15;
+  --raised: #16261c;
+  --edge: rgba(126, 231, 135, 0.18);
+  --brass: #7ee787;
+  --brass-deep: #3fb950;
+  --cream: #e6f4ea;
+  --muted: #a7c4b0;
+  --faint: #7f9a88;
 }
 
-.linux[hidden] {
-  display: none;
+html.linux body {
+  background:
+    repeating-linear-gradient(0deg, rgba(126, 231, 135, 0.055) 0 1px, transparent 1px 3px),
+    radial-gradient(1200px 600px at 50% -200px, rgba(63, 185, 80, 0.16), transparent 70%),
+    var(--ground);
 }
 
-.linux-inner {
-  width: min(880px, 100% - 32px);
-  margin-inline: auto;
-  padding-block: 48px 64px;
+/* The record turned green with the rest: its label and its sheen. */
+html.linux .brand img {
+  filter: hue-rotate(80deg) saturate(1.1);
 }
 
-.linux-bar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #21262d;
+html.linux .hero .icon {
+  filter: hue-rotate(80deg) saturate(1.1) drop-shadow(0 10px 30px rgba(63, 185, 80, 0.35));
 }
 
-.linux-lights {
-  display: flex;
-  gap: 7px;
+html.linux .button.primary,
+html.linux .button.primary:hover {
+  color: #06210f;
+  box-shadow: 0 8px 24px rgba(63, 185, 80, 0.3);
 }
 
-.linux-lights span {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #30363d;
+html.linux .button .version {
+  border-left-color: rgba(6, 33, 15, 0.25);
 }
 
-.linux-lights span:first-child {
-  background: #7ee787;
+/*
+ * While it changes. The browser's own cross-fade is off: the blob is a clip on
+ * the new picture of the page going in, and on the old one, raised above the
+ * new, going out.
+ */
+html[data-linux-going]::view-transition-old(root),
+html[data-linux-going]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
-.linux-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: #8b949e;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+html[data-linux-going='out']::view-transition-old(root) {
+  z-index: 1;
 }
 
-.linux-exit {
-  padding: 5px 14px;
-  border: 1px solid #2ea043;
-  border-radius: 6px;
-  background: transparent;
-  color: #7ee787;
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.linux-exit:hover,
-.linux-exit:focus-visible {
-  background: rgba(46, 160, 67, 0.15);
-}
-
-.linux-term {
-  margin: 28px 0 0;
-  font: inherit;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.linux-prompt {
-  color: #7ee787;
-}
-
-.linux-output {
-  display: block;
-  color: #8b949e;
-}
-
-.linux-output strong {
-  color: #e6edf3;
-  font-weight: 600;
-}
-
-/* A block cursor, blinking, sitting wherever the typing has got to. */
-.linux-cursor {
-  display: inline-block;
-  width: 0.62em;
-  height: 1.2em;
-  margin-left: 1px;
-  background: #7ee787;
-  vertical-align: text-bottom;
-  animation: linux-blink 1.05s steps(1) infinite;
-}
-
-@keyframes linux-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-/* The ways to get it, as cards that arrive one after another. */
-.linux-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
-  gap: 12px;
-  margin-top: 30px;
-}
-
-.linux-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  background: #161b22;
-  opacity: 0;
-  transform: translateY(8px);
-  transition:
-    opacity 0.35s ease,
-    transform 0.35s ease;
-}
-
-.linux-card.shown {
-  opacity: 1;
-  transform: none;
-}
-
-.linux-card-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.linux-card-name {
-  color: #7ee787;
-  font-weight: 600;
-}
-
-.linux-card-for {
-  color: #8b949e;
-  font-size: 13px;
-}
-
-.linux-card-cmd {
-  overflow: hidden;
-  color: #6e7681;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.linux-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.linux-soon {
-  color: #d29922;
-  font-size: 13px;
-}
-
-.linux-copy {
-  padding: 3px 10px;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  background: transparent;
-  color: #8b949e;
-  font: inherit;
-  font-size: 12px;
-}
-
-.linux-copy:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.linux-follow {
-  margin-top: 26px;
-  font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.35s ease;
-}
-
-.linux-follow.shown {
-  opacity: 1;
-}
-
-.linux-follow a {
-  color: #58a6ff;
-}
-
-/* The characters flying along the edge while it opens and closes. */
+/* The characters flying along the edge, live above both pictures. */
 .linux-ascii {
   position: fixed;
   inset: 0;
-  z-index: 1001;
   width: 100%;
   height: 100%;
   pointer-events: none;
+  view-transition-name: linux-ascii;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .linux-cursor {
-    animation: none;
-  }
+::view-transition-group(linux-ascii),
+::view-transition-new(linux-ascii) {
+  animation: none;
+}
 
-  .linux-card,
-  .linux-follow {
-    transition: none;
-  }
+::view-transition-old(linux-ascii) {
+  display: none;
 }

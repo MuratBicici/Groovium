@@ -1,68 +1,35 @@
-// "On Linux?" — a terminal that opens over the page from wherever it was
-// pressed.
+// "On Linux?" — the page puts on green, from wherever it was pressed.
 //
-// The terminal is a layer of its own over everything, revealed by a clip-path
-// that grows from the press: not a circle but a blob, its edge the sum of a
-// few sine waves whose phases drift as it grows, so the edge boils. Characters
-// fly along that edge on a canvas above it. "$ exit" plays it backwards.
+// The same page, the same layout: only the colours change, to terminal green
+// with faint scan lines (linux.css, under `html.linux`). The change spreads
+// from the press as a blob rather than a circle, its edge the sum of a few sine
+// waves whose phases drift as it grows, so the edge boils; characters fly along
+// that edge. Pressed again, it shrinks back to the press.
 //
-// A layer rather than a View Transition. What it reveals is different content
-// anyway, a clip on our own element looks the same, and it works the same in
-// every browser and on a phone without a snapshot of the page or a second way
-// of doing it for browsers without one.
+// It is a View Transition: the browser takes a picture of the page as it is and
+// as it will be, and the blob is a clip on the new picture (or on the old one,
+// going back). The whole shape over time is worked out once, before it starts,
+// as keyframes the browser plays itself; drawing on a picture costs a frame
+// next to nothing, where clipping the live page meant painting all of it again
+// every frame, which is what made it stutter. Browsers without View
+// Transitions, and visitors who would rather not have motion, just change.
 (function () {
   var trigger = document.querySelector('[data-linux-open]');
-  if (!trigger || !window.requestAnimationFrame) return;
+  if (!trigger) return;
 
-  // Everything the terminal says, in both languages, in one place. The command
-  // and the slogan are placeholders until the real ones are chosen.
   var TEXT = {
     en: {
       ask: 'On Linux?',
       noticed: 'Looks like you’re on Linux',
-      title: 'groovium-lite — bash',
-      prompt: 'you@groovium:~$ ',
-      command: 'sudo apt install ./groovium-lite_amd64.deb',
-      output: [
-        'So you are nerd enough to use Linux.',
-        'Then you may want to use your local much more.',
-      ],
-      soon: '[ coming soon ]',
-      copy: 'copy',
-      exit: '$ exit',
-      follow: 'Follow the releases on GitHub',
-      anywhere: 'any distribution',
+      back: 'Back to Windows',
     },
     tr: {
       ask: 'Linux mu kullanıyorsunuz?',
       noticed: 'Linux’ta olduğunu fark ettik',
-      title: 'groovium-lite — bash',
-      prompt: 'sen@groovium:~$ ',
-      command: 'sudo apt install ./groovium-lite_amd64.deb',
-      output: [
-        'So you are nerd enough to use Linux.',
-        'Then you may want to use your local much more.',
-      ],
-      soon: '[ yakında ]',
-      copy: 'kopyala',
-      exit: '$ exit',
-      follow: 'Sürümleri GitHub’da takip et',
-      anywhere: 'her dağıtım',
+      back: 'Windows’a dön',
     },
   };
   var text = document.documentElement.lang === 'tr' ? TEXT.tr : TEXT.en;
-
-  var CARDS = [
-    { name: '.deb', for: 'Ubuntu / Debian', cmd: 'sudo apt install ./groovium-lite_amd64.deb' },
-    { name: '.rpm', for: 'Fedora', cmd: 'sudo dnf install ./groovium-lite.x86_64.rpm' },
-    { name: 'AppImage', for: text.anywhere, cmd: 'chmod +x Groovium-Lite.AppImage' },
-    {
-      name: 'Flatpak',
-      for: 'Flathub',
-      cmd: 'flatpak install flathub io.github.muratbicici.GrooviumLite',
-      copy: true,
-    },
-  ];
 
   // The shape: how many points round the edge, and the waves that bend it —
   // each a multiple of once round, and how far it pushes the edge in and out.
@@ -76,16 +43,21 @@
   // farthest corner: 1 − 0.2 − 0.12 − 0.07 is 0.61, and 1.8 × 0.61 is over one.
   var REACH = 1.8;
   var DURATION = 1100;
+  // Keyframes for the whole run, one every 1/60 s; the browser goes straight
+  // from one to the next, which at this spacing nobody can tell from a curve.
+  var STEPS = 66;
   var GLYPHS = '01#$%&*+=/\\|<>{}[]~^:;?!@';
   var FLYING = 110;
-  var GREEN = '63, 185, 80';
+  var GLYPH_SIZE = 14;
+  var GREEN = '#3fb950';
+  // The browser bar on a phone, which the page's own colour does not reach.
+  var THEME = { windows: '#16110d', linux: '#0a120d' };
 
+  var root = document.documentElement;
+  var themeColor = document.querySelector('meta[name="theme-color"]');
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var busy = false;
-  var open = false;
-  var layer = null;
-  var canvas = null;
-  var typing = [];
+  var atlas = null;
 
   // Said differently to somebody who is already on Linux.
   function onLinux() {
@@ -94,92 +66,15 @@
     var agent = window.navigator.userAgent || '';
     return /Linux/.test(agent) && !/Android/.test(agent);
   }
+  var ask = onLinux() ? text.noticed : text.ask;
 
-  trigger.textContent = onLinux() ? text.noticed : text.ask;
+  function label() {
+    var green = root.classList.contains('linux');
+    trigger.textContent = green ? text.back : ask;
+    if (themeColor) themeColor.content = green ? THEME.linux : THEME.windows;
+  }
+  label();
   trigger.hidden = false;
-
-  function element(tag, className, content) {
-    var made = document.createElement(tag);
-    if (className) made.className = className;
-    if (content) made.textContent = content;
-    return made;
-  }
-
-  /** The terminal, built once on the first press. */
-  function build() {
-    if (layer) return;
-    layer = element('div', 'linux');
-    layer.id = 'linux';
-    layer.hidden = true;
-    layer.setAttribute('role', 'dialog');
-    layer.setAttribute('aria-modal', 'true');
-    layer.setAttribute('aria-labelledby', 'linux-title');
-
-    var inner = element('div', 'linux-inner');
-    var bar = element('div', 'linux-bar');
-    var lights = element('span', 'linux-lights');
-    lights.setAttribute('aria-hidden', 'true');
-    lights.append(element('span'), element('span'), element('span'));
-    var title = element('span', 'linux-title', text.title);
-    title.id = 'linux-title';
-    var exit = element('button', 'linux-exit', text.exit);
-    exit.type = 'button';
-    exit.addEventListener('click', function (event) {
-      var from = event.detail ? [event.clientX, event.clientY] : middleOf(exit);
-      close(from[0], from[1]);
-    });
-    bar.append(lights, title, exit);
-
-    var term = element('pre', 'linux-term');
-    term.append(
-      element('span', 'linux-prompt', text.prompt),
-      element('span', 'linux-command'),
-      element('span', 'linux-cursor'),
-      element('span', 'linux-output'),
-    );
-    term.querySelector('.linux-cursor').setAttribute('aria-hidden', 'true');
-
-    var cards = element('div', 'linux-cards');
-    CARDS.forEach(function (card) {
-      var box = element('div', 'linux-card');
-      var head = element('div', 'linux-card-head');
-      head.append(element('span', 'linux-card-name', card.name), element('span', 'linux-card-for', card.for));
-      var foot = element('div', 'linux-card-foot');
-      foot.append(element('span', 'linux-soon', text.soon));
-      if (card.copy) {
-        var copy = element('button', 'linux-copy', text.copy);
-        copy.type = 'button';
-        // Nothing to copy until it is on Flathub.
-        copy.disabled = true;
-        foot.append(copy);
-      }
-      var command = element('code', 'linux-card-cmd', '$ ' + card.cmd);
-      // Cut short with an ellipsis where it does not fit; all of it on hover.
-      command.title = card.cmd;
-      box.append(head, command, foot);
-      cards.append(box);
-    });
-
-    var follow = element('p', 'linux-follow');
-    var link = element('a', '', text.follow);
-    link.href = 'https://github.com/MuratBicici/Groovium/releases';
-    follow.append(link);
-
-    inner.append(bar, term, cards, follow);
-    layer.append(inner);
-    document.body.append(layer);
-
-    canvas = element('canvas', 'linux-ascii');
-    canvas.setAttribute('aria-hidden', 'true');
-    canvas.hidden = true;
-    document.body.append(canvas);
-
-    layer.addEventListener('keydown', function (event) {
-      if (event.key !== 'Escape') return;
-      var from = middleOf(exit);
-      close(from[0], from[1]);
-    });
-  }
 
   function middleOf(target) {
     var box = target.getBoundingClientRect();
@@ -219,32 +114,18 @@
     return Math.max(Math.hypot(x, y), Math.hypot(w - x, y), Math.hypot(x, h - y), Math.hypot(w - x, h - y));
   }
 
-  /** The canvas sized to the window, at no more than twice its pixels. */
-  function fitCanvas() {
-    var scale = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.round(window.innerWidth * scale);
-    canvas.height = Math.round(window.innerHeight * scale);
-    var context = canvas.getContext('2d');
-    context.setTransform(scale, 0, 0, scale, 0, 0);
-    return context;
+  /** The blob's radius `t` of the way through: growing from nothing, or shrinking to it. */
+  function radius(t, full, growing) {
+    var eased = ease(t);
+    return full * (growing ? eased : 1 - eased);
   }
 
-  /**
-   * Grow the blob from (x, y), or shrink it back there, and call `then` at the
-   * end. `growing` says which.
-   */
-  function play(x, y, growing, then) {
-    var bend = waves();
-    var full = farthest(x, y) * REACH;
-    var context = fitCanvas();
-    canvas.hidden = false;
-    var start = window.performance.now();
-
-    function frame(now) {
-      var t = Math.min(1, (now - start) / DURATION);
-      var eased = ease(t);
-      var r = full * (growing ? eased : 1 - eased);
-
+  /** The whole run as clip-path keyframes, worked out before it starts. */
+  function keyframes(x, y, full, growing, bend) {
+    var frames = [];
+    for (var s = 0; s <= STEPS; s++) {
+      var t = s / STEPS;
+      var r = radius(t, full, growing);
       var points = [];
       for (var i = 0; i < POINTS; i++) {
         var angle = (i / POINTS) * Math.PI * 2;
@@ -253,175 +134,149 @@
           (x + Math.cos(angle) * reach).toFixed(1) + 'px ' + (y + Math.sin(angle) * reach).toFixed(1) + 'px',
         );
       }
-      layer.style.clipPath = 'polygon(' + points.join(',') + ')';
-
-      // The characters, new every frame: just inside the edge and some way past
-      // it, fainter the further from it, and gone over the last stretch.
-      context.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      var fade = t > 0.85 ? (1 - t) / 0.15 : 1;
-      if (fade > 0 && r > 1) {
-        context.font = '14px ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, monospace';
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        for (var c = 0; c < FLYING; c++) {
-          var at = Math.random() * Math.PI * 2;
-          var off = -12 + Math.random() * 40;
-          var from = edge(at, t, r, bend) + off;
-          var cx = x + Math.cos(at) * from;
-          var cy = y + Math.sin(at) * from;
-          if (cx < -20 || cy < -20 || cx > window.innerWidth + 20 || cy > window.innerHeight + 20) continue;
-          var near = 1 - Math.abs(off) / 28;
-          context.fillStyle = 'rgba(' + GREEN + ',' + (Math.max(0.08, near) * fade).toFixed(3) + ')';
-          context.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], cx, cy);
-        }
-      }
-
-      if (t < 1) {
-        window.requestAnimationFrame(frame);
-        return;
-      }
-      context.clearRect(0, 0, window.innerWidth, window.innerHeight);
-      canvas.hidden = true;
-      then();
+      frames.push({ clipPath: 'polygon(' + points.join(',') + ')' });
     }
-    window.requestAnimationFrame(frame);
+    return frames;
   }
 
-  /** Everything but the terminal, out of reach while it is open. */
-  function setPageInert(inert) {
-    for (var i = 0; i < document.body.children.length; i++) {
-      var child = document.body.children[i];
-      if (child === layer || child === canvas || child.tagName === 'SCRIPT') continue;
-      if (inert) child.setAttribute('inert', '');
-      else child.removeAttribute('inert');
-    }
-    document.documentElement.style.overflow = inert ? 'hidden' : '';
+  /**
+   * Every character, drawn once in green on a strip, so a frame copies little
+   * pictures instead of setting type 110 times.
+   */
+  function glyphAtlas(scale) {
+    var cell = Math.ceil(GLYPH_SIZE * 1.3 * scale);
+    var strip = document.createElement('canvas');
+    strip.width = cell * GLYPHS.length;
+    strip.height = cell;
+    var context = strip.getContext('2d');
+    context.font = GLYPH_SIZE * scale + 'px ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, monospace';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillStyle = GREEN;
+    for (var i = 0; i < GLYPHS.length; i++) context.fillText(GLYPHS[i], i * cell + cell / 2, cell / 2);
+    return { strip: strip, cell: cell, scale: scale };
   }
 
-  function stopTyping() {
-    typing.forEach(function (id) {
-      window.clearTimeout(id);
-    });
-    typing = [];
+  /**
+   * The canvas the characters fly on, over the whole window. It has a
+   * transition name of its own (linux.css), so the browser keeps it out of the
+   * page's picture — where the blob would clip it — and shows it live on top.
+   */
+  function flyingCanvas() {
+    var scale = Math.min(2, window.devicePixelRatio || 1);
+    if (!atlas || atlas.scale !== scale) atlas = glyphAtlas(scale);
+    var canvas = document.createElement('canvas');
+    canvas.className = 'linux-ascii';
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.width = Math.round(window.innerWidth * scale);
+    canvas.height = Math.round(window.innerHeight * scale);
+    document.body.append(canvas);
+    return canvas;
   }
 
-  /** Type the command, then the output, then bring the cards in. */
-  function type() {
-    var command = layer.querySelector('.linux-command');
-    var output = layer.querySelector('.linux-output');
-    var cards = layer.querySelectorAll('.linux-card');
-    var follow = layer.querySelector('.linux-follow');
-    var cursor = layer.querySelector('.linux-cursor');
-    stopTyping();
-    command.textContent = '';
-    output.textContent = '';
-    cards.forEach(function (card) {
-      card.classList.remove('shown');
-    });
-    follow.classList.remove('shown');
-    command.after(cursor);
-
-    function reveal() {
-      cards.forEach(function (card, at) {
-        typing.push(
-          window.setTimeout(
-            function () {
-              card.classList.add('shown');
-            },
-            reduced ? 0 : at * 120,
-          ),
-        );
-      });
-      typing.push(
-        window.setTimeout(
-          function () {
-            follow.classList.add('shown');
-          },
-          reduced ? 0 : cards.length * 120,
-        ),
+  /**
+   * Draw the characters `t` of the way through: new ones every frame, just
+   * inside the edge and some way past it, fainter the further from it, and gone
+   * over the last stretch.
+   */
+  function fly(canvas, x, y, t, r, bend) {
+    var context = canvas.getContext('2d');
+    var scale = atlas.scale;
+    var cell = atlas.cell;
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    var fade = t > 0.85 ? (1 - t) / 0.15 : 1;
+    if (fade <= 0 || r <= 1) return;
+    for (var c = 0; c < FLYING; c++) {
+      var at = Math.random() * Math.PI * 2;
+      var off = -12 + Math.random() * 40;
+      var from = edge(at, t, r, bend) + off;
+      var cx = x + Math.cos(at) * from;
+      var cy = y + Math.sin(at) * from;
+      if (cx < -20 || cy < -20 || cx > w + 20 || cy > h + 20) continue;
+      context.globalAlpha = Math.max(0.08, 1 - Math.abs(off) / 28) * fade;
+      var glyph = Math.floor(Math.random() * GLYPHS.length);
+      context.drawImage(
+        atlas.strip,
+        glyph * cell,
+        0,
+        cell,
+        cell,
+        Math.round(cx * scale - cell / 2),
+        Math.round(cy * scale - cell / 2),
+        cell,
+        cell,
       );
     }
+    context.globalAlpha = 1;
+  }
 
-    function answer() {
-      output.after(cursor);
-      text.output.forEach(function (line, at) {
-        typing.push(
-          window.setTimeout(
-            function () {
-              output.append((at ? '\n' : '') + line);
-              if (at === text.output.length - 1) reveal();
-            },
-            reduced ? 0 : 260 + at * 140,
-          ),
-        );
+  function change() {
+    root.classList.toggle('linux');
+    label();
+  }
+
+  /** Put the green on, or take it off, spreading from (x, y). */
+  function toggle(x, y) {
+    if (busy) return;
+    if (reduced || !document.startViewTransition) {
+      change();
+      return;
+    }
+    busy = true;
+    var growing = !root.classList.contains('linux');
+    var bend = waves();
+    var full = farthest(x, y) * REACH;
+    var canvas = flyingCanvas();
+    // Which picture the blob clips, and so which goes on top; see linux.css.
+    root.setAttribute('data-linux-going', growing ? 'in' : 'out');
+
+    var transition = document.startViewTransition(change);
+    var running = null;
+    transition.ready
+      .then(function () {
+        running = root.animate(keyframes(x, y, full, growing, bend), {
+          duration: DURATION,
+          easing: 'linear',
+          fill: 'forwards',
+          pseudoElement: growing ? '::view-transition-new(root)' : '::view-transition-old(root)',
+        });
+        // The characters follow the browser's own clock for the blob, so they
+        // stay on its edge even when a frame comes late.
+        function frame() {
+          if (!running) return;
+          var t = Math.min(1, (Number(running.currentTime) || 0) / DURATION);
+          fly(canvas, x, y, t, radius(t, full, growing), bend);
+          if (t < 1) window.requestAnimationFrame(frame);
+        }
+        window.requestAnimationFrame(frame);
+        return running.finished;
+      })
+      .catch(function () {
+        // Skipped (the tab went to the background, say): the page has changed
+        // all the same, just without the blob.
+      })
+      .then(function () {
+        // Over by itself once the blob has run; this only makes sure of it.
+        transition.skipTransition();
+        return transition.finished;
+      })
+      .catch(function () {})
+      .then(function () {
+        // Held at its last frame until now, so the pictures never showed
+        // unclipped between the blob ending and the transition.
+        if (running) running.cancel();
+        running = null;
+        canvas.remove();
+        root.removeAttribute('data-linux-going');
+        busy = false;
       });
-    }
-
-    if (reduced) {
-      command.textContent = text.command;
-      answer();
-      return;
-    }
-    var typed = 0;
-    function next() {
-      typed += 1;
-      command.textContent = text.command.slice(0, typed);
-      if (typed < text.command.length) {
-        typing.push(window.setTimeout(next, 22 + Math.random() * 30));
-      } else {
-        answer();
-      }
-    }
-    typing.push(window.setTimeout(next, 280));
-  }
-
-  function show(x, y) {
-    if (busy || open) return;
-    busy = true;
-    build();
-    layer.hidden = false;
-    setPageInert(true);
-    if (reduced) {
-      layer.style.clipPath = '';
-      finishOpening();
-      return;
-    }
-    layer.style.clipPath = 'polygon(' + x + 'px ' + y + 'px)';
-    play(x, y, true, function () {
-      layer.style.clipPath = '';
-      finishOpening();
-    });
-  }
-
-  function finishOpening() {
-    busy = false;
-    open = true;
-    layer.querySelector('.linux-exit').focus({ preventScroll: true });
-    type();
-  }
-
-  function close(x, y) {
-    if (busy || !open) return;
-    busy = true;
-    stopTyping();
-    function finish() {
-      layer.hidden = true;
-      layer.style.clipPath = '';
-      layer.scrollTop = 0;
-      setPageInert(false);
-      busy = false;
-      open = false;
-      trigger.focus({ preventScroll: true });
-    }
-    if (reduced) {
-      finish();
-      return;
-    }
-    play(x, y, false, finish);
   }
 
   trigger.addEventListener('click', function (event) {
+    // From the pointer, or from the middle of the button when it was the keyboard.
     var from = event.detail ? [event.clientX, event.clientY] : middleOf(trigger);
-    show(from[0], from[1]);
+    toggle(from[0], from[1]);
   });
 })();
