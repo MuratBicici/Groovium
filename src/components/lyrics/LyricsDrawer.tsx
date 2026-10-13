@@ -159,10 +159,12 @@ export function LyricsDrawer({
 
       {/* The whole drawer, under the header rather than below it, so the
           record's centre is the drawer's centre — the same point the queue's
-          palette turns on, and the two read as one machine opened two ways. */}
+          palette turns on, and the two read as one machine opened two ways.
+          Everything in it is written on the black record, so it keeps the
+          record's ink on a light palette (`.groove-vinyl-ink`). */}
       <div
         ref={body}
-        className="absolute inset-0"
+        className="groove-vinyl-ink absolute inset-0"
         onWheel={lines ? (e) => browse.onWheel(e.deltaY) : undefined}
       >
         {/* The record, centred on the same point as the lines. It turns with

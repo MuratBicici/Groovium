@@ -975,6 +975,26 @@ body {
 }
 
 /*
+ * Ink for what is written on the lyrics record itself.
+ *
+ * The record is black in every palette, but on a light ground — the white a
+ * colourless sleeve brings, or a pale pair picked by hand — the palette's text
+ * and accent are dark, and dark words on a black record could not be read at
+ * all. There the record keeps an ink of its own: a neutral light grey for the
+ * words, and the same for the light the line being sung is lit in, which
+ * neither tints a black-and-white palette nor fights a coloured one. On a dark
+ * ground the palette's own ink already reads and is left as it is.
+ */
+:root[data-ground='light'] .groove-vinyl-ink {
+  --color-cream-50: #f4f4f4;
+  --color-cream-100: #e8e8e8;
+  --color-cream-200: #d6d6d6;
+  --color-cream-400: #a8a8a8;
+  --color-brass-300: #e6e6e6;
+  --color-brass-400: #dcdcdc;
+}
+
+/*
  * The wheel's lines, thinning to nothing at the drawer's top and bottom rather
  * than being cut off there.
  */
