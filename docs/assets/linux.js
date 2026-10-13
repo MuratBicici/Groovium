@@ -143,12 +143,24 @@
   // Zooming, or the window going to another screen, changes the pixels.
   window.addEventListener('resize', scanLines);
 
-  function label() {
+  // Green is kept in the address as #linux and carried by the link to the
+  // other language, so switching language, or reloading, stays green. The
+  // pages' heads put it on before the first paint when they arrive with it.
+  var KEEP = '#linux';
+  var languages = document.querySelectorAll('.lang a[hreflang]');
+
+  /** Everything that follows from being green or not, but the colours. */
+  function reflect() {
     var green = root.classList.contains('linux');
     trigger.textContent = green ? text.back : ask;
     if (themeColor) themeColor.content = green ? THEME.linux : THEME.windows;
+    var here = window.location.pathname + window.location.search;
+    if ((window.location.hash === KEEP) !== green) window.history.replaceState(null, '', green ? here + KEEP : here);
+    languages.forEach(function (link) {
+      link.setAttribute('href', link.getAttribute('href').split('#')[0] + (green ? KEEP : ''));
+    });
   }
-  label();
+  reflect();
   trigger.hidden = false;
 
   function middleOf(target) {
@@ -479,7 +491,7 @@
 
   function change() {
     root.classList.toggle('linux');
-    label();
+    reflect();
   }
 
   /** Put the green on, or take it off, spreading from (x, y). */
