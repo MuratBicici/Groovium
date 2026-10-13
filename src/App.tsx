@@ -523,6 +523,7 @@ export default function App() {
             onSetUpStation={() => setStationSetup(true)}
             onPickColour={setPickingColour}
             onShowWhatsNew={summary ? () => setReopened(true) : undefined}
+            covered={pickingColour !== null || stationSetup || whatsNewOpen}
           />
           <CompactLyrics
             show={lyricsOnDeck}

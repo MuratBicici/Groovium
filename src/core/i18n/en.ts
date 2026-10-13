@@ -387,6 +387,21 @@ export const en = {
   'settings.forget': 'Forget',
   'settings.spotifyHint': 'Search and play from Spotify.',
   'settings.lastfmHint': 'Finds the next song for infinite play.',
+  // The pages Settings is divided into, the headings on their cards, and the
+  // line under each page's name in the list.
+  'settings.lights': 'Lights',
+  'settings.general': 'General',
+  'settings.window': 'Window',
+  'settings.motion': 'Motion',
+  'settings.back': 'Back to settings',
+  'settings.on': 'on',
+  'settings.off': 'off',
+  'settings.summary.lights': 'Visualiser {visualizer} · Edge light {glow}',
+  'settings.summary.drawerLeft': 'Drawer on the left',
+  'settings.summary.drawerRight': 'Drawer on the right',
+  'settings.summary.ready': '{name} set up',
+  'settings.summary.notReady': '{name} not set up',
+  'settings.summary.update': '{version} ready',
 
   // Tray menu. Held here rather than in Rust so one dictionary covers the whole
   // app; Rust is handed the finished strings.

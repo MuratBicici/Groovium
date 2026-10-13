@@ -1,18 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
-import { openLogFolder, reportProblem } from '@/platform/report';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
-import { NOTCHES } from '@/core/visualizer';
-import { SCALES } from '@/core/settings';
-import { CUSTOM_DEFAULTS, CUSTOM_THEME, DEFAULT_THEME, THEMES } from '@/core/settings/themes';
-import { clearApiKey, hasApiKey } from '@/core/station/lastfm';
+import { DEFAULT_THEME } from '@/core/settings/themes';
+import { hasApiKey } from '@/core/station/lastfm';
 import { hasClientId } from '@/core/security/spotifyAuth';
-import { usePlayerStore } from '@/core/store';
-import { derivePalette } from '@/core/utils/contrast';
 import { isTauri } from '@/core/utils/env';
 import { useUpdateStore } from '@/core/updates/store';
-import { APP_VERSION, AUTHOR } from '@/core/version';
-import { Toggle } from '@/components/controls/Toggle';
+import { APP_VERSION } from '@/core/version';
+import { CATEGORIES, CATEGORY_NAME, summarise } from './categories';
+import type { SettingsCategory } from './categories';
+import {
+  AboutIcon,
+  CategoryRow,
+  ChevronIcon,
+  ConnectionsIcon,
+  GeneralIcon,
+  LightsIcon,
+  PaletteIcon,
+} from './parts';
+import { AboutPage } from './pages/AboutPage';
+import { AppearancePage } from './pages/AppearancePage';
+import { ConnectionsPage } from './pages/ConnectionsPage';
+import { GeneralPage } from './pages/GeneralPage';
+import { LightsPage } from './pages/LightsPage';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -34,10 +44,33 @@ interface SettingsPanelProps {
    * is then not drawn at all rather than drawn and inert.
    */
   onShowWhatsNew?: (() => void) | undefined;
+  /**
+   * A sheet opened from here is over the window — the colour picker, the
+   * station's setup, What's new. Escape is that sheet's then, not this panel's.
+   */
+  covered?: boolean;
 }
 
+const ICONS: Record<SettingsCategory, React.ReactNode> = {
+  appearance: <PaletteIcon />,
+  lights: <LightsIcon />,
+  general: <GeneralIcon />,
+  connections: <ConnectionsIcon />,
+  about: <AboutIcon />,
+};
+
+/** How long a page takes to slide in or out; `.groove-settings-layer` in styles.css. */
+const SLIDE_MS = 260;
+
 /**
- * Preferences.
+ * Preferences, a page for each kind: how it looks, what lights up, how the
+ * window behaves, what it is connected to, and what it is.
+ *
+ * It opens on the list of those pages, each with a line saying where it stands
+ * now, so a visit to check something usually ends there. A page slides in over
+ * the list and back out again; Escape on a page goes back to the list, and on
+ * the list closes the panel as it always has. Closed, it forgets the page, so
+ * it always opens on the list.
  *
  * Deliberately not where a key is entered. Spotify and Last.fm each already
  * have a setup flow that explains what the key is for and what the form asks
@@ -53,53 +86,19 @@ export function SettingsPanel({
   onSetUpStation,
   onPickColour,
   onShowWhatsNew,
+  covered = false,
 }: SettingsPanelProps) {
   const t = useT();
   const theme = useSettingsStore((s) => s.theme ?? DEFAULT_THEME);
-  const language = useSettingsStore((s) => s.language ?? 'en');
-  const reduceMotion = useSettingsStore((s) => s.reduceMotion);
-  const alwaysOnTop = useSettingsStore((s) => s.alwaysOnTop);
-  const boostContrast = useSettingsStore((s) => s.boostContrast);
-  const windowBorder = useSettingsStore((s) => s.windowBorder);
-  const drawerSide = useSettingsStore((s) => s.drawerSide);
-  const windowGlow = useSettingsStore((s) => s.windowGlow);
   const themeFromCover = useSettingsStore((s) => s.themeFromCover);
-  const glowStrength = useSettingsStore((s) => s.glowStrength);
-  const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
-  const glowSpeed = useSettingsStore((s) => s.glowSpeed);
-  const glowFlash = useSettingsStore((s) => s.glowFlash);
-  const glowFlare = useSettingsStore((s) => s.glowFlare);
-  const glowListens = useSettingsStore((s) => s.glowListens);
-  const visualizerLook = useSettingsStore((s) => s.visualizerLook);
-  const setVisualizerLook = useSettingsStore((s) => s.setVisualizerLook);
-  const visualizerBrightness = useSettingsStore((s) => s.visualizerBrightness);
-  const setVisualizerBrightness = useSettingsStore((s) => s.setVisualizerBrightness);
-  const visualizer = useSettingsStore((s) => s.visualizer);
-  const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
-  const setBoostContrast = useSettingsStore((s) => s.setBoostContrast);
-  const setWindowBorder = useSettingsStore((s) => s.setWindowBorder);
-  const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
-  const setWindowGlow = useSettingsStore((s) => s.setWindowGlow);
-  const setThemeFromCover = useSettingsStore((s) => s.setThemeFromCover);
-  const setGlow = useSettingsStore((s) => s.setGlow);
-  const setGlowListens = useSettingsStore((s) => s.setGlowListens);
-  const setVisualizer = useSettingsStore((s) => s.setVisualizer);
-  const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
   const scale = useSettingsStore((s) => s.scale);
-  const setScale = useSettingsStore((s) => s.setScale);
-  const setTheme = useSettingsStore((s) => s.setTheme);
-  const customPrimary = useSettingsStore((s) => s.customPrimary ?? CUSTOM_DEFAULTS.primary);
-  const customSecondary = useSettingsStore((s) => s.customSecondary ?? CUSTOM_DEFAULTS.secondary);
-  const setLanguage = useSettingsStore((s) => s.setLanguage);
-  const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
-  const setAlwaysOnTop = useSettingsStore((s) => s.setAlwaysOnTop);
+  const visualizer = useSettingsStore((s) => s.visualizer);
+  const windowGlow = useSettingsStore((s) => s.windowGlow);
+  const language = useSettingsStore((s) => s.language ?? 'en');
+  const drawerSide = useSettingsStore((s) => s.drawerSide);
   const forgetResult = useUpdateStore((s) => s.forgetResult);
-
-  // Measured from the two chosen colours rather than assumed from either. The
-  // derivation makes everything else read against the surface; the accent is
-  // the one colour it will not move, so it is the one that can still fail.
-  const accentUnreadable =
-    derivePalette(customPrimary, customSecondary, boostContrast)?.accentUnreadable ?? false;
+  const updateStatus = useUpdateStore((s) => s.status);
+  const updateVersion = useUpdateStore((s) => s.version);
 
   const [spotifyReady, setSpotifyReady] = useState(false);
   const [stationReady, setStationReady] = useState(false);
@@ -135,6 +134,106 @@ export function SettingsPanel({
     };
   }, [open, forgetResult]);
 
+  /** The page open over the list, or null for the list itself. */
+  const [page, setPage] = useState<SettingsCategory | null>(null);
+  /**
+   * The page last opened: the one on show, and the one still drawn while it
+   * slides back out, after `page` has already gone back to null.
+   */
+  const [lastPage, setLastPage] = useState<SettingsCategory>('appearance');
+  const backRef = useRef<HTMLButtonElement>(null);
+  const rowRefs = useRef<Partial<Record<SettingsCategory, HTMLButtonElement | null>>>({});
+  /** Set by a move somebody made, so focus follows it; not by the reset on closing. */
+  const moved = useRef(false);
+
+  const openPage = (category: SettingsCategory) => {
+    moved.current = true;
+    setLastPage(category);
+    setPage(category);
+  };
+  const goBack = useCallback(() => {
+    moved.current = true;
+    setPage(null);
+  }, []);
+
+  // Focus goes where the eye does: to the way back on arriving at a page, and
+  // to the row of the page just left on coming back to the list.
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    if (page) backRef.current?.focus({ preventScroll: true });
+    else rowRefs.current[lastPage]?.focus({ preventScroll: true });
+  }, [page, lastPage]);
+
+  // Escape on a page goes back to the list; on the list it is left to the
+  // shell, which closes the panel. Captured and kept, as the sheets do, and
+  // only while a page is open — an always-listening handler would swallow
+  // Escapes meant for everything else. Not while a sheet opened from here is
+  // over the window: that Escape is the sheet's.
+  useEffect(() => {
+    if (!open || page === null || covered) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      goBack();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [open, page, covered, goBack]);
+
+  // Back to the list once the panel has gone, so it opens there next time —
+  // after its way out rather than during it, which would show the list
+  // sliding in under a panel that is fading away.
+  useEffect(() => {
+    if (open) return;
+    const timer = window.setTimeout(() => setPage(null), SLIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  const categories = CATEGORIES.filter(
+    // Outside Tauri there are no keys to keep, so nothing to connect.
+    (category) => category !== 'connections' || isTauri(),
+  );
+  const facts = {
+    theme,
+    themeFromCover,
+    scale,
+    visualizer,
+    windowGlow,
+    language,
+    drawerSide,
+    spotifyReady,
+    stationReady,
+    version: APP_VERSION,
+    offered:
+      updateStatus === 'available' || updateStatus === 'downloading' || updateStatus === 'ready'
+        ? updateVersion
+        : null,
+  };
+
+  function pageFor(category: SettingsCategory) {
+    switch (category) {
+      case 'appearance':
+        return <AppearancePage onPickColour={onPickColour} />;
+      case 'lights':
+        return <LightsPage />;
+      case 'general':
+        return <GeneralPage />;
+      case 'connections':
+        return (
+          <ConnectionsPage
+            spotifyReady={spotifyReady}
+            stationReady={stationReady}
+            onSetUpSpotify={onSetUpSpotify}
+            onSetUpStation={onSetUpStation}
+            refresh={refresh}
+          />
+        );
+      case 'about':
+        return <AboutPage onShowWhatsNew={onShowWhatsNew} />;
+    }
+  }
+
   return (
     <div
       id={id}
@@ -150,10 +249,23 @@ export function SettingsPanel({
         open ? 'translate-y-0 opacity-100' : 'invisible translate-y-3 opacity-0'
       }`}
     >
-      <div className="flex shrink-0 items-center justify-between px-3 py-2">
-        <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-          {t('panel.settings')}
-        </span>
+      <div className="flex h-9 shrink-0 items-center justify-between px-3">
+        {page ? (
+          <button
+            ref={backRef}
+            type="button"
+            onClick={goBack}
+            aria-label={t('settings.back')}
+            className="-ml-1 flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-body font-medium text-brass-400 transition-colors outline-none hover:text-cream-50 focus-visible:ring-2 focus-visible:ring-brass-400"
+          >
+            <ChevronIcon direction="left" />
+            <span className="truncate">{t(CATEGORY_NAME[page])}</span>
+          </button>
+        ) : (
+          <span className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+            {t('panel.settings')}
+          </span>
+        )}
         <button
           type="button"
           aria-label={t('settings.close')}
@@ -167,804 +279,42 @@ export function SettingsPanel({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-3 groove-scroll-fade">
-        <Section title={t('settings.appearance')}>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-body text-cream-200">{t('settings.theme')}</span>
-              <span className="truncate text-meta text-cream-400">
-                {theme === CUSTOM_THEME
-                  ? t('settings.custom')
-                  : THEMES.find((entry) => entry.id === theme)?.name}
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              {THEMES.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  // The palette's name, not a translation of it: these are
-                  // proper names, and Verdigris is Verdigris in any language.
-                  aria-label={entry.name}
-                  title={entry.name}
-                  aria-pressed={entry.id === theme}
-                  onClick={() => setTheme(entry.id)}
-                  className={`h-7 flex-1 overflow-hidden rounded-md ring-1 transition-all ${
-                    entry.id === theme
-                      ? 'ring-2 ring-brass-400'
-                      : 'ring-[var(--color-edge)] hover:ring-cream-400/50'
-                  }`}
-                >
-                  <span className="flex h-full w-full">
-                    <span className="h-full w-2/3" style={{ background: entry.swatch[0] }} />
-                    <span className="h-full w-1/3" style={{ background: entry.swatch[1] }} />
-                  </span>
-                </button>
-              ))}
-
-              {/* Last, and drawn from what was picked rather than from a
-                  fixed pair — it is the only swatch whose colours are an
-                  answer rather than a definition. */}
-              <button
-                type="button"
-                aria-label={t('settings.custom')}
-                title={t('settings.custom')}
-                aria-pressed={theme === CUSTOM_THEME}
-                onClick={() => setTheme(CUSTOM_THEME)}
-                className={`h-7 flex-1 overflow-hidden rounded-md ring-1 transition-all ${
-                  theme === CUSTOM_THEME
-                    ? 'ring-2 ring-brass-400'
-                    : 'ring-[var(--color-edge)] hover:ring-cream-400/50'
-                }`}
-              >
-                <span className="flex h-full w-full">
-                  <span className="h-full w-2/3" style={{ background: customPrimary }} />
-                  <span className="h-full w-1/3" style={{ background: customSecondary }} />
-                </span>
-              </button>
-            </div>
-
-            {theme === CUSTOM_THEME && (
-              <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
-                <div className="flex gap-2">
-                  <Colour
-                    label={t('settings.customPrimary')}
-                    value={customPrimary}
-                    onClick={() => onPickColour('primary')}
-                  />
-                  <Colour
-                    label={t('settings.customSecondary')}
-                    value={customSecondary}
-                    onClick={() => onPickColour('secondary')}
-                  />
-                </div>
-                {/* Only when it is true. The ramp is measured now, so the
-                    one thing left that cannot be fixed for somebody is an
-                    accent that does not read against their own surface —
-                    fixing that would mean overruling a colour they chose. */}
-                {accentUnreadable ? (
-                  <p className="text-meta leading-snug text-amber-300/90">
-                    {t('settings.accentWarning')}
-                  </p>
-                ) : (
-                  <p className="text-meta leading-snug text-cream-400">
-                    {t('settings.customHint')}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <Toggle
-            label={t('settings.reduceMotion')}
-            hint={t('settings.reduceMotionHint')}
-            on={reduceMotion}
-            onChange={setReduceMotion}
-          />
-
-          {/* Outside Tauri there is no window to pin. */}
-          {isTauri() && (
-            <Toggle
-              label={t('settings.alwaysOnTop')}
-              hint={t('settings.alwaysOnTopHint')}
-              on={alwaysOnTop}
-              onChange={setAlwaysOnTop}
-            />
-          )}
-
-          <Toggle
-            label={t('settings.boostContrast')}
-            hint={t('settings.boostContrastHint')}
-            on={boostContrast}
-            onChange={setBoostContrast}
-          />
-
-          <ScaleSlider label={t('settings.scale')} scale={scale} onChange={setScale} />
-
-          <Toggle
-            label={t('settings.windowBorder')}
-            hint={t('settings.windowBorderHint')}
-            on={windowBorder}
-            onChange={setWindowBorder}
-          />
-
-          <Toggle
-            label={t('settings.visualizer')}
-            hint={t('settings.visualizerHint')}
-            on={visualizer}
-            onChange={setVisualizer}
-          />
-
-          {/* How it is drawn, folded away with it — the same as the edge
-              light's dials, for the same reasons. Two buttons: neither look is
-              the absence of the other. */}
-          <div
-            inert={!visualizer}
-            aria-hidden={!visualizer}
-            className={`grid overflow-hidden transition-all duration-200 ease-out ${
-              visualizer ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-            }`}
-          >
-            <div className="min-h-0">
-              <div className="flex flex-col gap-1 border-l border-shell-600 pt-1 pl-2.5">
-                <span className="text-meta text-cream-300">{t('settings.visualizerLook')}</span>
-                <div className="flex gap-1.5">
-                  <Choice
-                    active={visualizerLook === 'grooves'}
-                    onClick={() => setVisualizerLook('grooves')}
-                  >
-                    {t('settings.visualizerLookGrooves')}
-                  </Choice>
-                  <Choice
-                    active={visualizerLook === 'blocks'}
-                    onClick={() => setVisualizerLook('blocks')}
-                  >
-                    {t('settings.visualizerLookBlocks')}
-                  </Choice>
-                </div>
-                <div className="pt-1">
-                  <Slider
-                    label={t('settings.visualizerBrightness')}
-                    notch={visualizerBrightness}
-                    onChange={setVisualizerBrightness}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Toggle
-            label={t('settings.themeFromCover')}
-            hint={t('settings.themeFromCoverHint')}
-            on={themeFromCover}
-            onChange={setThemeFromCover}
-          />
-
-          {/* Under the ornaments, because it is about all of them at once:
-              what it decides is whether any of them run while nobody can see
-              them. */}
-          <Toggle
-            label={t('settings.sleepWhenHidden')}
-            hint={t('settings.sleepWhenHiddenHint')}
-            on={sleepWhenHidden}
-            onChange={setSleepWhenHidden}
-          />
-
-          <Toggle
-            label={t('settings.windowGlow')}
-            hint={t('settings.windowGlowHint')}
-            on={windowGlow}
-            onChange={setWindowGlow}
-          />
-
-          {/* Kept mounted and folded away, rather than added and removed. The
-              row template goes from nothing to its content's own height, which
-              is the one way to animate to a height nobody has to measure — and
-              `inert` takes the sliders out of the tab order while they are
-              folded, so there is nothing to reach that cannot be seen. */}
-          <div
-            inert={!windowGlow}
-            aria-hidden={!windowGlow}
-            className={`grid overflow-hidden transition-all duration-200 ease-out ${
-              windowGlow ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-            }`}
-          >
-            <div className="min-h-0">
-              <div className="flex flex-col gap-2 border-l border-shell-600 pt-1 pl-2.5">
-                {/* What it listens to, first: it changes what every slider
-                    under it is moving. Two buttons, as the drawer's side is —
-                    neither is the absence of the other. */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-meta text-cream-300">{t('settings.glowListens')}</span>
-                  <div className="flex gap-1.5">
-                    <Choice active={glowListens === 'all'} onClick={() => setGlowListens('all')}>
-                      {t('settings.glowListensAll')}
-                    </Choice>
-                    <Choice active={glowListens === 'bass'} onClick={() => setGlowListens('bass')}>
-                      {t('settings.glowListensBass')}
-                    </Choice>
-                  </div>
-                  <span className="text-meta leading-snug text-cream-400">
-                    {t('settings.glowListensHint')}
-                  </span>
-                </div>
-                <Slider
-                  label={t('settings.glowStrength')}
-                  notch={glowStrength}
-                  onChange={(notch) => setGlow('glowStrength', notch)}
-                />
-                <Slider
-                  label={t('settings.glowSensitivity')}
-                  notch={glowSensitivity}
-                  onChange={(notch) => setGlow('glowSensitivity', notch)}
-                />
-                <Slider
-                  label={t('settings.glowSpeed')}
-                  notch={glowSpeed}
-                  onChange={(notch) => setGlow('glowSpeed', notch)}
-                />
-                <Slider
-                  label={t('settings.glowFlash')}
-                  notch={glowFlash}
-                  onChange={(notch) => setGlow('glowFlash', notch)}
-                />
-                <Slider
-                  label={t('settings.glowFlare')}
-                  notch={glowFlare}
-                  onChange={(notch) => setGlow('glowFlare', notch)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Two buttons rather than a toggle. A switch would have to be
-              labelled for one of the two sides and read as off for the other,
-              and neither side is the absence of the other. */}
-          <div className="flex flex-col gap-1.5">
-            <div>
-              <p className="text-body font-medium text-cream-50">{t('settings.drawerSide')}</p>
-              <p className="text-meta leading-snug text-cream-300">
-                {t('settings.drawerSideHint')}
-              </p>
-            </div>
-            <div className="flex gap-1.5">
-              <Choice active={drawerSide === 'left'} onClick={() => setDrawerSide('left')}>
-                {t('settings.drawerSideLeft')}
-              </Choice>
-              <Choice active={drawerSide === 'right'} onClick={() => setDrawerSide('right')}>
-                {t('settings.drawerSideRight')}
-              </Choice>
-            </div>
-          </div>
-        </Section>
-
-        <Section title={t('settings.language')}>
-          <div className="flex gap-1.5">
-            {/* Each language names itself. Someone who has landed in a language
-                they cannot read needs to recognise their own, not read this
-                one's word for it. */}
-            <Choice active={language === 'en'} onClick={() => setLanguage('en')}>
-              English
-            </Choice>
-            <Choice active={language === 'tr'} onClick={() => setLanguage('tr')}>
-              Türkçe
-            </Choice>
-          </div>
-        </Section>
-
-        {isTauri() && (
-          <Section title={t('settings.connections')}>
-            <Connection
-              name={t('panel.spotify')}
-              hint={t('settings.spotifyHint')}
-              ready={spotifyReady}
-              onSetUp={onSetUpSpotify}
-              onForget={async () => {
-                // Signing out as well as forgetting the ID, so the tokens, a
-                // Spotify track on the deck and the drawer all go with it.
-                await usePlayerStore.getState().forgetSpotify();
-                await refresh();
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* The list, stepping back and fading under a page laid over it. */}
+        <nav
+          inert={page !== null}
+          aria-label={t('panel.settings')}
+          className={`groove-settings-layer absolute inset-0 space-y-1 overflow-y-auto px-3 pt-1 pb-3 groove-scroll-fade ${
+            page ? 'groove-settings-behind' : ''
+          }`}
+        >
+          {categories.map((category) => (
+            <CategoryRow
+              key={category}
+              ref={(row) => {
+                rowRefs.current[category] = row;
               }}
+              icon={ICONS[category]}
+              name={t(CATEGORY_NAME[category])}
+              summary={summarise(category, facts, t)}
+              onOpen={() => openPage(category)}
             />
-            <Connection
-              name="Last.fm"
-              hint={t('settings.lastfmHint')}
-              ready={stationReady}
-              onSetUp={onSetUpStation}
-              onForget={async () => {
-                await clearApiKey();
-                await refresh();
-              }}
-            />
-          </Section>
-        )}
+          ))}
+        </nav>
 
-        {/* For when something went wrong. The log is the most useful thing
-            anybody can send, and it is buried in AppData; this is the way to it
-            and to somewhere to send it. Nothing is sent by either button. */}
-        {isTauri() && (
-          <Section title={t('report.title')}>
-            <p className="text-meta leading-snug text-cream-400">{t('report.hint')}</p>
-            <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => void openLogFolder()}
-                className="rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
-              >
-                {t('report.openLog')}
-              </button>
-              <button
-                type="button"
-                onClick={() => void reportProblem()}
-                className="rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
-              >
-                {t('report.open')}
-              </button>
-            </div>
-          </Section>
-        )}
-
-        {/* Last, because it is the least often wanted. Everything above is
-            something to change; this is something to look up. */}
-        <Section title={t('settings.about')}>
-          <Updates />
-          {/* Its own row rather than a third thing on the version line: two
-              pills and a version do not fit across 340px, and the one that
-              would have been squeezed is the one somebody is looking for. */}
-          {onShowWhatsNew && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onShowWhatsNew}
-                // The outlined pill, matching Check for updates. Both are
-                // errands beside the filled brass of Download and Restart.
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
-              >
-                <NotesIcon />
-                {t('whatsNew.title')}
-              </button>
-            </div>
-          )}
-          {/* Last line in the panel, and quiet on purpose: a name belongs in
-              the app, but not competing with anything somebody came here to
-              do. */}
-          <p className="pt-1 text-center text-meta leading-snug text-cream-400">
-            {t('settings.credit', { author: AUTHOR })}
-          </p>
-        </Section>
+        {/* The page, in from the right. Drawn for the page last opened, so it
+            is still there while it slides back out. */}
+        <section
+          inert={page === null}
+          aria-label={t(CATEGORY_NAME[lastPage])}
+          className={`groove-settings-layer absolute inset-0 space-y-3 overflow-y-auto px-3 pt-1 pb-3 groove-scroll-fade ${
+            page ? '' : 'groove-settings-ahead'
+          }`}
+        >
+          {pageFor(lastPage)}
+        </section>
       </div>
     </div>
   );
 }
 
-/**
- * One colour of a hand-rolled palette: a swatch that opens the picker.
- *
- * This was a native `<input type="color">`, on the argument that the platform
- * already has a picker and it is the one people know. True, and still the
- * wrong call here — the one Windows opens is a system dialog wearing system
- * colours, and it arrived in the middle of a widget built to look like a
- * physical object. `ColourPicker` is the replacement.
- */
-function Colour({
-  label,
-  value,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-w-0 flex-1 items-center gap-1.5 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-brass-400"
-    >
-      <span
-        aria-hidden="true"
-        className="h-6 w-8 shrink-0 rounded ring-1 ring-[var(--color-edge)]"
-        style={{ background: value }}
-      />
-      <span className="min-w-0 truncate text-meta text-cream-200">{label}</span>
-    </button>
-  );
-}
-
-/**
- * A page with a couple of lines written on it.
- *
- * Sized and drawn to the same rules as `RefreshIcon`, since the two sit in
- * matching pills one row apart and any difference between them would read as a
- * mistake rather than a distinction.
- */
-function NotesIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-3 w-3 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M6 3h12v18H6z" />
-      <path d="M9.5 8.5h5M9.5 12.5h5M9.5 16.5h3" />
-    </svg>
-  );
-}
-
-/**
- * A circling arrow, for the errand of looking.
- *
- * `animate-spin` while it runs, matching the spinner `TransportControls`
- * already uses — a loading indicator is information rather than decoration, so
- * it is not gated behind the reduce-motion switch the platter is.
- */
-function RefreshIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-3 w-3 shrink-0 ${spinning ? 'animate-spin' : ''}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20 11a8 8 0 10-.7 4.3" />
-      <path d="M20 4v7h-6" />
-    </svg>
-  );
-}
-
-/**
- * The version, and whether there is a newer one.
- *
- * The check itself already ran, quietly, at startup — this is where its answer
- * is, and the only place a failure is ever shown. A launch with no network is
- * not a failure anybody asked about; a button somebody pressed is.
- */
-function Updates() {
-  const t = useT();
-  const status = useUpdateStore((s) => s.status);
-  const version = useUpdateStore((s) => s.version);
-  const progress = useUpdateStore((s) => s.progress);
-  const error = useUpdateStore((s) => s.error);
-  const checkNow = useUpdateStore((s) => s.checkNow);
-  const download = useUpdateStore((s) => s.download);
-  const restartNow = useUpdateStore((s) => s.restartNow);
-
-  const looking = status === 'checking';
-  /** Nothing is on offer, so the row is just a version and a way to ask. */
-  const resting = status === 'idle' || status === 'checking' || status === 'current';
-
-  return (
-    <div className="space-y-1.5">
-      {/* One row rather than two stacked fragments: the version and the way to
-          check it are the same thought, and reading them as separate lines is
-          what made this corner look unfinished. */}
-      <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-body text-cream-200">
-          {t('settings.version', { version: APP_VERSION })}
-        </p>
-
-        {resting && (
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Beside the button rather than under the row. It is the answer to
-                pressing that button, and an answer belongs next to the thing it
-                answers — on its own line it read as a separate announcement. */}
-            {status === 'current' && (
-              <span className="text-meta text-cream-400">{t('update.upToDate')}</span>
-            )}
-            <button
-              type="button"
-              onClick={() => void checkNow()}
-              disabled={looking}
-              // Outlined rather than filled, on purpose. Download and Restart are
-              // the filled brass pills because they are the actions that matter;
-              // this one is an errand. `--color-edge` rather than a shell shade
-              // so the outline survives a very dark palette.
-              className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500 disabled:opacity-60"
-            >
-              <RefreshIcon spinning={looking} />
-              {looking ? t('update.checking') : t('update.check')}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {status === 'available' && version && (
-        <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
-          <p className="text-meta text-cream-200">{t('update.available', { version })}</p>
-          {/* The version and a way to get it, and nothing else. Every word of
-              the release used to sit here in a little scrolling box, which is
-              the wrong shape for it twice over: this corner of Settings is a
-              status line, and nobody reads four hundred lines of changelog
-              through a slot four lines tall. What the release said is told
-              properly, once, by `WhatsNew` after it is installed. */}
-          <button
-            type="button"
-            onClick={() => void download()}
-            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
-          >
-            {t('update.download')}
-          </button>
-        </div>
-      )}
-
-      {status === 'downloading' && (
-        <div className="space-y-1">
-          <p className="text-meta text-cream-400">
-            {progress === null
-              ? t('update.downloadingUnknown')
-              : t('update.downloading', { percent: Math.round(progress * 100) })}
-          </p>
-          {progress !== null && (
-            <div className="groove-inset h-1 w-full overflow-hidden rounded-full">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-brass-600 to-brass-400 transition-[width] duration-150"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {status === 'ready' && (
-        <div className="space-y-1.5 rounded-md bg-shell-900/50 p-2">
-          <p className="text-meta leading-snug text-cream-200">{t('update.ready')}</p>
-          <button
-            type="button"
-            onClick={() => void restartNow()}
-            className="rounded-full bg-brass-600 px-3 py-1 text-meta font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
-          >
-            {t('update.restart')}
-          </button>
-        </div>
-      )}
-
-      {status === 'error' && (
-        <div className="space-y-1.5">
-          <p className="rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
-            {t('update.failed', { message: error ?? '' })}
-          </p>
-          <button
-            type="button"
-            onClick={() => void checkNow()}
-            className="flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500"
-          >
-            <RefreshIcon spinning={false} />
-            {t('update.tryAgain')}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="text-label font-medium tracking-[0.16em] text-cream-400 uppercase">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-/**
- * One of the edge light's three, in notches from -4 to 4.
- *
- * Notches rather than a smooth run, because these are settled by moving one and
- * looking at the window: a handful of positions can be tried and compared, and
- * an unbroken range only invites hunting for a number that is not there.
- *
- * No figure beside it either, and the marks underneath carry no numbers. Which
- * notch it is on is worth seeing; what the notch is called is not — the answer
- * is the light.
- */
-function Slider({
-  label,
-  notch,
-  onChange,
-}: {
-  label: string;
-  notch: number;
-  onChange: (next: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="text-meta text-cream-300">{label}</span>
-      <SteppedRange
-        min={-NOTCHES}
-        max={NOTCHES}
-        value={notch}
-        label={label}
-        valueText={notch > 0 ? `+${notch}` : String(notch)}
-        onChange={onChange}
-      />
-      {/* One mark per notch, the middle one taller: where the slider came from
-          is the thing worth being able to find again without thinking. */}
-      <span aria-hidden="true" className="mt-0.5 flex items-start justify-between px-1">
-        {Array.from({ length: NOTCHES * 2 + 1 }, (_, at) => (
-          <span
-            key={at}
-            className={`w-px rounded-full ${
-              at === NOTCHES ? 'h-1.5 bg-brass-500' : 'h-1 bg-shell-500'
-            }`}
-          />
-        ))}
-      </span>
-    </label>
-  );
-}
-
-/**
- * How large the window is drawn: one stop per size in `SCALES`.
- *
- * Unlike the edge light's dials this one says its number. A size is something
- * people think of as a number, and 110% is an answer to "how much bigger".
- */
-function ScaleSlider({
-  label,
-  scale,
-  onChange,
-}: {
-  label: string;
-  scale: number;
-  onChange: (next: number) => void;
-}) {
-  // Where the thumb is while it is being moved, which is not yet the size.
-  // Every stop resizes the window, and doing that under a moving thumb made
-  // the window lurch through each size on the way to the one wanted — so the
-  // number follows the thumb, and the window changes once, on letting go.
-  const [held, setHeld] = useState<number | null>(null);
-  const shown = held ?? scale;
-  const at = Math.max(0, SCALES.findIndex((step) => step === shown));
-  const percent = `${Math.round(shown * 100)}%`;
-  const settle = () => {
-    if (held !== null && held !== scale) onChange(held);
-    setHeld(null);
-  };
-  return (
-    <label className="block">
-      <span className="flex items-baseline justify-between">
-        <span className="text-meta text-cream-300">{label}</span>
-        <span className="text-meta text-cream-400 tabular-nums">{percent}</span>
-      </span>
-      <SteppedRange
-        min={0}
-        max={SCALES.length - 1}
-        value={at}
-        label={label}
-        valueText={percent}
-        onChange={(stop) => setHeld(SCALES[stop] ?? 1)}
-        onSettle={settle}
-      />
-    </label>
-  );
-}
-
-/**
- * A slider with a handful of stops, whose knob glides between them.
- *
- * The native range is kept for everything it does — pointer, keyboard, what a
- * screen reader hears — but drawn invisibly over the rail; the knob on show is
- * a sibling that moves to the stop over a moment (`.groove-stepped-knob`). The
- * native thumb jumps, and on a slider of five or nine stops a jump is a knob
- * teleporting a fifth of the rail at a time.
- *
- * `onSettle` is for a change that should wait for the hand to let go.
- */
-function SteppedRange({
-  min,
-  max,
-  value,
-  label,
-  valueText,
-  onChange,
-  onSettle,
-}: {
-  min: number;
-  max: number;
-  value: number;
-  label: string;
-  valueText: string;
-  onChange: (next: number) => void;
-  onSettle?: () => void;
-}) {
-  const fraction = max > min ? (value - min) / (max - min) : 0;
-  return (
-    <span className="relative mt-1 flex h-4 items-center">
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={value}
-        aria-label={label}
-        aria-valuetext={valueText}
-        onChange={(e) => onChange(Number(e.target.value))}
-        onPointerUp={onSettle}
-        onKeyUp={onSettle}
-        onBlur={onSettle}
-        className="groove-range peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none opacity-0"
-      />
-      {/* The rail, and the ring the keyboard sees: the input itself is clear. */}
-      <span
-        aria-hidden="true"
-        className="h-3 w-full rounded-full bg-shell-600 ring-1 ring-[var(--color-edge)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brass-400"
-      />
-      <span
-        aria-hidden="true"
-        className="groove-stepped-knob pointer-events-none absolute top-0"
-        style={{ left: `calc(${fraction} * (100% - 16px))` }}
-      />
-    </span>
-  );
-}
-
-function Choice({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`flex-1 rounded-full px-2 py-1 text-meta font-medium tracking-wide transition-colors ${
-        active
-          ? 'bg-brass-600 text-on-accent'
-          : 'bg-shell-700 text-cream-200 hover:bg-shell-600 hover:text-cream-50'
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Connection({
-  name,
-  hint,
-  ready,
-  onSetUp,
-  onForget,
-}: {
-  name: string;
-  hint: string;
-  ready: boolean;
-  onSetUp: () => void;
-  onForget: () => Promise<void>;
-}) {
-  const t = useT();
-
-  return (
-    <div className="flex items-center gap-2 rounded-md px-1 py-1">
-      <span className="min-w-0 flex-1">
-        <span className="block text-body text-cream-200">{name}</span>
-        <span className="block text-meta leading-snug text-cream-400">{hint}</span>
-      </span>
-      <span
-        className={`shrink-0 text-meta ${ready ? 'text-brass-400' : 'text-cream-400/70'}`}
-      >
-        {ready ? t('settings.configured') : t('settings.notConfigured')}
-      </span>
-      <button
-        type="button"
-        onClick={() => (ready ? void onForget() : onSetUp())}
-        className="shrink-0 rounded-full bg-shell-700 px-2 py-1 text-meta tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-cream-50"
-      >
-        {ready ? t('settings.forget') : t('settings.setUp')}
-      </button>
-    </div>
-  );
-}
