@@ -7,7 +7,7 @@
 
 /* The way in, under the Windows button: small and plain. */
 .linux-ask {
-  margin: calc(14 * var(--u)) 0 0;
+  margin: calc(14 * var(--u, 1px)) 0 0;
 }
 
 .linux-link {
@@ -16,7 +16,7 @@
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: calc(14 * var(--u));
+  font-size: calc(14 * var(--u, 1px));
   text-decoration: underline dotted;
   text-underline-offset: 4px;
   cursor: pointer;
@@ -85,10 +85,10 @@ html.linux .only-windows {
 /* "for Linux", under the name. */
 .for-linux {
   display: block;
-  margin-top: calc(10 * var(--u));
+  margin-top: calc(10 * var(--u, 1px));
   color: var(--brass);
   font:
-    600 min(calc(21 * var(--u)), max(17px, 2.4vw)) / 1.2 ui-monospace,
+    600 min(calc(21 * var(--u, 1px)), max(17px, 2.4vw)) / 1.2 ui-monospace,
     'Cascadia Mono',
     'DejaVu Sans Mono',
     Menlo,
@@ -102,19 +102,19 @@ html.linux .only-windows {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(14 * var(--u));
-  margin-top: calc(28 * var(--u));
+  gap: calc(14 * var(--u, 1px));
+  margin-top: calc(28 * var(--u, 1px));
 }
 
 .linux-term {
-  width: min(100%, calc(460 * var(--u)));
-  padding: calc(12 * var(--u)) calc(18 * var(--u));
+  width: min(100%, calc(460 * var(--u, 1px)));
+  padding: calc(12 * var(--u, 1px)) calc(18 * var(--u, 1px));
   border: 1px solid var(--edge);
   border-radius: 12px;
   background: #07100b;
   color: var(--cream);
   font:
-    calc(14 * var(--u)) / 1.7 ui-monospace,
+    calc(14 * var(--u, 1px)) / 1.7 ui-monospace,
     'Cascadia Mono',
     'DejaVu Sans Mono',
     Menlo,
