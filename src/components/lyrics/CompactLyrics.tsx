@@ -63,6 +63,12 @@ const META_LEADING = 1.6;
  */
 const META_DROP = 6;
 
+/**
+ * The crossfade between the travelling title and artist and the deck's own,
+ * where they meet: short, so for nearly all of the way they are solid.
+ */
+const HANDOVER_MS = 100;
+
 /** The line to come's size against the line being sung's, for the move between them. */
 const NEXT_TO_SUNG = 12 / 16;
 
@@ -155,14 +161,18 @@ export function CompactLyrics({
 
   // Coming and going: the title and the artist each glide between their place
   // on the deck and their corner at the foot of the stage, shrinking or
-  // growing by the ratio of the two type sizes, while the deck's own words
-  // crossfade under them. Movement and fade run on separate animations:
-  // movement settles on the arrive curve, the fade runs evenly, so the words
-  // are visible for the whole of the journey instead of gone by the middle.
+  // growing by the ratio of the two type sizes and taking on the colour of
+  // where they are going. They stay solid the whole way. The deck's own words
+  // are handed over only where the two meet, in a short crossfade at the
+  // deck's end of the journey: at the start of it coming, at the end of it
+  // going. They used to fade out evenly along the way while the deck's own
+  // faded in on a clock of its own, which read as the words dimming as they
+  // went and then reappearing whole where they arrived.
   useLayoutEffect(() => {
     const layer = lineLayer.current;
     const expander = expandButton.current;
     const deck = trackRef.current;
+    const deckWords = deck?.querySelector<HTMLElement>('[data-lyrics-hides]');
     const pairs = [
       [titleText.current, deck?.querySelector<HTMLElement>('h1')],
       [artistText.current, deck?.querySelector<HTMLElement>('[data-morph="artist"]')],
@@ -171,30 +181,49 @@ export function CompactLyrics({
       if (!show) setTimeout(() => setPresent(false), 0);
       return;
     }
-    const moving = [layer, expander, ...pairs.map(([el]) => el)].filter(
+    const moving = [layer, expander, deckWords, ...pairs.map(([el]) => el)].filter(
       (el): el is HTMLElement => !!el,
     );
     for (const el of moving) for (const a of el.getAnimations()) a.cancel();
+
+    const journey = ARRIVE_MS + 60;
+    // The handover sits at the deck's end: from the start coming, and up to
+    // the end going.
+    const handAt = show ? 0 : journey - HANDOVER_MS;
 
     let last: Animation | null = null;
     for (const [el, source] of pairs) {
       if (!el) continue;
       const onDeck = travelFrom(el, source);
+      const own = getComputedStyle(el).color;
+      const theirs = source ? getComputedStyle(source).color : own;
       const move = show
-        ? [{ transform: onDeck }, { transform: 'none' }]
-        : [{ transform: 'none' }, { transform: onDeck }];
-      const fade = show ? [{ opacity: 0.3 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }];
+        ? [{ transform: onDeck, color: theirs }, { transform: 'none', color: own }]
+        : [{ transform: 'none', color: own }, { transform: onDeck, color: theirs }];
+      // Coming, the journey waits for the handover, held on the deck: the
+      // move is quickest at its start, and starting both together put the two
+      // halves of the crossfade in different places.
       last = el.animate(move, {
-        duration: ARRIVE_MS + 60,
+        duration: journey,
+        delay: show ? HANDOVER_MS : 0,
         easing: ARRIVE_EASING,
-        fill: show ? 'none' : 'forwards',
+        fill: show ? 'backwards' : 'forwards',
       });
-      el.animate(fade, {
-        duration: ARRIVE_MS + 40,
+      el.animate(show ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], {
+        duration: HANDOVER_MS,
+        delay: handAt,
         easing: 'linear',
         fill: show ? 'none' : 'forwards',
       });
     }
+    // The deck's own words, the other half of the handover. On the way back
+    // they already rest visible, so they are held hidden until it comes.
+    deckWords?.animate(show ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], {
+      duration: HANDOVER_MS,
+      delay: handAt,
+      easing: 'linear',
+      fill: 'backwards',
+    });
 
     if (show) {
       // From nothing to whatever its own style says, which is dimmer than full

@@ -503,11 +503,10 @@ export default function App() {
           <div ref={trackRef}>
             {/* Faded rather than removed while lyrics are on the deck: the
                 collapse animation measures this box, and the title glides up
-                out of it into the lyrics' small line. */}
-            <div
-              className="transition-opacity duration-300 ease-out"
-              style={{ opacity: lyricsOnDeck ? 0 : 1 }}
-            >
+                out of it into the lyrics' small line. The fade itself is
+                `CompactLyrics`'s to run, timed to the words travelling between
+                the two, so this only says where it rests. */}
+            <div data-lyrics-hides="" style={{ opacity: lyricsOnDeck ? 0 : 1 }}>
               <TrackDisplay compact={compact} />
             </div>
           </div>
