@@ -89,21 +89,25 @@ html[data-linux-going='out']::view-transition-old(root) {
   z-index: 1;
 }
 
-/* The characters flying along the edge, live above both pictures. */
-.linux-ascii {
+/*
+ * The light along the edge and the characters, live above both pictures, and
+ * above the page for the moment the characters take to go afterwards.
+ */
+.linux-light {
   position: fixed;
   inset: 0;
+  z-index: 1000;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  view-transition-name: linux-ascii;
+  view-transition-name: linux-light;
 }
 
-::view-transition-group(linux-ascii),
-::view-transition-new(linux-ascii) {
+::view-transition-group(linux-light),
+::view-transition-new(linux-light) {
   animation: none;
 }
 
-::view-transition-old(linux-ascii) {
+::view-transition-old(linux-light) {
   display: none;
 }
