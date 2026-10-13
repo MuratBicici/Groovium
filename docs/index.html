@@ -68,13 +68,18 @@
     <main>
       <section class="wrap hero">
         <img class="icon" src="assets/icon-256.png" width="96" height="96" alt="Groovium app icon" />
-        <h1>Groovium</h1>
-        <p class="tagline">The music you love. A new way to feel it.</p>
-        <p class="lede">
+        <h1>Groovium <span class="for-linux only-linux">for Linux</span></h1>
+        <p class="tagline only-windows">The music you love. A new way to feel it.</p>
+        <p class="tagline only-linux">So you are nerd enough to use Linux. Then you may want to use your local much more.</p>
+        <p class="lede only-windows">
           Groovium brings the ritual of vinyl to your desktop. Your local library and Spotify,
           together on a turntable made for today.
         </p>
-        <div class="actions">
+        <p class="lede only-linux">
+          Groovium brings the ritual of vinyl to your desktop. Your local library, on a
+          turntable made for today.
+        </p>
+        <div class="actions only-windows">
           <a class="button primary" data-download href="https://github.com/MuratBicici/Groovium/releases/latest">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16" /></svg>
             Download for Windows
@@ -85,10 +90,22 @@
             View on GitHub
           </a>
         </div>
+        <div class="linux-status only-linux">
+          <div class="linux-term">
+            <p><span class="linux-prompt">you@groovium:~$</span> groovium --status</p>
+            <p class="linux-output">still being built · nothing to install yet</p>
+            <p><span class="linux-prompt">you@groovium:~$</span> <span class="linux-cursor" aria-hidden="true"></span></p>
+          </div>
+          <a class="button secondary" href="https://github.com/MuratBicici/Groovium">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.26-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.38.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg>
+            Follow on GitHub
+          </a>
+        </div>
         <p class="linux-ask">
           <button type="button" class="linux-link" data-linux-open hidden>On Linux?</button>
         </p>
-        <p class="note">Free and open source · Windows 10 and 11 · English and Turkish</p>
+        <p class="note only-windows">Free and open source · Windows 10 and 11 · English and Turkish</p>
+        <p class="note only-linux">Free and open source · For Linux · Local music first</p>
       </section>
 
       <section class="wrap">
@@ -118,10 +135,14 @@
             loading="lazy"
             alt="One collection. More ways to listen. Local music and Spotify side by side in Groovium's drawer."
           />
-          <p>
+          <p class="only-windows">
             Your local favourites and Spotify tracks, together in Groovium playlists. Bring your
             music, choose a track, and settle in.
             <a href="https://github.com/MuratBicici/Groovium#spotify-setup">Spotify Premium and setup required.</a>
+          </p>
+          <p class="only-linux">
+            Your local favourites, together in Groovium playlists. Bring your music, choose a
+            track, and settle in.
           </p>
         </figure>
 
@@ -182,13 +203,17 @@
       <section class="wrap section">
         <h2>Good to know</h2>
         <ul class="facts">
-          <li><strong>Windows only.</strong> Groovium runs on Windows 10 and 11.</li>
-          <li>
+          <li class="only-linux">
+            <strong>Linux is on its way.</strong> Groovium for Linux is still being built, with
+            your local music first. There is nothing to download yet.
+          </li>
+          <li class="only-windows"><strong>Windows only.</strong> Groovium runs on Windows 10 and 11.</li>
+          <li class="only-windows">
             <strong>Spotify needs Premium.</strong> Playing Spotify tracks requires a Premium
             account and a personal app registration; local music needs neither.
             <a href="https://github.com/MuratBicici/Groovium#spotify-setup">How to connect Spotify</a>.
           </li>
-          <li>
+          <li class="only-windows">
             <strong>Unsigned installer.</strong> The installer has no code signature yet, so
             Windows may show a SmartScreen warning the first time.
           </li>
@@ -201,11 +226,22 @@
 
       <section class="wrap closing">
         <h2>Put a record on.</h2>
-        <div class="actions">
+        <div class="actions only-windows">
           <a class="button primary" data-download href="https://github.com/MuratBicici/Groovium/releases/latest">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16" /></svg>
             Download for Windows
             <span class="version" data-download-version hidden></span>
+          </a>
+        </div>
+        <div class="linux-status only-linux">
+          <div class="linux-term">
+            <p><span class="linux-prompt">you@groovium:~$</span> groovium --status</p>
+            <p class="linux-output">still being built · nothing to install yet</p>
+            <p><span class="linux-prompt">you@groovium:~$</span> <span class="linux-cursor" aria-hidden="true"></span></p>
+          </div>
+          <a class="button secondary" href="https://github.com/MuratBicici/Groovium">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.26-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.38.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg>
+            Follow on GitHub
           </a>
         </div>
       </section>

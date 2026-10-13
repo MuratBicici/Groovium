@@ -1,7 +1,8 @@
 /*
  * The page in green, for Linux: the same page and the same layout, with the
- * brass swapped for terminal green and faint scan lines over the ground. Put on
- * and taken off by linux.js, which spreads the change from the press.
+ * brass swapped for terminal green and faint scan lines over the ground, and
+ * the download swapped for word that it is still being built. Put on and taken
+ * off by linux.js, which spreads the change from the press.
  */
 
 /* The way in, under the Windows button: small and plain. */
@@ -72,6 +73,91 @@ html.linux .button.primary:hover {
 
 html.linux .button .version {
   border-left-color: rgba(6, 33, 15, 0.25);
+}
+
+/* What the page says for each: the Windows download, or Linux on its way. */
+html:not(.linux) .only-linux,
+html.linux .only-windows {
+  display: none !important;
+}
+
+/* "for Linux", under the name. */
+.for-linux {
+  display: block;
+  margin-top: 10px;
+  color: var(--brass);
+  font:
+    600 clamp(17px, 2.4vw, 21px) / 1.2 ui-monospace,
+    'Cascadia Mono',
+    'DejaVu Sans Mono',
+    Menlo,
+    Consolas,
+    monospace;
+  letter-spacing: 0.04em;
+}
+
+/* The slogan is longer than the tagline it stands in for. */
+.tagline.only-linux {
+  max-width: 760px;
+}
+
+/* In place of a download: a terminal saying it is still being built. */
+.linux-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.linux-term {
+  width: min(100%, 460px);
+  padding: 12px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: #07100b;
+  color: var(--cream);
+  font:
+    14px/1.7 ui-monospace,
+    'Cascadia Mono',
+    'DejaVu Sans Mono',
+    Menlo,
+    Consolas,
+    monospace;
+  text-align: left;
+}
+
+.linux-term p {
+  margin: 0;
+}
+
+.linux-prompt {
+  color: var(--brass);
+}
+
+.linux-output {
+  color: var(--muted);
+}
+
+.linux-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.15em;
+  background: var(--brass);
+  vertical-align: text-bottom;
+  animation: linux-blink 1.05s steps(1) infinite;
+}
+
+@keyframes linux-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linux-cursor {
+    animation: none;
+  }
 }
 
 /*
