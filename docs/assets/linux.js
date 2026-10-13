@@ -104,6 +104,45 @@
   }
   var ask = onLinux() ? text.noticed : text.ask;
 
+  /**
+   * The scan lines under the green, drawn once to the screen's own pixels and
+   * tiled. A repeating gradient left them uneven wherever a CSS pixel is not a
+   * whole screen pixel, and the graphics card, drawing the page's ground as two
+   * triangles, put their hard edges in slightly different places on each side
+   * of the diagonal, so a seam ran from corner to corner. Here a line and the
+   * gap after it are whole screen pixels, as near the 1 in 3 as the screen
+   * allows, a little fainter where a line comes out thicker so the green stays
+   * as deep. The tile holds as many lines as it takes to be a whole number of
+   * CSS pixels too: the browser keeps sizes to 1/64 of one, so a tile of 3⅓
+   * would creep a little further off the screen's pixels with every repeat.
+   */
+  var SCAN_PERIOD = 3;
+  var SCAN_ALPHA = 0.055;
+  var scanScale = 0;
+  function scanLines() {
+    var scale = window.devicePixelRatio || 1;
+    if (scale === scanScale) return;
+    scanScale = scale;
+    var period = Math.max(2, Math.round(SCAN_PERIOD * scale));
+    var line = Math.max(1, Math.round(period / SCAN_PERIOD));
+    var lines = 1;
+    function whole(value) {
+      return Math.abs(value - Math.round(value)) < 1e-6;
+    }
+    while (lines < 64 && !whole((period * lines) / scale)) lines += 1;
+    var tile = document.createElement('canvas');
+    tile.height = period * lines;
+    tile.width = tile.height * Math.ceil(32 / tile.height);
+    var context = tile.getContext('2d');
+    context.fillStyle = 'rgba(126, 231, 135, ' + ((SCAN_ALPHA * period) / SCAN_PERIOD / line).toFixed(4) + ')';
+    for (var i = 0; i < lines; i++) context.fillRect(0, i * period, tile.width, line);
+    root.style.setProperty('--linux-scan', 'url(' + tile.toDataURL() + ')');
+    root.style.setProperty('--linux-scan-size', Math.round(tile.width / scale) + 'px ' + Math.round(tile.height / scale) + 'px');
+  }
+  scanLines();
+  // Zooming, or the window going to another screen, changes the pixels.
+  window.addEventListener('resize', scanLines);
+
   function label() {
     var green = root.classList.contains('linux');
     trigger.textContent = green ? text.back : ask;

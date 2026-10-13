@@ -49,9 +49,10 @@ html.linux {
   --faint: #7f9a88;
 }
 
+/* The scan lines are a tile linux.js draws to the screen's own pixels. */
 html.linux body {
   background:
-    repeating-linear-gradient(0deg, rgba(126, 231, 135, 0.055) 0 1px, transparent 1px 3px),
+    var(--linux-scan, none) 0 0 / var(--linux-scan-size, auto) repeat,
     radial-gradient(1200px 600px at 50% -200px, rgba(63, 185, 80, 0.16), transparent 70%),
     var(--ground);
 }
