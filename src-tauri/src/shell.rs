@@ -16,7 +16,7 @@
 //! down at the right moments rather than of moving anything.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -287,6 +287,10 @@ pub struct ClickArea {
     /// `None` is the whole window. Shared, because the watcher reads it from a
     /// thread of its own for as long as the app is running.
     part: Named,
+    /// How many times a part has been named. The watcher compares it with the
+    /// count it last acted on, so a change it did not make itself is put right
+    /// on its next look rather than taken on trust; see `Watch`.
+    named: Arc<AtomicU64>,
     watching: AtomicBool,
 }
 
@@ -330,9 +334,47 @@ pub fn set_click_area(
     if part.is_none() {
         let _ = window.set_ignore_cursor_events(false);
     }
+    // Counted after both, so a watcher that sees the new count also sees the
+    // new part.
+    area.named.fetch_add(1, Ordering::SeqCst);
 
     watch(&window, area.inner());
     Ok(())
+}
+
+/// What the watcher believes about the window, and whether to tell it again.
+///
+/// It used to keep only the first half: whether it had last told the window to
+/// let clicks through, trusted until the cursor said otherwise. But the window
+/// is told things it does not hear about — `set_click_area` makes all of it
+/// clickable at once when the part is taken away, which is what every drawer
+/// animation on the left does as the shell fills the window. With the cursor
+/// away from the player at the time (in another app, with the drawer opening
+/// or shutting by itself), the watcher still believed the window was letting
+/// clicks through when the part came back, saw no change to make, and left the
+/// empty stretch beside the player swallowing clicks meant for whatever was
+/// behind it — until the cursor next crossed the player. Now any naming since
+/// its last look sends it to the window again, whatever it believes.
+#[derive(Default)]
+struct Watch {
+    /// Whether it last told the window to let clicks through.
+    ignoring: bool,
+    /// The count of namings it last acted on.
+    seen: u64,
+}
+
+impl Watch {
+    /// One look: whether the window should let clicks through now, and how
+    /// many times a part has been named. What to tell the window, if anything.
+    fn look(&mut self, wanted: bool, named: u64) -> Option<bool> {
+        let renamed = named != self.seen;
+        self.seen = named;
+        if wanted == self.ignoring && !renamed {
+            return None;
+        }
+        self.ignoring = wanted;
+        Some(wanted)
+    }
 }
 
 /// One watcher for the life of the app, started the first time it is needed.
@@ -343,27 +385,30 @@ fn watch(window: &Window, area: &ClickArea) {
 
     let window = window.clone();
     let part = Arc::clone(&area.part);
+    let named = Arc::clone(&area.named);
     std::thread::spawn(move || {
-        let mut ignoring = false;
+        let mut watching = Watch::default();
         let mut every = IDLE_EVERY;
         loop {
             std::thread::sleep(every);
 
-            let named = part.lock().ok().and_then(|held| *held);
-            every = if named.is_some() { LOOK_EVERY } else { IDLE_EVERY };
+            // The count before the part, so a part read here is never older
+            // than the count it is judged against.
+            let count = named.load(Ordering::SeqCst);
+            let current = part.lock().ok().and_then(|held| *held);
+            every = if current.is_some() { LOOK_EVERY } else { IDLE_EVERY };
 
-            let wanted = match named {
+            let wanted = match current {
                 // No part named: the whole window takes clicks.
                 None => false,
                 Some(rect) => !over(&window, rect),
             };
 
-            if wanted != ignoring {
-                if window.set_ignore_cursor_events(wanted).is_err() {
+            if let Some(tell) = watching.look(wanted, count) {
+                if window.set_ignore_cursor_events(tell).is_err() {
                     // The window has gone. So has the reason to keep looking.
                     return;
                 }
-                ignoring = wanted;
             }
         }
     });
@@ -399,6 +444,30 @@ fn over(_window: &Window, _rect: Part) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_watcher_says_nothing_when_nothing_has_changed() {
+        let mut watch = Watch::default();
+        assert_eq!(watch.look(true, 1), Some(true), "away from the player: let clicks through");
+        assert_eq!(watch.look(true, 1), None, "still away, nothing new");
+        assert_eq!(watch.look(false, 1), Some(false), "over the player: take them");
+    }
+
+    #[test]
+    fn a_window_made_clickable_behind_the_watchers_back_is_put_right() {
+        // The fault behind clicks vanishing beside a shut drawer on the left.
+        // The watcher had let clicks through; then, between two of its looks,
+        // the part was taken away (the window made clickable at once) and
+        // named again, with the cursor still away from the player.
+        let mut watch = Watch::default();
+        assert_eq!(watch.look(true, 1), Some(true));
+        assert_eq!(
+            watch.look(true, 3),
+            Some(true),
+            "the window was changed meanwhile, so it is told again"
+        );
+        assert_eq!(watch.look(true, 3), None);
+    }
 
     #[test]
     fn a_place_is_remembered_with_a_size_beside_it() {
