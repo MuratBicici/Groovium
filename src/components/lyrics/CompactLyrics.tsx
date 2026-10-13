@@ -69,6 +69,10 @@ const META_DROP = 6;
  */
 const HANDOVER_MS = 100;
 
+/** The album coming in beside the artist on the deck: how long, and from how far left. */
+const ALBUM_MS = 220;
+const ALBUM_FROM = -10;
+
 /** The line to come's size against the line being sung's, for the move between them. */
 const NEXT_TO_SUNG = 12 / 16;
 
@@ -173,15 +177,16 @@ export function CompactLyrics({
     const expander = expandButton.current;
     const deck = trackRef.current;
     const deckWords = deck?.querySelector<HTMLElement>('[data-lyrics-hides]');
+    const album = deck?.querySelector<HTMLElement>('[data-album]');
     const pairs = [
       [titleText.current, deck?.querySelector<HTMLElement>('h1')],
-      [artistText.current, deck?.querySelector<HTMLElement>('[data-morph="artist"]')],
+      [artistText.current, artistOnDeck(deck)],
     ] as const;
     if (!layer || !geo || prefersReducedMotion()) {
       if (!show) setTimeout(() => setPresent(false), 0);
       return;
     }
-    const moving = [layer, expander, deckWords, ...pairs.map(([el]) => el)].filter(
+    const moving = [layer, expander, deckWords, album, ...pairs.map(([el]) => el)].filter(
       (el): el is HTMLElement => !!el,
     );
     for (const el of moving) for (const a of el.getAnimations()) a.cancel();
@@ -224,6 +229,23 @@ export function CompactLyrics({
       easing: 'linear',
       fill: 'backwards',
     });
+    // The album, which the small line leaves out. Going, it comes in beside
+    // the artist as the handover starts, sliding a little from the left;
+    // coming, it goes back the way it came under the fading deck. Moved by
+    // `left` rather than a transform: it stays inline, so that a line too long
+    // still ends in an ellipsis partway through it.
+    album?.animate(
+      show
+        ? [
+            { opacity: 1, left: '0px' },
+            { opacity: 0, left: `${ALBUM_FROM}px` },
+          ]
+        : [
+            { opacity: 0, left: `${ALBUM_FROM}px` },
+            { opacity: 1, left: '0px' },
+          ],
+      { duration: ALBUM_MS, delay: handAt, easing: ARRIVE_EASING, fill: 'backwards' },
+    );
 
     if (show) {
       // From nothing to whatever its own style says, which is dimmer than full
@@ -616,6 +638,19 @@ function QuietState({
   if (kind === 'Instrumental') return <p className="text-[14px] text-cream-300">{t('lyrics.instrumental')}</p>;
   if (kind === 'Plain') return <p className="text-[13px] text-cream-400">{t('lyrics.plainOnly')}</p>;
   return <p className="text-[13px] text-cream-400">{t('lyrics.notFound')}</p>;
+}
+
+/**
+ * Where the travelling artist lands: on the artist's own name in the deck's
+ * line, which goes on to the album. On the whole line instead when there is no
+ * name in it to find, or the name runs past the line's end and is cut off
+ * there — its middle would then be somewhere nobody can see.
+ */
+function artistOnDeck(deck: HTMLElement | null): HTMLElement | null {
+  const line = deck?.querySelector<HTMLElement>('[data-morph="artist"]') ?? null;
+  const name = line?.querySelector<HTMLElement>('[data-artist-name]');
+  if (!line || !name) return line;
+  return name.getBoundingClientRect().right <= line.getBoundingClientRect().right + 1 ? name : line;
 }
 
 /**

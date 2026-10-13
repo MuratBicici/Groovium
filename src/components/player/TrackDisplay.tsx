@@ -104,8 +104,22 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
         {track?.title ?? t('track.none')}
       </h1>
 
+      {/* The artist and the album apart, for the lyrics on the deck: their
+          small line has the artist alone, which lands on the artist here while
+          the album comes in beside it (`CompactLyrics`). Both inline, so a
+          line too long still ends in an ellipsis partway through the album
+          rather than losing the album whole. */}
       <p data-morph="artist" className="mt-0.5 truncate text-xs text-cream-400">
-        {track ? `${track.artist} — ${track.album}` : t('track.hint')}
+        {track ? (
+          <>
+            <span data-artist-name="">{track.artist}</span>
+            <span data-album="" className="relative">
+              {` — ${track.album}`}
+            </span>
+          </>
+        ) : (
+          t('track.hint')
+        )}
       </p>
     </div>
   );
