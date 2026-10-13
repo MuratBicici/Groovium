@@ -82,6 +82,12 @@ html.linux .only-windows {
   display: none !important;
 }
 
+/* The opening has the first screen to itself; the rest comes on scrolling. */
+html.linux .hero {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
 /* "for Linux", under the name. */
 .for-linux {
   display: block;
