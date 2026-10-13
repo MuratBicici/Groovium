@@ -7,7 +7,7 @@
 
 /* The way in, under the Windows button: small and plain. */
 .linux-ask {
-  margin: 14px 0 0;
+  margin: calc(14 * var(--u)) 0 0;
 }
 
 .linux-link {
@@ -16,7 +16,7 @@
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14 * var(--u));
   text-decoration: underline dotted;
   text-underline-offset: 4px;
   cursor: pointer;
@@ -82,19 +82,13 @@ html.linux .only-windows {
   display: none !important;
 }
 
-/* The opening has the first screen to itself; the rest comes on scrolling. */
-html.linux .hero {
-  min-height: 100vh;
-  min-height: 100svh;
-}
-
 /* "for Linux", under the name. */
 .for-linux {
   display: block;
-  margin-top: 10px;
+  margin-top: calc(10 * var(--u));
   color: var(--brass);
   font:
-    600 clamp(17px, 2.4vw, 21px) / 1.2 ui-monospace,
+    600 min(calc(21 * var(--u)), max(17px, 2.4vw)) / 1.2 ui-monospace,
     'Cascadia Mono',
     'DejaVu Sans Mono',
     Menlo,
@@ -108,19 +102,19 @@ html.linux .hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  margin-top: 28px;
+  gap: calc(14 * var(--u));
+  margin-top: calc(28 * var(--u));
 }
 
 .linux-term {
-  width: min(100%, 460px);
-  padding: 12px 18px;
+  width: min(100%, calc(460 * var(--u)));
+  padding: calc(12 * var(--u)) calc(18 * var(--u));
   border: 1px solid var(--edge);
   border-radius: 12px;
   background: #07100b;
   color: var(--cream);
   font:
-    14px/1.7 ui-monospace,
+    calc(14 * var(--u)) / 1.7 ui-monospace,
     'Cascadia Mono',
     'DejaVu Sans Mono',
     Menlo,

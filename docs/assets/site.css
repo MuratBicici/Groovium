@@ -16,6 +16,13 @@
   --faint: #9a8a74;
   --radius: 18px;
   --wide: 1100px;
+  /* The height of the bar across the top. */
+  --top: 86px;
+  /*
+   * A pixel, as the opening sizes things: one everywhere else, and in the
+   * opening more or less with the height there is for it; see .hero.
+   */
+  --u: 1px;
   color-scheme: dark;
 }
 
@@ -70,7 +77,7 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-block: 18px;
+  height: var(--top);
 }
 
 .brand {
@@ -105,35 +112,50 @@ img {
 }
 
 /* The opening: what it is, and the way to get it. */
+/*
+ * The opening has the first screen to itself: all the height the bar at the
+ * top leaves, with what it says in the middle of it. Everything in it is sized
+ * in --u, a pixel when there are 760 of them to fill, and as much more or less
+ * as there are, from 0.7 to 1.35 of one, so it fills about the same share of
+ * a short screen as of a tall one. The rest of the page comes on scrolling.
+ */
 .hero {
+  --u: clamp(0.7px, (100svh - var(--top)) / 760, 1.35px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - var(--top));
+  min-height: calc(100svh - var(--top));
+  padding-block: calc(24 * var(--u));
   text-align: center;
-  padding-block: 48px 32px;
 }
 
 .hero .icon {
-  width: 96px;
-  height: 96px;
-  margin: 0 auto 20px;
+  width: calc(96 * var(--u));
+  height: calc(96 * var(--u));
+  margin: 0 auto calc(20 * var(--u));
   filter: drop-shadow(0 10px 30px rgba(200, 148, 90, 0.35));
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(40px, 7vw, 64px);
+  /* Smaller on a narrow screen, as before; never below 40px. */
+  font-size: min(calc(64 * var(--u)), max(40px, 7vw));
   line-height: 1.05;
   letter-spacing: -0.02em;
 }
 
 .tagline {
-  margin: 14px auto 0;
-  font-size: clamp(20px, 3vw, 26px);
+  margin: calc(14 * var(--u)) auto 0;
+  font-size: min(calc(26 * var(--u)), max(20px, 3vw));
   font-weight: 600;
   color: var(--brass);
 }
 
 .lede {
-  max-width: 620px;
-  margin: 14px auto 0;
+  max-width: calc(620 * var(--u));
+  margin: calc(14 * var(--u)) auto 0;
+  font-size: calc(17 * var(--u));
   color: var(--muted);
 }
 
@@ -141,16 +163,17 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
+  gap: calc(12 * var(--u));
+  margin-top: calc(28 * var(--u));
 }
 
 .button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 13px 24px;
+  gap: calc(10 * var(--u));
+  padding: calc(13 * var(--u)) calc(24 * var(--u));
   border-radius: 999px;
+  font-size: calc(17 * var(--u));
   font-weight: 600;
   text-decoration: none;
   transition:
@@ -181,7 +204,7 @@ h1 {
 
 /* The version the button downloads, once GitHub has said which it is. */
 .button .version {
-  padding-left: 10px;
+  padding-left: calc(10 * var(--u));
   border-left: 1px solid rgba(27, 19, 12, 0.25);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -189,14 +212,14 @@ h1 {
 }
 
 .button svg {
-  width: 18px;
-  height: 18px;
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
   flex: none;
 }
 
 .note {
-  margin-top: 14px;
-  font-size: 14px;
+  margin: calc(14 * var(--u)) 0 0;
+  font-size: calc(14 * var(--u));
   color: var(--faint);
 }
 
