@@ -13,6 +13,32 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.2.3 — 2026-10-13
+
+Pikabın arkasındaki müzik artık oluk oluk.
+
+Görselleştiricinin yeni bir görünüşü var. Müzikle yükselip alçalan birkaç
+yumuşak ışık oluğu. Her oluğun üstünde bir ışık akar ve müzik yükseldikçe
+hızlanır. Vuruşları kaçırmazlar, ardından yumuşakça inerler. Müzik durunca
+önce düzleşir, sonra aşağı batarlar. Müzik başlayınca yeniden yükselirler.
+Lirik plağı çekmecede açıksa plağın bıraktığı alana sığarlar. Eski bloklar da
+duruyor: Ayarlar, Işıklar, Görünüş. Yeni Parlaklık ayarıyla ikisini de açıp
+kısabilirsiniz.
+
+Ayarlar artık sayfalara ayrıldı. Bir listeyle açılır: Görünüm, Işıklar, Genel,
+Bağlantılar ve Hakkında. Her birinin altında şu anki durumu yazar. Çoğu zaman
+bakmak için sayfa açmanız gerekmez. Bir sayfaya bastığınızda sayfa kayarak
+gelir. Esc ile listeye dönersiniz.
+
+Birkaç da düzeltme var. Çekmece soldayken oynatıcının yanındaki boş alan bazen
+arkadaki pencereye giden tıklamaları yutuyordu. Artık her seferinde geçiriyor.
+Plak, kenarının hemen dışından da tutulabiliyordu. Döndükçe imleç orada el
+işaretine dönüyordu. Artık yalnızca plağın kendisi tutuluyor. Lirikleri pikabın
+üstünde kapattığınızda şarkının adı ve sanatçısı yolda soluyor, sonra birden
+beliriyordu. Artık solmadan yerlerine oturuyorlar. Albüm de sanatçının yanına
+kayarak geliyor. Açık renkli bir temada siyah lirik plağının üstündeki yazılar
+koyu kalıyor ve okunmuyordu. Artık açık gri.
+
 ## 1.2.2 — 2026-10-08
 
 Sırada ne var, artık görünüyor.

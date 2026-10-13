@@ -4,6 +4,82 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.2.3 — 2026-10-13
+
+The music behind the deck, drawn as grooves.
+
+Behind the turntable, the visualiser has a new look: a few soft grooves of
+light that rise and fall with the music, a light running along each of them,
+quicker the louder it gets. They keep the punch of every kick and settle
+smoothly after it. When the music stops they lie flat and sink away, and they
+rise again when it plays. With the lyrics record open in the drawer, they draw
+in to the part of the window the record leaves. The blocks are still there,
+under Settings, Lights, Look, and a new Brightness setting turns either of
+them up or down.
+
+Settings is divided into pages now. It opens on a list, Appearance, Lights,
+General, Connections and About, each saying where it stands, so most visits
+end there. A page slides in when you open it, and Escape takes you back.
+
+And a handful of fixes. With the drawer on the left, the empty space beside the
+player sometimes kept clicks that were meant for the window behind it; they go
+through every time now. The record could be picked up from just outside its
+edge, where the cursor turned into a hand as it spun; now only the record
+itself can. Closing the lyrics on the deck, the song's title and artist faded
+on their way back and then appeared at once; they stay solid and settle into
+place, the album sliding in beside the artist. And on a light palette the
+lyrics on the black record were written in dark ink and could not be read;
+there they are written in light grey.
+
+HIGHLIGHTS
+· A new look for the visualiser, Grooves: soft lines of light that rise and
+  fall with the music.
+· Brightness for the visualiser, in Settings.
+· Settings in pages: Appearance, Lights, General, Connections and About.
+· Clicks beside a shut left drawer reach the window behind it, every time.
+· The record is picked up only on the record.
+· The title and artist settle smoothly when the lyrics close.
+· Lyrics on the black record readable on a light palette.
+
+ALL CHANGES
+
+Visualiser
+· Grooves, the new look and the default: four soft grooves with a faint glow
+  filling in under them, and a light running along each that goes faster as
+  the music gets louder. Blocks, the old look, is kept under Settings → Lights
+  → Look.
+· Brightness, a few notches either way, for either look.
+· Quick to answer the music: each band rises with a kick's punch and falls
+  back softly, with almost no smoothing left between the sound and the line.
+· As the music goes quiet the grooves sink below the foot of the window, and
+  rise again when it comes back. On pause they lie flat first, then sink.
+· Drawn at one pixel per pixel of the page whatever the window's size, so a
+  larger window costs no more to draw than a small one.
+· With the lyrics record in the drawer, the grooves squeeze into the part of
+  the window the record leaves, short of where it covers them.
+
+Settings
+· Five pages instead of one long list: Appearance (theme, colours from the
+  cover, window size, border, legibility), Lights (the visualiser and the edge
+  light), General (language, keep on top, drawer side, motion), Connections and
+  About. The list says where each stands.
+· Rows that belong together sit on cards, with small headings over them.
+· Escape on a page goes back to the list; Settings opens on the list again.
+· The notch marks under the sliders show; only the middle one could be seen.
+
+Fixes
+· With the drawer on the left, clicks beside the player reach the window
+  behind it every time. After the drawer had opened or shut on its own, they
+  could be kept until the cursor next crossed the player.
+· The record takes the pointer only within its round edge. It turned on a
+  square whose corners reached up to 1.4 times its radius, so the cursor
+  became a hand beside it, and a press there lifted it.
+· Closing the lyrics on the deck, the title and artist stay solid all the way
+  back and hand over in place, and opening, the other way round. The artist
+  lands on its own name and the album slides in beside it.
+· On a light palette, the words, the lit line and the silences on the lyrics
+  record are written in light grey.
+
 ## 1.2.2 — 2026-10-08
 
 What comes next, where you can see it.
