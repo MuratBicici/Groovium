@@ -96,11 +96,6 @@ html.linux .only-windows {
   letter-spacing: 0.04em;
 }
 
-/* The slogan is longer than the tagline it stands in for. */
-.tagline.only-linux {
-  max-width: 760px;
-}
-
 /* In place of a download: a terminal saying it is still being built. */
 .linux-status {
   display: flex;
