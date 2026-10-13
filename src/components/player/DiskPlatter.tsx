@@ -285,8 +285,16 @@ export function DiskPlatter({ stowed = false }: { stowed?: boolean }) {
           style={{ opacity: awaitingLanding || stowed || inHand ? 0 : 1 }}
         >
           {/* The spin stays on its own element; entrance and exit transforms
-              wrap it rather than fighting the keyframe for `transform`. */}
-          <div className="groove-platter" data-spinning={isPlaying}>
+              wrap it rather than fighting the keyframe for `transform`.
+
+              Round, though nothing on it shows past the record. A box takes
+              the pointer everywhere inside it, round content or not, and this
+              one turns: its corners swept out to 1.41x the record's radius,
+              so near the record — and only as a corner came by — the cursor
+              became a hand and a press there picked the record up. A rounded
+              box takes the pointer only inside its curve, and a turning
+              circle covers the same circle at every angle. */}
+          <div className="groove-platter rounded-full" data-spinning={isPlaying}>
             <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
           </div>
           {/* Sibling, not child: the light stays where it is while the record
