@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SIMILARITY_BIAS, drawWeighted, similarityWeight, weightedShuffle } from './sampling';
 
 /**
@@ -63,11 +63,27 @@ describe('weightedShuffle', () => {
   it('can still lead with a candidate Last.fm scored at zero', () => {
     // Plenty of real candidates arrive at exactly zero. A weight of zero is
     // "never", not "unlikely", so those would be excluded rather than rare.
-    const counts = leadCounts(600, () => weightedShuffle(['scored', 'zero'], (n) =>
-      similarityWeight(n === 'scored' ? 0.9 : 0),
-    )[0]);
-    expect(counts.get('zero') ?? 0).toBeGreaterThan(0);
-    expect(counts.get('scored') ?? 0).toBeGreaterThan(counts.get('zero') ?? 0);
+    //
+    // Its chance is about one in a hundred, so random draws were a poor
+    // witness: 600 of them missed it entirely about one run in 550. Instead
+    // every pair of draws on a grid is tried — the chance laid out in full
+    // rather than sampled, the same every time.
+    const STEPS = 200;
+    const draws: number[] = [];
+    for (let i = 0; i < STEPS; i++) {
+      for (let j = 0; j < STEPS; j++) draws.push((i + 0.5) / STEPS, (j + 0.5) / STEPS);
+    }
+    let next = 0;
+    const random = vi.spyOn(Math, 'random').mockImplementation(() => draws[next++] as number);
+    try {
+      const counts = leadCounts(STEPS * STEPS, () =>
+        weightedShuffle(['scored', 'zero'], (n) => similarityWeight(n === 'scored' ? 0.9 : 0))[0],
+      );
+      expect(counts.get('zero') ?? 0).toBeGreaterThan(0);
+      expect(counts.get('scored') ?? 0).toBeGreaterThan(counts.get('zero') ?? 0);
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it('handles the empty and single cases', () => {
