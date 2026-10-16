@@ -98,6 +98,16 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'lyrics.match.disclaimer':
     'Sözler LRCLIB ve NetEase’ten gelir. Groovium sözlerin doğruluğunu garanti etmez.',
   'lyrics.match.matched': 'Eşlendi · {source}',
+  'lyrics.timing.open': 'Zamanlama',
+  'lyrics.timing.openLong': 'Sözlerin zamanlamasını ayarla',
+  'lyrics.timing.start': 'Baş',
+  'lyrics.timing.end': 'Son',
+  'lyrics.timing.line': '{line}. satır',
+  'lyrics.timing.seconds': '{value} sn',
+  'lyrics.timing.hint': 'Bloğu ya da uçları sürükle. Bir işarete çift tıkla: iğne olur. Boş yere tıkla: oraya atlar.',
+  'lyrics.timing.reset': 'Sıfırla',
+  'lyrics.timing.done': 'Bitti',
+  'lyrics.timing.failed': 'Zamanlama kaydedilemedi.',
 
   'transport.shuffle': 'Karıştır',
   'transport.previous': 'Önceki',

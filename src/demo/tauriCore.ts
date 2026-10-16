@@ -4,6 +4,7 @@ import { APP_VERSION } from '@/core/version';
 import { localTracks } from './catalogue';
 import { demoLyrics, lyricsFor } from './lyrics';
 import type { LyricsCandidate, LyricsLookup, LyricsResult } from '@/core/lyrics/api';
+import type { LyricsTiming } from '@/core/lyrics/timing';
 import { DEMO_USER } from './spotifyApi';
 
 /**
@@ -58,6 +59,8 @@ const matched = new Map<string, { candidate: LyricsCandidate; result: LyricsResu
 const found = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
 /** Songs whose match was cleared in this run, and so have none. */
 const cleared = new Set<string>();
+/** The listener's retiming of a song's matched lyrics, by library id. */
+const timings = new Map<string, LyricsTiming>();
 
 /**
  * What a song is matched with: what this run matched it with, or else — the
@@ -158,10 +161,13 @@ function searchDemoLyrics(query: string): LyricsCandidate[] {
 }
 
 function savedLookup(trackId: string): LyricsLookup | null {
-  const match = matchOf(trackId.replace(/^library:/, ''));
+  const id = trackId.replace(/^library:/, '');
+  const match = matchOf(id);
   if (!match) return null;
   const { candidate, result } = match;
+  const timing = timings.get(id);
   return {
+    ...(timing && { timing }),
     result,
     matched: {
       trackName: candidate.trackName,
@@ -216,12 +222,20 @@ const HANDLERS: Record<string, Handler> = {
     if (pick) {
       matched.set(String(args.id ?? ''), pick);
       cleared.delete(String(args.id ?? ''));
+      timings.delete(String(args.id ?? ''));
     }
     return recordOf(String(args.id ?? ''));
+  },
+  library_set_lyrics_timing: (args) => {
+    const id = String(args.id ?? '');
+    if (Array.isArray(args.timing)) timings.set(id, args.timing as LyricsTiming);
+    else timings.delete(id);
+    return recordOf(id);
   },
   library_clear_lyrics: (args) => {
     matched.delete(String(args.id ?? ''));
     cleared.add(String(args.id ?? ''));
+    timings.delete(String(args.id ?? ''));
     return recordOf(String(args.id ?? ''));
   },
 

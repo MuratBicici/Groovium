@@ -31,7 +31,7 @@ use tauri_plugin_dialog::DialogExt;
 use walkdir::WalkDir;
 
 use crate::lyrics::manual::{self, Candidates, Saved, SAVED_VERSION};
-use crate::lyrics::LyricsLookup;
+use crate::lyrics::{LyricsLookup, Pin};
 use crate::metadata;
 
 const LIBRARY_FILE: &str = "library.json";
@@ -785,8 +785,46 @@ pub async fn library_set_lyrics(
     Ok(updated)
 }
 
-/// Let a song's lyrics be looked for automatically again, forgetting the ones
-/// matched by hand.
+/// Keep the listener's retiming of a song's matched lyrics, or forget it with
+/// `None`. Written as a new file and swapped in, as a new match is, so a
+/// failure leaves the old timing rather than half of the new one.
+#[tauri::command(async)]
+pub fn library_set_lyrics_timing(
+    app: AppHandle,
+    id: String,
+    timing: Option<Vec<Pin>>,
+) -> Result<LibraryTrack, String> {
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    let Some(matched) = track.lyrics.as_mut() else {
+        return Err("That song has no lyrics matched to it.".into());
+    };
+    let store = store(&app)?;
+    let Some(mut saved) = store.read_lyrics(&matched.file) else {
+        return Err("The lyrics matched to that song could not be read.".into());
+    };
+    if let Some(pins) = &timing {
+        if !manual::timing_fits(pins, &saved.result) {
+            return Err("That timing does not fit these lyrics.".into());
+        }
+    }
+    saved.timing = timing;
+    let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
+    let file = store.put_lyrics(&track.id, &json)?;
+    let old = std::mem::replace(&mut matched.file, file);
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    if let Err(e) = store.discard(&old) {
+        log::warn!("[library] {e}");
+    }
+    Ok(updated)
+}
+
+/// Forget the lyrics matched to a song by hand. A song on this computer is
+/// never looked up on its own, so it has none until it is matched again.
 #[tauri::command(async)]
 pub fn library_clear_lyrics(app: AppHandle, id: String) -> Result<LibraryTrack, String> {
     let library_path = library_path(&app)?;
@@ -1015,6 +1053,7 @@ mod tests {
             album_name: "Album".into(),
             duration_ms: 180_000,
             result: crate::lyrics::LyricsResult::Plain("words".into()),
+            timing: None,
         };
         let name = store
             .put_lyrics("abc", &serde_json::to_string(&saved).unwrap())

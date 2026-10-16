@@ -113,6 +113,7 @@ fn main() {
             library::library_set_cover,
             library::library_set_lyrics,
             library::library_clear_lyrics,
+            library::library_set_lyrics_timing,
             library::library_store_dir,
             playlists::playlists_load,
             playlists::playlist_create,

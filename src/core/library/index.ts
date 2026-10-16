@@ -1,4 +1,5 @@
 import type { TrackMetadata } from '@/core/types';
+import type { LyricsTiming } from '@/core/lyrics/timing';
 import { isTauri } from '@/core/utils/env';
 import { joinPath } from '@/core/utils/paths';
 import { log } from '@/platform/log';
@@ -158,9 +159,17 @@ export async function setLibraryTrackLyrics(id: string, key: string): Promise<Li
   return invoke<LibraryTrack>('library_set_lyrics', { id, key });
 }
 
-/** Forget a song's lyrics matched by hand, so they are looked for again. */
+/** Forget a song's lyrics matched by hand; it has none until matched again. */
 export async function clearLibraryTrackLyrics(id: string): Promise<LibraryTrack> {
   return invoke<LibraryTrack>('library_clear_lyrics', { id });
+}
+
+/** Keep the listener's retiming of a song's matched lyrics, or forget it with null. */
+export async function setLibraryTrackLyricsTiming(
+  id: string,
+  timing: LyricsTiming | null,
+): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_set_lyrics_timing', { id, timing });
 }
 
 /** The library id inside a player track's id, when it is a song from the library. */

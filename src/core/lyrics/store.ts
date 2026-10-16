@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import type { TrackMetadata } from '@/core/types';
+import { libraryIdOf, setLibraryTrackLyricsTiming } from '@/core/library';
+import { log } from '@/platform/log';
 import { getLyrics, type LyricsLookup } from './api';
-import { withIntro, withoutOutro } from './activeLine';
+import { withIntro, withoutOutro, type LyricLine } from './activeLine';
 import { choose, chosenFor, type LyricsSource } from './sourceChoice';
+import { defaultTiming, fits, isIdentity, retime, type LyricsTiming } from './timing';
+import { keepTiming, timingFor } from './timingChoice';
 
 /**
  * The lyrics of the song that is playing, shared by the two views.
@@ -20,7 +24,16 @@ interface LyricsState {
   /** The track the lookup below is for. */
   trackId: string | null;
   status: LyricsStatus;
+  /** The lyrics as shown: retimed, with the song's opening. */
   lookup: LyricsLookup | null;
+  /** The lyrics as the source gave them, which a timing is set against. */
+  raw: LyricsLookup | null;
+  /** The listener's timing for them, or null for the source's own. */
+  timing: LyricsTiming | null;
+  /** Whether the timing strip is open. */
+  tuning: boolean;
+  /** Why the last timing could not be kept, until the next one is. */
+  timingError: string | null;
   error: string | null;
   /** The source asked by name for this track, or null for the usual order. */
   source: LyricsSource | null;
@@ -35,6 +48,15 @@ interface LyricsState {
   reload: (trackId: string) => void;
   /** Take this track's lyrics from one source from now on, and ask it now. */
   pickSource: (source: LyricsSource) => void;
+  /** Open the timing strip, for timed lyrics. */
+  startTuning: () => void;
+  stopTuning: () => void;
+  /** Move the lines now, while a pin is dragged. Nothing is kept yet. */
+  setTiming: (timing: LyricsTiming) => void;
+  /** Keep the timing as it stands: in the song's file, or for a Spotify song here. */
+  commitTiming: () => void;
+  /** Back to the source's own timing, and keep that. */
+  resetTiming: () => void;
 }
 
 /**
@@ -56,19 +78,59 @@ function withOpening(lookup: LyricsLookup): LyricsLookup {
   return { ...lookup, result: { ...result, data: withIntro(withoutOutro(result.data)) } };
 }
 
+/**
+ * The lyrics as shown: the source's lines moved by the listener's timing, then
+ * given their opening — after, so the opening is measured to where the first
+ * line is now.
+ */
+function shown(raw: LyricsLookup, timing: LyricsTiming | null): LyricsLookup {
+  const { result } = raw;
+  if (result.status !== 'Synced' || !timing) return withOpening(raw);
+  return withOpening({ ...raw, result: { ...result, data: retime(result.data, timing) } });
+}
+
+/** The source's timed lines, when it timed them. */
+function linesOf(lookup: LyricsLookup | null): LyricLine[] | null {
+  return lookup?.result.status === 'Synced' ? lookup.result.data : null;
+}
+
+/**
+ * The timing kept for these lyrics: in the saved file for a song on this
+ * computer, which comes with the lookup; here, for a Spotify song.
+ */
+function keptTiming(trackId: string, lookup: LyricsLookup): LyricsTiming | null {
+  const lines = linesOf(lookup);
+  if (libraryIdOf(trackId) !== null) {
+    return lookup.timing && lines && fits(lookup.timing, lines) ? lookup.timing : null;
+  }
+  if (!lines || !lookup.matched) return null;
+  return timingFor(trackId, { via: lookup.matched.via, lines });
+}
+
 export const useLyricsStore = create<LyricsState>((set, get) => {
   async function fetchFor(track: TrackMetadata): Promise<void> {
     const ask = ++asked;
     const source = chosenFor(track.id);
-    set({ trackId: track.id, status: 'loading', lookup: null, error: null, source });
+    set({
+      trackId: track.id,
+      status: 'loading',
+      lookup: null,
+      raw: null,
+      timing: null,
+      tuning: false,
+      timingError: null,
+      error: null,
+      source,
+    });
     try {
       const lookup = await getLyrics(track, source);
       if (ask !== asked) return;
-      set(
-        lookup
-          ? { status: 'done', lookup: withOpening(lookup) }
-          : { status: 'error', error: 'Lyrics are only looked up in the app.' },
-      );
+      if (!lookup) {
+        set({ status: 'error', error: 'Lyrics are only looked up in the app.' });
+        return;
+      }
+      const timing = keptTiming(track.id, lookup);
+      set({ status: 'done', raw: lookup, timing, lookup: shown(lookup, timing) });
     } catch (err) {
       if (ask !== asked) return;
       set({ status: 'error', error: String(err) });
@@ -79,6 +141,10 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
     trackId: null,
     status: 'idle',
     lookup: null,
+    raw: null,
+    timing: null,
+    tuning: false,
+    timingError: null,
     error: null,
     source: null,
 
@@ -86,7 +152,15 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
       lastTrack = track;
       if (!track) {
         asked++;
-        set({ trackId: null, status: 'idle', lookup: null, error: null });
+        set({
+          trackId: null,
+          status: 'idle',
+          lookup: null,
+          raw: null,
+          timing: null,
+          tuning: false,
+          error: null,
+        });
         return;
       }
       const { trackId, status } = get();
@@ -106,6 +180,51 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
       if (!lastTrack) return;
       choose(lastTrack.id, source);
       void fetchFor(lastTrack);
+    },
+
+    startTuning() {
+      const lines = linesOf(get().raw);
+      if (!lines || lines.length === 0) return;
+      set({ tuning: true, timingError: null, timing: get().timing ?? defaultTiming(lines) });
+    },
+
+    stopTuning() {
+      set({ tuning: false });
+    },
+
+    setTiming(timing) {
+      const { raw } = get();
+      if (!raw) return;
+      set({ timing, lookup: shown(raw, timing) });
+    },
+
+    commitTiming() {
+      const { trackId, raw, timing } = get();
+      const lines = linesOf(raw);
+      if (!trackId || !raw || !lines) return;
+      // The source's own timing is kept as none, so nothing is left to apply.
+      const keep = timing && !isIdentity(timing, lines) ? timing : null;
+      const libraryId = libraryIdOf(trackId);
+      if (libraryId === null) {
+        if (raw.matched) keepTiming(trackId, { via: raw.matched.via, lines }, keep);
+        return;
+      }
+      setLibraryTrackLyricsTiming(libraryId, keep).then(
+        () => {
+          if (get().trackId === trackId) set({ timingError: null });
+        },
+        (err: unknown) => {
+          log('warn', 'lyrics', `could not keep the timing for ${trackId}`, err);
+          if (get().trackId === trackId) set({ timingError: String(err) });
+        },
+      );
+    },
+
+    resetTiming() {
+      const lines = linesOf(get().raw);
+      if (!lines) return;
+      get().setTiming(defaultTiming(lines));
+      get().commitTiming();
     },
   };
 });

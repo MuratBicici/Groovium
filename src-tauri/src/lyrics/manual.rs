@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::{
-    lrclib, netease, LyricsLookup, LyricsResult, Matched, NETEASE_ENABLED, PLAIN_GAP_MS,
+    lrclib, netease, LyricsLookup, LyricsResult, Matched, Pin, NETEASE_ENABLED, PLAIN_GAP_MS,
     SYNCED_GAP_MS,
 };
 
@@ -273,6 +273,21 @@ pub fn rank(candidates: &mut [Candidate], duration_ms: u32) {
     });
 }
 
+/// Whether a retiming can be kept for these lyrics: timed ones, the first and
+/// last line pinned, the pins in order of line and of moment. The frontend
+/// only ever sends such a one; this is what keeps a file from holding another.
+pub fn timing_fits(pins: &[Pin], result: &LyricsResult) -> bool {
+    let LyricsResult::Synced(lines) = result else {
+        return false;
+    };
+    let (Some(first), Some(last)) = (pins.first(), pins.last()) else {
+        return false;
+    };
+    first.line == 0
+        && last.line as usize + 1 == lines.len()
+        && pins.windows(2).all(|w| w[0].line < w[1].line && w[0].ms < w[1].ms)
+}
+
 /// What is written beside a song matched by hand.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -285,6 +300,10 @@ pub struct Saved {
     pub album_name: String,
     pub duration_ms: u32,
     pub result: LyricsResult,
+    /// The listener's retiming of `result`, when they have set one. Left out
+    /// of the file otherwise, so a file without it is still version 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<Vec<Pin>>,
 }
 
 /// The shape of `Saved` this build writes and reads.
@@ -302,6 +321,7 @@ impl Saved {
             album_name: c.album_name.clone(),
             duration_ms: c.duration_ms,
             result: picked.result.clone(),
+            timing: None,
         }
     }
 
@@ -321,6 +341,7 @@ impl Saved {
                 duration_s: f64::from(self.duration_ms) / 1000.0,
                 via,
             }),
+            timing: self.timing,
         }
     }
 }
@@ -462,5 +483,51 @@ mod tests {
         let lookup = back.into_lookup();
         assert_eq!(lookup.result, picked.result);
         assert_eq!(lookup.matched.map(|m| m.via), Some("saved:netease"));
+        assert_eq!(lookup.timing, None);
+    }
+
+    fn three_lines() -> LyricsResult {
+        LyricsResult::Synced(
+            [1_000, 5_000, 9_000]
+                .into_iter()
+                .map(|time_ms| LyricLine {
+                    time_ms,
+                    text: "a line".into(),
+                    ..Default::default()
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_retiming_is_kept_with_the_lyrics_and_an_older_file_has_none() {
+        let mut saved = Saved::from_picked(&Picked {
+            candidate: candidate("lrclib", 181_000, Kind::Synced, "lrclib:7"),
+            result: three_lines(),
+        });
+        let json = serde_json::to_string(&saved).unwrap();
+        // A file written before retiming existed says nothing about it.
+        assert!(!json.contains("timing"));
+        assert_eq!(serde_json::from_str::<Saved>(&json).unwrap().timing, None);
+
+        saved.timing = Some(vec![Pin { line: 0, ms: 2_500 }, Pin { line: 2, ms: 9_000 }]);
+        let back: Saved = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        assert_eq!(back.version, SAVED_VERSION);
+        assert_eq!(back.into_lookup().timing, saved.timing);
+    }
+
+    #[test]
+    fn only_a_timing_that_fits_the_lines_is_kept() {
+        let pin = |line, ms| Pin { line, ms };
+        let lines = three_lines();
+        assert!(timing_fits(&[pin(0, 2_000), pin(2, 9_000)], &lines));
+        assert!(timing_fits(&[pin(0, 2_000), pin(1, 4_000), pin(2, 9_000)], &lines));
+        // The last line not pinned, a line past the end, out of order.
+        assert!(!timing_fits(&[pin(0, 2_000), pin(1, 9_000)], &lines));
+        assert!(!timing_fits(&[pin(0, 2_000), pin(3, 9_000)], &lines));
+        assert!(!timing_fits(&[pin(0, 9_000), pin(2, 2_000)], &lines));
+        assert!(!timing_fits(&[], &lines));
+        // Words without timings have nothing to retime.
+        assert!(!timing_fits(&[pin(0, 0)], &LyricsResult::Plain("words".into())));
     }
 }

@@ -61,6 +61,12 @@ storage on your computer.
 Nothing is sent while lyrics are off. The lyrics found are kept in memory while
 the app is open and are not written anywhere.
 
+If you move a song's lyrics to fit it ("Timing"), where you put them is kept on
+your computer: for a Spotify song in the app's own browser storage, for a song
+on this computer in the file its lyrics are saved in. It is not sent anywhere.
+To draw the shape of a song on this computer behind the lines, Groovium reads
+its own copy of the file; that stays on your computer too.
+
 **Matching lyrics by hand.** A song on this computer is never looked up on its
 own: it has no lyrics until you search for them yourself and choose some.
 Whatever you type in that search is sent to `lrclib.net` and `music.163.com`,

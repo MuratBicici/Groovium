@@ -13,6 +13,7 @@ import { useLyricFrame } from './useLyricFrame';
 import type { Move } from './browse';
 import { useBrowse } from './useBrowse';
 import { useLyricsMatch } from './LyricsMatch';
+import { TimingStrip } from './TimingStrip';
 
 /**
  * Lyrics in the player: the compact view.
@@ -57,6 +58,9 @@ const NEXT_HEIGHT = 18;
  * one — the ş in a Turkish title, the q in an artist's name.
  */
 const META_HEIGHT = 18;
+
+/** The timing strip's panel in the compact view: strip, row and padding. */
+const STRIP_ROOM = 70;
 /** The line box inside it, in ems of the type. */
 const META_LEADING = 1.6;
 /**
@@ -111,6 +115,9 @@ export function CompactLyrics({
   const status = useLyricsStore((s) => s.status);
   const lookup = useLyricsStore((s) => s.lookup);
   const retry = useLyricsStore((s) => s.retry);
+  const tuning = useLyricsStore((s) => s.tuning);
+  const startTuning = useLyricsStore((s) => s.startTuning);
+  const stopTuning = useLyricsStore((s) => s.stopTuning);
   const match = useLyricsMatch();
 
   const [present, setPresent] = useState(show);
@@ -121,6 +128,7 @@ export function CompactLyrics({
   const titleText = useRef<HTMLSpanElement | null>(null);
   const artistText = useRef<HTMLSpanElement | null>(null);
   const expandButton = useRef<HTMLButtonElement | null>(null);
+  const timingButton = useRef<HTMLButtonElement | null>(null);
   const lineLayer = useRef<HTMLDivElement | null>(null);
   const activeEl = useRef<HTMLButtonElement | null>(null);
 
@@ -182,7 +190,9 @@ export function CompactLyrics({
   // went and then reappearing whole where they arrived.
   useLayoutEffect(() => {
     const layer = lineLayer.current;
-    const expander = expandButton.current;
+    const corner = [expandButton.current, timingButton.current].filter(
+      (el): el is HTMLButtonElement => !!el,
+    );
     const deck = trackRef.current;
     const deckWords = deck?.querySelector<HTMLElement>('[data-lyrics-hides]');
     const album = deck?.querySelector<HTMLElement>('[data-album]');
@@ -194,7 +204,7 @@ export function CompactLyrics({
       if (!show) setTimeout(() => setPresent(false), 0);
       return;
     }
-    const moving = [layer, expander, deckWords, album, ...pairs.map(([el]) => el)].filter(
+    const moving = [layer, ...corner, deckWords, album, ...pairs.map(([el]) => el)].filter(
       (el): el is HTMLElement => !!el,
     );
     for (const el of moving) for (const a of el.getAnimations()) a.cancel();
@@ -258,12 +268,14 @@ export function CompactLyrics({
     if (show) {
       // From nothing to whatever its own style says, which is dimmer than full
       // until it is pointed at.
-      expander?.animate([{ opacity: 0 }], {
-        duration: ARRIVE_MS,
-        delay: 200,
-        easing: ARRIVE_EASING,
-        fill: 'backwards',
-      });
+      for (const el of corner) {
+        el.animate([{ opacity: 0 }], {
+          duration: ARRIVE_MS,
+          delay: 200,
+          easing: ARRIVE_EASING,
+          fill: 'backwards',
+        });
+      }
       layer.animate(
         [
           { transform: 'translateY(10px)', opacity: 0 },
@@ -275,7 +287,7 @@ export function CompactLyrics({
       );
       return;
     }
-    expander?.animate([{ opacity: 0 }], { duration: 100, fill: 'forwards' });
+    for (const el of corner) el.animate([{ opacity: 0 }], { duration: 100, fill: 'forwards' });
     layer.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(8px)' }], {
       duration: LEAVE_MS,
       easing: LEAVE_EASING,
@@ -292,6 +304,18 @@ export function CompactLyrics({
     // Only on arriving and leaving; the geometry settling after is not either.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, geo !== null]);
+
+  // While the timing strip is open it takes the title's row and the room just
+  // over it. The sung line goes up to sit on it; the next one, which there is
+  // no room for without reaching up over the record, goes under its panel.
+  const stripTop = geo ? geo.metaTop + META_HEIGHT - STRIP_ROOM : 0;
+  const shownGeo =
+    geo && tuning && lines
+      ? (() => {
+          const activeTop = Math.min(geo.activeTop, stripTop - 2 - ACTIVE_HEIGHT);
+          return { ...geo, activeTop, nextTop: activeTop + ACTIVE_HEIGHT + 2 };
+        })()
+      : geo;
 
   if (!present) return null;
   return (
@@ -322,10 +346,38 @@ export function CompactLyrics({
               <path d="M7 2.5h2.5V5M9.5 2.5 6.5 5.5M5 9.5H2.5V7M2.5 9.5l3-3" />
             </svg>
           </button>
+          {lines && (
+            <button
+              ref={timingButton}
+              type="button"
+              aria-label={t('lyrics.timing.openLong')}
+              aria-pressed={tuning}
+              title={t('lyrics.timing.openLong')}
+              onClick={tuning ? stopTuning : startTuning}
+              className={`pointer-events-auto absolute top-1.5 right-9 flex h-5 w-5 items-center justify-center rounded-full transition-[opacity,color,background-color] hover:bg-shell-600 hover:text-cream-50 hover:opacity-100 focus-visible:opacity-100 ${
+                tuning ? 'text-brass-400 opacity-100' : 'text-cream-400 opacity-60'
+              }`}
+            >
+              {/* A strip with its marks: the lines along the song. */}
+              <svg
+                viewBox="0 0 12 12"
+                className="h-3 w-3"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              >
+                <path d="M1.5 6h9M3.5 3.5v5M6.5 4.5v3M8.5 3v6" />
+              </svg>
+            </button>
+          )}
 
           {/* Title left, artist right, small, just over the progress bar. */}
           <div
-            className="absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px]"
+            className={`absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px] ${
+              tuning && lines ? 'invisible' : ''
+            }`}
             style={{ top: geo.metaTop, height: META_HEIGHT, lineHeight: META_LEADING }}
           >
             <span ref={titleText} className="min-w-0 truncate font-medium text-cream-300">
@@ -348,14 +400,17 @@ export function CompactLyrics({
                     take the pointer. */}
                 <div
                   className="pointer-events-auto absolute inset-x-0"
-                  style={{ top: geo.activeTop, height: geo.nextTop + NEXT_HEIGHT - geo.activeTop }}
+                  style={{
+                    top: (shownGeo ?? geo).activeTop,
+                    height: (shownGeo ?? geo).nextTop + NEXT_HEIGHT - (shownGeo ?? geo).activeTop,
+                  }}
                 />
                 <SungLines
                   lines={lines}
                   view={browse.view}
                   sung={sung}
                   move={browse.move}
-                  geo={geo}
+                  geo={shownGeo ?? geo}
                   sungEl={activeEl}
                   onPick={(line) => {
                     browse.release();
@@ -375,6 +430,15 @@ export function CompactLyrics({
               </Quiet>
             )}
           </div>
+
+          {tuning && lines && (
+            <div
+              className="absolute inset-x-2 rounded-lg groove-surface p-1.5 ring-1 ring-[var(--color-edge)]"
+              style={{ top: stripTop }}
+            >
+              <TimingStrip compact />
+            </div>
+          )}
         </>
       )}
     </div>

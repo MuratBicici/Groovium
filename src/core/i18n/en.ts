@@ -100,6 +100,16 @@ export const en = {
   'lyrics.match.disclaimer':
     'Lyrics come from LRCLIB and NetEase. Groovium does not guarantee they are correct.',
   'lyrics.match.matched': 'Matched · {source}',
+  'lyrics.timing.open': 'Timing',
+  'lyrics.timing.openLong': 'Adjust the timing of the lyrics',
+  'lyrics.timing.start': 'Start',
+  'lyrics.timing.end': 'End',
+  'lyrics.timing.line': 'Line {line}',
+  'lyrics.timing.seconds': '{value} s',
+  'lyrics.timing.hint': 'Drag the block or its ends. Double-click a mark to pin it. Click anywhere else to go there.',
+  'lyrics.timing.reset': 'Reset',
+  'lyrics.timing.done': 'Done',
+  'lyrics.timing.failed': 'The timing could not be saved.',
 
   // Transport
   'transport.shuffle': 'Shuffle',

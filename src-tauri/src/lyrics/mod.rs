@@ -115,6 +115,19 @@ pub struct Matched {
 pub struct LyricsLookup {
     pub result: LyricsResult,
     pub matched: Option<Matched>,
+    /// The listener's own timing for these lines, for lyrics matched by hand
+    /// that they have retimed. The lines stay as the source gave them; the
+    /// frontend moves them, so the timing can be changed again or undone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timing: Option<Vec<Pin>>,
+}
+
+/// One line held at a new moment: `line` is its place among the lines, `ms`
+/// when it starts now. The frontend's `LyricsPin`, which says how they move.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pin {
+    pub line: u32,
+    pub ms: u32,
 }
 
 /// What one source found for the song.
@@ -139,6 +152,7 @@ impl From<Found> for LyricsLookup {
                 duration_s: f64::from(found.duration_ms) / 1000.0,
                 via: found.via,
             }),
+            timing: None,
         }
     }
 }
@@ -197,6 +211,7 @@ pub async fn get_lyrics(
         return Ok(LyricsLookup {
             result: LyricsResult::NotFound,
             matched: None,
+            timing: None,
         });
     }
     let from = Source::named(source.as_deref());
@@ -361,6 +376,7 @@ impl Waterfall {
                 LyricsLookup {
                     result: LyricsResult::NotFound,
                     matched: None,
+                    timing: None,
                 },
                 true,
             )),

@@ -2,6 +2,7 @@ import type { TrackMetadata } from '@/core/types';
 import { isTauri } from '@/core/utils/env';
 import type { LyricLine } from './activeLine';
 import type { LyricsSource } from './sourceChoice';
+import type { LyricsTiming } from './timing';
 
 /** What LRCLIB had for a song. The shape is Rust's `LyricsResult`. */
 export type LyricsResult =
@@ -74,6 +75,11 @@ export async function previewLyrics(key: string): Promise<LyricsResult> {
 export interface LyricsLookup {
   result: LyricsResult;
   matched: LyricsMatch | null;
+  /**
+   * The listener's retiming of these lines, for lyrics matched by hand that
+   * they retimed. The lines are as the source gave them; the store moves them.
+   */
+  timing?: LyricsTiming;
 }
 
 /**

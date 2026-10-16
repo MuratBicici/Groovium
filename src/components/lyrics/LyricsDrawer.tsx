@@ -16,6 +16,7 @@ import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
 import { useLyricsMatch } from './LyricsMatch';
+import { TimingStrip } from './TimingStrip';
 import { ARRIVE_EASING, SCENE_MS, turnIn } from './motion';
 
 /**
@@ -54,6 +55,9 @@ export function LyricsDrawer({
   const retry = useLyricsStore((s) => s.retry);
   const chosen = useLyricsStore((s) => s.source);
   const pickSource = useLyricsStore((s) => s.pickSource);
+  const tuning = useLyricsStore((s) => s.tuning);
+  const startTuning = useLyricsStore((s) => s.startTuning);
+  const stopTuning = useLyricsStore((s) => s.stopTuning);
   const match = useLyricsMatch();
   const left = side === 'left';
 
@@ -158,6 +162,20 @@ export function LyricsDrawer({
             <span className="ml-2 tracking-normal normal-case text-cream-400/70">
               {t('lyrics.match.matched', { source: SOURCES[saved] ?? saved })}
             </span>
+          )}
+          {lines && (
+            // Timed lyrics can be moved: the strip opens at the drawer's foot.
+            <button
+              type="button"
+              onClick={tuning ? stopTuning : startTuning}
+              aria-pressed={tuning}
+              title={t('lyrics.timing.openLong')}
+              className={`ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 tracking-normal normal-case transition-colors hover:bg-shell-600 hover:text-cream-50 ${
+                tuning ? 'text-brass-400' : 'text-cream-400/70'
+              }`}
+            >
+              {t('lyrics.timing.open')}
+            </button>
           )}
         </span>
         {/* On a dark pill: on the right the record's label is under these, and
@@ -306,6 +324,14 @@ export function LyricsDrawer({
           </ol>
         )}
       </div>
+
+      {/* The timing strip, on a surface of its own over the record's foot,
+          outside the record's ink so it reads in the palette's own. */}
+      {tuning && lines && (
+        <div className="absolute inset-x-2 bottom-2 z-10 rounded-lg groove-surface p-2 ring-1 ring-[var(--color-edge)]">
+          <TimingStrip />
+        </div>
+      )}
     </div>
   );
 }
