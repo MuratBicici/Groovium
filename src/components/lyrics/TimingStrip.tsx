@@ -407,15 +407,23 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
           compact ? 'h-8' : 'h-[52px]'
         }`}
       >
-        {shape && <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />}
+        {shape && (
+          <canvas
+            ref={canvas}
+            data-panel-fade
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          />
+        )}
         <div
           data-block
+          data-panel-fade
           className="absolute inset-y-0.5 cursor-grab border-y border-brass-500/60 bg-brass-500/10 active:cursor-grabbing"
           style={{ left: at(first.timeMs), width: across(last.timeMs - first.timeMs) }}
         />
         {labels.map((ms) => (
           <span
             key={ms}
+            data-panel-fade
             className="pointer-events-none absolute bottom-0 -translate-x-1/2 text-[9px] leading-none text-cream-400/70 tabular-nums"
             style={{ left: at(ms) }}
           >
@@ -458,7 +466,7 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
       </div>
 
       {/* The whole song, the lines on it and the stretch on show above. */}
-      <div className="flex items-center gap-2">
+      <div data-panel-fade className="flex items-center gap-2">
         <div
           ref={overview}
           onPointerDown={onOverviewDown}
@@ -490,7 +498,7 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
         <span className="shrink-0 text-label text-cream-400 tabular-nums">{viewName}</span>
       </div>
 
-      <div className="flex min-w-0 items-center gap-2 text-meta text-cream-400">
+      <div data-panel-fade className="flex min-w-0 items-center gap-2 text-meta text-cream-400">
         <span className="min-w-0 flex-1 truncate tabular-nums">
           {timingError ? (
             <span className="text-warn/90">{t('lyrics.timing.failed')}</span>
@@ -519,7 +527,11 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
           {t('lyrics.timing.done')}
         </button>
       </div>
-      {!compact && <p className="text-label text-cream-400/70">{t('lyrics.timing.hint')}</p>}
+      {!compact && (
+        <p data-panel-fade className="text-label text-cream-400/70">
+          {t('lyrics.timing.hint')}
+        </p>
+      )}
     </div>
   );
 }

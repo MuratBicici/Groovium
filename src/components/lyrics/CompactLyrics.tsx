@@ -13,6 +13,7 @@ import { useLyricFrame } from './useLyricFrame';
 import type { Move } from './browse';
 import { useBrowse } from './useBrowse';
 import { useLyricsMatch } from './LyricsMatch';
+import { TimingPanel } from './TimingPanel';
 import { TimingStrip } from './TimingStrip';
 
 /**
@@ -48,6 +49,8 @@ interface Geometry {
   roomTop: number;
   /** The foot of the progress bar and its times, below the stage. */
   progressBottom: number;
+  /** The progress bar's line itself, which the timing strip opens out of. */
+  progressLine: number;
   /** How wide the line being sung can be, inside its row's padding. */
   room: number;
 }
@@ -179,6 +182,8 @@ export function CompactLyrics({
         metaTop,
         roomTop,
         progressBottom: progress ? progress.bottom - base.top : metaTop + META_HEIGHT,
+        // The bar is the first thing in it, `h-4`, the line along its middle.
+        progressLine: progress ? progress.top - base.top + 8 : metaTop + META_HEIGHT,
         // The sung row's padding, `px-6`, either side.
         room: base.width - 48,
       });
@@ -317,19 +322,19 @@ export function CompactLyrics({
 
   // While the timing strip is open it sits over the progress bar — it goes
   // to a place in the song as well, with its own playhead and times — and
-  // over the title's row above it. The two lines sit on it where there is
-  // room for both without reaching up over the record; where there is not,
-  // the sung line does, and the next goes under the strip's panel.
+  // over the title's row above it. The sung line stays where it is: words
+  // that jump as a panel opens are words lost for a moment. It only goes up
+  // in a window too short for it to clear the panel. The next line, where
+  // there is no room left for it, fades where it is rather than moving.
   const stripTop = geo ? geo.progressBottom - STRIP_ROOM : 0;
   const shownGeo =
     geo && tuning && lines
       ? (() => {
-          const withNext = stripTop - 2 - NEXT_HEIGHT - 2 - ACTIVE_HEIGHT;
-          const activeTop =
-            withNext >= geo.roomTop ? Math.min(geo.activeTop, withNext) : stripTop - 2 - ACTIVE_HEIGHT;
+          const activeTop = Math.min(geo.activeTop, stripTop - 2 - ACTIVE_HEIGHT);
           return { ...geo, activeTop, nextTop: activeTop + ACTIVE_HEIGHT + 2 };
         })()
       : geo;
+  const hideNext = !!shownGeo && tuning && shownGeo.nextTop + NEXT_HEIGHT > stripTop - 2;
 
   if (!present) return null;
   return (
@@ -389,8 +394,8 @@ export function CompactLyrics({
 
           {/* Title left, artist right, small, just over the progress bar. */}
           <div
-            className={`absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px] ${
-              tuning && lines ? 'invisible' : ''
+            className={`absolute inset-x-0 flex items-center justify-between gap-3 px-4 text-[11px] transition-opacity duration-150 ${
+              tuning && lines ? 'opacity-0' : ''
             }`}
             style={{ top: geo.metaTop, height: META_HEIGHT, lineHeight: META_LEADING }}
           >
@@ -425,6 +430,7 @@ export function CompactLyrics({
                   sung={sung}
                   move={browse.move}
                   geo={shownGeo ?? geo}
+                  hideNext={hideNext}
                   sungEl={activeEl}
                   onPick={(line) => {
                     browse.release();
@@ -445,14 +451,14 @@ export function CompactLyrics({
             )}
           </div>
 
-          {tuning && lines && (
-            <div
-              className="pointer-events-auto absolute inset-x-2 rounded-lg groove-surface p-1.5 ring-1 ring-[var(--color-edge)]"
-              style={{ top: stripTop }}
-            >
-              <TimingStrip compact />
-            </div>
-          )}
+          <TimingPanel
+            show={tuning && !!lines}
+            foldAt={geo.progressLine - stripTop}
+            className="pointer-events-auto absolute inset-x-2 rounded-lg groove-surface p-1.5 ring-1 ring-[var(--color-edge)]"
+            style={{ top: stripTop }}
+          >
+            <TimingStrip compact />
+          </TimingPanel>
         </>
       )}
     </div>
@@ -482,6 +488,7 @@ function SungLines({
   sung,
   move,
   geo,
+  hideNext = false,
   sungEl,
   onPick,
 }: {
@@ -490,6 +497,8 @@ function SungLines({
   sung: number;
   move: Move;
   geo: Geometry;
+  /** Fade the next line out where it is: something else needs its row. */
+  hideNext?: boolean;
   sungEl: RefObject<HTMLButtonElement | null>;
   onPick: (line: LyricLine) => void;
 }) {
@@ -671,7 +680,11 @@ function SungLines({
           <button
             type="button"
             onClick={() => onPick(next)}
-            className="pointer-events-auto max-w-full truncate text-[12px] text-cream-400 transition-colors hover:text-cream-200"
+            tabIndex={hideNext ? -1 : undefined}
+            aria-hidden={hideNext || undefined}
+            className={`max-w-full truncate text-[12px] text-cream-400 transition-[color,opacity] duration-200 hover:text-cream-200 ${
+              hideNext ? 'pointer-events-none opacity-0' : 'pointer-events-auto opacity-100'
+            }`}
           >
             {isSilence(next.text) ? <Silence /> : next.text}
           </button>

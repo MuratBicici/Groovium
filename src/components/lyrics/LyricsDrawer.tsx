@@ -16,6 +16,7 @@ import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
 import { useLyricsMatch } from './LyricsMatch';
+import { TimingPanel } from './TimingPanel';
 import { TimingStrip } from './TimingStrip';
 import { ARRIVE_EASING, SCENE_MS, turnIn } from './motion';
 
@@ -327,11 +328,12 @@ export function LyricsDrawer({
 
       {/* The timing strip, on a surface of its own over the record's foot,
           outside the record's ink so it reads in the palette's own. */}
-      {tuning && lines && (
-        <div className="absolute inset-x-2 bottom-2 z-10 rounded-lg groove-surface p-2 ring-1 ring-[var(--color-edge)]">
-          <TimingStrip />
-        </div>
-      )}
+      <TimingPanel
+        show={tuning && !!lines}
+        className="absolute inset-x-2 bottom-2 z-10 rounded-lg groove-surface p-2 ring-1 ring-[var(--color-edge)]"
+      >
+        <TimingStrip />
+      </TimingPanel>
     </div>
   );
 }
