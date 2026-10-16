@@ -353,7 +353,9 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
     (LABEL_STEPS_MS[LABEL_STEPS_MS.length - 1] as number);
   const labels: number[] = [];
   for (let ms = Math.ceil(viewStart / labelStep) * labelStep; ms <= viewStart + viewSpan; ms += labelStep) {
-    labels.push(ms);
+    // Not right at either end, where half of it would be cut off.
+    const along = (ms - viewStart) / viewSpan;
+    if (along > 0.04 && along < 0.96) labels.push(ms);
   }
 
   // Dragging the overview moves the stretch along the song; a press beside

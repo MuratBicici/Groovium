@@ -44,6 +44,10 @@ interface Geometry {
   nextTop: number;
   /** The title and artist's row, at the foot of the stage. */
   metaTop: number;
+  /** The top of the room under the record, which nothing may reach over. */
+  roomTop: number;
+  /** The foot of the progress bar and its times, below the stage. */
+  progressBottom: number;
   /** How wide the line being sung can be, inside its row's padding. */
   room: number;
 }
@@ -59,7 +63,7 @@ const NEXT_HEIGHT = 18;
  */
 const META_HEIGHT = 18;
 
-/** The timing strip's panel in the compact view: strip, row and padding. */
+/** The timing strip's panel in the compact view: strip, overview, row and padding. */
 const STRIP_ROOM = 84;
 /** The line box inside it, in ems of the type. */
 const META_LEADING = 1.6;
@@ -103,11 +107,14 @@ export function CompactLyrics({
   show,
   stageRef,
   trackRef,
+  progressRef,
   onExpand,
 }: {
   show: boolean;
   stageRef: RefObject<HTMLDivElement | null>;
   trackRef: RefObject<HTMLDivElement | null>;
+  /** The progress bar under the stage, which the timing strip covers. */
+  progressRef: RefObject<HTMLDivElement | null>;
   onExpand: () => void;
 }) {
   const t = useT();
@@ -164,11 +171,14 @@ export function CompactLyrics({
       const activeTop = disc
         ? Math.max(roomTop, roomTop + (metaTop - roomTop - words) / 2 - airAbove)
         : roomTop;
+      const progress = progressRef.current?.getBoundingClientRect();
       setGeo({
         activeTop,
         activeHeight: ACTIVE_HEIGHT,
         nextTop: activeTop + ACTIVE_HEIGHT + 2,
         metaTop,
+        roomTop,
+        progressBottom: progress ? progress.bottom - base.top : metaTop + META_HEIGHT,
         // The sung row's padding, `px-6`, either side.
         room: base.width - 48,
       });
@@ -177,7 +187,7 @@ export function CompactLyrics({
     const watch = new ResizeObserver(measure);
     watch.observe(stage);
     return () => watch.disconnect();
-  }, [present, stageRef, trackRef]);
+  }, [present, stageRef, trackRef, progressRef]);
 
   // Coming and going: the title and the artist each glide between their place
   // on the deck and their corner at the foot of the stage, shrinking or
@@ -305,14 +315,18 @@ export function CompactLyrics({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show, geo !== null]);
 
-  // While the timing strip is open it takes the title's row and the room just
-  // over it. The sung line goes up to sit on it; the next one, which there is
-  // no room for without reaching up over the record, goes under its panel.
-  const stripTop = geo ? geo.metaTop + META_HEIGHT - STRIP_ROOM : 0;
+  // While the timing strip is open it sits over the progress bar — it goes
+  // to a place in the song as well, with its own playhead and times — and
+  // over the title's row above it. The two lines sit on it where there is
+  // room for both without reaching up over the record; where there is not,
+  // the sung line does, and the next goes under the strip's panel.
+  const stripTop = geo ? geo.progressBottom - STRIP_ROOM : 0;
   const shownGeo =
     geo && tuning && lines
       ? (() => {
-          const activeTop = Math.min(geo.activeTop, stripTop - 2 - ACTIVE_HEIGHT);
+          const withNext = stripTop - 2 - NEXT_HEIGHT - 2 - ACTIVE_HEIGHT;
+          const activeTop =
+            withNext >= geo.roomTop ? Math.min(geo.activeTop, withNext) : stripTop - 2 - ACTIVE_HEIGHT;
           return { ...geo, activeTop, nextTop: activeTop + ACTIVE_HEIGHT + 2 };
         })()
       : geo;
@@ -433,7 +447,7 @@ export function CompactLyrics({
 
           {tuning && lines && (
             <div
-              className="absolute inset-x-2 rounded-lg groove-surface p-1.5 ring-1 ring-[var(--color-edge)]"
+              className="pointer-events-auto absolute inset-x-2 rounded-lg groove-surface p-1.5 ring-1 ring-[var(--color-edge)]"
               style={{ top: stripTop }}
             >
               <TimingStrip compact />

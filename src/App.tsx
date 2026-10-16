@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DiskPlatter } from '@/components/player/DiskPlatter';
 import { TrackDisplay } from '@/components/player/TrackDisplay';
 import { ProgressBar } from '@/components/player/ProgressBar';
@@ -257,6 +257,8 @@ export default function App() {
       clearTimeout(reopen);
     };
   }, [swapping, chosenSide]);
+  /** The progress bar, which the compact lyrics' timing strip sits over. */
+  const progressRef = useRef<HTMLDivElement | null>(null);
   const { shellRef, stageRef, trackRef, bottomRef, drawerPresent } = useShellSize(
     compact,
     wide,
@@ -530,12 +532,16 @@ export default function App() {
             show={lyricsOnDeck}
             stageRef={stageRef}
             trackRef={trackRef}
+            progressRef={progressRef}
             onExpand={() => setLyricsLayout(expand(layout))}
           />
         </div>
 
-        {/* Always reachable, including while an overlay is open. */}
-        <ProgressBar />
+        {/* Always reachable, including while an overlay is open — except under
+            the lyrics' timing strip, which seeks as well and takes its place. */}
+        <div ref={progressRef}>
+          <ProgressBar />
+        </div>
         <TransportControls onStationNeedsSetup={() => setStationSetup(true)} />
 
         <div
