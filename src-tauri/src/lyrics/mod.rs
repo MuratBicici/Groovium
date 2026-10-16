@@ -1,7 +1,7 @@
 //! Time-synced lyrics for the song that is playing.
 //!
-//! A local song that has been matched by hand (`manual.rs`) answers from the
-//! lyrics saved for it, and nothing is asked. Otherwise several places are
+//! A local song is never looked for: it answers from the lyrics matched to it
+//! by hand (`manual.rs`), or with none. For any other song several places are
 //! asked in turn, and the first synced answer that is this song ends the
 //! search:
 //!
@@ -189,6 +189,15 @@ pub async fn get_lyrics(
     // time rather than cached, so a new match or a cleared one takes at once.
     if let Some(saved) = crate::library::saved_lyrics(&app, &track_id) {
         return Ok(saved);
+    }
+    // A song on this computer is never looked for: its tags are too often
+    // wrong or missing to search by. Until it is matched by hand it has none,
+    // and the lyrics view offers the match.
+    if track_id.starts_with("library:") {
+        return Ok(LyricsLookup {
+            result: LyricsResult::NotFound,
+            matched: None,
+        });
     }
     let from = Source::named(source.as_deref());
     let key = format!("{track_id}|{}", from.name());

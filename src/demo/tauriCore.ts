@@ -56,12 +56,38 @@ const FIRST_SETTINGS = {
  */
 const matched = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
 const found = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
+/** Songs whose match was cleared in this run, and so have none. */
+const cleared = new Set<string>();
+
+/**
+ * What a song is matched with: what this run matched it with, or else — the
+ * demo being there to show the lyrics off — its own made-up lyrics, as though
+ * matched from LRCLIB before the demo began.
+ */
+function matchOf(id: string): { candidate: LyricsCandidate; result: LyricsResult } | null {
+  const chosen = matched.get(id);
+  if (chosen || cleared.has(id)) return chosen ?? null;
+  const track = localTracks().find((t) => t.id === `library:${id}`);
+  if (!track) return null;
+  return {
+    candidate: {
+      key: `lrclib:demo-${id}`,
+      source: 'lrclib',
+      trackName: track.title,
+      artistName: track.artist,
+      albumName: track.album,
+      durationMs: track.duration,
+      kind: 'synced',
+    },
+    result: { status: 'Synced', data: lyricsFor(track.id, track.duration) },
+  };
+}
 
 /** The library panel's records, in the shape Rust keeps them in. */
 function libraryRecords() {
   return localTracks().map((track, n) => {
     const id = track.id.replace(/^library:/, '');
-    const match = matched.get(id)?.candidate;
+    const match = matchOf(id)?.candidate;
     return {
       id,
       storedFile: '',
@@ -132,7 +158,7 @@ function searchDemoLyrics(query: string): LyricsCandidate[] {
 }
 
 function savedLookup(trackId: string): LyricsLookup | null {
-  const match = matched.get(trackId.replace(/^library:/, ''));
+  const match = matchOf(trackId.replace(/^library:/, ''));
   if (!match) return null;
   const { candidate, result } = match;
   return {
@@ -174,18 +200,28 @@ const HANDLERS: Record<string, Handler> = {
 
   lastfm_has_api_key: () => false,
 
-  get_lyrics: (args) =>
-    savedLookup(String(args.trackId ?? '')) ??
-    demoLyrics(String(args.trackId ?? ''), typeof args.source === 'string' ? args.source : null),
+  // As in the app: a song from the library has what it was matched with, or
+  // nothing; it is never looked for.
+  get_lyrics: (args) => {
+    const trackId = String(args.trackId ?? '');
+    if (trackId.startsWith('library:')) {
+      return savedLookup(trackId) ?? { result: { status: 'NotFound' }, matched: null };
+    }
+    return demoLyrics(trackId, typeof args.source === 'string' ? args.source : null);
+  },
   search_lyrics: (args) => searchDemoLyrics(String(args.query ?? '')),
   lyrics_candidate: (args) => found.get(String(args.key ?? ''))?.result ?? { status: 'NotFound' },
   library_set_lyrics: (args) => {
     const pick = found.get(String(args.key ?? ''));
-    if (pick) matched.set(String(args.id ?? ''), pick);
+    if (pick) {
+      matched.set(String(args.id ?? ''), pick);
+      cleared.delete(String(args.id ?? ''));
+    }
     return recordOf(String(args.id ?? ''));
   },
   library_clear_lyrics: (args) => {
     matched.delete(String(args.id ?? ''));
+    cleared.add(String(args.id ?? ''));
     return recordOf(String(args.id ?? ''));
   },
 

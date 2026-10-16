@@ -126,7 +126,8 @@ export function CompactLyrics({
 
   const result = status === 'done' ? lookup?.result : undefined;
   const lines = result?.status === 'Synced' ? result.data : null;
-  // A song from the library with nothing found can be matched by hand.
+  // A song from the library is never looked for: with nothing matched to it
+  // yet, the listener is asked whether to match some.
   const canMatch =
     !!track && libraryIdOf(track.id) !== null && status === 'done' && savedFrom(lookup?.matched) === null;
   const { active: sung } = useLyricFrame(present ? lines : null, activeEl);
@@ -624,7 +625,7 @@ function QuietState({
   kind: string | undefined;
   hasTrack: boolean;
   onRetry: () => void;
-  /** Open the search for lyrics by hand, where nothing was found; absent where it cannot be done. */
+  /** Open the search for lyrics by hand, for a song from the library with none matched; absent otherwise. */
   onMatch: (() => void) | undefined;
 }) {
   const t = useT();
@@ -650,7 +651,9 @@ function QuietState({
   if (kind === 'Plain') return <p className="text-[13px] text-cream-400">{t('lyrics.plainOnly')}</p>;
   return (
     <>
-      <p className="text-[13px] text-cream-400">{t('lyrics.notFound')}</p>
+      <p className="whitespace-pre-line text-[13px] text-cream-400">
+        {onMatch ? t('lyrics.match.ask') : t('lyrics.notFound')}
+      </p>
       {onMatch && (
         <button
           type="button"

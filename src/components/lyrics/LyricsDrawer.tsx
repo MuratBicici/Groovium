@@ -81,14 +81,17 @@ export function LyricsDrawer({
   // Matched by hand, and from where: those lyrics are the song's now, and
   // changing them is the song's details' business, not a source switch's.
   const saved = status === 'done' ? savedFrom(lookup?.matched) : null;
-  // A song from the library whose lyrics were looked for can be matched by
-  // hand: when nothing was found, or when what was found is wrong.
-  const canMatch = !!track && libraryIdOf(track.id) !== null && status === 'done' && saved === null;
+  // A song from the library is never looked for: it has the lyrics it was
+  // matched with by hand, or none yet and the offer to match some.
+  const local = !!track && libraryIdOf(track.id) !== null;
+  const canMatch = local && status === 'done' && saved === null;
   // Where these came from: what answered, or — when the source asked by name
   // had nothing — that source. The other one is a press away. With neither
   // known, the usual order asked both and there is nowhere else to go.
   const source =
-    saved === null ? (lookup?.matched?.via.split(':')[0] ?? chosen ?? undefined) : undefined;
+    !local && saved === null
+      ? (lookup?.matched?.via.split(':')[0] ?? chosen ?? undefined)
+      : undefined;
   const other = source === 'netease' ? 'lrclib' : source ? 'netease' : null;
   const lines = result?.status === 'Synced' ? result.data : null;
 
@@ -103,6 +106,7 @@ export function LyricsDrawer({
   if (!track) quiet = t('lyrics.nothingPlaying');
   else if (status === 'loading' || status === 'idle') quiet = t('lyrics.loading');
   else if (status === 'error') quiet = t('lyrics.error');
+  else if (result?.status === 'NotFound' && canMatch) quiet = t('lyrics.match.ask');
   else if (result?.status === 'NotFound' && chosen)
     quiet = t('lyrics.notFoundIn', { source: SOURCES[chosen] ?? chosen });
   else if (result?.status === 'NotFound') quiet = t('lyrics.notFound');
@@ -148,17 +152,6 @@ export function LyricsDrawer({
                 {/* Two arrows passing: one source for the other. */}
                 <path d="M2 4h7.5M7.5 2 9.5 4 7.5 6M10 8H2.5M4.5 6 2.5 8l2 2" />
               </svg>
-            </button>
-          )}
-          {canMatch && track && (
-            <button
-              type="button"
-              onClick={() => match.open(track)}
-              title={t('lyrics.match.wrong')}
-              aria-label={t('lyrics.match.wrong')}
-              className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 tracking-normal normal-case text-cream-400/70 transition-colors hover:bg-shell-600 hover:text-cream-50"
-            >
-              {t('lyrics.match.short')}
             </button>
           )}
           {saved !== null && (
@@ -277,7 +270,7 @@ export function LyricsDrawer({
             style={{ [left ? 'left' : 'right']: TEXT_START + 8 }}
           >
             <p
-              className={`text-[16px] text-cream-200 ${
+              className={`text-[16px] whitespace-pre-line text-cream-200 ${
                 status === 'loading' ? 'animate-pulse' : ''
               }`}
             >

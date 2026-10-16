@@ -78,8 +78,7 @@ export const en = {
   // Matching a local song's lyrics by hand.
   'lyrics.match.title': 'Match lyrics',
   'lyrics.match.open': 'Match lyrics…',
-  'lyrics.match.short': 'Match',
-  'lyrics.match.wrong': 'Wrong lyrics? Find the right ones yourself',
+  'lyrics.match.ask': 'No lyrics are matched to this song yet.\nMatch some?',
   'lyrics.match.search': 'Search for the song',
   'lyrics.match.thisSong': 'This song: {duration}',
   'lyrics.match.searching': 'Looking in LRCLIB and NetEase…',

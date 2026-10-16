@@ -45,9 +45,9 @@ similar songs. Nothing is scrobbled and no Last.fm account is involved. See
 ### LRCLIB and NetEase — only while lyrics are on
 
 Lyrics are off until you press the lyrics button. While they are on, the title,
-artist, album and length of the song that is playing are sent to `lrclib.net`,
-an open lyrics database, to find its lyrics. If LRCLIB has no timed lyrics for
-it, the title (with things like "Remastered" or "feat." taken off) and the first
+artist, album and length of the Spotify song that is playing are sent to
+`lrclib.net`, an open lyrics database, to find its lyrics. If LRCLIB has no
+timed lyrics for it, the title (with things like "Remastered" or "feat." taken off) and the first
 artist are also sent to `music.163.com`, NetEase Cloud Music, a music service
 based in China. Groovium uses the same address NetEase's own web player uses; it
 is not a published API. See [LRCLIB](https://lrclib.net) and
@@ -61,10 +61,11 @@ storage on your computer.
 Nothing is sent while lyrics are off. The lyrics found are kept in memory while
 the app is open and are not written anywhere.
 
-**Matching lyrics by hand.** For a song on this computer you can search for its
-lyrics yourself. Whatever you type in that search is sent to `lrclib.net` and
-`music.163.com`, and so are requests for the lyrics of the results NetEase
-lists, to show which have timings. The lyrics you choose are saved on your
+**Matching lyrics by hand.** A song on this computer is never looked up on its
+own: it has no lyrics until you search for them yourself and choose some.
+Whatever you type in that search is sent to `lrclib.net` and `music.163.com`,
+and so are requests for the lyrics of the results NetEase lists, to show which
+have timings. The lyrics you choose are saved on your
 computer, in the library folder beside the song, and deleted when you clear the
 match or remove the song. Groovium does not check them and does not guarantee
 that they are correct.
