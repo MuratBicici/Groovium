@@ -27,6 +27,9 @@ if (import.meta.env.DEV) {
   void import('./core/spotify/store').then(({ useSpotifyPlaylistsStore }) => {
     (window as unknown as Record<string, unknown>).__grooviumPlaylists = useSpotifyPlaylistsStore;
   });
+  void import('./core/lyrics/store').then(({ useLyricsStore }) => {
+    (window as unknown as Record<string, unknown>).__grooviumLyrics = useLyricsStore;
+  });
 }
 
 async function start(root: HTMLElement): Promise<void> {

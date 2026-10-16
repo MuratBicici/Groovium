@@ -8,7 +8,8 @@
 //! off by `NETEASE_ENABLED` in the module above.
 //!
 //! What it sends is the cleaned title and the first artist, to a service in
-//! China. PRIVACY.md has to say so before this reaches a release.
+//! China — or, in a search by hand (`manual.rs`), whatever the listener typed.
+//! PRIVACY.md says both.
 
 use serde::Deserialize;
 
@@ -58,12 +59,16 @@ pub struct Album {
 }
 
 impl Song {
-    fn artists(&self) -> String {
+    pub fn artists(&self) -> String {
         self.ar
             .iter()
             .map(|a| a.name.as_str())
             .collect::<Vec<_>>()
             .join(", ")
+    }
+
+    pub fn album(&self) -> String {
+        self.al.as_ref().map(|a| a.name.clone()).unwrap_or_default()
     }
 }
 
@@ -85,47 +90,58 @@ struct LyricBody {
 
 pub async fn find(q: &Query) -> Result<Option<Found>, String> {
     let artist = primary_artist(&q.artist);
-    let terms = format!("{} {artist}", q.clean_title);
-    let url = reqwest::Url::parse_with_params(
-        SEARCH,
-        &[
-            ("s", terms.as_str()),
-            ("type", "1"),
-            ("limit", "10"),
-            ("offset", "0"),
-        ],
-    )
-    .map_err(|e| format!("Could not build the NetEase address: {e}"))?;
-    let Some(body) = fetch(url, Some(REFERER)).await? else {
-        return Ok(None);
-    };
-    let answer: SearchAnswer =
-        serde_json::from_str(&body).map_err(|e| format!("Unreadable NetEase search: {e}"))?;
-    let songs = answer.result.map(|r| r.songs).unwrap_or_default();
+    let songs = search_text(&format!("{} {artist}", q.clean_title)).await?;
     let Some(song) = choose(&songs, q) else {
         return Ok(None);
     };
-
-    let url = reqwest::Url::parse_with_params(
-        LYRIC,
-        &[("os", "pc"), ("id", &song.id.to_string()), ("lv", "-1")],
-    )
-    .map_err(|e| format!("Could not build the NetEase address: {e}"))?;
-    let Some(body) = fetch(url, Some(REFERER)).await? else {
+    let Some(lyric) = lyrics_answer(song.id).await? else {
         return Ok(None);
     };
-    let lyric: LyricAnswer =
-        serde_json::from_str(&body).map_err(|e| format!("Unreadable NetEase lyrics: {e}"))?;
 
     let result = result_of(&lyric, song.dt.abs_diff(q.duration_ms) <= SYNCED_GAP_MS);
     Ok(Some(Found {
         result,
         track_name: song.name.clone(),
         artist_name: song.artists(),
-        album_name: song.al.as_ref().map(|a| a.name.clone()).unwrap_or_default(),
+        album_name: song.album(),
         duration_ms: song.dt,
         via: "netease",
     }))
+}
+
+/// The first ten songs NetEase lists for `terms`. Used as they are for a match
+/// made by hand, where the listener chooses among them.
+pub async fn search_text(terms: &str) -> Result<Vec<Song>, String> {
+    let url = reqwest::Url::parse_with_params(
+        SEARCH,
+        &[("s", terms), ("type", "1"), ("limit", "10"), ("offset", "0")],
+    )
+    .map_err(|e| format!("Could not build the NetEase address: {e}"))?;
+    let Some(body) = fetch(url, Some(REFERER)).await? else {
+        return Ok(Vec::new());
+    };
+    let answer: SearchAnswer =
+        serde_json::from_str(&body).map_err(|e| format!("Unreadable NetEase search: {e}"))?;
+    Ok(answer.result.map(|r| r.songs).unwrap_or_default())
+}
+
+async fn lyrics_answer(id: u64) -> Result<Option<LyricAnswer>, String> {
+    let url = reqwest::Url::parse_with_params(LYRIC, &[("os", "pc"), ("id", &id.to_string()), ("lv", "-1")])
+        .map_err(|e| format!("Could not build the NetEase address: {e}"))?;
+    let Some(body) = fetch(url, Some(REFERER)).await? else {
+        return Ok(None);
+    };
+    serde_json::from_str(&body)
+        .map(Some)
+        .map_err(|e| format!("Unreadable NetEase lyrics: {e}"))
+}
+
+/// A song's lyrics as they are, for a match made by hand: timings kept
+/// whatever its length, since the listener chose it seeing that.
+pub async fn chosen_lyrics(id: u64) -> Result<LyricsResult, String> {
+    Ok(lyrics_answer(id)
+        .await?
+        .map_or(LyricsResult::NotFound, |answer| result_of(&answer, true)))
 }
 
 /// The search result to use: this song, nearest in length.

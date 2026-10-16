@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { useLyricsStore } from '@/core/lyrics/store';
+import { savedFrom } from '@/core/lyrics/api';
+import { libraryIdOf } from '@/core/library';
 import { seekLyrics } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { isSilence, type LyricLine } from '@/core/lyrics/activeLine';
@@ -10,6 +12,7 @@ import { ARRIVE_EASING, ARRIVE_MS, LEAVE_EASING, LEAVE_MS } from './motion';
 import { useLyricFrame } from './useLyricFrame';
 import type { Move } from './browse';
 import { useBrowse } from './useBrowse';
+import { useLyricsMatch } from './LyricsMatch';
 
 /**
  * Lyrics in the player: the compact view.
@@ -108,6 +111,7 @@ export function CompactLyrics({
   const status = useLyricsStore((s) => s.status);
   const lookup = useLyricsStore((s) => s.lookup);
   const retry = useLyricsStore((s) => s.retry);
+  const match = useLyricsMatch();
 
   const [present, setPresent] = useState(show);
   if (show && !present) setPresent(true);
@@ -122,6 +126,9 @@ export function CompactLyrics({
 
   const result = status === 'done' ? lookup?.result : undefined;
   const lines = result?.status === 'Synced' ? result.data : null;
+  // A song from the library with nothing found can be matched by hand.
+  const canMatch =
+    !!track && libraryIdOf(track.id) !== null && status === 'done' && savedFrom(lookup?.matched) === null;
   const { active: sung } = useLyricFrame(present ? lines : null, activeEl);
   const browse = useBrowse(lines?.length ?? 0, sung, track?.id);
 
@@ -362,6 +369,7 @@ export function CompactLyrics({
                   kind={result?.status}
                   hasTrack={track !== null}
                   onRetry={retry}
+                  onMatch={canMatch && track ? () => match.open(track) : undefined}
                 />
               </Quiet>
             )}
@@ -610,11 +618,14 @@ function QuietState({
   kind,
   hasTrack,
   onRetry,
+  onMatch,
 }: {
   status: string;
   kind: string | undefined;
   hasTrack: boolean;
   onRetry: () => void;
+  /** Open the search for lyrics by hand, where nothing was found; absent where it cannot be done. */
+  onMatch: (() => void) | undefined;
 }) {
   const t = useT();
   if (!hasTrack) return <p className="text-[13px] text-cream-400">{t('lyrics.nothingPlaying')}</p>;
@@ -637,7 +648,20 @@ function QuietState({
   }
   if (kind === 'Instrumental') return <p className="text-[14px] text-cream-300">{t('lyrics.instrumental')}</p>;
   if (kind === 'Plain') return <p className="text-[13px] text-cream-400">{t('lyrics.plainOnly')}</p>;
-  return <p className="text-[13px] text-cream-400">{t('lyrics.notFound')}</p>;
+  return (
+    <>
+      <p className="text-[13px] text-cream-400">{t('lyrics.notFound')}</p>
+      {onMatch && (
+        <button
+          type="button"
+          onClick={onMatch}
+          className="pointer-events-auto mt-2 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
+        >
+          {t('lyrics.match.open')}
+        </button>
+      )}
+    </>
+  );
 }
 
 /**

@@ -15,6 +15,9 @@ const API_ROOT: &str = "https://lrclib.net/api";
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Record {
+    /// LRCLIB's own number for the record: what a match made by hand points at.
+    #[serde(default, deserialize_with = "or_default")]
+    pub id: u64,
     #[serde(default, deserialize_with = "or_default")]
     pub track_name: String,
     #[serde(default, deserialize_with = "or_default")]
@@ -132,6 +135,22 @@ pub fn add_syllables(lines: Vec<LyricLine>, records: &[Record], q: &Query) -> Ve
         .unwrap_or(lines)
 }
 
+/// A search on whatever somebody typed, for a match made by hand: every record
+/// that comes back, with nothing filtered out — the listener chooses.
+pub async fn search_text(query: &str) -> Result<Vec<Record>, String> {
+    run_search(&[("q", query)]).await
+}
+
+/// One record by LRCLIB's own number, for a match made by hand.
+pub async fn by_id(id: u64) -> Result<Option<Record>, String> {
+    let Some(body) = fetch(endpoint(&format!("get/{id}"), &[])?, None).await? else {
+        return Ok(None);
+    };
+    serde_json::from_str(&body)
+        .map(Some)
+        .map_err(|e| format!("Unreadable LRCLIB answer: {e}"))
+}
+
 async fn run_search(params: &[(&str, &str)]) -> Result<Vec<Record>, String> {
     let Some(body) = fetch(endpoint("search", params)?, None).await? else {
         return Ok(Vec::new());
@@ -156,6 +175,31 @@ fn found(record: &Record, q: &Query, via: &'static str) -> Found {
         album_name: record.album_name.clone(),
         duration_ms: record.duration_ms(),
         via,
+    }
+}
+
+/// What a record holds, taken as it is: for a match made by hand.
+///
+/// Unlike `result_of`, timings are kept however far the record's length is
+/// from the song's. The listener saw the record and the difference before
+/// choosing it; turning their choice into words to read would be overruling it.
+pub fn as_chosen(record: &Record) -> LyricsResult {
+    if record.instrumental {
+        return LyricsResult::Instrumental;
+    }
+    if let Some(synced) = record
+        .synced_lyrics
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        let lines = parse_lrc(synced);
+        if !lines.is_empty() {
+            return LyricsResult::Synced(lines);
+        }
+    }
+    match record.plain_lyrics.as_deref().map(str::trim) {
+        Some(plain) if !plain.is_empty() => LyricsResult::Plain(without_translations(plain)),
+        _ => LyricsResult::NotFound,
     }
 }
 
@@ -201,6 +245,7 @@ mod tests {
 
     fn record(title: &str, artist: &str, duration: f64, synced: bool) -> Record {
         Record {
+            id: 0,
             track_name: title.into(),
             artist_name: artist.into(),
             album_name: String::new(),
@@ -354,6 +399,18 @@ mod tests {
     }
 
     #[test]
+    fn a_record_chosen_by_hand_keeps_its_timings_whatever_its_length() {
+        // Twenty seconds off: the automatic search would show only the words.
+        let r = record("Song", "Band", 200.0, true);
+        assert!(matches!(result_of(&r, 180_000), LyricsResult::Plain(_)));
+        assert!(matches!(as_chosen(&r), LyricsResult::Synced(_)));
+        let mut words = record("Song", "Band", 200.0, false);
+        assert_eq!(as_chosen(&words), LyricsResult::Plain("words".into()));
+        words.instrumental = true;
+        assert_eq!(as_chosen(&words), LyricsResult::Instrumental);
+    }
+
+    #[test]
     fn maps_a_record_to_what_it_holds() {
         let mut r = record("Song", "Band", 180.0, true);
         r.synced_lyrics = Some("no stamps here".into());
@@ -370,6 +427,7 @@ mod tests {
             "instrumental":false,"plainLyrics":"x","syncedLyrics":null}"#;
         let r: Record = serde_json::from_str(body).unwrap();
         assert_eq!(r.duration_ms(), 181_500);
+        assert_eq!(r.id, 1, "the number a match by hand points at");
         assert!(!r.has_synced());
 
         // Nulls where values usually are, as LRCLIB sends for some records.

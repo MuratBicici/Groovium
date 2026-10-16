@@ -16,6 +16,7 @@ import { CoverCrop, SheetPresence, SongDetailsSheet } from '@/components/spotify
 import { SearchLayer, opensSearch } from '@/components/spotify/SearchLayer';
 import { SearchButton } from '@/components/spotify/SearchParts';
 import { LocalSearch } from './LocalSearch';
+import { useLyricsMatch } from '@/components/lyrics/LyricsMatch';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
 import { useCarriedTrack } from '@/components/player/DiscHold';
@@ -91,6 +92,8 @@ export function GrooviumDrawer({
   const [songCoverNotice, setSongCoverNotice] = useState<string | null>(null);
   const renameTrack = usePlayerStore((s) => s.renameTrack);
   const setTrackCover = usePlayerStore((s) => s.setTrackCover);
+  const unmatchLyrics = usePlayerStore((s) => s.unmatchLyrics);
+  const lyricsMatch = useLyricsMatch();
 
   const closeSong = useCallback(() => {
     setEditingSong(null);
@@ -110,8 +113,10 @@ export function GrooviumDrawer({
 
   // Escape takes the topmost thing away: the crop, then the sheet. Captured
   // and kept, as every sheet here does, so it closes this and not the drawer.
+  // Not while the lyrics search is open over it: that is on top, and Escape is
+  // its first.
   useEffect(() => {
-    if (!editingSong) return;
+    if (!editingSong || lyricsMatch.active) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopImmediatePropagation();
@@ -120,7 +125,7 @@ export function GrooviumDrawer({
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [editingSong, songCover, closeSong]);
+  }, [editingSong, songCover, closeSong, lyricsMatch.active]);
 
   /** The playlist opened over the shelves, if one is, and where its crate was. */
   const [open, setOpen] = useState<{ id: string; origin: Origin } | null>(null);
@@ -286,6 +291,11 @@ export function GrooviumDrawer({
             coverUrl={song.coverArtUrl}
             {...(isTauri() && { onCover: chooseSongCover })}
             coverProblem={songCoverNotice}
+            {...(isTauri() && {
+              lyrics: song.lyrics ?? null,
+              onMatchLyrics: () => lyricsMatch.open(libraryTrackToMetadata(song)),
+              onClearLyrics: () => void unmatchLyrics(song.id),
+            })}
             onClose={closeSong}
             onSave={(names) => {
               closeSong();

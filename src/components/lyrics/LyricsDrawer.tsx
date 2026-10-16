@@ -4,6 +4,8 @@ import type { DrawerSide } from '@/core/settings';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { useLyricsStore } from '@/core/lyrics/store';
+import { savedFrom } from '@/core/lyrics/api';
+import { libraryIdOf } from '@/core/library';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { DiscLight } from '@/components/player/DiscLight';
@@ -13,6 +15,7 @@ import { DiscOrbit } from './DiscOrbit';
 import { LyricWheel, turnTransition } from './LyricWheel';
 import { useBrowse } from './useBrowse';
 import { useLyricFrame } from './useLyricFrame';
+import { useLyricsMatch } from './LyricsMatch';
 import { ARRIVE_EASING, SCENE_MS, turnIn } from './motion';
 
 /**
@@ -51,6 +54,7 @@ export function LyricsDrawer({
   const retry = useLyricsStore((s) => s.retry);
   const chosen = useLyricsStore((s) => s.source);
   const pickSource = useLyricsStore((s) => s.pickSource);
+  const match = useLyricsMatch();
   const left = side === 'left';
 
   const record = useRef<HTMLDivElement | null>(null);
@@ -74,10 +78,17 @@ export function LyricsDrawer({
   }, [track?.id]);
 
   const result = status === 'done' ? lookup?.result : undefined;
+  // Matched by hand, and from where: those lyrics are the song's now, and
+  // changing them is the song's details' business, not a source switch's.
+  const saved = status === 'done' ? savedFrom(lookup?.matched) : null;
+  // A song from the library whose lyrics were looked for can be matched by
+  // hand: when nothing was found, or when what was found is wrong.
+  const canMatch = !!track && libraryIdOf(track.id) !== null && status === 'done' && saved === null;
   // Where these came from: what answered, or — when the source asked by name
   // had nothing — that source. The other one is a press away. With neither
   // known, the usual order asked both and there is nowhere else to go.
-  const source = lookup?.matched?.via.split(':')[0] ?? chosen ?? undefined;
+  const source =
+    saved === null ? (lookup?.matched?.via.split(':')[0] ?? chosen ?? undefined) : undefined;
   const other = source === 'netease' ? 'lrclib' : source ? 'netease' : null;
   const lines = result?.status === 'Synced' ? result.data : null;
 
@@ -138,6 +149,22 @@ export function LyricsDrawer({
                 <path d="M2 4h7.5M7.5 2 9.5 4 7.5 6M10 8H2.5M4.5 6 2.5 8l2 2" />
               </svg>
             </button>
+          )}
+          {canMatch && track && (
+            <button
+              type="button"
+              onClick={() => match.open(track)}
+              title={t('lyrics.match.wrong')}
+              aria-label={t('lyrics.match.wrong')}
+              className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 tracking-normal normal-case text-cream-400/70 transition-colors hover:bg-shell-600 hover:text-cream-50"
+            >
+              {t('lyrics.match.short')}
+            </button>
+          )}
+          {saved !== null && (
+            <span className="ml-2 tracking-normal normal-case text-cream-400/70">
+              {t('lyrics.match.matched', { source: SOURCES[saved] ?? saved })}
+            </span>
           )}
         </span>
         {/* On a dark pill: on the right the record's label is under these, and
@@ -263,6 +290,15 @@ export function LyricsDrawer({
                 className="mt-2 text-label tracking-wide text-brass-400 uppercase transition-colors hover:text-brass-300"
               >
                 {t('lyrics.retry')}
+              </button>
+            )}
+            {canMatch && track && result?.status === 'NotFound' && (
+              <button
+                type="button"
+                onClick={() => match.open(track)}
+                className="mt-3 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
+              >
+                {t('lyrics.match.open')}
               </button>
             )}
           </div>

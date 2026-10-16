@@ -47,6 +47,14 @@
   --color-edge: #3d2f24;
 
   /*
+   * A length that fits and one that is off, in the lyrics search — Tailwind's
+   * emerald-300 and amber-300. Pale on purpose for a dark ground; on a light
+   * one they all but vanish, so `[data-ground='light']` below darkens them.
+   */
+  --color-fit: oklch(84.5% 0.143 164.978);
+  --color-warn: oklch(87.9% 0.169 91.605);
+
+  /*
    * The light falling on the record, as raw channels so the disc can mix its
    * own alphas. A theme changes the room the deck is sitting in, and a warm
    * cream reflection on a cold blue shell reads as a sticker rather than a
@@ -361,6 +369,9 @@ body {
 :root[data-ground='light'] {
   --lift: 0.55;
   --shade: 0.28;
+  /* emerald-700 and amber-700. */
+  --color-fit: oklch(50.8% 0.118 165.612);
+  --color-warn: oklch(55.5% 0.163 48.998);
 }
 
 /*

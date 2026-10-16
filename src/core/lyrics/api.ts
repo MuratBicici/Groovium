@@ -16,8 +16,59 @@ export interface LyricsMatch {
   artistName: string;
   albumName: string;
   durationS: number;
-  /** Which source and step: `lrclib:get`, `lrclib:get-clean`, `lrclib:search` or `netease`. */
+  /**
+   * Which source and step: `lrclib:get`, `lrclib:get-clean`, `lrclib:search`
+   * or `netease`; `saved:lrclib` or `saved:netease` for lyrics matched by hand.
+   */
   via: string;
+}
+
+/** Whether a lookup's lyrics were matched by hand, and from which source if so. */
+export function savedFrom(match: LyricsMatch | null | undefined): string | null {
+  if (!match?.via.startsWith('saved')) return null;
+  return match.via.split(':')[1] ?? '';
+}
+
+/** A lyrics source by the name people know it by. */
+export function sourceName(source: string): string {
+  if (source === 'lrclib') return 'LRCLIB';
+  if (source === 'netease') return 'NetEase';
+  return source;
+}
+
+/** One record a search by hand found. The shape is Rust's `Candidate`. */
+export interface LyricsCandidate {
+  /** `lrclib:<id>` or `netease:<id>`. */
+  key: string;
+  source: 'lrclib' | 'netease';
+  trackName: string;
+  artistName: string;
+  albumName: string;
+  durationMs: number;
+  kind: 'synced' | 'plain' | 'instrumental';
+}
+
+/**
+ * Look for lyrics by hand in every source, the likeliest first for a song
+ * `durationMs` long. Outside the app, a development build makes some up.
+ */
+export async function searchLyrics(query: string, durationMs: number): Promise<LyricsCandidate[]> {
+  if (!isTauri()) {
+    if (import.meta.env.DEV) return (await import('./fixture')).candidatesFor(query, durationMs);
+    return [];
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<LyricsCandidate[]>('search_lyrics', { query, durationMs: Math.round(durationMs) });
+}
+
+/** What one candidate from `searchLyrics` holds, to read before choosing it. */
+export async function previewLyrics(key: string): Promise<LyricsResult> {
+  if (!isTauri()) {
+    if (import.meta.env.DEV) return (await import('./fixture')).previewFor(key);
+    return { status: 'NotFound' };
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<LyricsResult>('lyrics_candidate', { key });
 }
 
 export interface LyricsLookup {

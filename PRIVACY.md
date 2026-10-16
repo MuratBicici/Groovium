@@ -53,8 +53,21 @@ based in China. Groovium uses the same address NetEase's own web player uses; it
 is not a published API. See [LRCLIB](https://lrclib.net) and
 [NetEase Cloud Music](https://music.163.com).
 
+If you switch a song to the other source ("Get them from … instead"), only that
+source is asked for it from then on — NetEase too, even when LRCLIB has timed
+lyrics. Which source you chose for which song is kept in the app's own browser
+storage on your computer.
+
 Nothing is sent while lyrics are off. The lyrics found are kept in memory while
 the app is open and are not written anywhere.
+
+**Matching lyrics by hand.** For a song on this computer you can search for its
+lyrics yourself. Whatever you type in that search is sent to `lrclib.net` and
+`music.163.com`, and so are requests for the lyrics of the results NetEase
+lists, to show which have timings. The lyrics you choose are saved on your
+computer, in the library folder beside the song, and deleted when you clear the
+match or remove the song. Groovium does not check them and does not guarantee
+that they are correct.
 
 ## What stays on your computer
 

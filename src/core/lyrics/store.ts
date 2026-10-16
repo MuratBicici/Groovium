@@ -28,6 +28,11 @@ interface LyricsState {
   want: (track: TrackMetadata | null) => void;
   /** Ask again for the same track, after a failure. */
   retry: () => void;
+  /**
+   * Ask again for this track if it is the one showing: after its lyrics were
+   * matched by hand or the match was cleared, which `want` would not notice.
+   */
+  reload: (trackId: string) => void;
   /** Take this track's lyrics from one source from now on, and ask it now. */
   pickSource: (source: LyricsSource) => void;
 }
@@ -91,6 +96,10 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
 
     retry() {
       if (lastTrack) void fetchFor(lastTrack);
+    },
+
+    reload(trackId) {
+      if (lastTrack?.id === trackId && get().status !== 'idle') void fetchFor(lastTrack);
     },
 
     pickSource(source) {

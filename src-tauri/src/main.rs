@@ -62,6 +62,7 @@ fn main() {
         .manage(shell::Placekeeper::default())
         .manage(visualizer::Running::default())
         .manage(lyrics::LyricsCache::default())
+        .manage(lyrics::manual::Candidates::default())
         .setup(|app| {
             // Before anything is shown. The window has a frame of its own that
             // this app draws over, and the corners are where that shows.
@@ -110,6 +111,8 @@ fn main() {
             library::library_remove,
             library::library_update_track,
             library::library_set_cover,
+            library::library_set_lyrics,
+            library::library_clear_lyrics,
             library::library_store_dir,
             playlists::playlists_load,
             playlists::playlist_create,
@@ -146,6 +149,8 @@ fn main() {
             lastfm::lastfm_similar_tracks,
             lastfm::lastfm_artist_candidates,
             lyrics::get_lyrics,
+            lyrics::manual::search_lyrics,
+            lyrics::manual::lyrics_candidate,
             audio::audio_backend_available,
             shell::set_window_box,
             shell::set_click_area,

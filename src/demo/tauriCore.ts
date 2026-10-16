@@ -2,7 +2,8 @@ import { core } from '@tauri-apps/api';
 import type { InvokeArgs, InvokeOptions } from '@tauri-apps/api/core';
 import { APP_VERSION } from '@/core/version';
 import { localTracks } from './catalogue';
-import { demoLyrics } from './lyrics';
+import { demoLyrics, lyricsFor } from './lyrics';
+import type { LyricsCandidate, LyricsLookup, LyricsResult } from '@/core/lyrics/api';
 import { DEMO_USER } from './spotifyApi';
 
 /**
@@ -49,20 +50,105 @@ const FIRST_SETTINGS = {
   lastSeenVersion: APP_VERSION,
 };
 
+/**
+ * Lyrics matched by hand in the demo, by library id, and the records its
+ * searches found. Kept for the run only, like everything else the demo makes up.
+ */
+const matched = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
+const found = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
+
 /** The library panel's records, in the shape Rust keeps them in. */
 function libraryRecords() {
-  return localTracks().map((track, n) => ({
-    id: track.id.replace(/^library:/, ''),
-    storedFile: '',
-    sourcePath: '',
-    title: track.title,
-    artist: track.artist,
-    album: track.album,
-    durationMs: track.duration,
-    hasCoverArt: true,
-    coverArtUrl: track.coverArtUrl,
-    addedAt: Date.now() - n * 86_400_000,
-  }));
+  return localTracks().map((track, n) => {
+    const id = track.id.replace(/^library:/, '');
+    const match = matched.get(id)?.candidate;
+    return {
+      id,
+      storedFile: '',
+      sourcePath: '',
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      durationMs: track.duration,
+      hasCoverArt: true,
+      coverArtUrl: track.coverArtUrl,
+      ...(match && {
+        lyrics: {
+          file: `${id}.lyrics-demo.json`,
+          source: match.source,
+          trackName: match.trackName,
+          artistName: match.artistName,
+          durationMs: match.durationMs,
+        },
+      }),
+      addedAt: Date.now() - n * 86_400_000,
+    };
+  });
+}
+
+/**
+ * A search by hand in the demo: every made-up song whose title or artist has a
+ * word of the query in it, each as a few records of the kind the real sources
+ * hold — timed and close, timed from another take, words alone.
+ */
+function searchDemoLyrics(query: string): LyricsCandidate[] {
+  const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+  if (words.length === 0) return [];
+  const songs = localTracks().filter((track) =>
+    words.some((w) => `${track.title} ${track.artist}`.toLowerCase().includes(w)),
+  );
+  const list: LyricsCandidate[] = [];
+  songs.slice(0, 2).forEach((song, n) => {
+    const lines = lyricsFor(song.id, song.duration);
+    const record = (
+      number: number,
+      source: LyricsCandidate['source'],
+      offset: number,
+      kind: LyricsCandidate['kind'],
+      live = false,
+    ) => {
+      const candidate: LyricsCandidate = {
+        key: `${source}:${7000 + n * 10 + number}`,
+        source,
+        trackName: live ? `${song.title} (Live)` : song.title,
+        artistName: song.artist,
+        albumName: live ? 'Live at the Attic' : song.album,
+        durationMs: song.duration + offset,
+        kind,
+      };
+      const result: LyricsResult =
+        kind === 'plain'
+          ? { status: 'Plain', data: lines.map((l) => l.text).filter(Boolean).join('\n') }
+          : { status: 'Synced', data: lines };
+      found.set(candidate.key, { candidate, result });
+      list.push(candidate);
+    };
+    record(1, 'lrclib', -1_000, 'synced');
+    record(2, 'netease', 0, 'synced');
+    record(3, 'lrclib', 0, 'plain');
+    record(4, 'lrclib', 41_000, 'synced', true);
+  });
+  return list;
+}
+
+function savedLookup(trackId: string): LyricsLookup | null {
+  const match = matched.get(trackId.replace(/^library:/, ''));
+  if (!match) return null;
+  const { candidate, result } = match;
+  return {
+    result,
+    matched: {
+      trackName: candidate.trackName,
+      artistName: candidate.artistName,
+      albumName: candidate.albumName,
+      durationS: candidate.durationMs / 1000,
+      via: `saved:${candidate.source}`,
+    },
+  };
+}
+
+function recordOf(id: string) {
+  return libraryRecords().find((record) => record.id === id) ?? null;
 }
 
 const HANDLERS: Record<string, Handler> = {
@@ -89,7 +175,19 @@ const HANDLERS: Record<string, Handler> = {
   lastfm_has_api_key: () => false,
 
   get_lyrics: (args) =>
+    savedLookup(String(args.trackId ?? '')) ??
     demoLyrics(String(args.trackId ?? ''), typeof args.source === 'string' ? args.source : null),
+  search_lyrics: (args) => searchDemoLyrics(String(args.query ?? '')),
+  lyrics_candidate: (args) => found.get(String(args.key ?? ''))?.result ?? { status: 'NotFound' },
+  library_set_lyrics: (args) => {
+    const pick = found.get(String(args.key ?? ''));
+    if (pick) matched.set(String(args.id ?? ''), pick);
+    return recordOf(String(args.id ?? ''));
+  },
+  library_clear_lyrics: (args) => {
+    matched.delete(String(args.id ?? ''));
+    return recordOf(String(args.id ?? ''));
+  },
 
   // No sound to listen to: the demo provider hands the visualiser its beat.
   visualizer_start: () => null,

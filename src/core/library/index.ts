@@ -30,7 +30,22 @@ export interface LibraryTrack {
    * `attachCoverArtUrls`. Client-only — never sent back to Rust.
    */
   coverArtUrl?: string;
+  /** Lyrics matched by hand, saved beside the song; absent when they are looked for. */
+  lyrics?: MatchedLyrics;
   addedAt: number;
+}
+
+/**
+ * Which lyrics a song was matched with by hand: the file they were saved in,
+ * and the record they came from. The shape is Rust's `LyricsMatch`.
+ */
+export interface MatchedLyrics {
+  file: string;
+  /** `lrclib` or `netease`. */
+  source: string;
+  trackName: string;
+  artistName: string;
+  durationMs: number;
 }
 
 export type PlaylistItem =
@@ -133,6 +148,24 @@ export async function updateLibraryTrack(id: string, names: TrackNames): Promise
 /** Give a song a cover, as base64 JPEG. */
 export async function setLibraryTrackCover(id: string, jpeg: string): Promise<LibraryTrack> {
   return invoke<LibraryTrack>('library_set_cover', { id, jpeg });
+}
+
+/**
+ * Match a song with lyrics found by hand. `key` names a candidate from
+ * `searchLyrics`; the lyrics are saved beside the song.
+ */
+export async function setLibraryTrackLyrics(id: string, key: string): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_set_lyrics', { id, key });
+}
+
+/** Forget a song's lyrics matched by hand, so they are looked for again. */
+export async function clearLibraryTrackLyrics(id: string): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_clear_lyrics', { id });
+}
+
+/** The library id inside a player track's id, when it is a song from the library. */
+export function libraryIdOf(trackId: string): string | null {
+  return trackId.startsWith('library:') ? trackId.slice('library:'.length) : null;
 }
 
 /** Absolute path of the store directory, fetched once and cached. */

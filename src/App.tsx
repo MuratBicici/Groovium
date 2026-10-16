@@ -5,6 +5,7 @@ import { ProgressBar } from '@/components/player/ProgressBar';
 import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
+import { LyricsMatchProvider } from '@/components/lyrics/LyricsMatch';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider, useCarryKind } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
@@ -434,6 +435,7 @@ export default function App() {
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
       <PlaylistPickerProvider>
+      <LyricsMatchProvider>
       <Visualizer
         on={visualizer}
         look={visualizerLook}
@@ -701,6 +703,7 @@ export default function App() {
       />
       </DiscHoldProvider>
       </DiscFlightProvider>
+      </LyricsMatchProvider>
       </PlaylistPickerProvider>
     </div>
   );

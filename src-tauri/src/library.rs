@@ -30,6 +30,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use walkdir::WalkDir;
 
+use crate::lyrics::manual::{self, Candidates, Saved, SAVED_VERSION};
+use crate::lyrics::LyricsLookup;
 use crate::metadata;
 
 const LIBRARY_FILE: &str = "library.json";
@@ -74,7 +76,24 @@ pub struct LibraryTrack {
     /// grant — a file here is an `<img src>` with no IPC payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_file: Option<String>,
+    /// Lyrics chosen by hand, saved in a file of their own inside the store
+    /// directory (`lyrics::manual`). `None` for a song left to the automatic
+    /// search, and on records from before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lyrics: Option<LyricsMatch>,
     pub added_at: u64,
+}
+
+/// Which lyrics a song was matched with by hand: the file they were saved in,
+/// and enough about the record they came from to say so without opening it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsMatch {
+    pub file: String,
+    pub source: String,
+    pub track_name: String,
+    pub artist_name: String,
+    pub duration_ms: u32,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -225,9 +244,32 @@ impl Store {
     /// address was the old picture for as long as the cache kept it.
     pub fn put_cover(&self, owner: &str, jpeg_base64: &str) -> Result<String, String> {
         let bytes = cover_bytes(jpeg_base64)?;
-        let name = format!("{owner}.cover-{}.jpg", new_id());
+        self.put_new(format!("{owner}.cover-{}.jpg", new_id()), &bytes, "the cover")
+    }
+
+    /// Write lyrics chosen by hand, and return their name in the store. A new
+    /// name each time, for the reason a cover has one.
+    pub fn put_lyrics(&self, owner: &str, json: &str) -> Result<String, String> {
+        self.put_new(format!("{owner}.lyrics-{}.json", new_id()), json.as_bytes(), "the lyrics")
+    }
+
+    /// Lyrics saved by `put_lyrics`, if `name` is one and they can be read as
+    /// this build writes them.
+    pub fn read_lyrics(&self, name: &str) -> Option<Saved> {
+        let raw = fs::read_to_string(self.path_of(name)?)
+            .map_err(|e| log::warn!("[library] could not read {name}: {e}"))
+            .ok()?;
+        let saved: Saved = serde_json::from_str(&raw)
+            .map_err(|e| log::warn!("[library] unreadable lyrics in {name}: {e}"))
+            .ok()?;
+        (saved.version == SAVED_VERSION).then_some(saved)
+    }
+
+    /// A file of ours under `name`, written beside it and renamed into place so
+    /// a failure cannot leave half of it. `what` is how an error names it.
+    fn put_new(&self, name: String, bytes: &[u8], what: &str) -> Result<String, String> {
         if !is_bare_name(&name) {
-            return Err("That is not something a cover can belong to.".into());
+            return Err(format!("That is not something {what} can belong to."));
         }
         fs::create_dir_all(&self.root)
             .map_err(|e| format!("Could not create the library folder: {e}"))?;
@@ -235,11 +277,11 @@ impl Store {
         let temp = self.root.join(format!("{name}.partial"));
         fs::write(&temp, bytes).map_err(|e| {
             let _ = fs::remove_file(&temp);
-            format!("Could not save the cover: {e}")
+            format!("Could not save {what}: {e}")
         })?;
         fs::rename(&temp, &path).map_err(|e| {
             let _ = fs::remove_file(&temp);
-            format!("Could not save the cover: {e}")
+            format!("Could not save {what}: {e}")
         })?;
         Ok(name)
     }
@@ -581,6 +623,7 @@ pub fn library_import(
             // actually renders, so it decides.
             has_cover_art: cover_file.is_some(),
             cover_file,
+            lyrics: None,
             added_at: now_secs(),
         };
 
@@ -628,10 +671,11 @@ pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
 
     let store = store(&app)?;
     store.discard(&removed.stored_file)?;
-    if let Some(cover) = &removed.cover_file {
-        // Best effort: an orphaned cover image wastes a few KB; it does not
-        // justify failing the removal the user asked for.
-        if let Err(e) = store.discard(cover) {
+    // Best effort, both: an orphaned cover or lyrics file wastes a few KB; it
+    // does not justify failing the removal the user asked for.
+    let owned = removed.cover_file.iter().chain(removed.lyrics.iter().map(|l| &l.file));
+    for file in owned {
+        if let Err(e) = store.discard(file) {
             log::warn!("[library] {e}");
         }
     }
@@ -700,6 +744,74 @@ pub fn library_set_cover(app: AppHandle, id: String, jpeg: String) -> Result<Lib
         }
     }
     Ok(updated)
+}
+
+/// Match a song with lyrics found by hand: `key` names a candidate from a
+/// search (`lyrics::manual`). The lyrics are saved beside the song, in place
+/// of any it had, so they play without asking anyone again.
+#[tauri::command]
+pub async fn library_set_lyrics(
+    app: AppHandle,
+    found: State<'_, Candidates>,
+    id: String,
+    key: String,
+) -> Result<LibraryTrack, String> {
+    let picked = manual::take(&found, &key).await?;
+    let saved = Saved::from_picked(&picked);
+    let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
+
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    let store = store(&app)?;
+    let file = store.put_lyrics(&track.id, &json)?;
+    let old = track.lyrics.replace(LyricsMatch {
+        file,
+        source: saved.source,
+        track_name: saved.track_name,
+        artist_name: saved.artist_name,
+        duration_ms: saved.duration_ms,
+    });
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    // After the record points at the new file, as with a cover.
+    if let Some(old) = old {
+        if let Err(e) = store.discard(&old.file) {
+            log::warn!("[library] {e}");
+        }
+    }
+    Ok(updated)
+}
+
+/// Let a song's lyrics be looked for automatically again, forgetting the ones
+/// matched by hand.
+#[tauri::command(async)]
+pub fn library_clear_lyrics(app: AppHandle, id: String) -> Result<LibraryTrack, String> {
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    let old = track.lyrics.take();
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    if let Some(old) = old {
+        if let Err(e) = store(&app)?.discard(&old.file) {
+            log::warn!("[library] {e}");
+        }
+    }
+    Ok(updated)
+}
+
+/// The lyrics a song was matched with by hand, if it was. `track_id` is the
+/// player's, `library:<id>`; anything else has none.
+pub fn saved_lyrics(app: &AppHandle, track_id: &str) -> Option<LyricsLookup> {
+    let id = track_id.strip_prefix("library:")?;
+    let tracks = read_library(&library_path(app).ok()?);
+    let file = tracks.into_iter().find(|t| t.id == id)?.lyrics?.file;
+    Some(store(app).ok()?.read_lyrics(&file)?.into_lookup())
 }
 
 /// Absolute path of the store directory.
@@ -862,6 +974,7 @@ mod tests {
             duration_ms: 1234,
             has_cover_art: true,
             cover_file: Some("id4.cover.jpg".into()),
+            lyrics: None,
             added_at: 99,
         };
 
@@ -885,6 +998,36 @@ mod tests {
         let tracks = read_library(&path);
         assert_eq!(tracks.len(), 1);
         assert_eq!(tracks[0].cover_file, None, "old records read as None");
+        // Nor did `lyrics` bump it, for the same reason.
+        assert_eq!(tracks[0].lyrics, None);
+    }
+
+    #[test]
+    fn lyrics_matched_by_hand_are_saved_and_read_back() {
+        let dir = TempDir::new();
+        let store = Store::new(dir.0.clone());
+        let saved = Saved {
+            version: SAVED_VERSION,
+            source: "lrclib".into(),
+            source_id: "7".into(),
+            track_name: "Song".into(),
+            artist_name: "Band".into(),
+            album_name: "Album".into(),
+            duration_ms: 180_000,
+            result: crate::lyrics::LyricsResult::Plain("words".into()),
+        };
+        let name = store
+            .put_lyrics("abc", &serde_json::to_string(&saved).unwrap())
+            .expect("written");
+        assert!(name.starts_with("abc.lyrics-") && name.ends_with(".json"));
+        assert_eq!(store.read_lyrics(&name), Some(saved));
+
+        // Nothing outside the store, written or read.
+        assert!(store.put_lyrics("../escape", "{}").is_err());
+        assert!(store.read_lyrics("../escape.json").is_none());
+        // A file of another shape is not taken for lyrics.
+        let other = store.put_lyrics("abc", r#"{"version":2}"#).expect("written");
+        assert!(store.read_lyrics(&other).is_none());
     }
 
     #[test]
@@ -907,6 +1050,7 @@ mod tests {
             duration_ms: 1,
             has_cover_art: true,
             cover_file: None,
+            lyrics: None,
             added_at: 0,
         }];
 
@@ -934,6 +1078,7 @@ mod tests {
                 duration_ms: 1,
                 has_cover_art: true,
                 cover_file: Some("done.cover.jpg".into()),
+                lyrics: None,
                 added_at: 0,
             },
             LibraryTrack {
@@ -946,6 +1091,7 @@ mod tests {
                 duration_ms: 1,
                 has_cover_art: false,
                 cover_file: None,
+                lyrics: None,
                 added_at: 0,
             },
         ];

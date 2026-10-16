@@ -1,5 +1,5 @@
 import type { TrackMetadata } from '@/core/types';
-import type { LyricsLookup } from './api';
+import type { LyricsCandidate, LyricsLookup, LyricsResult } from './api';
 import type { LyricLine } from './activeLine';
 
 /**
@@ -50,6 +50,34 @@ function lines(): LyricLine[] {
       })),
     };
   });
+}
+
+/** Made-up records for a search by hand: the query as the title, a few takes of it. */
+export function candidatesFor(query: string, durationMs: number): LyricsCandidate[] {
+  const title = query.trim();
+  if (title.length < 2) return [];
+  const take = (n: number, source: LyricsCandidate['source'], offset: number, kind: LyricsCandidate['kind']) => ({
+    key: `${source}:${900 + n}`,
+    source,
+    trackName: n === 2 ? `${title} (Live)` : title,
+    artistName: 'Fixture Band',
+    albumName: n === 2 ? 'Live Somewhere' : 'Fixture Album',
+    durationMs: Math.max(0, durationMs + offset),
+    kind,
+  });
+  return [
+    take(0, 'lrclib', -1_000, 'synced'),
+    take(1, 'netease', 0, 'synced'),
+    take(3, 'lrclib', 0, 'plain'),
+    take(2, 'lrclib', 41_000, 'synced'),
+  ];
+}
+
+/** What a made-up record holds. */
+export function previewFor(key: string): LyricsResult {
+  return key.endsWith('903')
+    ? { status: 'Plain', data: WORDS.filter(Boolean).join('\n') }
+    : { status: 'Synced', data: lines() };
 }
 
 export function fixtureFor(track: TrackMetadata): LyricsLookup {

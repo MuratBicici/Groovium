@@ -34,6 +34,8 @@ import {
   movePlaylistItemFile,
   renamePlaylistFile,
   setLibraryTrackCover,
+  setLibraryTrackLyrics,
+  clearLibraryTrackLyrics,
   setPlaylistCoverFile,
   updateLibraryTrack,
   type TrackNames,
@@ -44,6 +46,7 @@ import {
   type ScanSummary,
 } from '@/core/library';
 import { loadSession, saveSession } from '@/core/session';
+import { useLyricsStore } from '@/core/lyrics/store';
 import { moved, nextUnskipped, stepWithin, type QueuedTrack, type Upcoming } from './order';
 import {
   isAuthenticated as spotifyIsAuthenticated,
@@ -368,6 +371,12 @@ export interface PlayerActions {
   renameTrack: (libraryId: string, names: TrackNames) => Promise<void>;
   /** A cover for a song on this computer, as base64 JPEG. */
   setTrackCover: (libraryId: string, jpeg: string) => Promise<void>;
+  /**
+   * Match a song with lyrics found by hand (`key` from `searchLyrics`), or
+   * forget the match. Whether it worked; a failure is reported as any is.
+   */
+  matchLyrics: (libraryId: string, key: string) => Promise<boolean>;
+  unmatchLyrics: (libraryId: string) => Promise<boolean>;
 }
 
 export type PlayerStore = PlayerState & PlayerActions;
@@ -1566,6 +1575,24 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await setLibraryTrackCover(libraryId, jpeg);
         await refreshTrackOnDeck(libraryId);
       }, undefined);
+    },
+
+    async matchLyrics(libraryId, key) {
+      return reporting(async () => {
+        await setLibraryTrackLyrics(libraryId, key);
+        await get().refreshLibrary();
+        useLyricsStore.getState().reload(`library:${libraryId}`);
+        return true;
+      }, false);
+    },
+
+    async unmatchLyrics(libraryId) {
+      return reporting(async () => {
+        await clearLibraryTrackLyrics(libraryId);
+        await get().refreshLibrary();
+        useLyricsStore.getState().reload(`library:${libraryId}`);
+        return true;
+      }, false);
     },
 
     async removePlaylistItem(playlistId, index) {

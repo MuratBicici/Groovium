@@ -1,8 +1,9 @@
 //! Time-synced lyrics for the song that is playing.
 //!
-//! Still a proof of concept — the panel that calls this is a development
-//! build's alone — but it now looks hard. Several places are asked in turn,
-//! and the first synced answer that is this song ends the search:
+//! A local song that has been matched by hand (`manual.rs`) answers from the
+//! lyrics saved for it, and nothing is asked. Otherwise several places are
+//! asked in turn, and the first synced answer that is this song ends the
+//! search:
 //!
 //! 1. LRCLIB's exact lookup, with the title as Spotify has it.
 //! 2. The same, with the title cleaned of what describes the recording rather
@@ -28,6 +29,7 @@
 mod clean;
 mod lrc;
 mod lrclib;
+pub mod manual;
 mod merge;
 mod netease;
 mod script;
@@ -37,7 +39,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 /// Whether NetEase is asked at all. Its endpoint is unofficial and may stop
 /// answering at any time; see `netease.rs`. Off here switches it off entirely.
@@ -65,7 +67,9 @@ pub const SYNCED_GAP_MS: u32 = 4_000;
 /// How far it may be and still be taken for its words alone.
 pub const PLAIN_GAP_MS: u32 = 10_000;
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq, Default)]
+// Deserialize as well as Serialize: lyrics matched by hand are written to a
+// file of their own and read back from it (`manual.rs`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricLine {
     pub time_ms: u32,
@@ -73,19 +77,19 @@ pub struct LyricLine {
     /// The line in pieces — syllables or words — each with the moment it is
     /// sung, when some source times them. Joined, they are `text` exactly.
     /// Empty when only the line is timed.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub words: Vec<Syllable>,
 }
 
 /// A piece of a line and when it is sung.
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Syllable {
     pub time_ms: u32,
     pub text: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "status", content = "data")]
 pub enum LyricsResult {
     Synced(Vec<LyricLine>),
@@ -167,8 +171,12 @@ impl Query {
 #[derive(Default)]
 pub struct LyricsCache(Mutex<HashMap<String, LyricsLookup>>);
 
+// The arguments are the invoke's own fields, as the frontend sends them;
+// gathering them in a struct would only move the list into the payload.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn get_lyrics(
+    app: AppHandle,
     cache: State<'_, LyricsCache>,
     track_id: String,
     track_name: String,
@@ -177,6 +185,11 @@ pub async fn get_lyrics(
     duration_ms: u32,
     source: Option<String>,
 ) -> Result<LyricsLookup, String> {
+    // Matched by hand: the lyrics saved for it, and nobody asked. Read each
+    // time rather than cached, so a new match or a cleared one takes at once.
+    if let Some(saved) = crate::library::saved_lyrics(&app, &track_id) {
+        return Ok(saved);
+    }
     let from = Source::named(source.as_deref());
     let key = format!("{track_id}|{}", from.name());
     if let Some(hit) = cache.0.lock().map_err(|e| e.to_string())?.get(&key) {

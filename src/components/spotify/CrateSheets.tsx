@@ -17,6 +17,7 @@ import {
   type Size,
 } from '@/core/spotify/cover';
 import { useT } from '@/core/i18n';
+import { sourceName } from '@/core/lyrics/api';
 import { Toggle } from '@/components/controls/Toggle';
 
 /**
@@ -504,6 +505,9 @@ export function SongDetailsSheet({
   onSave,
   onCover,
   coverProblem,
+  lyrics,
+  onMatchLyrics,
+  onClearLyrics,
   onClose,
 }: {
   names: SongNames;
@@ -511,6 +515,14 @@ export function SongDetailsSheet({
   onSave: (names: SongNames) => void;
   onCover?: () => void;
   coverProblem?: string | null;
+  /**
+   * The lyrics the song was matched with by hand, or null for none. The row is
+   * left out altogether without `onMatchLyrics`: outside the app nothing can
+   * be saved.
+   */
+  lyrics?: { source: string; trackName: string; artistName: string } | null;
+  onMatchLyrics?: () => void;
+  onClearLyrics?: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -557,6 +569,40 @@ export function SongDetailsSheet({
       {field(t('library.songAlbum'), album, setAlbum)}
       {coverProblem && <p className="text-meta leading-snug text-red-300">{coverProblem}</p>}
 
+      {/* The lyrics: looked for, or matched by hand and with what. Changed in
+          the search over the window, which saves on its own — nothing here
+          waits for Save. */}
+      {onMatchLyrics && (
+        <div className="flex flex-col gap-1">
+          <span className="text-meta text-cream-400">{t('library.songLyrics')}</span>
+          <div className="flex items-center gap-1.5 rounded bg-shell-900/55 py-1 pr-1 pl-2 ring-1 ring-[var(--color-edge)]">
+            {lyrics ? (
+              <span
+                className="min-w-0 flex-1 truncate text-body text-cream-50"
+                title={`${sourceName(lyrics.source)} · ${lyrics.trackName} — ${lyrics.artistName}`}
+              >
+                <span className="mr-1.5 text-[9px] font-semibold tracking-wide text-brass-400">
+                  {sourceName(lyrics.source)}
+                </span>
+                {lyrics.trackName} — {lyrics.artistName}
+              </span>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-body text-cream-400">
+                {t('library.lyricsAuto')}
+              </span>
+            )}
+            <button type="button" onClick={onMatchLyrics} className={LYRICS_BUTTON}>
+              {lyrics ? t('library.lyricsChange') : t('library.lyricsMatch')}
+            </button>
+            {lyrics && onClearLyrics && (
+              <button type="button" onClick={onClearLyrics} className={LYRICS_BUTTON}>
+                {t('library.lyricsClear')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mt-1 flex items-center justify-end gap-2">
         <button
           type="button"
@@ -577,6 +623,10 @@ export function SongDetailsSheet({
     </Sheet>
   );
 }
+
+/** The small outlined pills beside a song's lyrics. */
+const LYRICS_BUTTON =
+  'shrink-0 rounded-full px-2 py-0.5 text-meta text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:text-cream-50 hover:ring-brass-500';
 
 /** The side of the square the picture is cropped in, on screen. */
 const CROP_VIEW = 176;
