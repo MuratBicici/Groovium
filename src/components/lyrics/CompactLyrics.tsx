@@ -60,7 +60,7 @@ const NEXT_HEIGHT = 18;
 const META_HEIGHT = 18;
 
 /** The timing strip's panel in the compact view: strip, row and padding. */
-const STRIP_ROOM = 70;
+const STRIP_ROOM = 84;
 /** The line box inside it, in ems of the type. */
 const META_LEADING = 1.6;
 /**

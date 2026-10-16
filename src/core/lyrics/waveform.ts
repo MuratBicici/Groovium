@@ -17,8 +17,10 @@ import { log } from '@/platform/log';
  * Spotify song has no file to read, and gets no shape.
  */
 
-/** How many columns the shape is drawn in. More than any strip is wide. */
+/** The fewest columns a shape has, for the shortest songs. */
 export const ENVELOPE_COLUMNS = 600;
+/** And the most, for the longest: under a hundred kilobytes kept a song. */
+const MAX_COLUMNS = 24_000;
 
 /** The last few songs' shapes, so reopening the strip draws at once. */
 const KEEP = 8;
@@ -56,7 +58,10 @@ async function read(storedFile: string): Promise<Float32Array | null> {
   const context = new OfflineAudioContext(1, 1, 44_100);
   const sound = await context.decodeAudioData(bytes);
   const channels = Array.from({ length: sound.numberOfChannels }, (_, i) => sound.getChannelData(i));
-  return envelopeFrom(channels);
+  // Fine enough for the strip at its narrowest — a few seconds across — to
+  // still show the shape: forty columns a second.
+  const columns = Math.round(Math.min(MAX_COLUMNS, Math.max(ENVELOPE_COLUMNS, sound.duration * 40)));
+  return envelopeFrom(channels, columns);
 }
 
 /**

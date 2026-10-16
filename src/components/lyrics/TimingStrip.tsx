@@ -29,6 +29,12 @@ import { usePlayerStore } from '@/core/store';
  *
  * The lines move under the strip as it is dragged; what is dragged is kept
  * when it is let go.
+ *
+ * A whole song across a few hundred pixels is a third of a second a pixel,
+ * too coarse to set a line by. So the wheel narrows the strip to a stretch of
+ * the song, around the pointer, down to a few seconds across; a thin
+ * overview under it holds the whole song and the stretch in view, and is
+ * dragged to move along it.
  */
 
 /** How far a press has to travel before it is a drag rather than a press. */
@@ -39,6 +45,18 @@ const STEP_MS = 100;
 const KEEP_AFTER_KEYS_MS = 600;
 /** Two presses on one mark this close together are a double click. */
 const DOUBLE_MS = 400;
+/** The narrowest stretch the strip shows. */
+const MIN_VIEW_MS = 3_000;
+/** How much one wheel pixel narrows or widens it. */
+const ZOOM_PER_PX = 0.002;
+/** Time marks along the strip, the finest that leave room between them. */
+const LABEL_STEPS_MS = [1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 60_000, 120_000];
+
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+const clock = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
 type Drag = {
   kind: 'pin' | 'shift' | 'seek';
@@ -47,7 +65,8 @@ type Drag = {
   /** Which line's mark was pressed, for a mark. */
   tick: number;
   x: number;
-  width: number;
+  /** Milliseconds a pixel, at the zoom the press started at. */
+  scale: number;
   from: LyricsTiming;
   moved: boolean;
 };
@@ -71,11 +90,20 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
   // The strip is the song; a last line moved past its end widens it.
   const lastMs = shown?.[shown.length - 1]?.timeMs ?? 0;
   const span = Math.max(track?.duration ?? 0, lastMs + LAST_LINE_MS, 1);
-  const at = (ms: number) => `${(ms / span) * 100}%`;
+
+  // The stretch of it on show: all of it, or what the wheel narrowed it to.
+  const [view, setView] = useState<{ start: number; span: number } | null>(null);
+  const viewSpan = view ? Math.min(view.span, span) : span;
+  const viewStart = view ? clamp(view.start, 0, span - viewSpan) : 0;
+  const at = (ms: number) => `${((ms - viewStart) / viewSpan) * 100}%`;
+  const across = (ms: number) => `${(ms / viewSpan) * 100}%`;
 
   const strip = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const head = useRef<HTMLDivElement | null>(null);
+  const overview = useRef<HTMLDivElement | null>(null);
+  const overviewHead = useRef<HTMLDivElement | null>(null);
+  const pan = useRef<{ x: number; start: number } | null>(null);
   const drag = useRef<Drag | null>(null);
   const keysDone = useRef(0);
   /**
@@ -119,12 +147,20 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
       context.clearRect(0, 0, width, height);
       const colour = getComputedStyle(document.documentElement).getPropertyValue('--color-shell-600');
       context.fillStyle = colour.trim() || '#3d2f24';
-      // The sound covers its own length of the strip, which can be wider.
-      const songWidth = (width * (track?.duration ?? span)) / span;
-      const column = songWidth / shape.length;
-      for (let i = 0; i < shape.length; i++) {
-        const tall = Math.max(1, (shape[i] as number) * height * 0.82);
-        context.fillRect(i * column, (height - tall) / 2, Math.max(1, column - 0.5), tall);
+      // A pixel at a time, the loudest of the columns under it: many when the
+      // whole song is on show, a fraction of one at the narrowest.
+      const song = track?.duration ?? span;
+      const perMs = shape.length / song;
+      for (let x = 0; x < width; x++) {
+        const from = viewStart + (x / width) * viewSpan;
+        if (from >= song) break;
+        const to = viewStart + ((x + 1) / width) * viewSpan;
+        const c0 = Math.floor(from * perMs);
+        const c1 = Math.max(c0 + 1, Math.floor(to * perMs));
+        let peak = 0;
+        for (let c = c0; c < c1 && c < shape.length; c++) peak = Math.max(peak, shape[c] as number);
+        const tall = Math.max(1, peak * height * 0.82);
+        context.fillRect(x, (height - tall) / 2, 1, tall);
       }
     };
     draw();
@@ -139,18 +175,46 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
       sized.disconnect();
       themed.disconnect();
     };
-  }, [shape, span, track?.duration]);
+  }, [shape, span, viewStart, viewSpan, track?.duration]);
 
-  // The playhead, every frame, without a render.
+  // The playhead, on the strip and the overview, every frame, without a render.
   useEffect(() => {
     let frame = 0;
     const tick = () => {
-      if (head.current) head.current.style.left = `${(playheadMs() / span) * 100}%`;
+      const ms = playheadMs();
+      if (head.current) head.current.style.left = `${((ms - viewStart) / viewSpan) * 100}%`;
+      if (overviewHead.current) overviewHead.current.style.left = `${(ms / span) * 100}%`;
       frame = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [span]);
+  }, [span, viewStart, viewSpan]);
+
+  // The wheel narrows or widens the strip around the pointer. Its own
+  // listener, not React's: React listens for the wheel passively, and this
+  // has to keep the page from taking the same turn.
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const box = el.getBoundingClientRect();
+      if (box.width === 0) return;
+      const where = clamp((e.clientX - box.left) / box.width, 0, 1);
+      const turn = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      setView((was) => {
+        const wasSpan = was ? Math.min(was.span, span) : span;
+        const wasStart = was ? clamp(was.start, 0, span - wasSpan) : 0;
+        const next = clamp(wasSpan * Math.exp(turn * ZOOM_PER_PX), Math.min(MIN_VIEW_MS, span), span);
+        if (next >= span) return null;
+        const pointed = wasStart + where * wasSpan;
+        return { start: clamp(pointed - where * next, 0, span - next), span: next };
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [span, lines, timing]);
 
   // Escape puts the strip away, ahead of whatever else listens for it.
   useEffect(() => {
@@ -179,7 +243,7 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
   const msAt = (clientX: number) => {
     const box = strip.current?.getBoundingClientRect();
     if (!box || box.width === 0) return 0;
-    return Math.max(0, ((clientX - box.left) / box.width) * span);
+    return Math.max(0, viewStart + ((clientX - box.left) / box.width) * viewSpan);
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -194,7 +258,7 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
       index,
       tick: tick ? Number(tick.dataset.tick) : -1,
       x: e.clientX,
-      width: strip.current?.clientWidth ?? 1,
+      scale: viewSpan / (strip.current?.clientWidth || 1),
       from: timing,
       moved: false,
     };
@@ -208,7 +272,7 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
     const dx = e.clientX - d.x;
     if (!d.moved && Math.abs(dx) < DRAG_PX) return;
     d.moved = true;
-    const ms = (dx / d.width) * span;
+    const ms = dx * d.scale;
     if (d.kind === 'pin') setTiming(movePin(d.from, d.index, (d.from[d.index] as LyricsPin).ms + ms));
     else setTiming(shiftAll(d.from, ms));
   };
@@ -259,6 +323,11 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
       e.preventDefault();
       setTiming(movePin(timing, index, pin.ms + (e.key === 'ArrowLeft' ? -step : step)));
       keepSoon();
+    } else if (e.key === '+' || e.key === '=' || e.key === '-') {
+      // Narrower or wider around the handle, for the keyboard's wheel.
+      e.preventDefault();
+      const next = clamp(viewSpan * (e.key === '-' ? 2 : 0.5), Math.min(MIN_VIEW_MS, span), span);
+      setView(next >= span ? null : { start: clamp(pin.ms - next / 2, 0, span - next), span: next });
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && index > 0 && index < timing.length - 1) {
       e.preventDefault();
       setTiming(removePin(timing, pin.line));
@@ -267,7 +336,45 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
     }
   };
 
-  const seconds = new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // A hundredth of a second once the strip is narrow enough to set one.
+  const digits = viewSpan < 20_000 ? 2 : 1;
+  const seconds = new Intl.NumberFormat(language, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  const onePlace = new Intl.NumberFormat(language, { maximumFractionDigits: 1 });
+  const viewName = view
+    ? viewSpan >= 60_000
+      ? t('lyrics.timing.minutes', { value: onePlace.format(viewSpan / 60_000) })
+      : t('lyrics.timing.seconds', { value: onePlace.format(viewSpan / 1000) })
+    : t('lyrics.timing.viewAll');
+  const labelStep =
+    LABEL_STEPS_MS.find((step) => viewSpan / step <= (compact ? 4 : 7)) ??
+    (LABEL_STEPS_MS[LABEL_STEPS_MS.length - 1] as number);
+  const labels: number[] = [];
+  for (let ms = Math.ceil(viewStart / labelStep) * labelStep; ms <= viewStart + viewSpan; ms += labelStep) {
+    labels.push(ms);
+  }
+
+  // Dragging the overview moves the stretch along the song; a press beside
+  // the stretch brings it there first.
+  const onOverviewDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (!view || e.button !== 0) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const pressed = ((e.clientX - box.left) / box.width) * span;
+    const inside = pressed >= viewStart && pressed <= viewStart + viewSpan;
+    const start = inside ? viewStart : clamp(pressed - viewSpan / 2, 0, span - viewSpan);
+    if (!inside) setView({ start, span: viewSpan });
+    pan.current = { x: e.clientX, start };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onOverviewMove = (e: PointerEvent<HTMLDivElement>) => {
+    const p = pan.current;
+    const width = overview.current?.clientWidth;
+    if (!p || !width) return;
+    const start = clamp(p.start + ((e.clientX - p.x) / width) * span, 0, span - viewSpan);
+    setView({ start, span: viewSpan });
+  };
   const delta = (pin: LyricsPin) => {
     const s = (pin.ms - (lines[pin.line] as LyricLine).timeMs) / 1000;
     const sign = s >= 0.05 ? '+' : s <= -0.05 ? '−' : '';
@@ -302,8 +409,17 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
         <div
           data-block
           className="absolute inset-y-0.5 cursor-grab border-y border-brass-500/60 bg-brass-500/10 active:cursor-grabbing"
-          style={{ left: at(first.timeMs), width: at(last.timeMs - first.timeMs) }}
+          style={{ left: at(first.timeMs), width: across(last.timeMs - first.timeMs) }}
         />
+        {labels.map((ms) => (
+          <span
+            key={ms}
+            className="pointer-events-none absolute bottom-0 -translate-x-1/2 text-[9px] leading-none text-cream-400/70 tabular-nums"
+            style={{ left: at(ms) }}
+          >
+            {clock(ms)}
+          </span>
+        ))}
         {shown.map((line, i) =>
           pinned.has(i) ? null : (
             <div
@@ -337,6 +453,39 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
             <div className="h-3.5 w-0.5 rounded-full bg-shell-900/60" />
           </div>
         ))}
+      </div>
+
+      {/* The whole song, the lines on it and the stretch on show above. */}
+      <div className="flex items-center gap-2">
+        <div
+          ref={overview}
+          onPointerDown={onOverviewDown}
+          onPointerMove={onOverviewMove}
+          onPointerUp={() => (pan.current = null)}
+          onPointerCancel={() => (pan.current = null)}
+          className={`relative flex-1 touch-none overflow-hidden rounded-sm bg-shell-900/80 ring-1 ring-[var(--color-edge)] select-none ${
+            compact ? 'h-2' : 'h-2.5'
+          } ${view ? 'cursor-pointer' : ''}`}
+        >
+          {shown.map((line, i) => (
+            <div
+              key={i}
+              className="pointer-events-none absolute inset-y-0.5 w-px bg-brass-400/45"
+              style={{ left: `${(line.timeMs / span) * 100}%` }}
+            />
+          ))}
+          <div
+            className={`absolute inset-y-0 rounded-[2px] border border-brass-500 bg-brass-500/20 ${
+              view ? 'cursor-grab active:cursor-grabbing' : ''
+            }`}
+            style={{
+              left: `${(viewStart / span) * 100}%`,
+              width: `max(4px, ${(viewSpan / span) * 100}%)`,
+            }}
+          />
+          <div ref={overviewHead} className="pointer-events-none absolute inset-y-0 w-px bg-cream-50/90" />
+        </div>
+        <span className="shrink-0 text-label text-cream-400 tabular-nums">{viewName}</span>
       </div>
 
       <div className="flex min-w-0 items-center gap-2 text-meta text-cream-400">
