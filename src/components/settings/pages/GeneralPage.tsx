@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { useT } from '@/core/i18n';
+import { exportTimings, importTimings } from '@/core/lyrics/timingChoice';
+import { useLyricsStore } from '@/core/lyrics/store';
 import { useSettingsStore } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { Toggle } from '@/components/controls/Toggle';
@@ -78,6 +81,76 @@ export function GeneralPage() {
           onChange={setSleepWhenHidden}
         />
       </Group>
+
+      {/* Only the app has a file to write them to. */}
+      {isTauri() && (
+        <Group title={t('settings.lyricsTiming')}>
+          <TimingTransfer />
+        </Group>
+      )}
     </>
   );
 }
+
+/**
+ * Carrying the Spotify songs' lyrics timings to another computer: out to a
+ * file of the listener's choosing, and back in from one, merged with what is
+ * here. A song on this computer needs none of this — its timing is in its
+ * lyrics' file, in the library folder.
+ */
+function TimingTransfer() {
+  const t = useT();
+  const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (way: 'export' | 'import') => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const count = way === 'export' ? await exportTimings() : await importTimings();
+      if (count === null) return;
+      setNote({
+        text: t(way === 'export' ? 'settings.lyricsTimingExported' : 'settings.lyricsTimingImported', {
+          count,
+        }),
+        bad: false,
+      });
+      // The song playing may have just been given a timing.
+      if (way === 'import') {
+        const { trackId, reload } = useLyricsStore.getState();
+        if (trackId) reload(trackId);
+      }
+    } catch (err) {
+      setNote({
+        text: String(err).includes('unreadable')
+          ? t('settings.lyricsTimingUnreadable')
+          : t('settings.lyricsTimingFailed'),
+        bad: true,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label={t('settings.lyricsTimingSpotify')} hint={t('settings.lyricsTimingHint')}>
+      <div className="flex gap-1.5">
+        <button type="button" disabled={busy} onClick={() => void run('export')} className={ACTION}>
+          {t('settings.lyricsTimingExport')}
+        </button>
+        <button type="button" disabled={busy} onClick={() => void run('import')} className={ACTION}>
+          {t('settings.lyricsTimingImport')}
+        </button>
+      </div>
+      {note && (
+        <p role="status" className={`text-meta leading-snug ${note.bad ? 'text-warn/90' : 'text-cream-400'}`}>
+          {note.text}
+        </p>
+      )}
+    </Field>
+  );
+}
+
+/** A plain action, in the shape of the choices around it. */
+const ACTION =
+  'flex-1 rounded-full bg-shell-700 px-2 py-1 text-meta font-medium tracking-wide text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:opacity-50';

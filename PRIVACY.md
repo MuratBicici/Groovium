@@ -62,10 +62,13 @@ Nothing is sent while lyrics are off. The lyrics found are kept in memory while
 the app is open and are not written anywhere.
 
 If you move a song's lyrics to fit it ("Timing"), where you put them is kept on
-your computer: for a Spotify song in the app's own browser storage, for a song
-on this computer in the file its lyrics are saved in. It is not sent anywhere.
-To draw the shape of a song on this computer behind the lines, Groovium reads
-its own copy of the file; that stays on your computer too.
+your computer: for a Spotify song in `lyrics-timing.json` in
+`%APPDATA%\com.groovium.desktop`, for a song on this computer in the file its
+lyrics are saved in. It is not sent anywhere. Settings › General can export the
+Spotify songs' timings to a file you choose and import them from one, to carry
+them to another computer. To draw the shape of a song on this computer behind
+the lines, Groovium reads its own copy of the file; that stays on your computer
+too.
 
 **Matching lyrics by hand.** A song on this computer is never looked up on its
 own: it has no lyrics until you search for them yourself and choose some.
@@ -80,8 +83,9 @@ that they are correct.
 
 - **Your music files.** Local tracks are copied into Groovium's library folder
   and played from there. They are never uploaded anywhere.
-- **Settings, playlists, the library index, the last session and the window's
-  position**, in `%APPDATA%\com.groovium.desktop`. The Spotify Client ID and the
+- **Settings, playlists, the library index, the last session, the window's
+  position and the Spotify songs' lyrics timings**, in
+  `%APPDATA%\com.groovium.desktop`. The Spotify Client ID and the
   Last.fm API key you entered are kept here too.
 - **Spotify's sign-in tokens**, in Windows Credential Manager rather than in a
   file.

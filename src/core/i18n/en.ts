@@ -112,6 +112,18 @@ export const en = {
   'lyrics.timing.reset': 'Reset',
   'lyrics.timing.done': 'Done',
   'lyrics.timing.failed': 'The timing could not be saved.',
+  'settings.lyricsTiming': 'Lyrics timings',
+  'settings.lyricsTimingSpotify': 'Spotify songs',
+  'settings.lyricsTimingHint':
+    "The timing you set for Spotify songs' lyrics is kept in a file. To move it to another computer, export it here and import it there. Songs on this computer keep theirs with their lyrics, in the library folder.",
+  'settings.lyricsTimingExport': 'Export…',
+  'settings.lyricsTimingImport': 'Import…',
+  'settings.lyricsTimingExported': 'Exported the timing of {count} song.',
+  'settings.lyricsTimingExported_plural': 'Exported the timing of {count} songs.',
+  'settings.lyricsTimingImported': 'Imported the timing of {count} song.',
+  'settings.lyricsTimingImported_plural': 'Imported the timing of {count} songs.',
+  'settings.lyricsTimingUnreadable': 'That file is not a lyrics timings file.',
+  'settings.lyricsTimingFailed': 'That did not work. The log file has the details.',
 
   // Transport
   'transport.shuffle': 'Shuffle',

@@ -63,6 +63,7 @@ fn main() {
         .manage(visualizer::Running::default())
         .manage(lyrics::LyricsCache::default())
         .manage(lyrics::manual::Candidates::default())
+        .manage(lyrics::timings::TimingsLock::default())
         .setup(|app| {
             // Before anything is shown. The window has a frame of its own that
             // this app draws over, and the corners are where that shows.
@@ -152,6 +153,11 @@ fn main() {
             lyrics::get_lyrics,
             lyrics::manual::search_lyrics,
             lyrics::manual::lyrics_candidate,
+            lyrics::timings::lyrics_timings_load,
+            lyrics::timings::lyrics_timing_keep,
+            lyrics::timings::lyrics_timings_merge,
+            lyrics::timings::lyrics_timings_export,
+            lyrics::timings::lyrics_timings_import,
             audio::audio_backend_available,
             shell::set_window_box,
             shell::set_click_area,

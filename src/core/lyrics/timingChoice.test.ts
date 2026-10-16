@@ -1,29 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { LyricLine } from './activeLine';
-import { keepTiming, timingFor } from './timingChoice';
+import { keepTiming, matches, timingFor, type Kept } from './timingChoice';
 
 /**
  * A Spotify song's retiming is kept for that song, and only for the record it
- * was set against. Stored in the webview, which can refuse: nothing here may
- * throw because of it.
+ * was set against. Outside the app nothing is written; it is held for the run,
+ * which is what these see.
  */
-
-function memoryStorage() {
-  const items = new Map<string, string>();
-  return {
-    getItem: (key: string) => items.get(key) ?? null,
-    setItem: (key: string, value: string) => void items.set(key, value),
-    removeItem: (key: string) => void items.delete(key),
-  };
-}
-
-beforeEach(() => {
-  vi.stubGlobal('localStorage', memoryStorage());
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 const LINES: LyricLine[] = [
   { timeMs: 1_000, text: 'first' },
@@ -35,43 +18,40 @@ const TIMING = [
   { line: 2, ms: 11_000 },
 ];
 const RECORD = { via: 'lrclib:get', lines: LINES };
+const KEPT: Kept = { source: 'lrclib', lines: 3, first: 'first', timing: TIMING };
 
 describe('the timing kept for a song', () => {
-  it('is none until one is kept', () => {
-    expect(timingFor('spotify:track:a', RECORD)).toBeNull();
+  it('is none until one is kept', async () => {
+    expect(await timingFor('spotify:track:none', RECORD)).toBeNull();
   });
 
-  it('comes back for the same record, found by another step of the same source', () => {
+  it('comes back for the same record, found by another step of the same source', async () => {
     keepTiming('spotify:track:a', RECORD, TIMING);
-    expect(timingFor('spotify:track:a', RECORD)).toEqual(TIMING);
-    expect(timingFor('spotify:track:a', { ...RECORD, via: 'lrclib:search' })).toEqual(TIMING);
-    expect(timingFor('spotify:track:b', RECORD)).toBeNull();
+    expect(await timingFor('spotify:track:a', RECORD)).toEqual(TIMING);
+    expect(await timingFor('spotify:track:a', { ...RECORD, via: 'lrclib:search' })).toEqual(TIMING);
+    expect(await timingFor('spotify:track:b', RECORD)).toBeNull();
   });
 
-  it('is left unused for lyrics from another source or another record', () => {
-    keepTiming('spotify:track:a', RECORD, TIMING);
-    expect(timingFor('spotify:track:a', { ...RECORD, via: 'netease' })).toBeNull();
-    expect(timingFor('spotify:track:a', { ...RECORD, lines: LINES.slice(0, 2) })).toBeNull();
+  it('is forgotten when kept as none', async () => {
+    keepTiming('spotify:track:c', RECORD, TIMING);
+    keepTiming('spotify:track:c', RECORD, null);
+    expect(await timingFor('spotify:track:c', RECORD)).toBeNull();
+  });
+});
+
+describe('whether a kept timing is for these lyrics', () => {
+  it('is for the same source, line count and first line', () => {
+    expect(matches(KEPT, RECORD)).toBe(true);
+  });
+
+  it('is not for another source or another record', () => {
+    expect(matches(KEPT, { ...RECORD, via: 'netease' })).toBe(false);
+    expect(matches(KEPT, { ...RECORD, lines: LINES.slice(0, 2) })).toBe(false);
     const other = [{ ...LINES[0], text: 'another' } as LyricLine, ...LINES.slice(1)];
-    expect(timingFor('spotify:track:a', { ...RECORD, lines: other })).toBeNull();
+    expect(matches(KEPT, { ...RECORD, lines: other })).toBe(false);
   });
 
-  it('is forgotten when kept as none', () => {
-    keepTiming('spotify:track:a', RECORD, TIMING);
-    keepTiming('spotify:track:a', RECORD, null);
-    expect(timingFor('spotify:track:a', RECORD)).toBeNull();
-  });
-
-  it('survives storage that refuses', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: () => {
-        throw new Error('denied');
-      },
-      setItem: () => {
-        throw new Error('denied');
-      },
-    });
-    expect(() => keepTiming('spotify:track:a', RECORD, TIMING)).not.toThrow();
-    expect(timingFor('spotify:track:a', RECORD)).toBeNull();
+  it('is not for a timing that does not fit the lines', () => {
+    expect(matches({ ...KEPT, timing: [{ line: 0, ms: 3_000 }] }, RECORD)).toBe(false);
   });
 });

@@ -96,9 +96,10 @@ function linesOf(lookup: LyricsLookup | null): LyricLine[] | null {
 
 /**
  * The timing kept for these lyrics: in the saved file for a song on this
- * computer, which comes with the lookup; here, for a Spotify song.
+ * computer, which comes with the lookup; in the timings file, for a Spotify
+ * song.
  */
-function keptTiming(trackId: string, lookup: LyricsLookup): LyricsTiming | null {
+async function keptTiming(trackId: string, lookup: LyricsLookup): Promise<LyricsTiming | null> {
   const lines = linesOf(lookup);
   if (libraryIdOf(trackId) !== null) {
     return lookup.timing && lines && fits(lookup.timing, lines) ? lookup.timing : null;
@@ -129,7 +130,8 @@ export const useLyricsStore = create<LyricsState>((set, get) => {
         set({ status: 'error', error: 'Lyrics are only looked up in the app.' });
         return;
       }
-      const timing = keptTiming(track.id, lookup);
+      const timing = await keptTiming(track.id, lookup);
+      if (ask !== asked) return;
       set({ status: 'done', raw: lookup, timing, lookup: shown(lookup, timing) });
     } catch (err) {
       if (ask !== asked) return;

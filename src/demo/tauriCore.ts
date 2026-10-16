@@ -61,6 +61,8 @@ const found = new Map<string, { candidate: LyricsCandidate; result: LyricsResult
 const cleared = new Set<string>();
 /** The listener's retiming of a song's matched lyrics, by library id. */
 const timings = new Map<string, LyricsTiming>();
+/** And of a Spotify song's, by track id, as the timings file holds them. */
+const spotifyTimings = new Map<string, unknown>();
 
 /**
  * What a song is matched with: what this run matched it with, or else — the
@@ -232,6 +234,17 @@ const HANDLERS: Record<string, Handler> = {
     else timings.delete(id);
     return recordOf(id);
   },
+  lyrics_timings_load: () => Object.fromEntries(spotifyTimings),
+  lyrics_timing_keep: (args) => {
+    const id = String(args.trackId ?? '');
+    if (args.kept) spotifyTimings.set(id, args.kept);
+    else spotifyTimings.delete(id);
+    return null;
+  },
+  lyrics_timings_merge: () => 0,
+  // No file to choose in the demo: as though the dialog were closed.
+  lyrics_timings_export: () => null,
+  lyrics_timings_import: () => null,
   library_clear_lyrics: (args) => {
     matched.delete(String(args.id ?? ''));
     cleared.add(String(args.id ?? ''));

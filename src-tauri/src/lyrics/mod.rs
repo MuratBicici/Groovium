@@ -30,6 +30,7 @@ mod clean;
 mod lrc;
 mod lrclib;
 pub mod manual;
+pub mod timings;
 mod merge;
 mod netease;
 mod script;
