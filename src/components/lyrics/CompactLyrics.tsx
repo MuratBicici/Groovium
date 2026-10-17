@@ -66,6 +66,12 @@ const NEXT_HEIGHT = 18;
  */
 const META_HEIGHT = 18;
 
+/**
+ * How far the sung line may reach over the record's foot to stay clear of
+ * the timing strip: where the record curves away, and nobody takes hold.
+ */
+const OVER_RECORD = 8;
+
 /** The timing strip's panel in the compact view: strip, overview, row and padding. */
 const STRIP_ROOM = 84;
 /** The line box inside it, in ems of the type. */
@@ -171,13 +177,16 @@ export function CompactLyrics({
       const progressBottom = progress ? progress.bottom - base.top : metaTop + META_HEIGHT;
       // Centred in that room by the words, then back up by the air over them —
       // and clear of where the timing strip opens, all the time rather than
-      // only while it is open, so opening it never moves the words. But never
-      // up over the record itself. In a short window the room is smaller than
-      // the boxes, and a box over the record's lower edge is a record that
-      // cannot be picked up there, air in it or not.
+      // only while it is open, so opening it never moves the words. Not up
+      // over the record itself, beyond the sliver of its rounded foot that
+      // making room for the strip may take: in a short window the room is
+      // smaller than the boxes, and a box over the record's lower edge is a
+      // record that cannot be picked up there, air in it or not.
       const centred = roomTop + (metaTop - roomTop - words) / 2 - airAbove;
       const clear = progressBottom - STRIP_ROOM - 2 - ACTIVE_HEIGHT;
-      const activeTop = disc ? Math.max(roomTop, Math.min(centred, clear)) : roomTop;
+      const activeTop = disc
+        ? Math.max(roomTop - OVER_RECORD, Math.min(Math.max(roomTop, centred), clear))
+        : roomTop;
       setGeo({
         activeTop,
         activeHeight: ACTIVE_HEIGHT,
@@ -325,20 +334,12 @@ export function CompactLyrics({
 
   // While the timing strip is open it sits over the progress bar — it goes
   // to a place in the song as well, with its own playhead and times — and
-  // over the title's row above it. The sung line stays where it is: words
-  // that jump as a panel opens are words lost for a moment, and the measure
-  // above already keeps it clear of the strip. Only a window too short for
-  // that, where it would have to reach over the record, has it go up now.
-  // The next line, where there is no room left for it, fades where it is.
+  // over the title's row above it. The sung line does not move for it, ever:
+  // words that jump as a panel opens are words lost for a moment, and the
+  // measure above has already placed them clear of it. The next line, where
+  // there is no room left for it, fades where it is.
   const stripTop = geo ? geo.progressBottom - STRIP_ROOM : 0;
-  const shownGeo =
-    geo && tuning && lines
-      ? (() => {
-          const activeTop = Math.min(geo.activeTop, stripTop - 2 - ACTIVE_HEIGHT);
-          return { ...geo, activeTop, nextTop: activeTop + ACTIVE_HEIGHT + 2 };
-        })()
-      : geo;
-  const hideNext = !!shownGeo && tuning && shownGeo.nextTop + NEXT_HEIGHT > stripTop - 2;
+  const hideNext = !!geo && tuning && geo.nextTop + NEXT_HEIGHT > stripTop - 2;
 
   if (!present) return null;
   return (
@@ -424,8 +425,8 @@ export function CompactLyrics({
                 <div
                   className="pointer-events-auto absolute inset-x-0"
                   style={{
-                    top: (shownGeo ?? geo).activeTop,
-                    height: (shownGeo ?? geo).nextTop + NEXT_HEIGHT - (shownGeo ?? geo).activeTop,
+                    top: geo.activeTop,
+                    height: geo.nextTop + NEXT_HEIGHT - geo.activeTop,
                   }}
                 />
                 <SungLines
@@ -433,7 +434,7 @@ export function CompactLyrics({
                   view={browse.view}
                   sung={sung}
                   move={browse.move}
-                  geo={shownGeo ?? geo}
+                  geo={geo}
                   hideNext={hideNext}
                   sungEl={activeEl}
                   onPick={(line) => {
