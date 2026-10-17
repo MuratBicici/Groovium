@@ -333,7 +333,8 @@ impl Saved {
             _ => "saved",
         };
         LyricsLookup {
-            result: self.result,
+            // Lyrics saved before signatures were taken out lose them here.
+            result: super::lrc::without_signatures(self.result),
             matched: Some(Matched {
                 track_name: self.track_name,
                 artist_name: self.artist_name,

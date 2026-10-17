@@ -3,7 +3,7 @@
 use serde::Deserialize;
 
 use super::clean::{primary_artist, same_song};
-use super::lrc::{fragmented, parse_lrc, without_translations, words_of};
+use super::lrc::{fragmented, parse_lrc, readable, words_of};
 use super::merge::with_syllables;
 use super::{
     fetch, flaw, or_default, pick_nearest, Found, LyricLine, LyricsResult, Query, SYNCED_GAP_MS,
@@ -198,7 +198,7 @@ pub fn as_chosen(record: &Record) -> LyricsResult {
         }
     }
     match record.plain_lyrics.as_deref().map(str::trim) {
-        Some(plain) if !plain.is_empty() => LyricsResult::Plain(without_translations(plain)),
+        Some(plain) if !plain.is_empty() => LyricsResult::Plain(readable(plain)),
         _ => LyricsResult::NotFound,
     }
 }
@@ -230,7 +230,7 @@ pub fn result_of(record: &Record, duration_ms: u32) -> LyricsResult {
         }
     }
     match record.plain_lyrics.as_deref().map(str::trim) {
-        Some(plain) if !plain.is_empty() => LyricsResult::Plain(without_translations(plain)),
+        Some(plain) if !plain.is_empty() => LyricsResult::Plain(readable(plain)),
         _ => LyricsResult::NotFound,
     }
 }

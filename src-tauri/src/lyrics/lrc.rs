@@ -1,6 +1,6 @@
 //! Reading LRC, the format both LRCLIB and NetEase hand synced lyrics back in.
 
-use super::{LyricLine, Syllable};
+use super::{LyricLine, LyricsResult, Syllable};
 
 /// `[mm:ss]`, `[mm:ss.x]`, `[mm:ss.xx]` or `[mm:ss.xxx]` (a colon before the
 /// fraction is accepted too) as milliseconds. `None` for anything else.
@@ -173,6 +173,14 @@ pub fn parse_lrc(text: &str) -> Vec<LyricLine> {
             }
         }
         let (words, pieces) = word_stamped(rest);
+        // A timer's signature keeps its moment, as a pause: that is where it
+        // was put, usually in a break, and the line before it should not be
+        // lit on through the break in its place.
+        let (words, pieces) = if is_signature(&words) {
+            (String::new(), Vec::new())
+        } else {
+            (words, pieces)
+        };
         // Pieces carry their own times, which belong to one singing of the
         // line; a line stamped for several (a chorus) keeps only its words.
         let pieces: Vec<(i64, String)> = match stamps.as_slice() {
@@ -250,6 +258,82 @@ fn sung_part(line: &str) -> &str {
         Some(at) => line[..at].trim_end(),
         None => line,
     }
+}
+
+/// The endings of the addresses a signature gives.
+const SITE_ENDINGS: &[&str] = &["com", "net", "org", "info", "io", "biz", "ru", "xyz"];
+
+/// Words beside an address that still make a signature: "Lyrics by", "LRC
+/// made by". A line with more around its address is a lyric that names one.
+const SIGNATURE_WORDS: usize = 3;
+
+/// Whether a word is a web address: `www.…`, `http…`, or a name with one of
+/// the usual endings — `RentAnAdviser.com`.
+fn is_address(word: &str) -> bool {
+    let word = word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+    if word.starts_with("http://") || word.starts_with("https://") {
+        return true;
+    }
+    if let Some(rest) = word.strip_prefix("www.") {
+        return rest.contains('.');
+    }
+    let labels: Vec<&str> = word.split('.').collect();
+    let [name, .., ending] = labels.as_slice() else {
+        return false;
+    };
+    SITE_ENDINGS.contains(ending)
+        && name.chars().count() >= 2
+        && name.chars().any(char::is_alphabetic)
+        && labels.iter().all(|label| !label.is_empty())
+        && word.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-')
+}
+
+/// Whether a line is the signature of whoever made the record rather than a
+/// lyric: "--- www.LRCgenerator.com ---", "Lyrics by RentAnAdviser.com". An
+/// address, and no more than a few words beside it.
+pub fn is_signature(text: &str) -> bool {
+    let mut addresses = 0;
+    let mut words = 0;
+    for word in text.split_whitespace() {
+        if is_address(word) {
+            addresses += 1;
+        } else if word.chars().any(char::is_alphanumeric) {
+            words += 1;
+        }
+    }
+    addresses > 0 && words <= SIGNATURE_WORDS
+}
+
+/// Lyrics without a timer's signature: emptied where they are timed, so the
+/// lines keep their places — a retiming counts them — and left out where they
+/// are only words. For lyrics saved before signatures were taken out.
+pub fn without_signatures(result: LyricsResult) -> LyricsResult {
+    match result {
+        LyricsResult::Synced(lines) => LyricsResult::Synced(
+            lines
+                .into_iter()
+                .map(|line| {
+                    if is_signature(&line.text) {
+                        LyricLine { time_ms: line.time_ms, ..Default::default() }
+                    } else {
+                        line
+                    }
+                })
+                .collect(),
+        ),
+        LyricsResult::Plain(words) => LyricsResult::Plain(readable(&words)),
+        other => other,
+    }
+}
+
+/// Words to read: without a translation after a caret, and without a timer's
+/// signature.
+pub fn readable(plain: &str) -> String {
+    without_translations(plain)
+        .lines()
+        .filter(|line| !is_signature(line))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Words to read, without the translation some records carry after a caret.
@@ -389,6 +473,50 @@ mod tests {
                 line(20000, "verse"),
                 line(30000, "chorus")
             ]
+        );
+    }
+
+    #[test]
+    fn knows_a_signature_from_a_lyric() {
+        for signature in [
+            "--- www.LRCgenerator.com ---",
+            "Lyrics by RentAnAdviser.com",
+            "LRC made by lyricsify.com",
+            "https://example.org/lrc",
+            "[ www.megalobiz.com ]",
+        ] {
+            assert!(is_signature(signature), "{signature}");
+        }
+        for lyric in [
+            "Sabaha kadar oyna, at zarları, hileli",
+            "I put my number on myspace.com and waited all night long",
+            "Mr. Brightside",
+            "Version 2.0",
+            "dot com",
+            "",
+        ] {
+            assert!(!is_signature(lyric), "{lyric}");
+        }
+    }
+
+    #[test]
+    fn a_signature_keeps_its_moment_as_a_pause() {
+        let lines = parse_lrc(
+            "[00:01.00]first\n[00:05.00]<00:05.00>--- <00:05.50>www.LRCgenerator.com ---\n[00:09.00]last",
+        );
+        assert_eq!(lines, vec![line(1000, "first"), line(5000, ""), line(9000, "last")]);
+    }
+
+    #[test]
+    fn words_to_read_and_saved_lyrics_lose_their_signatures() {
+        assert_eq!(readable("first\nLyrics by RentAnAdviser.com\nlast"), "first\nlast");
+        let saved = LyricsResult::Synced(vec![
+            line(1000, "first"),
+            line(5000, "--- www.LRCgenerator.com ---"),
+        ]);
+        assert_eq!(
+            without_signatures(saved),
+            LyricsResult::Synced(vec![line(1000, "first"), line(5000, "")])
         );
     }
 
