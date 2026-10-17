@@ -15,9 +15,12 @@ import { log } from '@/platform/log';
 
 export interface LibraryTrack {
   id: string;
-  /** File name inside the app's store directory. */
+  /** File name inside the app's store directory; empty for a linked song. */
   storedFile: string;
-  /** Where it was imported from. Display and duplicate-detection only. */
+  /**
+   * Where it was imported from, for display and to avoid adding it twice —
+   * and for a linked song, the file it plays from.
+   */
   sourcePath: string;
   title: string;
   artist: string;
@@ -33,7 +36,22 @@ export interface LibraryTrack {
   coverArtUrl?: string;
   /** Lyrics matched by hand, saved beside the song; absent when they are looked for. */
   lyrics?: MatchedLyrics;
+  /**
+   * Played from where it is rather than copied in. Groovium cannot answer for
+   * it: moved, renamed or deleted, it no longer plays.
+   */
+  linked?: boolean;
+  /** A linked song whose file was not there when the library was loaded. */
+  missing?: boolean;
   addedAt: number;
+}
+
+/** Where a song's audio is: the app's copy, or a linked song's own file. */
+export function audioPathOf(
+  track: Pick<LibraryTrack, 'storedFile' | 'sourcePath' | 'linked'>,
+  storeDir: string,
+): string {
+  return track.linked ? track.sourcePath : joinPath(storeDir, track.storedFile);
 }
 
 /**
@@ -202,12 +220,65 @@ export async function importPaths(paths: string[]): Promise<LibraryTrack[]> {
   return invoke<LibraryTrack[]>('library_import', { paths });
 }
 
+/** Add the given files without copying them: linked, played from where they are. */
+export async function linkPaths(paths: string[]): Promise<LibraryTrack[]> {
+  if (!isTauri()) return [];
+  return invoke<LibraryTrack[]>('library_link', { paths });
+}
+
+/**
+ * Copy a linked song into the library after all, keeping its record. Rejects
+ * with `missing` when its file is not there.
+ */
+export async function copyIntoLibrary(id: string): Promise<LibraryTrack> {
+  return invoke<LibraryTrack>('library_copy_in', { id });
+}
+
+/** The songs opened with Groovium before the app had loaded, once. */
+export async function takeOpened(): Promise<string[]> {
+  if (!isTauri()) return [];
+  return invoke<string[]>('library_take_opened');
+}
+
+/** Listen for one of the library's events from Rust. Returns the unsubscribe function. */
+function listenFor<T>(event: string, handler: (payload: T) => void): () => void {
+  if (!isTauri()) return () => {};
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+  void (async () => {
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      const stop = await listen<T>(event, (e) => handler(e.payload));
+      if (cancelled) stop();
+      else unlisten = stop;
+    } catch (err) {
+      log('warn', 'library', `could not listen for ${event}`, err);
+    }
+  })();
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
+/** Files dropped on the window, summarised as a pick would be. */
+export const onDropped = (handler: (summary: ScanSummary) => void) =>
+  listenFor<ScanSummary>('library:dropped', handler);
+
+/** Whether files are being dragged over the window from outside. */
+export const onDropHover = (handler: (over: boolean) => void) =>
+  listenFor<boolean>('library:drop-hover', handler);
+
+/** Songs opened with Groovium while it was running, as library ids. */
+export const onOpened = (handler: (ids: string[]) => void) =>
+  listenFor<string[]>('library:opened', handler);
+
 export async function cancelImport(): Promise<void> {
   if (!isTauri()) return;
   await invoke('library_cancel_import');
 }
 
-/** Remove a track and delete the app's copy of it. Not reversible. */
+/** Remove a track and delete the app's copy of it — never a linked song's own file. */
 export async function removeFromLibrary(id: string): Promise<void> {
   if (!isTauri()) return;
   await invoke('library_remove', { id });

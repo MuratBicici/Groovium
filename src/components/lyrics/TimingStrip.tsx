@@ -13,7 +13,7 @@ import {
   type LyricsPin,
   type LyricsTiming,
 } from '@/core/lyrics/timing';
-import { envelopeOf } from '@/core/lyrics/waveform';
+import { envelopeOf, soundKey } from '@/core/lyrics/waveform';
 import { useLanguage } from '@/core/settings/store';
 import { usePlayerStore } from '@/core/store';
 
@@ -117,19 +117,24 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
 
   // The shape of the sound, for a song on this computer.
   const libraryId = track ? libraryIdOf(track.id) : null;
-  const storedFile = libraryId ? library.find((song) => song.id === libraryId)?.storedFile : undefined;
+  const song = libraryId ? library.find((record) => record.id === libraryId) : undefined;
+  // A linked song whose file has gone has no sound to read.
+  const sounded = song && !song.missing ? song : undefined;
+  const audioKey = sounded ? soundKey(sounded) : undefined;
   const [envelope, setEnvelope] = useState<{ file: string; shape: Float32Array | null } | null>(null);
   useEffect(() => {
-    if (!storedFile) return;
+    if (!sounded || !audioKey) return;
     let live = true;
-    void envelopeOf(storedFile).then((shape) => {
-      if (live) setEnvelope({ file: storedFile, shape });
+    void envelopeOf(sounded).then((shape) => {
+      if (live) setEnvelope({ file: audioKey, shape });
     });
     return () => {
       live = false;
     };
-  }, [storedFile]);
-  const shape = envelope && envelope.file === storedFile ? envelope.shape : null;
+    // The key is the file; the record is read when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioKey]);
+  const shape = envelope && envelope.file === audioKey ? envelope.shape : null;
 
   // Drawn again at every size and every theme, in the theme's own colour.
   useEffect(() => {

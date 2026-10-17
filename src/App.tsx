@@ -27,6 +27,8 @@ import {
   toCompact,
 } from '@/core/lyrics/layout';
 import { pressQueue, queueHidden } from '@/core/queue/view';
+import { onDropHover, onDropped, onOpened } from '@/core/library';
+import { ARRIVE_EASING } from '@/components/lyrics/motion';
 import { QueueDrawer } from '@/components/queue/QueueDrawer';
 import { QueueButton } from '@/components/queue/QueueButton';
 import { useLyricsStore } from '@/core/lyrics/store';
@@ -184,6 +186,29 @@ export default function App() {
   useEffect(() => {
     if (settingsReady) void setWindowZoom(scale);
   }, [scale, settingsReady]);
+
+  // Songs from outside. Dropped on the window, they are asked about in the
+  // library drawer, opened on its local side; opened with Groovium while it
+  // runs, they play.
+  useEffect(() => {
+    const stopDropped = onDropped((summary) => {
+      usePlayerStore.getState().offer(summary);
+      const settings = useSettingsStore.getState();
+      settings.setLibraryTab('groovium');
+      settings.setLyricsLayout(
+        showSpotify({
+          drawerOpen: settings.drawerOpen,
+          lyricsOn: settings.lyricsOn,
+          lyricsPlace: settings.lyricsPlace,
+        }),
+      );
+    });
+    const stopOpened = onOpened((ids) => void usePlayerStore.getState().playOpened(ids));
+    return () => {
+      stopDropped();
+      stopOpened();
+    };
+  }, []);
   const visualizer = useSettingsStore((s) => s.visualizer);
   const visualizerLook = useSettingsStore((s) => s.visualizerLook);
   const visualizerBrightness = useSettingsStore((s) => s.visualizerBrightness);
@@ -265,6 +290,38 @@ export default function App() {
     settingsReady,
     drawerSide,
   );
+  // Files dragged over the window from outside: the record rises to take
+  // them, a little larger and lit, and says where to let go where its title
+  // was. Scaled and never moved — the record's centre is what its flights
+  // measure — and played through the Web Animations API, so nothing of it is
+  // left in the record's own styles once the files have gone.
+  const [dropHover, setDropHover] = useState(false);
+  useEffect(() => onDropHover(setDropHover), []);
+  const lifts = useRef<Animation[]>([]);
+  useEffect(() => {
+    if (!dropHover && lifts.current.length === 0) return;
+    const disc = stageRef.current?.querySelector<HTMLElement>('[data-morph="disc"]');
+    if (!disc || prefersReducedMotion()) return;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-brass-500').trim();
+    const lit = `drop-shadow(0 0 16px color-mix(in srgb, ${accent || '#c8945a'} 50%, transparent))`;
+    const lift = disc.animate(
+      [
+        { scale: '1', filter: 'drop-shadow(0 0 0 transparent)' },
+        { scale: '1.05', filter: lit },
+      ],
+      { duration: 300, easing: ARRIVE_EASING, fill: 'forwards', direction: dropHover ? 'normal' : 'reverse' },
+    );
+    lifts.current.push(lift);
+    if (dropHover) return;
+    lift.finished.then(
+      () => {
+        for (const a of lifts.current) a.cancel();
+        lifts.current = [];
+      },
+      () => {},
+    );
+  }, [dropHover, stageRef]);
+
 
   const [overlay, setOverlay] = useState<Overlay>('none');
   // Collapsing takes the panel buttons away with it, so nothing may be showing
@@ -504,15 +561,25 @@ export default function App() {
                 arm swings clear, and one opacity on the lot cannot do that. */}
             <DiskPlatter stowed={compact} />
           </div>
-          <div ref={trackRef}>
+          <div ref={trackRef} className="relative">
             {/* Faded rather than removed while lyrics are on the deck: the
                 collapse animation measures this box, and the title glides up
                 out of it into the lyrics' small line. The fade itself is
                 `CompactLyrics`'s to run, timed to the words travelling between
                 the two, so this only says where it rests. */}
             <div data-lyrics-hides="" style={{ opacity: lyricsOnDeck ? 0 : 1 }}>
-              <TrackDisplay compact={compact} />
+              <div className="transition-opacity duration-200" style={{ opacity: dropHover ? 0 : 1 }}>
+                <TrackDisplay compact={compact} />
+              </div>
             </div>
+            {/* Where the title was, while files hover over the window. */}
+            <p
+              aria-hidden={!dropHover}
+              className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-body font-medium text-brass-400 transition-opacity duration-200"
+              style={{ opacity: dropHover ? 1 : 0 }}
+            >
+              {currentTrack ? t('library.dropOnRecord') : t('library.dropHere')}
+            </p>
           </div>
 
           <SettingsPanel

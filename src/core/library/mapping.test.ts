@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { libraryTrackToMetadata, playlistItemToMetadata, type LibraryTrack } from './index';
+import {
+  audioPathOf,
+  libraryTrackToMetadata,
+  playlistItemToMetadata,
+  type LibraryTrack,
+} from './index';
 import { toPlaylistItem } from '@/core/store/playerStore';
 
 const entry = (over: Partial<LibraryTrack> = {}): LibraryTrack => ({
@@ -13,6 +18,16 @@ const entry = (over: Partial<LibraryTrack> = {}): LibraryTrack => ({
   hasCoverArt: false,
   addedAt: 0,
   ...over,
+});
+
+describe('audioPathOf', () => {
+  it('plays a copy from the store and a linked song from its own file', () => {
+    // Joined the way the store directory is, whichever separator it uses.
+    expect(audioPathOf(entry(), 'C:/Data/library')).toBe('C:/Data/library/abc.mp3');
+    expect(audioPathOf(entry({ linked: true, storedFile: '' }), 'C:/Data/library')).toBe(
+      'C:/Music/song.mp3',
+    );
+  });
 });
 
 describe('libraryTrackToMetadata', () => {

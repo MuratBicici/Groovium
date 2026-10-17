@@ -508,6 +508,8 @@ export function SongDetailsSheet({
   lyrics,
   onMatchLyrics,
   onClearLyrics,
+  linkedFile,
+  onCopyIn,
   onClose,
 }: {
   names: SongNames;
@@ -523,6 +525,13 @@ export function SongDetailsSheet({
   lyrics?: { source: string; trackName: string; artistName: string } | null;
   onMatchLyrics?: () => void;
   onClearLyrics?: () => void;
+  /**
+   * For a song linked rather than copied in: the file it plays from, and
+   * whether it was there at the last look. Left out for a song in the library.
+   */
+  linkedFile?: { path: string; missing: boolean };
+  /** Copy a linked song into the library after all. */
+  onCopyIn?: () => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -600,6 +609,33 @@ export function SongDetailsSheet({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* A linked song: where its file is, that Groovium cannot answer for
+          it, and the way to make it a copy after all. The path is cut at its
+          start, where folders matter least; all of it is in the tooltip. */}
+      {linkedFile && (
+        <div className="flex flex-col gap-1">
+          <span className="text-meta text-cream-400">{t('library.songFile')}</span>
+          <div className="flex items-center gap-1.5 rounded bg-shell-900/55 py-1 pr-1 pl-2 ring-1 ring-[var(--color-edge)]">
+            <span
+              className={`min-w-0 flex-1 truncate text-body [direction:rtl] text-left ${
+                linkedFile.missing ? 'text-warn/90' : 'text-cream-50'
+              }`}
+              title={linkedFile.path}
+            >
+              <bdi>{linkedFile.path}</bdi>
+            </span>
+            {onCopyIn && !linkedFile.missing && (
+              <button type="button" onClick={onCopyIn} className={LYRICS_BUTTON}>
+                {t('library.copyIn')}
+              </button>
+            )}
+          </div>
+          <p className="text-meta leading-snug text-cream-400">
+            {linkedFile.missing ? t('library.missingNote') : t('library.linkedNote')}
+          </p>
         </div>
       )}
 

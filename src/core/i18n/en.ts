@@ -179,6 +179,24 @@ export const en = {
   'library.confirmImport': 'Copy {count} file ({size}) into your library?',
   'library.confirmImport_plural': 'Copy {count} files ({size}) into your library?',
   'library.duplicates': '{count} already added.',
+  'library.link': 'Add without copying',
+  'library.dropOnRecord': 'Drop it on the record',
+  'library.dropHere': 'Drop it here',
+  'library.linkNote':
+    'Not copied, the songs play from where they are. Groovium cannot vouch for songs it has not added to its library: moved, renamed or deleted, they no longer play.',
+  'library.allThere': 'All of these ({count}) are already here.',
+  'library.droppedNothing': 'There is no audio among what was dropped.',
+  'library.linkedShelf': 'Linked · outside the library · {count}',
+  'library.missing': 'File missing',
+  'library.missingPlay': 'This song’s file is no longer where it was: {path}',
+  'library.copyMissing': 'Could not copy it: the file is no longer there ({path}).',
+  'library.songFile': 'File',
+  'library.linkedNote':
+    'Outside the library, played from where it is. Groovium cannot vouch for it: moved, renamed or deleted, it no longer plays.',
+  'library.missingNote':
+    'The file is no longer here. Put it back and the song plays again, or remove it.',
+  'library.copyIn': 'Copy into the library',
+  'library.confirmUnlink': 'Remove this link? The file itself is not deleted.',
   'library.removeNamed': 'Remove {title} from library',
   'library.removeTitle': 'Remove from library',
   'library.confirmRemove':
@@ -206,7 +224,7 @@ export const en = {
   'library.songArtist': 'Artist',
   'library.songAlbum': 'Album',
   'library.songLyrics': 'Lyrics',
-  'library.lyricsAuto': 'Looked for automatically',
+  'library.lyricsAuto': 'Not matched',
   'library.lyricsMatch': 'Match…',
   'library.lyricsChange': 'Change…',
   'library.lyricsClear': 'Clear',

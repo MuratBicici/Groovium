@@ -82,7 +82,11 @@ that they are correct.
 ## What stays on your computer
 
 - **Your music files.** Local tracks are copied into Groovium's library folder
-  and played from there. They are never uploaded anywhere.
+  and played from there — or, if you add them without copying, played from
+  where they are, with their place on your disk written in the library index.
+  Either way they are never uploaded anywhere. A song added without copying
+  keeps its cover and any lyrics you matched in the library folder; removing
+  it from Groovium removes those and leaves the file itself alone.
 - **Settings, playlists, the library index, the last session, the window's
   position and the Spotify songs' lyrics timings**, in
   `%APPDATA%\com.groovium.desktop`. The Spotify Client ID and the

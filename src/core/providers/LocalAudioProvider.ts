@@ -1,12 +1,15 @@
 import type { AuthResult, SourceType, TrackMetadata } from '@/core/types';
 import { clamp } from '@/core/utils/time';
-import { joinPath } from '@/core/utils/paths';
+import { audioPathOf } from '@/core/library';
 import { BaseProvider } from './BaseProvider';
 
 /** The shape `useLibrary` needs, kept structural to avoid importing the store. */
 export interface LibraryEntrySource {
   id: string;
   storedFile: string;
+  /** The file itself, for a linked song, which has no stored copy. */
+  sourcePath: string;
+  linked?: boolean;
   title: string;
   artist: string;
   album: string;
@@ -177,7 +180,7 @@ export class LocalAudioProvider extends BaseProvider {
     const { convertFileSrc } = await import('@tauri-apps/api/core');
 
     for (const track of tracks) {
-      const path = joinPath(storeDir, track.storedFile);
+      const path = audioPathOf(track, storeDir);
       const id = `library:${track.id}`;
       const metadata: TrackMetadata = {
         id,

@@ -1,6 +1,5 @@
-import { libraryStoreDir } from '@/core/library';
+import { audioPathOf, libraryStoreDir, type LibraryTrack } from '@/core/library';
 import { isTauri } from '@/core/utils/env';
-import { joinPath } from '@/core/utils/paths';
 import { log } from '@/platform/log';
 
 /**
@@ -12,9 +11,10 @@ import { log } from '@/platform/log';
  * starts after an opening, where a break falls and where it ends — the places
  * the lines have to meet.
  *
- * Read from the library's own copy of the file, decoded in the webview, and
- * reduced at once to a few hundred peaks; the decoded sound is not kept. A
- * Spotify song has no file to read, and gets no shape.
+ * Read from the library's own copy of the file — or a linked song's own file —
+ * decoded in the webview, and reduced at once to a few hundred peaks; the
+ * decoded sound is not kept. A Spotify song has no file to read, and gets no
+ * shape.
  */
 
 /** The fewest columns a shape has, for the shortest songs. */
@@ -49,11 +49,14 @@ export function envelopeFrom(channels: Float32Array[], columns = ENVELOPE_COLUMN
   return out;
 }
 
-async function read(storedFile: string): Promise<Float32Array | null> {
+/** The song's audio, as the waveform needs to know it. */
+export type Sounded = Pick<LibraryTrack, 'storedFile' | 'sourcePath' | 'linked'>;
+
+async function read(song: Sounded): Promise<Float32Array | null> {
   const { convertFileSrc } = await import('@tauri-apps/api/core');
-  const url = convertFileSrc(joinPath(await libraryStoreDir(), storedFile));
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${response.status} for ${storedFile}`);
+  const path = audioPathOf(song, await libraryStoreDir());
+  const response = await fetch(convertFileSrc(path));
+  if (!response.ok) throw new Error(`${response.status} for ${path}`);
   const bytes = await response.arrayBuffer();
   const context = new OfflineAudioContext(1, 1, 44_100);
   const sound = await context.decodeAudioData(bytes);
@@ -64,19 +67,25 @@ async function read(storedFile: string): Promise<Float32Array | null> {
   return envelopeFrom(channels, columns);
 }
 
+/** What a song's shape is kept under: its file, wherever that is. */
+export function soundKey(song: Sounded): string {
+  return song.linked ? `linked:${song.sourcePath}` : song.storedFile;
+}
+
 /**
- * The shape of a library song's sound, by its stored file, or null when there
- * is none to read — outside the app, or a file the webview cannot decode.
+ * The shape of a library song's sound, or null when there is none to read —
+ * outside the app, or a file the webview cannot decode.
  */
-export function envelopeOf(storedFile: string): Promise<Float32Array | null> {
+export function envelopeOf(song: Sounded): Promise<Float32Array | null> {
   if (!isTauri()) return Promise.resolve(null);
-  const hit = kept.get(storedFile);
+  const key = soundKey(song);
+  const hit = kept.get(key);
   if (hit) return hit;
-  const shape = read(storedFile).catch((err: unknown) => {
-    log('warn', 'lyrics', `no waveform for ${storedFile}`, err);
+  const shape = read(song).catch((err: unknown) => {
+    log('warn', 'lyrics', `no waveform for ${key}`, err);
     return null;
   });
-  kept.set(storedFile, shape);
+  kept.set(key, shape);
   for (const key of [...kept.keys()].slice(0, Math.max(0, kept.size - KEEP))) kept.delete(key);
   return shape;
 }

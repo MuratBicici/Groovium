@@ -34,6 +34,9 @@ import {
   movePlaylistItemFile,
   renamePlaylistFile,
   setLibraryTrackCover,
+  linkPaths,
+  copyIntoLibrary,
+  takeOpened,
   setLibraryTrackLyrics,
   clearLibraryTrackLyrics,
   setPlaylistCoverFile,
@@ -203,6 +206,11 @@ export interface PlayerState {
   skipped: number[];
   /** Non-null while files are being copied in. */
   importing: ImportProgress | null;
+  /**
+   * Files dropped on the window, waiting for the listener to say whether to
+   * copy them in or link them. Shown in the library drawer.
+   */
+  offered: ScanSummary | null;
 
   /**
    * Infinite play. When the current collection runs out, a similar track is
@@ -354,6 +362,14 @@ export interface PlayerActions {
   chooseFolder: () => Promise<ScanSummary | null>;
   /** Copy the chosen files in. Progress lands on `importing`. */
   runImport: (paths: string[]) => Promise<void>;
+  /** Add files without copying them, played from where they are. */
+  runLink: (paths: string[]) => Promise<void>;
+  /** Copy a linked song into the library after all. */
+  copyTrackIn: (libraryId: string) => Promise<void>;
+  /** Put dropped files up to be confirmed, or put them away with null. */
+  offer: (summary: ScanSummary | null) => void;
+  /** Play songs that were opened with Groovium, the first of them now. */
+  playOpened: (libraryIds: string[]) => Promise<void>;
   cancelImport: () => Promise<void>;
   removeTrack: (libraryId: string) => Promise<void>;
 
@@ -407,6 +423,7 @@ const initialState: PlayerState = {
   upNext: [],
   skipped: [],
   importing: null,
+  offered: null,
   station: false,
   wholeList: false,
   stationSearching: false,
@@ -844,6 +861,20 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     if (changed) set({ currentTrack: libraryTrackToMetadata(changed) });
   }
 
+  /** Copy files in or link them, with the same progress strip either way. */
+  async function bringIn(paths: string[], add: (paths: string[]) => Promise<unknown>): Promise<void> {
+    if (paths.length === 0) return;
+    set({ importing: { done: 0, total: paths.length, currentName: '' } });
+    try {
+      await reporting(async () => {
+        await add(paths);
+        await get().refreshLibrary();
+      }, undefined);
+    } finally {
+      set({ importing: null });
+    }
+  }
+
   async function reporting<T>(action: () => Promise<T>, fallback: T): Promise<T> {
     try {
       return await action();
@@ -1108,6 +1139,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await withProvider((provider) => provider.setVolume(outputAmplitude()));
         startPersisting();
         set({ initialized: true });
+        // Started by opening a song with Groovium: that song, now.
+        const opened = await takeOpened();
+        if (opened.length > 0) await get().playOpened(opened);
       } catch (err) {
         set({
           error: say('error.startup', {
@@ -1486,17 +1520,34 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async runImport(paths) {
-      if (paths.length === 0) return;
+      await bringIn(paths, importPaths);
+    },
 
-      set({ importing: { done: 0, total: paths.length, currentName: '' } });
-      try {
-        await reporting(async () => {
-          await importPaths(paths);
-          await get().refreshLibrary();
-        }, undefined);
-      } finally {
-        set({ importing: null });
-      }
+    async runLink(paths) {
+      await bringIn(paths, linkPaths);
+    },
+
+    async copyTrackIn(libraryId) {
+      const song = get().library.find((track) => track.id === libraryId);
+      await reporting(async () => {
+        try {
+          await copyIntoLibrary(libraryId);
+        } catch (err) {
+          if (errorText(err) !== 'missing') throw err;
+          throw new Error(say('library.copyMissing', { path: song?.sourcePath ?? '' }), { cause: err });
+        }
+        await get().refreshLibrary();
+      }, undefined);
+    },
+
+    offer(summary) {
+      set({ offered: summary });
+    },
+
+    async playOpened(libraryIds) {
+      await get().refreshLibrary();
+      const index = get().library.findIndex((track) => track.id === libraryIds[0]);
+      if (index >= 0) await get().playFrom('library', index);
     },
 
     async cancelImport() {

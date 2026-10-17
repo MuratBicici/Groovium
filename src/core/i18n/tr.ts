@@ -167,6 +167,24 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Burada henüz bir şey yok. Başlamak için müzik ekleyin — şarkılar kopyalanarak alınır, böylece aslını taşısanız veya silseniz de çalmaya devam eder.',
   'library.confirmImport': '{count} dosya ({size}) kitaplığınıza kopyalansın mı?',
   'library.duplicates': '{count} tanesi zaten ekli.',
+  'library.link': 'Kopyalamadan ekle',
+  'library.dropOnRecord': 'Plağın üstüne bırakın',
+  'library.dropHere': 'Buraya bırakın',
+  'library.linkNote':
+    'Kopyalamazsanız şarkılar bulundukları yerden çalar. Groovium kitaplığa eklenmemiş şarkılar için garanti vermez: dosya taşınır, adı değişir ya da silinirse çalmaz.',
+  'library.allThere': 'Bunların hepsi ({count}) zaten ekli.',
+  'library.droppedNothing': 'Bırakılanlarda ses dosyası yok.',
+  'library.linkedShelf': 'Bağlantılı · kitaplık dışında · {count}',
+  'library.missing': 'Dosya yok',
+  'library.missingPlay': 'Bu şarkının dosyası artık yerinde değil: {path}',
+  'library.copyMissing': 'Kopyalanamadı: dosya artık yerinde değil ({path}).',
+  'library.songFile': 'Dosya',
+  'library.linkedNote':
+    'Kitaplık dışında, bulunduğu yerden çalar. Groovium bu şarkı için garanti vermez: dosya taşınır, adı değişir ya da silinirse çalmaz.',
+  'library.missingNote':
+    'Dosya artık bu konumda değil. Geri koyarsanız şarkı yeniden çalar; ya da kaldırabilirsiniz.',
+  'library.copyIn': 'Kitaplığa kopyala',
+  'library.confirmUnlink': 'Bu bağlantı kaldırılsın mı? Dosyanın kendisi silinmez.',
   'library.removeNamed': '{title} şarkısını kitaplıktan çıkar',
   'library.removeTitle': 'Kitaplıktan çıkar',
   'library.confirmRemove':
@@ -194,7 +212,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'library.songArtist': 'Sanatçı',
   'library.songAlbum': 'Albüm',
   'library.songLyrics': 'Sözler',
-  'library.lyricsAuto': 'Otomatik aranır',
+  'library.lyricsAuto': 'Eşlenmedi',
   'library.lyricsMatch': 'Eşleştir…',
   'library.lyricsChange': 'Değiştir…',
   'library.lyricsClear': 'Kaldır',

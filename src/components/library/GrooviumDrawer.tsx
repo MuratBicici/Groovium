@@ -54,6 +54,11 @@ export function GrooviumDrawer({
   const chooseFiles = usePlayerStore((s) => s.chooseFiles);
   const chooseFolder = usePlayerStore((s) => s.chooseFolder);
   const runImport = usePlayerStore((s) => s.runImport);
+  const runLink = usePlayerStore((s) => s.runLink);
+  const copyTrackIn = usePlayerStore((s) => s.copyTrackIn);
+  // Files dropped on the window, waiting here to be confirmed like a pick.
+  const offered = usePlayerStore((s) => s.offered);
+  const offer = usePlayerStore((s) => s.offer);
   const removeTrack = usePlayerStore((s) => s.removeTrack);
   const playFrom = usePlayerStore((s) => s.playFrom);
   const newPlaylist = usePlayerStore((s) => s.newPlaylist);
@@ -141,7 +146,8 @@ export function GrooviumDrawer({
   // to type at the drawer. Not while anything is already over the shelves — a
   // crate, a song's details, a question — since a letter typed there is not
   // the start of a search of what they cover.
-  const covered = open !== null || editingSong !== null || pending !== null || confirmRemove !== null;
+  const covered =
+    open !== null || editingSong !== null || pending !== null || offered !== null || confirmRemove !== null;
   useEffect(() => {
     if (!active || searching !== null || covered) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -168,11 +174,32 @@ export function GrooviumDrawer({
     setPending(summary);
   }
 
-  async function confirmImport() {
-    const summary = pending;
+  // A pick made here, or files dropped on the window: asked about the same way.
+  const asking = pending ?? offered;
+  const putAway = () => {
     setPending(null);
-    if (summary) await runImport(summary.paths);
+    offer(null);
+  };
+  async function confirmImport(how: 'copy' | 'link') {
+    const summary = asking;
+    putAway();
+    if (!summary) return;
+    await (how === 'copy' ? runImport(summary.paths) : runLink(summary.paths));
   }
+
+  // Copied in and linked, each on its shelf, each keeping its place in the
+  // library — which is the order the library plays in either way.
+  const shelved = library.map((track, index) => ({ track, index }));
+  const copied = shelved.filter(({ track }) => !track.linked);
+  const linked = shelved.filter(({ track }) => track.linked);
+  const play = (track: LibraryTrack, index: number) => {
+    if (track.missing) {
+      usePlayerStore.setState({ error: t('library.missingPlay', { path: track.sourcePath }) });
+      return;
+    }
+    void playFrom('library', index);
+  };
+  const removing = confirmRemove ? library.find((track) => track.id === confirmRemove) : undefined;
 
   return (
     <aside
@@ -190,48 +217,80 @@ export function GrooviumDrawer({
       </div>
 
       {/* Copying duplicates the audio on disk, so the size is shown before it
-          starts rather than discovered afterwards. */}
-      {pending && (
+          starts rather than discovered afterwards. Not copying is the other
+          answer, said plainly with what it costs. */}
+      {asking && (
         <div className="mx-3 mb-2 shrink-0 rounded bg-shell-900/80 p-2 text-meta leading-snug text-cream-200">
-          <p>
-            {t('library.confirmImport', {
-              count: pending.paths.length,
-              size: formatBytes(pending.totalBytes),
-            })}
-            {pending.duplicates > 0 && (
-              <span className="text-cream-400">
-                {' '}
-                {t('library.duplicates', { count: pending.duplicates })}
-              </span>
-            )}
-          </p>
-          <div className="mt-1.5 flex gap-1.5">
-            <SmallButton onClick={() => void confirmImport()} primary>
-              {t('common.copy')}
-            </SmallButton>
-            <SmallButton onClick={() => setPending(null)}>{t('common.cancel')}</SmallButton>
-          </div>
+          {asking.paths.length > 0 ? (
+            <>
+              <p>
+                {t('library.confirmImport', {
+                  count: asking.paths.length,
+                  size: formatBytes(asking.totalBytes),
+                })}
+                {asking.duplicates > 0 && (
+                  <span className="text-cream-400">
+                    {' '}
+                    {t('library.duplicates', { count: asking.duplicates })}
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 text-cream-400">{t('library.linkNote')}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <SmallButton onClick={() => void confirmImport('copy')} primary>
+                  {t('common.copy')}
+                </SmallButton>
+                <SmallButton onClick={() => void confirmImport('link')}>{t('library.link')}</SmallButton>
+                <SmallButton onClick={putAway}>{t('common.cancel')}</SmallButton>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>
+                {asking.duplicates > 0
+                  ? t('library.allThere', { count: asking.duplicates })
+                  : t('library.droppedNothing')}
+              </p>
+              <div className="mt-1.5 flex gap-1.5">
+                <SmallButton onClick={putAway}>{t('common.close')}</SmallButton>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2">
-        <Shelf heading={t('library.onThisComputer', { count: library.length })}>
+        <Shelf heading={t('library.onThisComputer', { count: copied.length })}>
           <AddMusic onChoose={(which) => void choose(which)} />
           {library.length === 0 && (
             <p className="max-w-[260px] self-center px-1 text-meta leading-relaxed text-cream-400/70">
               {t('library.empty')}
             </p>
           )}
-          {library.map((track, index) => (
+          {copied.map(({ track, index }) => (
             <LocalRecord
               key={track.id}
               track={track}
-              onPlay={() => void playFrom('library', index)}
+              onPlay={() => play(track, index)}
               onRemove={() => setConfirmRemove(track.id)}
               onEdit={() => setEditingSong(track.id)}
             />
           ))}
         </Shelf>
+
+        {linked.length > 0 && (
+          <Shelf heading={t('library.linkedShelf', { count: linked.length })}>
+            {linked.map(({ track, index }) => (
+              <LocalRecord
+                key={track.id}
+                track={track}
+                onPlay={() => play(track, index)}
+                onRemove={() => setConfirmRemove(track.id)}
+                onEdit={() => setEditingSong(track.id)}
+              />
+            ))}
+          </Shelf>
+        )}
 
         <Shelf heading={t('library.lists')}>
           <NewCrate
@@ -263,10 +322,11 @@ export function GrooviumDrawer({
         </Shelf>
       </div>
 
-      {/* Deleting the app's copy is not reversible, so it is confirmed. */}
+      {/* Deleting the app's copy is not reversible, so it is confirmed. A link
+          has no copy to lose, and says so: its file stays where it is. */}
       {confirmRemove && (
         <div className="shrink-0 bg-red-950/80 px-3 py-2 text-meta leading-snug text-red-100">
-          <p>{t('library.confirmRemove')}</p>
+          <p>{removing?.linked ? t('library.confirmUnlink') : t('library.confirmRemove')}</p>
           <div className="mt-1.5 flex gap-1.5">
             <SmallButton
               onClick={() => {
@@ -276,7 +336,7 @@ export function GrooviumDrawer({
               }}
               primary
             >
-              {t('common.delete')}
+              {removing?.linked ? t('common.remove') : t('common.delete')}
             </SmallButton>
             <SmallButton onClick={() => setConfirmRemove(null)}>{t('common.keep')}</SmallButton>
           </div>
@@ -295,6 +355,13 @@ export function GrooviumDrawer({
               lyrics: song.lyrics ?? null,
               onMatchLyrics: () => lyricsMatch.open(libraryTrackToMetadata(song)),
               onClearLyrics: () => void unmatchLyrics(song.id),
+            })}
+            {...(song.linked && {
+              linkedFile: { path: song.sourcePath, missing: !!song.missing },
+              onCopyIn: () => {
+                closeSong();
+                void copyTrackIn(song.id);
+              },
             })}
             onClose={closeSong}
             onSave={(names) => {
@@ -369,7 +436,21 @@ function LocalRecord({
   const meta = libraryTrackToMetadata(track);
   return (
     <div className="group/record relative shrink-0">
-      <RecordCard track={meta} onPlay={onPlay} />
+      <div className={track.missing ? 'opacity-45 grayscale' : undefined}>
+        <RecordCard track={meta} onPlay={onPlay} />
+      </div>
+      {track.missing && (
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center"
+          style={{ height: RECORD_SIZE }}
+          title={track.sourcePath}
+        >
+          {/* On a pill of the shell, so it reads on the dimmed record in any palette. */}
+          <span className="rounded-full bg-shell-900/85 px-1.5 py-0.5 text-label font-medium text-warn">
+            {t('library.missing')}
+          </span>
+        </span>
+      )}
       <span className="absolute top-0.5 right-0.5 z-10 flex items-center rounded-full bg-shell-900/80 opacity-0 backdrop-blur-sm transition-opacity group-hover/record:opacity-100 focus-within:opacity-100">
         <button
           type="button"

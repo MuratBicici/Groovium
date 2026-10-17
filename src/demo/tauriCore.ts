@@ -89,14 +89,28 @@ function matchOf(id: string): { candidate: LyricsCandidate; result: LyricsResult
 }
 
 /** The library panel's records, in the shape Rust keeps them in. */
+/**
+ * Songs the demo plays as linked rather than copied in, by library id: the
+ * last two, one of them with its file gone, so both look as they would.
+ * Copying one in takes it off.
+ */
+const copiedIn = new Set<string>();
+function linkOf(n: number, count: number, id: string): { linked?: true; missing?: true } {
+  if (copiedIn.has(id) || n < count - 2) return {};
+  return n === count - 1 ? { linked: true, missing: true } : { linked: true };
+}
+
 function libraryRecords() {
-  return localTracks().map((track, n) => {
+  const tracks = localTracks();
+  return tracks.map((track, n) => {
     const id = track.id.replace(/^library:/, '');
     const match = matchOf(id)?.candidate;
+    const link = linkOf(n, tracks.length, id);
     return {
       id,
       storedFile: '',
-      sourcePath: '',
+      sourcePath: link.linked ? `C:\\Users\\Demo\\Music\\${track.artist}\\${track.title}.flac` : '',
+      ...link,
       title: track.title,
       artist: track.artist,
       album: track.album,
@@ -191,6 +205,16 @@ const HANDLERS: Record<string, Handler> = {
   library_pick_files: () => null,
   library_pick_folder: () => null,
   library_import: () => [],
+  library_link: () => [],
+  library_copy_in: (args) => {
+    const id = String(args.id ?? '');
+    if (libraryRecords().find((record) => record.id === id)?.missing) {
+      throw new Error('missing');
+    }
+    copiedIn.add(id);
+    return recordOf(id);
+  },
+  library_take_opened: () => [],
   library_remove: () => null,
   playlists_load: () => [],
 

@@ -22,7 +22,7 @@ mod spotify;
 mod tray;
 mod visualizer;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 fn main() {
     logging::record_panics();
@@ -30,10 +30,19 @@ fn main() {
     tauri::Builder::default()
         // Must be registered first so a second launch is intercepted before it
         // does any other setup work.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // The widget is already running — surface it instead of starting
             // a second copy that would fight over the media keys.
             tray::show_window(app);
+            // And if it was started to open a song ("Open with", a double
+            // click), this copy plays it. The first argument is the program.
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let ids = library::open_with(&app, args.into_iter().skip(1));
+                if !ids.is_empty() {
+                    let _ = app.emit("library:opened", ids);
+                }
+            });
         }))
         // Remember where the user put the widget. Position and size — see
         // `shell::PLACE_FLAGS` for why the size has to be saved even though the
@@ -57,6 +66,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .manage(library::ImportControl::default())
         .manage(library::PickedPaths::default())
+        .manage(library::Opened::default())
         .manage(spotify::tokens::AccessTokenCache::default())
         .manage(shell::ClickArea::default())
         .manage(shell::Placekeeper::default())
@@ -81,6 +91,9 @@ fn main() {
             tray::create(app.handle())?;
             // Never fatal: media keys may already be held by another app.
             shortcuts::register(app.handle());
+            // Started to open a song: linked now, played once the webview asks.
+            let opened = library::open_with(app.handle(), std::env::args().skip(1));
+            app.state::<library::Opened>().hold(opened);
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -96,6 +109,8 @@ fn main() {
             // Dragged, or moved by the drawer changing sides. Written down once
             // it stops rather than sixty times a second while it goes.
             WindowEvent::Moved(_) => shell::place_changed(window.app_handle()),
+            // Files dragged in from outside, to add.
+            WindowEvent::DragDrop(drop) => library::on_drag_drop(window.app_handle(), drop),
             _ => {}
         })
         // No credential-store commands here on purpose. Reading a stored secret
@@ -108,6 +123,9 @@ fn main() {
             library::library_pick_files,
             library::library_pick_folder,
             library::library_import,
+            library::library_link,
+            library::library_copy_in,
+            library::library_take_opened,
             library::library_cancel_import,
             library::library_remove,
             library::library_update_track,

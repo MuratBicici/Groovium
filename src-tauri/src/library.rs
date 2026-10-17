@@ -15,6 +15,13 @@
 //! tags are still there to read. And the asset-protocol scope collapses to one
 //! recursive grant on our own directory instead of a grant per picked file,
 //! which is a narrower surface than Phase 1 had.
+//!
+//! A song can be linked instead, when the listener would rather not copy it:
+//! listed, tagged and played from where it is, with nothing copied in but its
+//! cover. Groovium cannot answer for a file it does not hold — moved, renamed
+//! or deleted, a linked song no longer plays, and the library says so rather
+//! than pretending. Each linked file gets an asset grant of its own, for that
+//! file alone. Removing one forgets it; the file itself is never touched.
 
 use std::collections::HashSet;
 use std::fs;
@@ -26,7 +33,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, DragDropEvent, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use walkdir::WalkDir;
 
@@ -39,8 +46,14 @@ const LIBRARY_FILE: &str = "library.json";
 const STORE_DIR: &str = "library";
 const LIBRARY_VERSION: u32 = 1;
 
+/// What the webview's own player can decode, which is what plays a local
+/// song. WebM, MP4 and its audiobook twin M4B were tried in it and play;
+/// Matroska is what it says it plays, with Opus or Vorbis inside. AIFF, ALAC,
+/// WMA and APE it cannot, and they are not offered. `windows/hooks.nsh`
+/// offers Groovium in "Open with" for exactly these.
 const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "wav", "ogg", "oga", "opus", "m4a", "aac", "weba",
+    "mp3", "flac", "wav", "ogg", "oga", "opus", "m4a", "aac", "weba", "webm", "mp4", "m4b",
+    "mka",
 ];
 
 /// Deep enough for `Artist/Album/Disc 1`, shallow enough that pointing at a
@@ -81,7 +94,19 @@ pub struct LibraryTrack {
     /// search, and on records from before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lyrics: Option<LyricsMatch>,
+    /// Played from where it is, nothing copied in but its cover: `stored_file`
+    /// is empty and `source_path` is the file itself.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub linked: bool,
+    /// A linked song whose file was not where it was at the last load. Worked
+    /// out again on every load, never trusted from the file.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub missing: bool,
     pub added_at: u64,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// Which lyrics a song was matched with by hand: the file they were saved in,
@@ -367,11 +392,21 @@ fn backfill_covers(tracks: &mut [LibraryTrack], store: &Store) -> bool {
         if track.cover_file.is_some() || !track.has_cover_art {
             continue;
         }
-        // A name this store could not have written is a tampered record, not
-        // a track with artwork waiting to be found.
-        let extracted = store
-            .path_of(&track.stored_file)
-            .and_then(|copy| metadata::extract_picture_to(&copy, &store.root, &track.id));
+        // A linked song's art is in its own file, and a file that is not there
+        // now may be back: tried again next time rather than given up on.
+        let audio = if track.linked {
+            let file = PathBuf::from(&track.source_path);
+            if !file.is_file() {
+                continue;
+            }
+            Some(file)
+        } else {
+            // A name this store could not have written is a tampered record,
+            // not a track with artwork waiting to be found.
+            store.path_of(&track.stored_file)
+        };
+        let extracted =
+            audio.and_then(|file| metadata::extract_picture_to(&file, &store.root, &track.id));
         match extracted {
             Some(name) => track.cover_file = Some(name),
             // Our copy is the source of truth; nothing extractable means the
@@ -432,6 +467,7 @@ pub fn library_load(app: AppHandle) -> Result<Vec<LibraryTrack>, String> {
 
     let library_path = library_path(&app)?;
     let mut tracks = read_library(&library_path);
+    look_for_linked(&app, &mut tracks);
     if backfill_covers(&mut tracks, &store) {
         write_library(&library_path, &tracks)?;
     }
@@ -484,15 +520,7 @@ pub fn library_pick_folder(
         .into_path()
         .map_err(|e| format!("Could not resolve the folder: {e}"))?;
 
-    let paths: Vec<PathBuf> = WalkDir::new(&root)
-        .max_depth(MAX_SCAN_DEPTH)
-        .into_iter()
-        // Skip unreadable directories rather than abandoning the whole scan.
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file() && is_audio_file(e.path()))
-        .map(|e| e.path().to_path_buf())
-        .collect();
-
+    let paths = audio_files_in(&root);
     picked.offer(&paths);
     Ok(Some(summarize(&app, paths)?))
 }
@@ -526,6 +554,69 @@ fn summarize(app: &AppHandle, paths: Vec<PathBuf>) -> Result<ScanSummary, String
     })
 }
 
+/// The audio files in a folder and the folders under it.
+fn audio_files_in(root: &Path) -> Vec<PathBuf> {
+    WalkDir::new(root)
+        .max_depth(MAX_SCAN_DEPTH)
+        .into_iter()
+        // Skip unreadable directories rather than abandoning the whole scan.
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file() && is_audio_file(e.path()))
+        .map(|e| e.path().to_path_buf())
+        .collect()
+}
+
+/// How a file comes into the library: copied into the store, or linked where
+/// it is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Bring {
+    Copy,
+    Link,
+}
+
+/// Let the webview read one linked file, and nothing beside it. Audio only: a
+/// record is a file anyone can edit, and a grant made from it should not be
+/// able to reach a document.
+fn grant(app: &AppHandle, file: &Path) {
+    if !is_audio_file(file) {
+        return;
+    }
+    if let Err(e) = app.asset_protocol_scope().allow_file(file) {
+        log::warn!("[library] could not grant access to {}: {e}", file.display());
+    }
+}
+
+/// Mark the linked songs whose files are not there, and grant the rest.
+fn look_for_linked(app: &AppHandle, tracks: &mut [LibraryTrack]) {
+    for file in mark_missing(tracks) {
+        grant(app, &file);
+    }
+}
+
+/// Mark the linked songs whose files are not there; the files that are.
+fn mark_missing(tracks: &mut [LibraryTrack]) -> Vec<PathBuf> {
+    let mut present = Vec::new();
+    for track in tracks.iter_mut().filter(|t| t.linked) {
+        let file = PathBuf::from(&track.source_path);
+        track.missing = !file.is_file();
+        if !track.missing {
+            present.push(file);
+        }
+    }
+    present
+}
+
+/// What a store holds for a track and should go with it: its copy, unless it
+/// is linked and has none, its cover and its lyrics. Never a linked song's
+/// own file, which is not in the store and not ours.
+fn owned_files(track: &LibraryTrack) -> Vec<&str> {
+    let copy = (!track.linked).then_some(track.stored_file.as_str());
+    copy.into_iter()
+        .chain(track.cover_file.as_deref())
+        .chain(track.lyrics.as_ref().map(|l| l.file.as_str()))
+        .collect()
+}
+
 /// Copy the given files into the store and add them to the library.
 ///
 /// Emits `library:import-progress` per file and checks the cancel flag between
@@ -537,25 +628,52 @@ pub fn library_import(
     control: State<'_, ImportControl>,
     picked: State<'_, PickedPaths>,
 ) -> Result<Vec<LibraryTrack>, String> {
-    control.reset();
+    refuse_uninvited(&paths, &picked)?;
+    bring_in(&app, &paths, &control, Bring::Copy)
+}
 
-    // A path that never came out of a dialog is not a file anyone asked for.
-    // Refused as a whole rather than quietly filtered, because in normal use
-    // this cannot happen: the frontend hands back exactly the list it was
-    // given. The count is reported and the paths are not, so nothing invented
-    // gets echoed into the interface.
+/// Add the given files without copying them: linked, played from where they
+/// are. The same progress and the same cancel as an import.
+#[tauri::command(async)]
+pub fn library_link(
+    app: AppHandle,
+    paths: Vec<String>,
+    control: State<'_, ImportControl>,
+    picked: State<'_, PickedPaths>,
+) -> Result<Vec<LibraryTrack>, String> {
+    refuse_uninvited(&paths, &picked)?;
+    bring_in(&app, &paths, &control, Bring::Link)
+}
+
+/// A path that never came out of a dialog — or a drop, or the system opening
+/// a file with Groovium — is not a file anyone asked for. Refused as a whole
+/// rather than quietly filtered, because in normal use this cannot happen:
+/// the frontend hands back exactly the list it was given. The count is
+/// reported and the paths are not, so nothing invented gets echoed into the
+/// interface.
+fn refuse_uninvited(paths: &[String], picked: &PickedPaths) -> Result<(), String> {
     let uninvited = paths
         .iter()
         .filter(|raw| !picked.was_offered(Path::new(raw)))
         .count();
     if uninvited > 0 {
         return Err(format!(
-            "{uninvited} of these files were never chosen in a file dialog, so nothing was imported."
+            "{uninvited} of these files were never chosen in a file dialog, so nothing was added."
         ));
     }
+    Ok(())
+}
 
-    let store = store(&app)?;
-    let library_path = library_path(&app)?;
+fn bring_in(
+    app: &AppHandle,
+    paths: &[String],
+    control: &ImportControl,
+    how: Bring,
+) -> Result<Vec<LibraryTrack>, String> {
+    control.reset();
+
+    let store = store(app)?;
+    let library_path = library_path(app)?;
     let mut tracks = read_library(&library_path);
     let total = paths.len();
     let mut added = Vec::new();
@@ -586,47 +704,9 @@ pub fn library_import(
             continue;
         }
 
-        let id = new_id();
-        let stored_file = match store.take_in(&source, &id) {
-            Ok(name) => name,
-            Err(e) => {
-                // One unreadable file should not abandon the rest of the import.
-                log::warn!("[library] skipping {raw_path}: {e}");
-                continue;
-            }
-        };
-
-        // Tags come from our own copy, so the entry is complete even if the
-        // original disappears a moment later — but the filename fallback has to
-        // come from the source. The copy is named after a generated id, and an
-        // untagged file named after it would show a random string as its title.
-        // `take_in` generated this name, so it is always one the store could
-        // have written; the check is here because `path_of` promises it rather
-        // than because this call site is in doubt.
-        let Some(copy) = store.path_of(&stored_file) else {
+        let Some(track) = make_track(app, &store, &source, raw_path, how) else {
             continue;
         };
-        let scanned = metadata::read_track_named(&copy, &source);
-        // Artwork comes out now, while the copy is fresh — the sidecar is what
-        // the webview renders, via the store directory's asset grant.
-        let cover_file = metadata::extract_picture_to(&copy, &store.root, &id);
-        let track = LibraryTrack {
-            id,
-            stored_file,
-            source_path: raw_path.clone(),
-            title: scanned.title,
-            artist: scanned.artist,
-            album: scanned.album,
-            duration_ms: scanned.duration_ms,
-            // The scan can say "has art" while extraction says "nothing usable"
-            // (oversized booklet scans, corrupt pictures). The sidecar is what
-            // actually renders, so it decides.
-            has_cover_art: cover_file.is_some(),
-            cover_file,
-            lyrics: None,
-            added_at: now_secs(),
-        };
-
         tracks.push(track.clone());
         added.push(track);
 
@@ -653,12 +733,215 @@ pub fn library_import(
     Ok(added)
 }
 
+/// One file as a record: copied in, or linked. None for a file that cannot be
+/// read, which should not abandon the rest of an import.
+fn make_track(
+    app: &AppHandle,
+    store: &Store,
+    source: &Path,
+    raw_path: &str,
+    how: Bring,
+) -> Option<LibraryTrack> {
+    let track = record_for(store, source, raw_path, how)?;
+    if track.linked {
+        grant(app, source);
+    }
+    Some(track)
+}
+
+/// `make_track` without the grant, which is all that needs the app.
+fn record_for(store: &Store, source: &Path, raw_path: &str, how: Bring) -> Option<LibraryTrack> {
+    let id = new_id();
+    let (stored_file, audio) = match how {
+        Bring::Copy => {
+            let stored_file = match store.take_in(source, &id) {
+                Ok(name) => name,
+                Err(e) => {
+                    log::warn!("[library] skipping {raw_path}: {e}");
+                    return None;
+                }
+            };
+            // `take_in` generated this name, so it is always one the store
+            // could have written; the check is here because `path_of` promises
+            // it rather than because this call site is in doubt.
+            let copy = store.path_of(&stored_file)?;
+            (stored_file, copy)
+        }
+        Bring::Link => {
+            if !source.is_file() {
+                log::warn!("[library] skipping {raw_path}: not a file");
+                return None;
+            }
+            (String::new(), source.to_path_buf())
+        }
+    };
+
+    // Tags come from our own copy when there is one, so the entry is complete
+    // even if the original disappears a moment later — but the filename
+    // fallback has to come from the source. The copy is named after a
+    // generated id, and an untagged file named after it would show a random
+    // string as its title.
+    let scanned = metadata::read_track_named(&audio, source);
+    // Artwork comes out now, into the store either way — the sidecar is what
+    // the webview renders, via the store directory's asset grant.
+    let cover_file = metadata::extract_picture_to(&audio, &store.root, &id);
+    Some(LibraryTrack {
+        id,
+        stored_file,
+        source_path: raw_path.to_string(),
+        title: scanned.title,
+        artist: scanned.artist,
+        album: scanned.album,
+        duration_ms: scanned.duration_ms,
+        // The scan can say "has art" while extraction says "nothing usable"
+        // (oversized booklet scans, corrupt pictures). The sidecar is what
+        // actually renders, so it decides.
+        has_cover_art: cover_file.is_some(),
+        cover_file,
+        lyrics: None,
+        linked: how == Bring::Link,
+        missing: false,
+        added_at: now_secs(),
+    })
+}
+
+/// Copy a linked song into the library after all, so it stops depending on
+/// its file. The same record and the same id, so its lyrics, its timing and
+/// its places in playlists all stay. `missing` when the file is not there.
+#[tauri::command(async)]
+pub fn library_copy_in(app: AppHandle, id: String) -> Result<LibraryTrack, String> {
+    let library_path = library_path(&app)?;
+    let mut tracks = read_library(&library_path);
+    let Some(track) = tracks.iter_mut().find(|t| t.id == id) else {
+        return Err("That song is no longer in the library.".into());
+    };
+    if !track.linked {
+        return Ok(track.clone());
+    }
+    let source = PathBuf::from(&track.source_path);
+    if !source.is_file() {
+        return Err("missing".into());
+    }
+    track.stored_file = store(&app)?.take_in(&source, &track.id)?;
+    track.linked = false;
+    track.missing = false;
+    let updated = track.clone();
+    write_library(&library_path, &tracks)?;
+    Ok(updated)
+}
+
+/// What the window is given by a drag from outside: shown while it hovers,
+/// and once let go, summarised like a pick, so the listener is asked whether
+/// to copy before anything is added. The files are offered as a dialog's
+/// would be: dropping them was choosing them.
+pub fn on_drag_drop(app: &AppHandle, event: &DragDropEvent) {
+    match event {
+        DragDropEvent::Enter { .. } => {
+            let _ = app.emit("library:drop-hover", true);
+        }
+        DragDropEvent::Leave => {
+            let _ = app.emit("library:drop-hover", false);
+        }
+        DragDropEvent::Drop { paths, .. } => {
+            let _ = app.emit("library:drop-hover", false);
+            let app = app.clone();
+            let paths = paths.clone();
+            // A dropped folder is walked, which can take a while; not on the
+            // thread the window runs on.
+            tauri::async_runtime::spawn_blocking(move || {
+                let files = audio_files_among(&paths);
+                app.state::<PickedPaths>().offer(&files);
+                match summarize(&app, files) {
+                    Ok(summary) => {
+                        let _ = app.emit("library:dropped", summary);
+                    }
+                    Err(e) => log::warn!("[library] could not read what was dropped: {e}"),
+                }
+            });
+        }
+        _ => {}
+    }
+}
+
+/// The audio files among things dropped: files as they are, folders walked.
+fn audio_files_among(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            files.extend(audio_files_in(path));
+        } else if path.is_file() && is_audio_file(path) {
+            files.push(path.clone());
+        }
+    }
+    files
+}
+
+/// Songs opened with Groovium from outside — "Open with", a double click —
+/// before the webview was there to hear of it.
+#[derive(Default)]
+pub struct Opened(Mutex<Vec<String>>);
+
+impl Opened {
+    pub fn hold(&self, ids: Vec<String>) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).extend(ids);
+    }
+}
+
+/// Link the audio files the system opened with Groovium, or find them where
+/// they are already in the library, and return their ids in the order given.
+/// Taken as chosen: the listener picked them, in Explorer rather than in a
+/// dialog of ours. Anything else on the command line is ignored.
+pub fn open_with(app: &AppHandle, args: impl IntoIterator<Item = String>) -> Vec<String> {
+    let files: Vec<PathBuf> = args
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.is_file() && is_audio_file(p))
+        .collect();
+    if files.is_empty() {
+        return Vec::new();
+    }
+    let (Ok(library_path), Ok(store)) = (library_path(app), store(app)) else {
+        return Vec::new();
+    };
+    let mut tracks = read_library(&library_path);
+    let mut ids = Vec::new();
+    let mut changed = false;
+    for file in files {
+        let raw = file.to_string_lossy().into_owned();
+        if let Some(known) = tracks.iter().find(|t| t.source_path == raw) {
+            if known.linked {
+                grant(app, &file);
+            }
+            ids.push(known.id.clone());
+            continue;
+        }
+        if let Some(track) = make_track(app, &store, &file, &raw, Bring::Link) {
+            ids.push(track.id.clone());
+            tracks.push(track);
+            changed = true;
+        }
+    }
+    if changed {
+        if let Err(e) = write_library(&library_path, &tracks) {
+            log::warn!("[library] could not keep the songs opened with Groovium: {e}");
+        }
+    }
+    ids
+}
+
+/// The songs opened with Groovium before the webview had loaded, once.
+#[tauri::command]
+pub fn library_take_opened(opened: State<'_, Opened>) -> Vec<String> {
+    std::mem::take(&mut *opened.0.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
 #[tauri::command]
 pub fn library_cancel_import(control: State<'_, ImportControl>) {
     control.cancel();
 }
 
-/// Remove a track and delete the copy it owns.
+/// Remove a track and delete the copy it owns. A linked song owns no copy:
+/// only its record and what the store holds for it go, never its file.
 #[tauri::command(async)]
 pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
     let library_path = library_path(&app)?;
@@ -670,10 +953,16 @@ pub fn library_remove(app: AppHandle, id: String) -> Result<(), String> {
     let removed = tracks.remove(position);
 
     let store = store(&app)?;
-    store.discard(&removed.stored_file)?;
-    // Best effort, both: an orphaned cover or lyrics file wastes a few KB; it
-    // does not justify failing the removal the user asked for.
-    let owned = removed.cover_file.iter().chain(removed.lyrics.iter().map(|l| &l.file));
+    let mut owned = owned_files(&removed).into_iter();
+    // The copy first, and not best effort: a song whose audio could not be
+    // deleted stays in the library rather than leaving the file orphaned.
+    if !removed.linked {
+        if let Some(copy) = owned.next() {
+            store.discard(copy)?;
+        }
+    }
+    // Best effort, the rest: an orphaned cover or lyrics file wastes a few KB;
+    // it does not justify failing the removal the user asked for.
     for file in owned {
         if let Err(e) = store.discard(file) {
             log::warn!("[library] {e}");
@@ -866,6 +1155,118 @@ mod tests {
     use super::*;
 
     /// Scratch directory that cleans up after itself.
+    #[test]
+    fn every_extension_added_is_offered_in_open_with() {
+        // The installer's list is written out by hand; this keeps it whole.
+        let hooks = include_str!("../windows/hooks.nsh");
+        for ext in AUDIO_EXTENSIONS {
+            assert!(hooks.contains(&format!("${{MACRO}} \"{ext}\"")), "{ext} is not in windows/hooks.nsh");
+        }
+    }
+
+    #[test]
+    fn a_record_from_before_linking_is_a_copy() {
+        let old = r#"{"version":1,"tracks":[{"id":"a","storedFile":"a.mp3","sourcePath":"C:\\Music\\a.mp3","title":"A","artist":"B","album":"C","durationMs":1,"hasCoverArt":false,"addedAt":1}]}"#;
+        let file: LibraryFile = serde_json::from_str(old).expect("reads");
+        assert!(!file.tracks[0].linked);
+        assert!(!file.tracks[0].missing);
+        // And a copy says nothing about either when written again.
+        let json = serde_json::to_string(&file.tracks[0]).unwrap();
+        assert!(!json.contains("linked") && !json.contains("missing"));
+    }
+
+    #[test]
+    fn a_linked_song_is_read_where_it_is_and_nothing_is_copied() {
+        let dir = TempDir::new();
+        let store = Store::new(dir.join("store"));
+        fs::create_dir_all(&store.root).unwrap();
+        let source = write_source(&dir, "Some Artist - Some Song.mp3", b"not really audio");
+        let raw = source.to_string_lossy().into_owned();
+
+        let track = record_for(&store, &source, &raw, Bring::Link).expect("a record");
+        assert!(track.linked);
+        assert!(track.stored_file.is_empty());
+        assert_eq!(track.source_path, raw);
+        // Named from the file, as an untagged copy would be.
+        assert_eq!(track.title, "Some Song");
+        // Nothing of the audio went into the store.
+        let in_store: Vec<_> = fs::read_dir(&store.root).unwrap().collect();
+        assert!(in_store.is_empty(), "{in_store:?}");
+
+        // A file that is not there is not linked.
+        let gone = dir.join("gone.mp3");
+        assert!(record_for(&store, &gone, &gone.to_string_lossy(), Bring::Link).is_none());
+    }
+
+    #[test]
+    fn removing_a_linked_song_leaves_its_file_alone() {
+        let mut track = test_track("a");
+        track.linked = true;
+        track.stored_file = String::new();
+        track.cover_file = Some("a.cover-x.jpg".into());
+        assert_eq!(owned_files(&track), vec!["a.cover-x.jpg"]);
+        track.linked = false;
+        track.stored_file = "a.mp3".into();
+        assert_eq!(owned_files(&track), vec!["a.mp3", "a.cover-x.jpg"]);
+    }
+
+    #[test]
+    fn a_linked_song_whose_file_went_is_marked_and_comes_back_when_it_does() {
+        let dir = TempDir::new();
+        let source = write_source(&dir, "song.mp3", b"x");
+        let mut linked = test_track("a");
+        linked.linked = true;
+        linked.source_path = source.to_string_lossy().into_owned();
+        let copied = test_track("b");
+        let mut tracks = vec![linked, copied];
+
+        assert_eq!(mark_missing(&mut tracks), vec![source.clone()]);
+        assert!(!tracks[0].missing);
+        fs::remove_file(&source).unwrap();
+        assert!(mark_missing(&mut tracks).is_empty());
+        assert!(tracks[0].missing);
+        // A copy is never missing: its audio is ours.
+        assert!(!tracks[1].missing);
+        fs::write(&source, b"x").unwrap();
+        mark_missing(&mut tracks);
+        assert!(!tracks[0].missing);
+    }
+
+    #[test]
+    fn what_is_dropped_is_its_audio_files_and_the_audio_in_its_folders() {
+        let dir = TempDir::new();
+        let song = write_source(&dir, "song.mp3", b"x");
+        let note = write_source(&dir, "notes.txt", b"x");
+        fs::create_dir_all(dir.join("album/disc 1")).unwrap();
+        let deep = dir.join("album/disc 1/track.flac");
+        fs::write(&deep, b"x").unwrap();
+        fs::write(dir.join("album/cover.jpg"), b"x").unwrap();
+
+        let mut found = audio_files_among(&[song.clone(), note, dir.join("album")]);
+        found.sort();
+        let mut expected = vec![song, deep];
+        expected.sort();
+        assert_eq!(found, expected);
+    }
+
+    fn test_track(id: &str) -> LibraryTrack {
+        LibraryTrack {
+            id: id.into(),
+            stored_file: format!("{id}.mp3"),
+            source_path: format!(r"C:\Music\{id}.mp3"),
+            title: "Song".into(),
+            artist: "Band".into(),
+            album: "Album".into(),
+            duration_ms: 1000,
+            has_cover_art: false,
+            cover_file: None,
+            lyrics: None,
+            linked: false,
+            missing: false,
+            added_at: 1,
+        }
+    }
+
     struct TempDir(PathBuf);
 
     impl TempDir {
@@ -1013,6 +1414,8 @@ mod tests {
             has_cover_art: true,
             cover_file: Some("id4.cover.jpg".into()),
             lyrics: None,
+            linked: false,
+            missing: false,
             added_at: 99,
         };
 
@@ -1090,6 +1493,8 @@ mod tests {
             has_cover_art: true,
             cover_file: None,
             lyrics: None,
+            linked: false,
+            missing: false,
             added_at: 0,
         }];
 
@@ -1118,6 +1523,8 @@ mod tests {
                 has_cover_art: true,
                 cover_file: Some("done.cover.jpg".into()),
                 lyrics: None,
+                linked: false,
+                missing: false,
                 added_at: 0,
             },
             LibraryTrack {
@@ -1131,6 +1538,8 @@ mod tests {
                 has_cover_art: false,
                 cover_file: None,
                 lyrics: None,
+                linked: false,
+                missing: false,
                 added_at: 0,
             },
         ];
