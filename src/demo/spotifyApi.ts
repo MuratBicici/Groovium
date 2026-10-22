@@ -13,20 +13,30 @@ export const DEMO_USER = { id: 'demo-listener', displayName: 'Alex' };
 
 const API = 'https://api.spotify.com/v1';
 
-/** A track as the Web API spells it. */
-function apiTrack(track: TrackMetadata) {
+/**
+ * The one song in the collection not sold where the demo is listened to, so a
+ * song that will not play here can be seen: said so when asked with a country.
+ */
+function notSoldHere(): string | undefined {
+  return tracks().filter((track) => track.source === 'spotify')[2]?.id;
+}
+
+/** A track as the Web API spells it; asked with a country, saying whether it plays there. */
+function apiTrack(track: TrackMetadata, market: string | null = null) {
   const images = track.coverArtUrl
     ? [
         { url: track.coverArtUrl, width: 300, height: 300 },
         { url: track.coverArtUrl, width: 64, height: 64 },
       ]
     : [];
+  const refused = track.id === notSoldHere();
   return {
     uri: track.id,
     name: track.title,
     duration_ms: track.duration,
     artists: [{ id: `artist-${track.artist}`, name: track.artist }],
     album: { name: track.album, images },
+    ...(market && { is_playable: !refused, ...(refused && { restrictions: { reason: 'market' } }) }),
   };
 }
 
@@ -57,8 +67,15 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   const url = new URL(raw);
   const path = url.pathname.replace('/v1', '');
   const method = (init?.method ?? 'GET').toUpperCase();
+  const market = url.searchParams.get('market');
 
   if (method !== 'GET') return json({ snapshot_id: `demo-${Date.now()}` }, 200);
+
+  const one = /^\/tracks\/([^/]+)$/.exec(path);
+  if (one) {
+    const track = tracks().find((t) => t.id === `spotify:track:${decodeURIComponent(one[1] ?? '')}`);
+    return track ? json(apiTrack(track, market)) : json({ error: { status: 404, message: 'Not found' } }, 404);
+  }
 
   if (path === '/me') return json({ id: DEMO_USER.id, display_name: DEMO_USER.displayName });
 
@@ -80,7 +97,10 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   if (inCrate) {
     const crate = crates().find((c) => c.id === decodeURIComponent(inCrate[1] ?? ''));
     if (!crate) return json({ error: { status: 404, message: 'Not found' } }, 404);
-    const entries = crate.tracks.map((track) => ({ item: apiTrack(track), track: apiTrack(track) }));
+    const entries = crate.tracks.map((track) => ({
+      item: apiTrack(track, market),
+      track: apiTrack(track, market),
+    }));
     return json(page(entries, url));
   }
 
@@ -88,7 +108,8 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
     return json({ items: recentlyPlayed().map((track) => ({ track: apiTrack(track) })) });
   }
   if (path === '/me/top/tracks') {
-    return json({ items: mostPlayed().map(apiTrack) });
+    // Asked without a country, as the real one has to be.
+    return json({ items: mostPlayed().map((track) => apiTrack(track)) });
   }
 
   if (path === '/search') {
@@ -101,7 +122,7 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
       const text = `${track.title} ${track.artist} ${track.album}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
-    return json({ tracks: page(found.map(apiTrack), url), artists: { items: [] } });
+    return json({ tracks: page(found.map((track) => apiTrack(track, market)), url), artists: { items: [] } });
   }
 
   return json({ error: { status: 404, message: 'Not in the demo' } }, 404);

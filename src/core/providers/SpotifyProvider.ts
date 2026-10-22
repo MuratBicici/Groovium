@@ -34,6 +34,14 @@ import { noteSlow } from './connectionHealth';
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
 import { currentPlayback, playableVersion, playOnDevice, restricted, SpotifyError } from './spotifyApi';
+import {
+  askedFor,
+  noteRelinked,
+  noteUnplayable,
+  releaseToPlay,
+  unplayable,
+  whyUnplayable,
+} from '@/core/spotify/playable';
 import { errorText } from '@/core/utils/errorText';
 
 /**
@@ -240,16 +248,10 @@ export class SpotifyProvider extends BaseProvider {
   private reachable = true;
   /**
    * What was playing, so an outage can be recovered from rather than waited
-   * out: the URI Spotify was asked to play, which for a track it refused here
-   * is the release of it that plays here (`relinked`).
+   * out: the URI Spotify was asked to play, which for a song not sold here as
+   * it was named is the release of it that is (`playable.ts`).
    */
   private playing: string | null = null;
-  /**
-   * Tracks Spotify refused as they were named and played as another release
-   * of the same song: the URI asked for, and the one played. Kept for the
-   * session, so the next time is not another refusal first.
-   */
-  private relinked = new Map<string, string>();
   /** One restart attempt at a time. */
   private restarting = false;
   /**
@@ -413,8 +415,16 @@ export class SpotifyProvider extends BaseProvider {
   async play(trackId: string): Promise<void> {
     if (!this.player) throw new Error('Spotify player is not connected.');
 
+    // Known not to play here: said at once, rather than asked and refused.
+    const refused = unplayable({ id: trackId, source: 'spotify' });
+    if (refused) {
+      const err = new SpotifyError(whyUnplayable(refused), 403);
+      this.fail(describe(err));
+      throw err;
+    }
+
     this.setState('LOADING');
-    const uri = this.relinked.get(trackId) ?? trackId;
+    const uri = releaseToPlay(trackId);
     this.leaving = this.playing !== uri ? this.playing : null;
     this.playing = uri;
     // Before the command goes out, not after: Spotify can answer with a state
@@ -466,22 +476,18 @@ export class SpotifyProvider extends BaseProvider {
     });
     if (other && 'uri' in other) {
       log('info', 'playback', 'Spotify refused a track here; playing the release of it that plays here');
-      this.relinked.set(trackId, other.uri);
+      noteRelinked(trackId, other.uri);
       this.playing = other.uri;
       await playOnDevice(deviceId, other.uri);
       return;
     }
     if (other) {
       log('info', 'playback', `Spotify will not play a track here: ${other.refused}`);
-      throw new SpotifyError(say(`spotify.refused.${other.refused}`), 403);
+      // So the shelves show it as such from now on.
+      noteUnplayable(trackId, other.refused);
+      throw new SpotifyError(whyUnplayable(other.refused), 403);
     }
     throw refusal;
-  }
-
-  /** The track a URI Spotify is playing stands for: what was asked for, where another release was played. */
-  private askedFor(uri: string | null): string | null {
-    for (const [asked, played] of this.relinked) if (played === uri) return asked;
-    return uri;
   }
 
   async pause(): Promise<void> {
@@ -743,7 +749,7 @@ export class SpotifyProvider extends BaseProvider {
         // for Spotify at all.
         // The track the store asked for, which is not the one playing where
         // another release of it was played instead.
-        this.emit({ type: 'ended', trackId: this.askedFor(track?.uri ?? null) });
+        this.emit({ type: 'ended', trackId: askedFor(track?.uri ?? null) });
         return;
       }
       this.stopListening();

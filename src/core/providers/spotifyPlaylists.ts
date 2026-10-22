@@ -3,6 +3,7 @@ import { account } from '@/core/security/spotifyAuth';
 import { crateFor, withCrate } from '@/core/spotify/cache';
 import { loadCache, updateCache } from '@/core/spotify/cacheFile';
 import {
+  HERE,
   pickCover,
   request,
   SpotifyError,
@@ -294,7 +295,9 @@ export async function playlistEntryPage(
   cursor?: string | null,
   perPage = ITEMS_PER_PAGE,
 ): Promise<Page<CrateEntry>> {
-  const params = new URLSearchParams({ limit: String(perPage) });
+  // With the account's country, so each song comes as the release that plays
+  // here, or says it does not (`toTrackMetadata`).
+  const params = new URLSearchParams({ limit: String(perPage), market: HERE });
   if (cursor) params.set('offset', cursor);
 
   let data: ApiPage<ApiItemEntry> | null;

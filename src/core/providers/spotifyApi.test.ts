@@ -408,6 +408,36 @@ describe('a track Spotify refused', () => {
     }
   });
 
+  it('is asked for with the country in search, so what will not play says so', async () => {
+    const { searchTracks } = await freshApi();
+    const track = (uri: string, more: object = {}) => ({ uri, name: 'Song', duration_ms: 1, artists: [], ...more });
+    stubFetch([
+      answer(
+        200,
+        {},
+        JSON.stringify({
+          tracks: {
+            items: [
+              track('spotify:track:here', { is_playable: true, linked_from: { uri: 'spotify:track:asked' } }),
+              track('spotify:track:not', { is_playable: false, restrictions: { reason: 'market' } }),
+              track('spotify:track:plain'),
+            ],
+          },
+        }),
+      ),
+    ]);
+    const found = await searchTracks('song');
+    expect(calls[0]).toContain('market=from_token');
+    // A relinked song keeps the URI it was asked by, which a playlist holds.
+    expect(found.map((t) => [t.id, t.unplayable])).toEqual([
+      ['spotify:track:asked', undefined],
+      ['spotify:track:not', 'market'],
+      ['spotify:track:plain', undefined],
+    ]);
+    const { releaseToPlay } = await import('@/core/spotify/playable');
+    expect(releaseToPlay('spotify:track:asked')).toBe('spotify:track:here');
+  });
+
   it('has nothing to say when the track plays as it was named', async () => {
     const { playableVersion } = await freshApi();
     stubFetch([answer(200, {}, JSON.stringify({ uri: 'spotify:track:abc', is_playable: true }))]);

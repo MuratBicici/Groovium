@@ -4,6 +4,8 @@ import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { useT } from '@/core/i18n';
+import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
+import { refuseUnplayable, UNPLAYABLE_LOOK } from './Unplayable';
 
 /**
  * The pieces both sides of the library drawer search with.
@@ -101,25 +103,39 @@ export function TrackResult({
   track: TrackMetadata;
   onPlay: () => void;
 }) {
+  const t = useT();
   const { flyToPlatter } = useDiscFlight();
+  /** Why Spotify will not play it here, if it will not: listed, greyed, and saying so when pressed. */
+  const refused = useUnplayable(track);
   return (
     <li className="group/row flex items-center gap-1">
       <button
         type="button"
+        aria-disabled={refused ? true : undefined}
+        title={refused ? whyUnplayable(refused) : undefined}
         onClick={(e) => {
+          if (refused) {
+            refuseUnplayable(e.currentTarget, refused);
+            return;
+          }
           const disc = e.currentTarget.querySelector<HTMLElement>('[data-disc]');
           if (disc) flyToPlatter(disc, track);
           onPlay();
         }}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-shell-700/60"
       >
-        <span data-disc className="shrink-0">
+        <span data-disc className={`shrink-0 ${refused ? UNPLAYABLE_LOOK : ''}`}>
           <VinylDisc size={24} coverArtUrl={track.coverArtUrl} />
         </span>
-        <span className="min-w-0 flex-1">
+        <span className={`min-w-0 flex-1 ${refused ? UNPLAYABLE_LOOK : ''}`}>
           <span className="block truncate text-body text-cream-100">{track.title}</span>
           <span className="block truncate text-label text-cream-400">{track.artist}</span>
         </span>
+        {refused && (
+          <span className="shrink-0 rounded-full bg-shell-900/80 px-1.5 py-0.5 text-label font-medium text-brass-400">
+            {t('spotify.unplayable')}
+          </span>
+        )}
       </button>
       <span className="shrink-0 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
         <AddToPlaylist track={track} />

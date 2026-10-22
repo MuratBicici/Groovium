@@ -4,6 +4,7 @@ export type {
   PlaybackState,
   ProviderEvent,
   ProviderEventListener,
+  Restriction,
   SourceType,
   TrackMetadata,
 } from './provider';

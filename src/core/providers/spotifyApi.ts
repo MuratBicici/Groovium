@@ -1,7 +1,8 @@
 import { accessToken } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
 import { log } from '@/platform/log';
-import type { TrackMetadata } from '@/core/types';
+import { noteRelinked } from '@/core/spotify/playable';
+import type { Restriction, TrackMetadata } from '@/core/types';
 
 /**
  * The slice of Spotify's Web API this app touches.
@@ -427,7 +428,21 @@ export interface ApiTrack {
   /** `id` is what tells two artists with the same name apart. */
   artists: { id: string; name: string }[];
   album?: { name: string; images: ApiImage[] };
+  /**
+   * Only when asked with a country (`market=from_token`): whether it plays
+   * there, why not, and — where the release that does is another one than
+   * was asked for — the one asked for.
+   */
+  is_playable?: boolean;
+  restrictions?: { reason?: string };
+  linked_from?: { uri?: string };
 }
+
+/**
+ * Asked with the account's own country, so Spotify answers with the release
+ * of each song that plays there, and says which do not (`playable.ts`).
+ */
+export const HERE = 'from_token';
 
 /**
  * Pick artwork big enough to stay sharp on the 56px platter label without
@@ -439,12 +454,20 @@ export function pickCover(images: ApiImage[] | null | undefined): string | undef
   return (sorted.find((i) => (i.width ?? 0) >= 300) ?? sorted[sorted.length - 1])?.url;
 }
 
-/** Map a Spotify track onto the shared metadata shape. */
+/**
+ * Map a Spotify track onto the shared metadata shape.
+ *
+ * A song relinked to the release that plays here keeps the URI it was asked
+ * by as its id — the one its playlist holds, which taking it out or moving it
+ * has to name — and the release to play is remembered for when it is played.
+ */
 export function toTrackMetadata(track: ApiTrack): TrackMetadata {
   const cover = pickCover(track.album?.images);
+  const asked = track.linked_from?.uri ?? track.uri;
+  noteRelinked(asked, track.uri);
   const metadata: TrackMetadata = {
     // The URI is what `play()` needs, so it doubles as the id.
-    id: track.uri,
+    id: asked,
     title: track.name,
     artist: track.artists.map((a) => a.name).join(', ') || 'Unknown Artist',
     album: track.album?.name ?? 'Spotify',
@@ -452,6 +475,7 @@ export function toTrackMetadata(track: ApiTrack): TrackMetadata {
     source: 'spotify',
   };
   if (cover) metadata.coverArtUrl = cover;
+  if (track.is_playable === false) metadata.unplayable = restriction(track);
   return metadata;
 }
 
@@ -477,6 +501,7 @@ export async function searchTracks(query: string): Promise<TrackMetadata[]> {
     q: trimmed,
     type: 'track',
     limit: String(SEARCH_LIMIT),
+    market: HERE,
   });
   const data = await request<SearchResponse>(`/search?${params}`);
 
@@ -536,12 +561,15 @@ async function tracksByArtist(artist: ApiArtist): Promise<TrackMetadata[]> {
     q: `artist:"${artist.name.replace(/"/g, '')}"`,
     type: 'track',
     limit: String(SEARCH_LIMIT),
+    market: HERE,
   });
   const data = await request<SearchResponse>(`/search?${params}`);
   return (data?.tracks?.items ?? [])
     .filter((track): track is ApiTrack => track !== null && !!track.uri)
     .filter((track) => track.artists.some((a) => a.id === artist.id))
-    .map(toTrackMetadata);
+    .map(toTrackMetadata)
+    // The station is never handed a song that will not play.
+    .filter((track) => !track.unplayable);
 }
 
 /**
@@ -664,9 +692,6 @@ export function restricted(err: unknown): boolean {
   return err instanceof SpotifyError && err.status === 403 && /restriction/i.test(err.message);
 }
 
-/** Why Spotify will not play a track here, as it says. */
-export type Restriction = 'market' | 'explicit' | 'product' | 'unknown';
-
 /**
  * The version of a track this account can play, or why there is none.
  *
@@ -691,9 +716,12 @@ export async function playableVersion(trackUri: string): Promise<{ uri: string }
     restrictions?: { reason?: string };
   }>(`/tracks/${encodeURIComponent(id)}?market=from_token`);
   if (!track) return null;
-  const reason = track.restrictions?.reason;
-  if (track.is_playable === false || reason) {
-    return { refused: reason === 'market' || reason === 'explicit' || reason === 'product' ? reason : 'unknown' };
-  }
+  if (track.is_playable === false || track.restrictions?.reason) return { refused: restriction(track) };
   return track.uri && track.uri !== trackUri ? { uri: track.uri } : null;
+}
+
+/** Spotify's reason, as one this app has words for. */
+function restriction(track: { restrictions?: { reason?: string } }): Restriction {
+  const reason = track.restrictions?.reason;
+  return reason === 'market' || reason === 'explicit' || reason === 'product' ? reason : 'unknown';
 }

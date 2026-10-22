@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
+import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
+import { refuse, refuseUnplayable, UNPLAYABLE_LOOK, UnplayableTag } from './Unplayable';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
@@ -85,9 +87,6 @@ const MIN_CARD = 132;
 /** How far the pointer travels before a press becomes a lift rather than a click. */
 const DRAG_THRESHOLD = 5;
 
-/** An empty sleeve saying so. */
-const SHAKE_MS = 360;
-
 /** The gap between cards, which is `gap-3`. Measured grids need it as a number. */
 const GRID_GAP = 12;
 
@@ -101,28 +100,6 @@ const REMOVE_MS = 150;
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 10;
 
-/**
- * A sleeve refusing, because the record it would give you is on the deck.
- *
- * On `translate` rather than `transform`: the card's hover lift is a
- * `transform`, and an animation on the same property would win over it for as
- * long as it ran, so the card would drop two pixels the moment it shook.
- * These are separate properties and compose, so the lift stays put.
- */
-function refuse(card: HTMLElement | null): void {
-  if (!card || prefersReducedMotion()) return;
-  card.animate(
-    [
-      { translate: '0px' },
-      { translate: '-6px' },
-      { translate: '5px' },
-      { translate: '-3px' },
-      { translate: '2px' },
-      { translate: '0px' },
-    ],
-    { duration: SHAKE_MS, easing: 'ease-out' },
-  );
-}
 
 /** Where the crate was on screen, so the page can grow out of it. */
 type Origin = { x: number; y: number; width: number; height: number };
@@ -1144,6 +1121,8 @@ function Record({
   const button = useRef<HTMLButtonElement | null>(null);
   /** Whether the press being finished turned into a lift. */
   const lifted = useRef(false);
+  /** Why Spotify will not play it here, if it will not. It can still be moved and taken out. */
+  const refused = useUnplayable(track);
 
   return (
     <button
@@ -1154,11 +1133,17 @@ function Record({
       // is how you find out it is empty — and a disabled button receives no
       // pointer events at all, so it could not answer.
       data-key={recordKey}
-      aria-disabled={absent && !editing}
-      title={absent && !editing ? t('spotify.onDeck') : undefined}
+      aria-disabled={(absent || !!refused) && !editing}
+      title={
+        editing ? undefined : refused ? whyUnplayable(refused) : absent ? t('spotify.onDeck') : undefined
+      }
       onPointerDown={(e) => {
         if (editing) {
           onReorder(e, e.currentTarget);
+          return;
+        }
+        if (refused) {
+          refuseUnplayable(e.currentTarget, refused);
           return;
         }
         if (absent) {
@@ -1179,7 +1164,7 @@ function Record({
         // became a lift has had its say too — the record went where it was
         // dropped, and the `click` that follows it must not send it again.
         // In edit mode a press is for moving, never for playing.
-        if (editing || absent || lifted.current) return;
+        if (editing || absent || refused || lifted.current) return;
         if (disc.current) onPlay(disc.current);
       }}
       className={`groove-record groove-sleeve group relative flex flex-col rounded-md text-left ${
@@ -1213,8 +1198,11 @@ function Record({
         </span>
       )}
       <span className="relative aspect-square w-full">
+        {refused && <UnplayableTag />}
         <span
-          className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900"
+          className={`groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900 ${
+            refused ? UNPLAYABLE_LOOK : ''
+          }`}
           // No cut: nothing goes in or out of this sleeve.
           style={{ ['--notch' as string]: '0px' }}
         >
@@ -1237,15 +1225,17 @@ function Record({
         <span
           ref={disc}
           data-disc
-          className={`absolute top-0 left-0 transition-transform duration-200 group-hover:-translate-y-0.5 motion-reduce:transition-none ${
+          className={`absolute top-0 left-0 transition-transform duration-200 motion-reduce:transition-none ${
             absent ? 'groove-sleeve-empty' : ''
-          }`}
+          } ${refused ? UNPLAYABLE_LOOK : 'group-hover:-translate-y-0.5'}`}
           style={{ width: discSize, height: discSize }}
         >
           <VinylDisc size={discSize} coverArtUrl={track.coverArtUrl} />
         </span>
       </span>
-      <span className="relative flex min-w-0 flex-col px-1.5 py-1 text-center">
+      <span
+        className={`relative flex min-w-0 flex-col px-1.5 py-1 text-center ${refused ? UNPLAYABLE_LOOK : ''}`}
+      >
         <span className="truncate text-meta text-cream-100" title={track.title}>
           {track.title}
         </span>

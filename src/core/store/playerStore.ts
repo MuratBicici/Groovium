@@ -67,6 +67,7 @@ import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
+import { unplayable, whyUnplayable } from '@/core/spotify/playable';
 import { log } from '@/platform/log';
 import { errorText } from '@/core/utils/errorText';
 
@@ -471,8 +472,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
   function neighborIndex(step: number): number | null {
     const { playback, repeat, skipped } = get();
-    if (step > 0 && skipped.length > 0) {
-      const { index, passed } = nextUnskipped(playbackOrder(), playback.index, repeat === 'all', skipped);
+    // Songs Spotify said do not play here are passed over the way songs taken
+    // off the queue for this time are, only for good: a playlist with one in
+    // it played on past it rather than stopping there with a refusal.
+    const refused = playback.tracks.flatMap((track, at) => (unplayable(track) ? [at] : []));
+    if (step > 0 && (skipped.length > 0 || refused.length > 0)) {
+      const { index, passed } = nextUnskipped(playbackOrder(), playback.index, repeat === 'all', [
+        ...skipped,
+        ...refused,
+      ]);
       if (passed.length > 0) set({ skipped: skipped.filter((at) => !passed.includes(at)) });
       return index;
     }
@@ -1194,7 +1202,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     async playList(id, tracks, shuffle) {
       if (tracks.length === 0) return;
       const shuffling = shuffle ?? get().shuffle;
-      const index = shuffling ? Math.floor(Math.random() * tracks.length) : 0;
+      // Started on a song that plays here; the rest are passed over as they come.
+      const playable = tracks.flatMap((track, at) => (unplayable(track) ? [] : [at]));
+      if (playable.length === 0) {
+        set({ error: whyUnplayable(unplayable(tracks[0] as TrackMetadata) ?? 'unknown') });
+        return;
+      }
+      const index = shuffling
+        ? (playable[Math.floor(Math.random() * playable.length)] as number)
+        : (playable[0] as number);
       set({
         // Only ever a whole crate: a song from one is played on its own.
         ...wholeListStarting(true),

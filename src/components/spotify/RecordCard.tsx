@@ -5,6 +5,8 @@ import { VinylDisc } from '@/components/player/VinylDisc';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
+import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
+import { refuseUnplayable, UNPLAYABLE_LOOK, UnplayableTag } from './Unplayable';
 
 /** The record's diameter. The cell is this wide; the sleeve is square. */
 export const RECORD_SIZE = 70;
@@ -44,6 +46,8 @@ export function RecordCard({
 
   /** The record is not on the shelf: it is on the deck or in somebody's hand. */
   const away = onDeck === track.id || carried === track.id;
+  /** Why Spotify will not play it here, if it will not: it stays, greyed, and says so when pressed. */
+  const refused = useUnplayable(track);
 
   const deliver = useCallback(
     (taken: TrackMetadata) => {
@@ -123,10 +127,15 @@ export function RecordCard({
       type="button"
       className="group relative shrink-0 text-left"
       style={{ width: DISC_SIZE }}
-      title={`${track.title} — ${track.artist}`}
+      title={refused ? whyUnplayable(refused) : `${track.title} — ${track.artist}`}
       aria-label={away ? t('spotify.onDeck') : `${track.title} — ${track.artist}`}
-      onPointerDown={carry}
-      onClick={() => {
+      aria-disabled={refused ? true : undefined}
+      onPointerDown={refused ? undefined : carry}
+      onClick={(e) => {
+        if (refused) {
+          refuseUnplayable(e.currentTarget, refused);
+          return;
+        }
         // The drag already put it somewhere; the click that follows the same
         // press has nothing left to do.
         if (dragged.current) {
@@ -138,8 +147,13 @@ export function RecordCard({
         deliver(track);
       }}
     >
+      {refused && (
+        <span className="absolute inset-x-0 top-0 block" style={{ height: DISC_SIZE }}>
+          <UnplayableTag />
+        </span>
+      )}
       <span
-        className="relative block w-full overflow-hidden rounded-md bg-shell-900"
+        className={`relative block w-full overflow-hidden rounded-md bg-shell-900 ${refused ? UNPLAYABLE_LOOK : ''}`}
         style={{ height: DISC_SIZE }}
       >
         {track.coverArtUrl && (
@@ -160,14 +174,14 @@ export function RecordCard({
       <span
         ref={disc}
         data-disc
-        className={`absolute top-0 left-0 transition-transform group-hover:-translate-y-0.5 ${
-          away ? 'invisible' : ''
+        className={`absolute top-0 left-0 transition-transform ${away ? 'invisible' : ''} ${
+          refused ? UNPLAYABLE_LOOK : 'group-hover:-translate-y-0.5'
         }`}
         style={{ width: DISC_SIZE, height: DISC_SIZE }}
       >
         <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
       </span>
-      <span className="relative mt-1 flex min-w-0 flex-col text-center">
+      <span className={`relative mt-1 flex min-w-0 flex-col text-center ${refused ? UNPLAYABLE_LOOK : ''}`}>
         <span className="truncate text-meta text-cream-100">{track.title}</span>
         <span className="truncate text-label text-cream-400">{track.artist}</span>
       </span>

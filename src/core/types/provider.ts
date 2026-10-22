@@ -19,7 +19,17 @@ export interface TrackMetadata {
   duration: number;
   coverArtUrl?: string;
   source: SourceType;
+  /**
+   * Why Spotify will not play this song here, when it said so: asked with the
+   * account's country, it marks what is not sold there, needs explicit
+   * content turned on, or is not on this kind of account. Absent when it
+   * plays, or nothing said.
+   */
+  unplayable?: Restriction;
 }
+
+/** Why Spotify will not play a track here, as it says. */
+export type Restriction = 'market' | 'explicit' | 'product' | 'unknown';
 
 export type PlaybackState = 'IDLE' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'ERROR';
 
