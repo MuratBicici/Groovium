@@ -33,9 +33,10 @@ log = "0.4"
 # Linux does not need OpenSSL headers.
 # `form` is the token endpoint's encoding; `json` is for the profile response.
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
-# Just the synchronisation primitives: one async mutex, so a token refresh
-# cannot happen twice at once. The runtime itself comes in with Tauri.
-tokio = { version = "1", default-features = false, features = ["sync"] }
+# The synchronisation primitives — one async mutex, so a token refresh cannot
+# happen twice at once — and a timer, for a lyrics source that asks to be
+# asked again in a moment. The runtime itself comes in with Tauri.
+tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 tiny_http = "0.12"
 sha2 = "0.11"
 getrandom = "0.4"

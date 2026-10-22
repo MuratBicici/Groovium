@@ -19,7 +19,8 @@ export interface LyricsMatch {
   durationS: number;
   /**
    * Which source and step: `lrclib:get`, `lrclib:get-clean`, `lrclib:search`
-   * or `netease`; `saved:lrclib` or `saved:netease` for lyrics matched by hand.
+   * or `netease`; `saved:lrclib` or `saved:netease` for lyrics matched by hand,
+   * to a song from the library or, chosen, to a Spotify song.
    */
   via: string;
 }
@@ -70,6 +71,22 @@ export async function previewLyrics(key: string): Promise<LyricsResult> {
   }
   const { invoke } = await import('@tauri-apps/api/core');
   return invoke<LyricsResult>('lyrics_candidate', { key });
+}
+
+/**
+ * Keep a candidate from `searchLyrics` as a Spotify song's lyrics, in place of
+ * whatever the search finds for it, until `unchooseLyrics`. A song from the
+ * library is matched through the library instead.
+ */
+export async function chooseLyrics(trackId: string, key: string): Promise<LyricsLookup> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<LyricsLookup>('lyrics_choose', { trackId, key });
+}
+
+/** Forget the lyrics chosen for a Spotify song, so they are looked up again. */
+export async function unchooseLyrics(trackId: string): Promise<void> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('lyrics_unchoose', { trackId });
 }
 
 export interface LyricsLookup {

@@ -63,6 +63,8 @@ const cleared = new Set<string>();
 const timings = new Map<string, LyricsTiming>();
 /** And of a Spotify song's, by track id, as the timings file holds them. */
 const spotifyTimings = new Map<string, unknown>();
+/** Lyrics chosen by hand for a Spotify song in this run, by track id. */
+const spotifyChosen = new Map<string, { candidate: LyricsCandidate; result: LyricsResult }>();
 
 /**
  * What a song is matched with: what this run matched it with, or else — the
@@ -180,10 +182,13 @@ function savedLookup(trackId: string): LyricsLookup | null {
   const id = trackId.replace(/^library:/, '');
   const match = matchOf(id);
   if (!match) return null;
-  const { candidate, result } = match;
   const timing = timings.get(id);
+  return { ...(timing && { timing }), ...lookupOf(match) };
+}
+
+/** Lyrics matched or chosen by hand, as a lookup answers with them. */
+function lookupOf({ candidate, result }: { candidate: LyricsCandidate; result: LyricsResult }): LyricsLookup {
   return {
-    ...(timing && { timing }),
     result,
     matched: {
       trackName: candidate.trackName,
@@ -239,7 +244,19 @@ const HANDLERS: Record<string, Handler> = {
     if (trackId.startsWith('library:')) {
       return savedLookup(trackId) ?? { result: { status: 'NotFound' }, matched: null };
     }
+    const chosen = spotifyChosen.get(trackId);
+    if (chosen) return lookupOf(chosen);
     return demoLyrics(trackId, typeof args.source === 'string' ? args.source : null);
+  },
+  lyrics_choose: (args) => {
+    const pick = found.get(String(args.key ?? ''));
+    if (!pick) throw new Error('Search again to choose that one.');
+    spotifyChosen.set(String(args.trackId ?? ''), pick);
+    return lookupOf(pick);
+  },
+  lyrics_unchoose: (args) => {
+    spotifyChosen.delete(String(args.trackId ?? ''));
+    return null;
   },
   search_lyrics: (args) => searchDemoLyrics(String(args.query ?? '')),
   lyrics_candidate: (args) => found.get(String(args.key ?? ''))?.result ?? { status: 'NotFound' },

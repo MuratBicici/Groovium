@@ -151,9 +151,12 @@ export function CompactLyrics({
   const result = status === 'done' ? lookup?.result : undefined;
   const lines = result?.status === 'Synced' ? result.data : null;
   // A song from the library is never looked for: with nothing matched to it
-  // yet, the listener is asked whether to match some.
-  const canMatch =
-    !!track && libraryIdOf(track.id) !== null && status === 'done' && savedFrom(lookup?.matched) === null;
+  // yet, the listener is asked whether to match some. Any other song's lyrics
+  // can be chosen by hand when none were found or no source would answer.
+  const local = !!track && libraryIdOf(track.id) !== null;
+  const canMatch = local
+    ? status === 'done' && savedFrom(lookup?.matched) === null
+    : !!track && (status === 'error' || (status === 'done' && result?.status === 'NotFound'));
   const { active: sung } = useLyricFrame(present ? lines : null, activeEl);
   const browse = useBrowse(lines?.length ?? 0, sung, track?.id);
 
@@ -449,6 +452,7 @@ export function CompactLyrics({
                   status={status}
                   kind={result?.status}
                   hasTrack={track !== null}
+                  local={local}
                   onRetry={retry}
                   onMatch={canMatch && track ? () => match.open(track) : undefined}
                 />
@@ -714,14 +718,17 @@ function QuietState({
   status,
   kind,
   hasTrack,
+  local,
   onRetry,
   onMatch,
 }: {
   status: string;
   kind: string | undefined;
   hasTrack: boolean;
+  /** Whether the song is from the library, which is asked to match rather than told none were found. */
+  local: boolean;
   onRetry: () => void;
-  /** Open the search for lyrics by hand, for a song from the library with none matched; absent otherwise. */
+  /** Open the search for lyrics by hand, where there are none to show; absent otherwise. */
   onMatch: (() => void) | undefined;
 }) {
   const t = useT();
@@ -729,18 +736,30 @@ function QuietState({
   if (status === 'loading' || status === 'idle') {
     return <p className="animate-pulse text-[13px] text-cream-400">{t('lyrics.loading')}</p>;
   }
+  const matchButton = onMatch && (
+    <button
+      type="button"
+      onClick={onMatch}
+      className="pointer-events-auto mt-2 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
+    >
+      {t('lyrics.match.open')}
+    </button>
+  );
   if (status === 'error') {
     return (
-      <p className="text-[13px] text-cream-400">
-        {t('lyrics.error')}{' '}
-        <button
-          type="button"
-          onClick={onRetry}
-          className="pointer-events-auto text-brass-400 underline-offset-2 hover:underline"
-        >
-          {t('lyrics.retry')}
-        </button>
-      </p>
+      <>
+        <p className="text-[13px] text-cream-400">
+          {t('lyrics.error')}{' '}
+          <button
+            type="button"
+            onClick={onRetry}
+            className="pointer-events-auto text-brass-400 underline-offset-2 hover:underline"
+          >
+            {t('lyrics.retry')}
+          </button>
+        </p>
+        {matchButton}
+      </>
     );
   }
   if (kind === 'Instrumental') return <p className="text-[14px] text-cream-300">{t('lyrics.instrumental')}</p>;
@@ -748,17 +767,9 @@ function QuietState({
   return (
     <>
       <p className="whitespace-pre-line text-[13px] text-cream-400">
-        {onMatch ? t('lyrics.match.ask') : t('lyrics.notFound')}
+        {local && onMatch ? t('lyrics.match.ask') : t('lyrics.notFound')}
       </p>
-      {onMatch && (
-        <button
-          type="button"
-          onClick={onMatch}
-          className="pointer-events-auto mt-2 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
-        >
-          {t('lyrics.match.open')}
-        </button>
-      )}
+      {matchButton}
     </>
   );
 }

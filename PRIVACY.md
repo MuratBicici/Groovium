@@ -71,13 +71,17 @@ the lines, Groovium reads its own copy of the file; that stays on your computer
 too.
 
 **Matching lyrics by hand.** A song on this computer is never looked up on its
-own: it has no lyrics until you search for them yourself and choose some.
+own: it has no lyrics until you search for them yourself and choose some. A
+Spotify song's lyrics can be chosen the same way, when none were found, the
+sources could not be reached, or the ones found are wrong.
 Whatever you type in that search is sent to `lrclib.net` and `music.163.com`,
 and so are requests for the lyrics of the results NetEase lists, to show which
-have timings. The lyrics you choose are saved on your
-computer, in the library folder beside the song, and deleted when you clear the
-match or remove the song. Groovium does not check them and does not guarantee
-that they are correct.
+have timings. The lyrics you choose are saved on your computer: for a song on
+this computer in the library folder beside the song, deleted when you clear the
+match or remove the song; for a Spotify song in `lyrics-chosen.json` in
+`%APPDATA%\com.groovium.desktop`, deleted when you remove your choice. Settings
+› General exports and imports these with the Spotify songs' timings. Groovium
+does not check them and does not guarantee that they are correct.
 
 ## What stays on your computer
 
@@ -88,7 +92,8 @@ that they are correct.
   keeps its cover and any lyrics you matched in the library folder; removing
   it from Groovium removes those and leaves the file itself alone.
 - **Settings, playlists, the library index, the last session, the window's
-  position and the Spotify songs' lyrics timings**, in
+  position, and the Spotify songs' lyrics timings and the lyrics you chose for
+  them**, in
   `%APPDATA%\com.groovium.desktop`. The Spotify Client ID and the
   Last.fm API key you entered are kept here too.
 - **Spotify's sign-in tokens**, in Windows Credential Manager rather than in a

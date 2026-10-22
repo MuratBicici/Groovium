@@ -1,12 +1,15 @@
-//! Lyrics found by hand, for a local song the automatic search gets wrong.
+//! Lyrics found by hand: for a local song, which is never looked for, and for
+//! a Spotify song the automatic search could not find, could not reach a
+//! source for, or got wrong.
 //!
 //! The listener types what to look for. LRCLIB and NetEase are both asked, and
 //! everything that has words comes back as one list, the likeliest first: the
 //! nearest in length, then with timings. One can be read before it is chosen,
-//! and the one chosen is saved beside the song in the library (`library.rs`),
-//! so it plays the same tomorrow, offline, and whatever the source later does
-//! to its records. Groovium vouches for none of it — the listener chose it, and
-//! the window says so.
+//! and the one chosen is kept — beside the song in the library (`library.rs`),
+//! or for a Spotify song in a file of its own (`chosen.rs`) — so it plays the
+//! same tomorrow, offline, and whatever the source later does to its records.
+//! Groovium vouches for none of it — the listener chose it, and the window
+//! says so.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -288,8 +291,9 @@ pub fn timing_fits(pins: &[Pin], result: &LyricsResult) -> bool {
         && pins.windows(2).all(|w| w[0].line < w[1].line && w[0].ms < w[1].ms)
 }
 
-/// What is written beside a song matched by hand.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+/// What is written beside a song matched by hand, or kept for a Spotify song
+/// whose lyrics were chosen by hand (`chosen.rs`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Saved {
     pub version: u32,

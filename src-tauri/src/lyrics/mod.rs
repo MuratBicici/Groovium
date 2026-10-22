@@ -1,9 +1,10 @@
 //! Time-synced lyrics for the song that is playing.
 //!
 //! A local song is never looked for: it answers from the lyrics matched to it
-//! by hand (`manual.rs`), or with none. For any other song several places are
-//! asked in turn, and the first synced answer that is this song ends the
-//! search:
+//! by hand (`manual.rs`), or with none. A Spotify song whose lyrics the
+//! listener chose by hand answers from those (`chosen.rs`). For any other song
+//! several places are asked in turn, and the first synced answer that is this
+//! song ends the search:
 //!
 //! 1. LRCLIB's exact lookup, with the title as Spotify has it.
 //! 2. The same, with the title cleaned of what describes the recording rather
@@ -26,6 +27,7 @@
 //! Requests go out from here rather than from the webview, so the page's
 //! security policy does not have to name these hosts.
 
+pub mod chosen;
 mod clean;
 mod lrc;
 mod lrclib;
@@ -214,6 +216,11 @@ pub async fn get_lyrics(
             matched: None,
             timing: None,
         });
+    }
+    // Chosen by hand: those, whichever source is asked for, until they are
+    // taken away. Read each time, as a song's matched lyrics are.
+    if let Some(chosen) = chosen::chosen_lyrics(&app, &track_id) {
+        return Ok(chosen);
     }
     let from = Source::named(source.as_deref());
     let key = format!("{track_id}|{}", from.name());
@@ -440,17 +447,39 @@ fn client() -> &'static reqwest::Client {
     })
 }
 
+/// How long to wait before asking again a source that said it was busy, once
+/// for each try after the first.
+///
+/// LRCLIB answers 503 "The server is busy, please retry in a moment" often
+/// enough that the lyrics view said it could not load them several times an
+/// evening, for songs it had. Kept short: a lookup asks LRCLIB up to three
+/// times, and someone is waiting for the words.
+const BUSY_RETRIES: [Duration; 2] = [Duration::from_millis(700), Duration::from_millis(1_500)];
+
+/// Whether an answer says to ask again shortly rather than that something is wrong.
+fn busy(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::SERVICE_UNAVAILABLE || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+}
+
 /// One GET. `None` for a 404, which is "no such track" to both sources.
+/// Asked again, a little later, while the source says it is busy.
 async fn fetch(url: reqwest::Url, referer: Option<&str>) -> Result<Option<String>, String> {
     let host = url.host_str().unwrap_or("?").to_string();
-    let mut request = client().get(url).header("User-Agent", USER_AGENT);
-    if let Some(referer) = referer {
-        request = request.header("Referer", referer);
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach {host}: {e}"))?;
+    let mut waits = BUSY_RETRIES.iter();
+    let response = loop {
+        let mut request = client().get(url.clone()).header("User-Agent", USER_AGENT);
+        if let Some(referer) = referer {
+            request = request.header("Referer", referer);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Could not reach {host}: {e}"))?;
+        match waits.next() {
+            Some(wait) if busy(response.status()) => tokio::time::sleep(*wait).await,
+            _ => break response,
+        }
+    };
     let status = response.status();
     if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
@@ -468,6 +497,15 @@ async fn fetch(url: reqwest::Url, referer: Option<&str>) -> Result<Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_busy_source_is_asked_again_and_a_missing_record_is_not() {
+        assert!(busy(reqwest::StatusCode::SERVICE_UNAVAILABLE));
+        assert!(busy(reqwest::StatusCode::TOO_MANY_REQUESTS));
+        assert!(!busy(reqwest::StatusCode::NOT_FOUND));
+        assert!(!busy(reqwest::StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(!busy(reqwest::StatusCode::OK));
+    }
 
     fn found(result: LyricsResult, via: &'static str) -> Found {
         Found {

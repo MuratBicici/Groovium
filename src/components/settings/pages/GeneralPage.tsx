@@ -93,10 +93,10 @@ export function GeneralPage() {
 }
 
 /**
- * Carrying the Spotify songs' lyrics timings to another computer: out to a
- * file of the listener's choosing, and back in from one, merged with what is
- * here. A song on this computer needs none of this — its timing is in its
- * lyrics' file, in the library folder.
+ * Carrying the Spotify songs' lyrics timings, and the lyrics chosen for them by
+ * hand, to another computer: out to a file of the listener's choosing, and
+ * back in from one, merged with what is here. A song on this computer needs
+ * none of this — its lyrics and their timing are in the library folder.
  */
 function TimingTransfer() {
   const t = useT();

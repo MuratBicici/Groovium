@@ -176,6 +176,8 @@ fn main() {
             lyrics::timings::lyrics_timings_merge,
             lyrics::timings::lyrics_timings_export,
             lyrics::timings::lyrics_timings_import,
+            lyrics::chosen::lyrics_choose,
+            lyrics::chosen::lyrics_unchoose,
             audio::audio_backend_available,
             shell::set_window_box,
             shell::set_click_area,

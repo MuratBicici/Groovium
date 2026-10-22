@@ -90,6 +90,9 @@ export function LyricsDrawer({
   // matched with by hand, or none yet and the offer to match some.
   const local = !!track && libraryIdOf(track.id) !== null;
   const canMatch = local && status === 'done' && saved === null;
+  // Any other song can have its lyrics chosen by hand when the search found
+  // none, could not reach a source, or found the wrong ones.
+  const canChoose = !!track && !local;
   // Where these came from: what answered, or — when the source asked by name
   // had nothing — that source. The other one is a press away. With neither
   // known, the usual order asked both and there is nowhere else to go.
@@ -159,11 +162,34 @@ export function LyricsDrawer({
               </svg>
             </button>
           )}
-          {saved !== null && (
-            <span className="ml-2 tracking-normal normal-case text-cream-400/70">
-              {t('lyrics.match.matched', { source: SOURCES[saved] ?? saved })}
-            </span>
+          {canChoose && saved === null && status === 'done' && result?.status !== 'NotFound' && (
+            // Found, but maybe not this song's: the listener can look for
+            // them themselves, as when nothing was found.
+            <button
+              type="button"
+              onClick={() => track && match.open(track)}
+              title={t('lyrics.match.anotherLong')}
+              className="ml-1 inline-flex items-center rounded-full px-1.5 py-0.5 tracking-normal normal-case text-cream-400/70 transition-colors hover:bg-shell-600 hover:text-cream-50"
+            >
+              {t('lyrics.match.another')}
+            </button>
           )}
+          {saved !== null &&
+            (canChoose ? (
+              // Chosen by hand: changed or taken away from the same search.
+              <button
+                type="button"
+                onClick={() => track && match.open(track)}
+                title={t('lyrics.match.anotherLong')}
+                className="ml-2 inline-flex items-center rounded-full px-1.5 py-0.5 tracking-normal normal-case text-cream-400/70 transition-colors hover:bg-shell-600 hover:text-cream-50"
+              >
+                {t('lyrics.match.matched', { source: SOURCES[saved] ?? saved })}
+              </button>
+            ) : (
+              <span className="ml-2 tracking-normal normal-case text-cream-400/70">
+                {t('lyrics.match.matched', { source: SOURCES[saved] ?? saved })}
+              </span>
+            ))}
           {lines && (
             // Timed lyrics can be moved: the strip opens at the drawer's foot.
             <button
@@ -285,7 +311,9 @@ export function LyricsDrawer({
 
         {quiet && (
           <div
-            className={`absolute top-1/2 -translate-y-1/2 ${left ? 'text-left' : 'text-right'}`}
+            className={`absolute top-1/2 flex -translate-y-1/2 flex-col ${
+              left ? 'items-start text-left' : 'items-end text-right'
+            }`}
             style={{ [left ? 'left' : 'right']: TEXT_START + 8 }}
           >
             <p
@@ -304,15 +332,19 @@ export function LyricsDrawer({
                 {t('lyrics.retry')}
               </button>
             )}
-            {canMatch && track && result?.status === 'NotFound' && (
-              <button
-                type="button"
-                onClick={() => match.open(track)}
-                className="mt-3 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
-              >
-                {t('lyrics.match.open')}
-              </button>
-            )}
+            {/* Nothing found, or no source would answer: the listener can look
+                for them themselves. */}
+            {track &&
+              ((canMatch && result?.status === 'NotFound') ||
+                (canChoose && (status === 'error' || result?.status === 'NotFound'))) && (
+                <button
+                  type="button"
+                  onClick={() => match.open(track)}
+                  className="mt-3 rounded-full px-3 py-1 text-meta font-medium text-brass-400 ring-1 ring-brass-400/50 transition-colors hover:bg-brass-400/10"
+                >
+                  {t('lyrics.match.open')}
+                </button>
+              )}
           </div>
         )}
 

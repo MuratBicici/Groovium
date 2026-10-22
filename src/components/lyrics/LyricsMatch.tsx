@@ -2,27 +2,33 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { TrackMetadata } from '@/core/types';
 import { libraryIdOf } from '@/core/library';
 import {
+  chooseLyrics,
   previewLyrics,
+  savedFrom,
   searchLyrics,
   sourceName,
+  unchooseLyrics,
   type LyricsCandidate,
   type LyricsResult,
 } from '@/core/lyrics/api';
+import { useLyricsStore } from '@/core/lyrics/store';
 import { usePlayerStore } from '@/core/store';
+import { log } from '@/platform/log';
 import { useSheet } from '@/core/utils/useSheet';
 import { formatDuration } from '@/core/utils/time';
 import { useT } from '@/core/i18n';
 import { SearchBox } from '@/components/spotify/SearchParts';
 
 /**
- * Matching a local song's lyrics by hand.
+ * Matching a song's lyrics by hand.
  *
- * For a song the automatic search gets wrong or cannot find — its tags are
- * missing, or name it differently from every record there is. The listener
- * searches LRCLIB and NetEase themselves, reads what a record holds, and
- * matches the one they want; Rust saves it beside the song, and from then on
- * it plays from there. Groovium vouches for none of it, and says so under
- * every step.
+ * A local song is never looked up, so this is the only way it gets lyrics. A
+ * Spotify song is, and this is for when that went wrong: nothing found, no
+ * source that would answer, or another song's words. The listener searches
+ * LRCLIB and NetEase themselves, reads what a record holds, and matches the
+ * one they want. Rust keeps it — beside a local song in the library, for a
+ * Spotify song in a file of its own — and from then on it plays from there.
+ * Groovium vouches for none of it, and says so under every step.
  *
  * One sheet for the whole window, as the playlist picker is: it is opened from
  * the lyrics in the player as well as from a song's details in the drawer, and
@@ -30,7 +36,7 @@ import { SearchBox } from '@/components/spotify/SearchParts';
  */
 
 interface MatchContext {
-  /** Open the search for a song from the library. Anything else is ignored. */
+  /** Open the search for a song's lyrics. */
   open: (track: TrackMetadata) => void;
   /**
    * Whether it is open. A sheet it was opened over steps aside for Escape
@@ -67,6 +73,21 @@ type Search =
 
 type Preview = { state: 'loading' } | { state: 'done'; result: LyricsResult } | { state: 'error' };
 
+/**
+ * Choose or forget a Spotify song's lyrics, then show the song's lyrics as
+ * they are now. Whether it worked; why not is in the log.
+ */
+async function keepChoice(change: () => Promise<unknown>, trackId: string): Promise<boolean> {
+  try {
+    await change();
+  } catch (err) {
+    log('warn', 'lyrics', `could not change the lyrics chosen for ${trackId}`, err);
+    return false;
+  }
+  useLyricsStore.getState().reload(trackId);
+  return true;
+}
+
 /** What to look for first: the song as the library has it. */
 function firstQuery(track: TrackMetadata): string {
   return [track.artist, track.title].filter((part) => part && part !== 'Unknown Artist').join(' ');
@@ -91,8 +112,17 @@ export function LyricsMatchProvider({ children }: { children: React.ReactNode })
   /** Counted up by every search, so an answer that arrives late is dropped. */
   const asked = useRef(0);
 
+  // Lyrics chosen by hand for the Spotify song shown, which can be taken away
+  // here again: a local song's are cleared in its details, with the song.
+  const chosenHere = useLyricsStore(
+    (s) =>
+      !!showing &&
+      libraryIdOf(showing.id) === null &&
+      s.trackId === showing.id &&
+      savedFrom(s.lookup?.matched) !== null,
+  );
+
   const open = useCallback((next: TrackMetadata) => {
-    if (!libraryIdOf(next.id)) return;
     setQuery(firstQuery(next));
     setSearch({ state: 'idle' });
     setChosen(null);
@@ -171,11 +201,23 @@ export function LyricsMatchProvider({ children }: { children: React.ReactNode })
   }, [chosen]);
 
   async function use(candidate: LyricsCandidate) {
-    const libraryId = showing ? libraryIdOf(showing.id) : null;
-    if (!libraryId || saving) return;
+    if (!showing || saving) return;
     setSaving(true);
     setSaveFailed(false);
-    const done = await matchLyrics(libraryId, candidate.key);
+    const libraryId = libraryIdOf(showing.id);
+    const done = libraryId
+      ? await matchLyrics(libraryId, candidate.key)
+      : await keepChoice(() => chooseLyrics(showing.id, candidate.key), showing.id);
+    setSaving(false);
+    if (done) close();
+    else setSaveFailed(true);
+  }
+
+  async function forget() {
+    if (!showing || saving) return;
+    setSaving(true);
+    setSaveFailed(false);
+    const done = await keepChoice(() => unchooseLyrics(showing.id), showing.id);
     setSaving(false);
     if (done) close();
     else setSaveFailed(true);
@@ -224,6 +266,9 @@ export function LyricsMatchProvider({ children }: { children: React.ReactNode })
                 search={query.trim().length < 2 ? { state: 'idle' } : search}
                 onClose={close}
                 onPick={setChosen}
+                onForget={chosenHere ? () => void forget() : undefined}
+                forgetting={saving}
+                forgetFailed={saveFailed}
               />
             )}
             <p className="shrink-0 px-3 pt-1 pb-2.5 text-center text-label leading-snug text-cream-400/80">
@@ -260,6 +305,9 @@ function ListStep({
   search,
   onClose,
   onPick,
+  onForget,
+  forgetting,
+  forgetFailed,
 }: {
   track: TrackMetadata;
   query: string;
@@ -267,6 +315,10 @@ function ListStep({
   search: Search;
   onClose: () => void;
   onPick: (candidate: LyricsCandidate) => void;
+  /** Take away the lyrics chosen for a Spotify song; absent when none were. */
+  onForget: (() => void) | undefined;
+  forgetting: boolean;
+  forgetFailed: boolean;
 }) {
   const t = useT();
   return (
@@ -277,6 +329,19 @@ function ListStep({
         </p>
         <CloseButton onPress={onClose} />
       </div>
+      {onForget && (
+        <div className="flex shrink-0 flex-col gap-0.5 px-3 pb-1.5">
+          <button
+            type="button"
+            onClick={onForget}
+            disabled={forgetting}
+            className="self-start text-meta text-brass-400 underline-offset-2 transition-colors hover:text-brass-300 hover:underline disabled:opacity-60"
+          >
+            {t('lyrics.match.unchoose')}
+          </button>
+          {forgetFailed && <p className="text-label text-warn/90">{t('lyrics.match.saveFailed')}</p>}
+        </div>
+      )}
       <div className="flex shrink-0 flex-col gap-1 px-3 pb-1.5">
         <SearchBox value={query} onChange={onQuery} placeholder={t('lyrics.match.search')} />
         {track.duration > 0 && (
