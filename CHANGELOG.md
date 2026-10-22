@@ -4,6 +4,112 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.3.0 — 2026-10-22
+
+Lyrics you can put right yourself.
+
+A song on this computer gets its lyrics when you choose them. Open the lyrics
+and Groovium offers to match some: search LRCLIB and NetEase at once, read
+what a record holds, and pick the one that fits. They are kept beside the
+song, so they are there tomorrow, offline too. A Spotify song is still looked
+up for you, and when nothing is found, the sources are too busy to answer, or
+the words are another song's, the same search lets you choose them yourself.
+
+Timed lyrics can be moved to fit the recording. Timing opens a strip of the
+song under the words: drag the block to move every line, its ends to stretch
+them, and pin a line to move it on its own. Songs on this computer show their
+sound behind the lines. A Spotify song's timing is kept in a file, and
+Settings, General exports and imports it with the lyrics you chose. And where
+a song goes quiet between verses, the wave shows the break now even when
+whoever timed it did not mark one.
+
+Music on this computer no longer has to be copied into the library. Add
+without copying lists songs where they are, on a shelf of their own. Groovium
+cannot answer for a file it does not hold, says so, and marks one that has
+gone. Drag files or folders onto the window, or open a song with Groovium from
+Explorer and it plays at once.
+
+And on Spotify, a song not sold in your country plays as the release of it
+that is, or is shown greyed out with Can't play rather than failing when
+pressed. When something goes wrong it is said on a card that goes by itself,
+in place of the red strip. And signing out asks first.
+
+HIGHLIGHTS
+· Lyrics matched by hand for songs on this computer, and chosen by hand for
+  Spotify songs whose lyrics are missing or wrong.
+· A timing strip to move lyrics to fit the recording.
+· Breaks between verses shown even where nobody marked them.
+· Songs on this computer added without copying, dropped on the window, or
+  opened from Explorer.
+· Spotify songs that will not play here shown as such.
+· A quieter notice in place of the red strip.
+· Signing out of Spotify asks first.
+
+ALL CHANGES
+
+Lyrics
+· A song on this computer is never looked up on its own: its tags are too often
+  wrong to search by. With none matched, the lyrics view asks whether to match
+  some. The search asks LRCLIB and NetEase together, lists the likeliest first
+  by length and by whether they have timings, and shows a record's opening
+  lines before it is chosen. What is chosen is saved in the library folder
+  beside the song, and Groovium says it does not check it.
+· A Spotify song's lyrics can be chosen the same way: under "No lyrics found",
+  under "No lyrics found for this song just now", and from Choose… in the
+  drawer's header while lyrics are showing. The choice answers for that song
+  from then on, kept in lyrics-chosen.json beside the settings, until it is
+  removed from the same search.
+· Timing: a strip of the song with its lines on it. Drag the block to move
+  every line, its ends to stretch or squeeze them, and double-click a line to
+  pin it and move it alone. The wheel zooms in, and an overview underneath
+  moves along. For songs on this computer the shape of the sound is drawn
+  behind the lines. In the player the strip opens out of the progress bar, and
+  the line being sung stays where it is.
+· A Spotify song's timing is kept in lyrics-timing.json beside the settings.
+  Settings → General exports and imports it, with the lyrics chosen by hand.
+· A break nobody marked is shown as a wave wherever a line runs on well past
+  what its words take. Measured against 294 LRCLIB records whose timers did
+  mark theirs, with the marks taken out: every break of ten seconds or more
+  is found again.
+· A lyrics timer's signature, a web address on a line of its own, is no longer
+  shown as words; its moment is kept as a pause.
+· LRCLIB answering that it is busy is asked again twice, a moment apart. When
+  no source answers, the lyrics say none were found just now, rather than that
+  they could not be loaded, with Retry and Match lyrics beneath.
+· A song's details say "Not matched" for a local song with no lyrics, rather
+  than "Looked for automatically".
+
+Music on this computer
+· Add without copying, beside Copy, whenever files are added. Linked songs sit
+  on a shelf of their own, Linked · outside the library, and play from where
+  they are. One whose file was moved or deleted is dimmed and marked File
+  missing, and says where it was when pressed. Copy into the library, in a
+  song's details, makes it a copy after all, keeping its lyrics, its timing and
+  its places in playlists. Removing a link never touches the file.
+· Files and folders dragged onto the window are asked about the same way; the
+  record lifts to meet them.
+· Open with → Groovium in Explorer, which the installer offers for the audio
+  types, links the song and plays it, whether Groovium is running or not. It
+  does not make Groovium the default player for anything.
+· WebM, MP4, M4B and Matroska audio can be added as well.
+
+Spotify
+· Search and playlists are asked with your account's country, so each song
+  comes as the release of it that plays there. A song refused anyway, as one
+  from the top tracks shelf can be, is asked for again that way and played as
+  that release.
+· A song that does not play here stays where it is, greyed out with Can't
+  play: on the shelves, in search and in playlists. Pressed, it says why: not
+  sold in your country, explicit content turned off on your account, or not on
+  your kind of account. Playing a playlist through passes over it.
+· Signing out asks first, and says what it does.
+
+Fixes
+· When something goes wrong it is said on a card in the window's own colours,
+  just above the controls, which goes by itself after a few seconds and waits
+  while the pointer is on it. The red strip that pushed the controls up and
+  stayed until clicked is gone.
+
 ## 1.2.3 — 2026-10-13
 
 The music behind the deck, drawn as grooves.

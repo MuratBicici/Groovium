@@ -13,6 +13,36 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.3.0 — 2026-10-22
+
+Sözleri artık siz düzeltebilirsiniz.
+
+Bu bilgisayardaki bir şarkının sözlerini siz seçersiniz. Sözleri açınca
+Groovium eşlemeyi önerir. LRCLIB ve NetEase'te aynı anda arayın, bir kayıtta ne
+olduğuna bakın, uyanı seçin. Sözler şarkının yanında saklanır. Yarın da
+oradadır, internet olmasa da. Spotify şarkılarının sözleri yine sizin için
+aranır. Bir şey bulunamazsa, kaynaklar cevap veremeyecek kadar meşgulse ya da
+gelen sözler başka bir şarkınınsa, aynı aramayla kendiniz seçebilirsiniz.
+
+Zamanlı sözleri kayda göre kaydırabilirsiniz. Zamanlama, sözlerin altında
+şarkının bir şeridini açar. Bloğu sürükleyip bütün satırları kaydırın, uçlarını
+çekip esnetin. Bir satırı iğneleyip tek başına taşıyın. Bu bilgisayardaki
+şarkılarda satırların arkasında şarkının sesi görünür. Spotify şarkılarının
+zamanlaması bir dosyada durur. Ayarlar, Genel'den seçtiğiniz sözlerle birlikte
+dışa ve içe aktarabilirsiniz. Kıtaların arasındaki müzik aralarında da dalga
+artık görünüyor, sözleri zamanlayan kişi oraya bir işaret koymamış olsa bile.
+
+Bu bilgisayardaki müziği artık kitaplığa kopyalamanız gerekmiyor. Kopyalamadan
+ekle, şarkıları bulundukları yerden kendi raflarına koyar. Groovium elinde
+olmayan bir dosya için garanti veremez. Bunu söyler, yerinden gitmiş olanı da
+işaretler. Dosyaları ya da klasörleri pencereye sürükleyin, ya da Gezgin'de bir
+şarkıyı Groovium ile açın. Hemen çalar.
+
+Spotify tarafında da değişiklikler var. Ülkenizde satılmayan bir şarkı, satılan
+sürümüyle çalar. Hiçbiri yoksa basınca hata vermek yerine gri ve Çalınamıyor
+diye görünür. Ters giden bir şey olduğunda artık kırmızı şerit yerine
+kendiliğinden kapanan bir kartta yazıyor. Çıkış yapmadan önce de soruluyor.
+
 ## 1.2.3 — 2026-10-13
 
 Pikabın arkasındaki müzik artık oluk oluk.
