@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DiskPlatter } from '@/components/player/DiskPlatter';
 import { TrackDisplay } from '@/components/player/TrackDisplay';
 import { ProgressBar } from '@/components/player/ProgressBar';
+import { Notice } from '@/components/player/Notice';
 import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
@@ -568,7 +569,9 @@ export default function App() {
                 `CompactLyrics`'s to run, timed to the words travelling between
                 the two, so this only says where it rests. */}
             <div data-lyrics-hides="" style={{ opacity: lyricsOnDeck ? 0 : 1 }}>
-              <div className="transition-opacity duration-200" style={{ opacity: dropHover ? 0 : 1 }}>
+              {/* Out of the way as well while a notice is over it, rather than
+                  cut in half by the card's edge. */}
+              <div className="transition-opacity duration-200" style={{ opacity: dropHover || error ? 0 : 1 }}>
                 <TrackDisplay compact={compact} />
               </div>
             </div>
@@ -602,6 +605,9 @@ export default function App() {
             progressRef={progressRef}
             onExpand={() => setLyricsLayout(expand(layout))}
           />
+          {/* Over the foot of the stage, just above the controls, whatever is
+              on the stage: a notice takes no room from anything. */}
+          <Notice message={error} onDismiss={clearError} />
         </div>
 
         {/* Always reachable, including while an overlay is open — except under
@@ -727,17 +733,6 @@ export default function App() {
       />
 
       <ImportProgress />
-
-      {error && (
-        <button
-          type="button"
-          onClick={clearError}
-          title={t('common.dismiss')}
-          className="shrink-0 bg-red-950/80 px-3 py-1.5 text-left text-meta leading-snug text-red-200"
-        >
-          {error}
-        </button>
-      )}
       {/* The window's own edge, drawn last and over everything.
 
           It is what separates a frameless transparent window from the desktop

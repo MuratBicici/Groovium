@@ -1370,3 +1370,23 @@ body {
     animation: none;
   }
 }
+
+/* The notice's countdown: a line that runs out as the notice goes, and waits
+   while the pointer or the focus is on the notice. Its end is what puts the
+   notice away (`Notice.tsx`), so pausing it pauses that too. */
+.groove-notice-line {
+  transform-origin: left;
+  animation: groove-notice-run var(--notice-ms, 6000ms) linear forwards;
+}
+.groove-notice:hover .groove-notice-line,
+.groove-notice:focus-within .groove-notice-line {
+  animation-play-state: paused;
+}
+@keyframes groove-notice-run {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
