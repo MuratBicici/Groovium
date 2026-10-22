@@ -67,7 +67,7 @@ export const en = {
   'lyrics.notFound': 'No lyrics found for this song.',
   'lyrics.instrumental': 'Instrumental',
   'lyrics.plainOnly': 'Words only — no timings for this one',
-  'lyrics.error': 'The lyrics could not be loaded.',
+  'lyrics.error': 'No lyrics found for this song just now.',
   'lyrics.retry': 'Try again',
   'lyrics.nothingPlaying': 'Play something to see its lyrics.',
   'lyrics.source': 'from {source}',

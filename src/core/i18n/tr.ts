@@ -67,7 +67,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'lyrics.notFound': 'Bu şarkının sözleri bulunamadı.',
   'lyrics.instrumental': 'Enstrümantal',
   'lyrics.plainOnly': 'Yalnızca sözler, zamanlama yok',
-  'lyrics.error': 'Sözler yüklenemedi.',
+  'lyrics.error': 'Bu şarkının sözleri şu an bulunamadı.',
   'lyrics.retry': 'Tekrar dene',
   'lyrics.nothingPlaying': 'Sözlerini görmek için bir şarkı çalın.',
   'lyrics.source': 'kaynak: {source}',
