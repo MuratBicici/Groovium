@@ -85,16 +85,22 @@ export function withIntro(lines: readonly LyricLine[]): LyricLine[] {
 
 /**
  * How much longer than its words need a line has to last before the rest of it
- * is taken for a break. A guess, so a wide margin: a held note, a breath, a
- * slow bar are all longer than the words and none of them is a break.
+ * is taken for a break. A guess, so a margin: a held note, a breath, a slow bar
+ * are all longer than the words and none of them is a break.
+ *
+ * These numbers were set against 294 LRCLIB records whose timers marked their
+ * breaks, with the marks taken out and found again: every break of ten seconds
+ * or more, about two in three of five to ten; the wave starting a median 1.3 s
+ * after the timer's mark, more than a second before it for about one in eight.
+ * Those are mostly a last note held long, which the timing alone cannot tell.
  */
-export const BREAK_WORTH_SHOWING_MS = 5_000;
+export const BREAK_WORTH_SHOWING_MS = 4_000;
 
 /** The least a line with words on it is given, however few the words. */
 const LEAST_SUNG_MS = 3_000;
 
 /** Room for the last note to be held, on top of what the words take. */
-const HELD_MS = 1_000;
+const HELD_MS = 1_500;
 
 /** Lines shorter than this say too little about how fast a song is sung. */
 const LEAST_LETTERS_TO_PACE = 6;

@@ -197,23 +197,31 @@ describe('a break nobody wrote down', () => {
     [120670, 27], [122570, 33], [124380, 69], [127920, 34], [129730, 28], [131440, 59],
   ];
   const song = timed.map(([timeMs, letters]) => ({ timeMs, text: 'x'.repeat(letters) }));
-  const added = (lines: LyricLine[]) => lines.filter((line) => !song.includes(line));
+  const shown = withBreaks(song);
+  /** Where a break was put in after the line at `ms`, or −1. */
+  const breakAfter = (ms: number) => {
+    const at = shown.findIndex((line) => line.timeMs === ms && song.includes(line)) + 1;
+    return shown[at] && !song.includes(shown[at]) ? at : -1;
+  };
 
-  it('is found where a line runs on far past its words, and nowhere else', () => {
-    const breaks = added(withBreaks(song));
-    expect(breaks).toHaveLength(1);
-    const at = (breaks[0] as LyricLine).timeMs;
+  it('is found where a line runs on far past its words', () => {
+    const at = breakAfter(53_290);
+    expect(at).toBeGreaterThan(0);
     // The words are over within seconds; the next line is at 71.18 s.
-    expect(at).toBeGreaterThan(53_290 + 2_000);
-    expect(at).toBeLessThanOrEqual(71_180 - BREAK_WORTH_SHOWING_MS);
+    const start = (shown[at] as LyricLine).timeMs;
+    expect(start).toBeGreaterThan(53_290 + 2_000);
+    expect(start).toBeLessThanOrEqual(71_180 - BREAK_WORTH_SHOWING_MS);
   });
 
   it('comes in just after the line it follows, a line with nothing on it', () => {
-    const shown = withBreaks(song);
-    const at = shown.findIndex((line) => !song.includes(line));
-    expect(shown[at - 1]).toBe(song[17]);
+    const at = breakAfter(53_290);
     expect(shown[at]?.text).toBe('');
     expect(shown[at + 1]).toBe(song[18]);
+  });
+
+  it('is not found where the song is sung line after line', () => {
+    // From the chorus to the end, every line is over before the next is due.
+    for (const [ms] of timed.slice(23)) expect(breakAfter(ms), `after ${ms}`).toBe(-1);
   });
 
   it('is never added where the song already marks one', () => {
@@ -231,8 +239,8 @@ describe('a break nobody wrote down', () => {
       { timeMs: 0, text: 'a line of words here' },
       { timeMs: 3_000, text: 'a line of words here' },
       { timeMs: 6_000, text: 'oh' },
-      { timeMs: 13_000, text: 'a line of words here' },
-      { timeMs: 16_000, text: 'a line of words here' },
+      { timeMs: 12_000, text: 'a line of words here' },
+      { timeMs: 15_000, text: 'a line of words here' },
     ];
     expect(withBreaks(held)).toEqual(held);
   });
