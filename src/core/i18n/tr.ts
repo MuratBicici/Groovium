@@ -445,6 +445,13 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.visualizer': 'Görselleştirici',
   'settings.visualizerHint':
     'Pikabın arkasında, Groovium ne çalıyorsa ona göre hareket eder.',
+  'settings.backdrop': 'Arka plan ışığı',
+  'settings.backdropHint': 'Kapağın renkleri plakla birlikte döner, ışıkta toz süzülür. İkisi de müzikle hafifçe nefes alır.',
+  'settings.backdropBrightness': 'Parlaklık',
+  'settings.backdropSpread': 'Yayılma',
+  'settings.backdropSpeed': 'Dönüş hızı',
+  'settings.backdropBreath': 'Nefes',
+  'settings.backdropDust': 'Toz',
   'settings.connections': 'Bağlantılar',
   'settings.configured': 'Kurulu',
   'settings.notConfigured': 'Kurulu değil',

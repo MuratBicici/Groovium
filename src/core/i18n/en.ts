@@ -464,6 +464,14 @@ export const en = {
   'settings.visualizer': 'Visualiser',
   'settings.visualizerHint':
     'Behind the deck, moving to what Groovium is playing.',
+  /** The light behind everything: the cover's colours turning with the record, and dust. */
+  'settings.backdrop': 'Background light',
+  'settings.backdropHint': "The cover's colours turning with the record, and dust in the light, breathing with the music.",
+  'settings.backdropBrightness': 'Brightness',
+  'settings.backdropSpread': 'Spread',
+  'settings.backdropSpeed': 'Turning speed',
+  'settings.backdropBreath': 'Breath',
+  'settings.backdropDust': 'Dust',
   'settings.connections': 'Connections',
   'settings.configured': 'Set up',
   'settings.notConfigured': 'Not set up',

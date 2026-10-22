@@ -1371,6 +1371,29 @@ body {
   }
 }
 
+/*
+ * Over the light behind everything (`Backdrop.tsx`).
+ *
+ * The grain is there for the gradient, not as a texture to look at: a dark,
+ * slow gradient drawn in eight bits a channel steps in bands you can see, and a
+ * faint, fixed noise over it breaks the steps up below where the eye resolves
+ * them. Fixed, so nothing in it moves.
+ *
+ * The shade keeps the foot of the window, where the title, the progress bar and
+ * the controls sit, on a calm ground whatever colour the cover is.
+ */
+.groove-backdrop-grain {
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.groove-backdrop-shade {
+  background: linear-gradient(
+    to bottom,
+    transparent 45%,
+    color-mix(in srgb, var(--color-shell-900) 55%, transparent) 100%
+  );
+}
+
 /* The notice's countdown: a line that runs out as the notice goes, and waits
    while the pointer or the focus is on the notice. Its end is what puts the
    notice away (`Notice.tsx`), so pausing it pauses that too. */

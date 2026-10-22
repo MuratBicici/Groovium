@@ -4,8 +4,9 @@ import { Toggle } from '@/components/controls/Toggle';
 import { Choice, Fold, Group, Slider } from '../parts';
 
 /**
- * What moves with the music: the visualiser behind the deck and the light
- * round the window, each with its own dials folded under its switch.
+ * What moves with the music: the light behind everything, the visualiser
+ * behind the deck and the light round the window, each with its own dials
+ * folded under its switch.
  */
 export function LightsPage() {
   const t = useT();
@@ -25,9 +26,55 @@ export function LightsPage() {
   const glowFlash = useSettingsStore((s) => s.glowFlash);
   const glowFlare = useSettingsStore((s) => s.glowFlare);
   const setGlow = useSettingsStore((s) => s.setGlow);
+  const backdrop = useSettingsStore((s) => s.backdrop);
+  const setBackdrop = useSettingsStore((s) => s.setBackdrop);
+  const backdropBrightness = useSettingsStore((s) => s.backdropBrightness);
+  const backdropSpread = useSettingsStore((s) => s.backdropSpread);
+  const backdropSpeed = useSettingsStore((s) => s.backdropSpeed);
+  const backdropBreath = useSettingsStore((s) => s.backdropBreath);
+  const backdropDust = useSettingsStore((s) => s.backdropDust);
+  const setBackdropKnob = useSettingsStore((s) => s.setBackdropKnob);
 
   return (
     <>
+      {/* The room behind the turntable: first, because it is the most of the
+          window any of these light. */}
+      <Group>
+        <Toggle
+          label={t('settings.backdrop')}
+          hint={t('settings.backdropHint')}
+          on={backdrop}
+          onChange={setBackdrop}
+        />
+        <Fold open={backdrop}>
+          <Slider
+            label={t('settings.backdropBrightness')}
+            notch={backdropBrightness}
+            onChange={(notch) => setBackdropKnob('backdropBrightness', notch)}
+          />
+          <Slider
+            label={t('settings.backdropSpread')}
+            notch={backdropSpread}
+            onChange={(notch) => setBackdropKnob('backdropSpread', notch)}
+          />
+          <Slider
+            label={t('settings.backdropSpeed')}
+            notch={backdropSpeed}
+            onChange={(notch) => setBackdropKnob('backdropSpeed', notch)}
+          />
+          <Slider
+            label={t('settings.backdropBreath')}
+            notch={backdropBreath}
+            onChange={(notch) => setBackdropKnob('backdropBreath', notch)}
+          />
+          <Slider
+            label={t('settings.backdropDust')}
+            notch={backdropDust}
+            onChange={(notch) => setBackdropKnob('backdropDust', notch)}
+          />
+        </Fold>
+      </Group>
+
       <Group>
         <Toggle
           label={t('settings.visualizer')}

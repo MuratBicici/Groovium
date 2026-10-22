@@ -10,6 +10,7 @@ import { LyricsMatchProvider } from '@/components/lyrics/LyricsMatch';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider, useCarryKind } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
+import { Backdrop } from '@/components/player/Backdrop';
 import { WindowGlow } from '@/components/player/WindowGlow';
 import { CoverTheme } from '@/components/player/CoverTheme';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
@@ -213,6 +214,12 @@ export default function App() {
   const visualizer = useSettingsStore((s) => s.visualizer);
   const visualizerLook = useSettingsStore((s) => s.visualizerLook);
   const visualizerBrightness = useSettingsStore((s) => s.visualizerBrightness);
+  const backdrop = useSettingsStore((s) => s.backdrop);
+  const backdropBrightness = useSettingsStore((s) => s.backdropBrightness);
+  const backdropSpread = useSettingsStore((s) => s.backdropSpread);
+  const backdropSpeed = useSettingsStore((s) => s.backdropSpeed);
+  const backdropBreath = useSettingsStore((s) => s.backdropBreath);
+  const backdropDust = useSettingsStore((s) => s.backdropDust);
   const windowGlow = useSettingsStore((s) => s.windowGlow);
   const glowStrength = useSettingsStore((s) => s.glowStrength);
   const glowSensitivity = useSettingsStore((s) => s.glowSensitivity);
@@ -496,6 +503,15 @@ export default function App() {
     >
       <PlaylistPickerProvider>
       <LyricsMatchProvider>
+      {/* Under the visualiser: the room, and the grooves in front of it. */}
+      <Backdrop
+        on={backdrop}
+        brightness={backdropBrightness}
+        spread={backdropSpread}
+        speed={backdropSpeed}
+        breath={backdropBreath}
+        dust={backdropDust}
+      />
       <Visualizer
         on={visualizer}
         look={visualizerLook}

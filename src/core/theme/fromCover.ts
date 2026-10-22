@@ -1,4 +1,4 @@
-import { hsvToRgb, rgbToHsv, toHex, type Rgb } from '@/core/utils/colour';
+import { hsvToRgb, rgbToHsv, rgbToOklab, toHex, type Rgb } from '@/core/utils/colour';
 import { ACCENT_VISIBLE, contrastRatio } from '@/core/utils/contrast';
 
 /**
@@ -21,7 +21,23 @@ export interface CoverPalette {
   accent: string;
   /** Set when the sleeve had no colour in it, and says which of the two it got. */
   mono?: 'black' | 'white';
+  /**
+   * The cover's own colours, the strongest first and each unlike the others:
+   * what the light behind the deck turns through (`Backdrop`). Up to `HUES`
+   * of them, and none for a sleeve with no colour in it.
+   */
+  hues?: string[];
 }
+
+/** How many colours the light behind the deck is made of. */
+export const HUES = 3;
+
+/**
+ * How far apart two of them have to be, in OKLab. Below this a cover's second
+ * colour is its first one again, a shade off, and the light would turn through
+ * one colour twice.
+ */
+const HUES_APART = 0.12;
 
 /** How coarsely colours are grouped: four bits a channel, so 4096 buckets. */
 const BITS = 4;
@@ -230,27 +246,49 @@ export function paletteFrom(pixels: Uint8ClampedArray): CoverPalette | null {
   const { buckets, total } = bucketsOf(pixels);
   if (total === 0) return null;
 
-  let accent: Rgb | null = null;
-  let best = 0;
-  for (const bucket of buckets.values()) {
-    const colour = meanOf(bucket);
-    // The root of the share, not the share. How much of the sleeve a colour
-    // covers should count, or a stray pixel would decide the palette — but not
-    // in proportion, or it decides it on its own: a dark navy field over four
-    // fifths of a cover beats the orange sun the cover is *about*, and the
-    // window comes out navy. Under a root, presence still matters and being
-    // large stops being an argument by itself.
-    const worth = accentWorth(colour) * Math.sqrt(bucket.count / total);
-    if (worth > best) {
-      best = worth;
-      accent = colour;
-    }
-  }
+  // The root of the share, not the share. How much of the sleeve a colour
+  // covers should count, or a stray pixel would decide the palette — but not
+  // in proportion, or it decides it on its own: a dark navy field over four
+  // fifths of a cover beats the orange sun the cover is *about*, and the
+  // window comes out navy. Under a root, presence still matters and being
+  // large stops being an argument by itself.
+  const ranked = [...buckets.values()]
+    .map((bucket) => {
+      const colour = meanOf(bucket);
+      return { colour, worth: accentWorth(colour) * Math.sqrt(bucket.count / total) };
+    })
+    .sort((a, b) => b.worth - a.worth);
+  const accent = ranked[0]?.colour ?? null;
+  const best = ranked[0]?.worth ?? 0;
 
   if (!accent || best < COLOURFUL * COLOURFUL) {
     return brightness(buckets, total) >= WHITE_FROM ? WHITE_SLEEVE : BLACK_SLEEVE;
   }
 
   const ground = groundFrom(buckets, total, accent);
-  return { surface: toHex(ground), accent: toHex(readableOn(accent, ground)) };
+  return {
+    surface: toHex(ground),
+    accent: toHex(readableOn(accent, ground)),
+    hues: huesOf(ranked).map(toHex),
+  };
+}
+
+/**
+ * The cover's strongest colours that are not each other: down the ranking, a
+ * colour kept only if it is far enough from every one kept before it. A cover
+ * with one colour in it gives one; the light fills in the rest from the theme.
+ */
+function huesOf(ranked: readonly { colour: Rgb; worth: number }[]): Rgb[] {
+  const kept: Rgb[] = [];
+  for (const { colour, worth } of ranked) {
+    if (kept.length === HUES) break;
+    if (worth < COLOURFUL * COLOURFUL) break;
+    const lab = rgbToOklab(colour);
+    const apart = kept.every((other) => {
+      const o = rgbToOklab(other);
+      return Math.hypot(lab.L - o.L, lab.a - o.a, lab.b - o.b) >= HUES_APART;
+    });
+    if (apart) kept.push(colour);
+  }
+  return kept;
 }

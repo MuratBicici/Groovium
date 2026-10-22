@@ -160,6 +160,23 @@ pub struct Settings {
     /// being the quarter it has always been drawn at.
     #[serde(default, deserialize_with = "notch")]
     pub visualizer_brightness: i32,
+    /// The light behind everything: the cover's colours turning with the
+    /// record, and dust over the deck. On unless turned off, as the
+    /// visualiser is, including in a config written before it existed.
+    #[serde(default = "on_unless_turned_off")]
+    pub backdrop: bool,
+    /// How it is tuned, a notch from -4 to 4 each, nought being what it
+    /// shipped at: brightness, spread, speed, breath and dust.
+    #[serde(default, deserialize_with = "notch")]
+    pub backdrop_brightness: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub backdrop_spread: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub backdrop_speed: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub backdrop_breath: i32,
+    #[serde(default, deserialize_with = "notch")]
+    pub backdrop_dust: i32,
     /// The last version whose summary was shown on the way in. `None` means
     /// nobody has been shown anything, which is equally true of a first run and
     /// of a config written before this field existed — both get the summary
@@ -218,6 +235,12 @@ impl Default for Settings {
             glow_listens: all_of_it(),
             visualizer_look: grooves(),
             visualizer_brightness: 0,
+            backdrop: on_unless_turned_off(),
+            backdrop_brightness: 0,
+            backdrop_spread: 0,
+            backdrop_speed: 0,
+            backdrop_breath: 0,
+            backdrop_dust: 0,
             last_seen_version: None,
             declined_version: None,
             lyrics_on: false,
@@ -415,6 +438,12 @@ mod tests {
             glow_listens: "bass".into(),
             visualizer_look: "blocks".into(),
             visualizer_brightness: 2,
+            backdrop: false,
+            backdrop_brightness: 1,
+            backdrop_spread: -1,
+            backdrop_speed: 4,
+            backdrop_breath: 2,
+            backdrop_dust: -4,
             last_seen_version: Some("1.0.4".into()),
             declined_version: Some("1.0.5".into()),
             lyrics_on: true,
@@ -439,6 +468,22 @@ mod tests {
         assert!(written.contains(r#""glowListens":"bass""#));
         assert!(written.contains(r#""visualizerLook":"blocks""#));
         assert!(written.contains(r#""visualizerBrightness":2"#));
+        assert!(written.contains(r#""backdrop":false"#));
+        assert!(written.contains(r#""backdropSpeed":4"#));
+        assert!(written.contains(r#""backdropDust":-4"#));
+    }
+
+    #[test]
+    fn a_config_from_before_the_light_behind_the_deck_has_it_on_as_it_shipped() {
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert!(config.settings.backdrop);
+        assert_eq!(config.settings.backdrop_brightness, 0);
+        assert_eq!(config.settings.backdrop_speed, 0);
+        // Off once somebody has said so, and a notch typed in by hand held to its range.
+        let chosen: AppConfig =
+            serde_json::from_str(r#"{"settings":{"backdrop":false,"backdropDust":-9}}"#).expect("parses");
+        assert!(!chosen.settings.backdrop);
+        assert_eq!(chosen.settings.backdrop_dust, -4);
     }
 
     #[test]

@@ -166,6 +166,24 @@ export interface Settings {
    */
   visualizerBrightness: number;
   /**
+   * The light behind everything: the cover's colours turning with the record,
+   * and dust in the lamp over the deck (`src/core/visualizer/backdrop.ts`).
+   *
+   * On unless turned off, as the visualiser is: it is the room the turntable
+   * stands in, not a change to the window's shape.
+   */
+  backdrop: boolean;
+  /**
+   * How the light is tuned, a notch from -4 to 4 each, nought in the middle:
+   * how strongly it shows, how far it spreads, how fast it turns, how much it
+   * breathes with the music, and how much dust is in the air.
+   */
+  backdropBrightness: number;
+  backdropSpread: number;
+  backdropSpeed: number;
+  backdropBreath: number;
+  backdropDust: number;
+  /**
    * The last version whose "what's new" was actually shown.
    *
    * Not a preference, and the odd one out here for that reason — but this is
@@ -220,6 +238,17 @@ export const GLOW_KNOBS = [
 
 export type GlowKnob = (typeof GLOW_KNOBS)[number];
 
+/** Which of the light's dials the settings panel is moving. */
+export const BACKDROP_KNOBS = [
+  'backdropBrightness',
+  'backdropSpread',
+  'backdropSpeed',
+  'backdropBreath',
+  'backdropDust',
+] as const;
+
+export type BackdropKnob = (typeof BACKDROP_KNOBS)[number];
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: null,
   language: null,
@@ -245,6 +274,12 @@ export const DEFAULT_SETTINGS: Settings = {
   glowListens: 'all',
   visualizerLook: 'grooves',
   visualizerBrightness: 0,
+  backdrop: true,
+  backdropBrightness: 0,
+  backdropSpread: 0,
+  backdropSpeed: 0,
+  backdropBreath: 0,
+  backdropDust: 0,
   lastSeenVersion: null,
   declinedVersion: null,
   lyricsOn: false,
@@ -280,10 +315,11 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     settings.lyricsOn = settings.lyricsOn === true;
+    settings.backdrop = settings.backdrop !== false;
     settings.scale = nearestScale(Number(settings.scale));
     // And the sliders, which are numbers somebody could put anything in — a
     // fraction among them, since these were fractions for one afternoon.
-    for (const knob of [...GLOW_KNOBS, 'visualizerBrightness'] as const) {
+    for (const knob of [...GLOW_KNOBS, ...BACKDROP_KNOBS, 'visualizerBrightness'] as const) {
       const held = Math.round(Number(settings[knob]));
       settings[knob] = Number.isFinite(held) ? Math.max(-NOTCHES, Math.min(NOTCHES, held)) : 0;
     }

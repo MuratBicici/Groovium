@@ -141,3 +141,25 @@ describe('a palette out of a sleeve', () => {
     expect(paletteFrom(new Uint8ClampedArray([200, 40, 40, 0, 200, 40, 40, 0]))).toBeNull();
   });
 });
+
+describe('the colours of a sleeve, for the light behind the deck', () => {
+  it('are its strongest colours, the strongest first, each unlike the others', () => {
+    const art = cover(
+      { colour: [12, 18, 40], share: 500 },
+      { colour: [126, 69, 211], share: 250 },
+      { colour: [209, 8, 55], share: 150 },
+      { colour: [210, 12, 60], share: 100 },
+    );
+    const hues = paletteFrom(art)!.hues!;
+    // The two reds are one colour twice, and count once; the navy ground is
+    // too dark to be one at all. Red first: as much of it, and stronger.
+    expect(hues).toHaveLength(2);
+    expect(hsv(hues[0]!).h).toBeGreaterThan(330);
+    expect(hsv(hues[1]!).h).toBeGreaterThan(250);
+    expect(hsv(hues[1]!).h).toBeLessThan(280);
+  });
+
+  it('are none for a sleeve with no colour in it', () => {
+    expect(paletteFrom(cover({ colour: [30, 30, 30], share: 1000 }))!.hues).toBeUndefined();
+  });
+});
