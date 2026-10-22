@@ -358,6 +358,64 @@ describe('starting a track on a device', () => {
   });
 });
 
+/**
+ * A song Spotify will not play as it was named.
+ *
+ * What was reported: a song from the top-tracks shelf, played on Spotify
+ * itself a hundred times, refused with "Player command failed: Restriction
+ * violated" — the shelf's track being a release of the song that is not sold
+ * where the listener is.
+ */
+describe('a track Spotify refused', () => {
+  const refusal = JSON.stringify({ error: { status: 403, message: 'Player command failed: Restriction violated' } });
+
+  it('is told from any other refusal by what Spotify said', async () => {
+    const { restricted, SpotifyError } = await freshApi();
+    expect(restricted(new SpotifyError('Spotify refused this request. Player command failed: Restriction violated', 403))).toBe(true);
+    expect(restricted(new SpotifyError('Spotify refused this request. Insufficient client scope', 403))).toBe(false);
+    expect(restricted(new SpotifyError('Restriction violated', 429))).toBe(false);
+    expect(restricted(new Error('Restriction violated'))).toBe(false);
+  });
+
+  it('comes back from a refused play as such', async () => {
+    const { playOnDevice, restricted } = await freshApi();
+    stubFetch([answer(403, {}, refusal)]);
+    const err = await playOnDevice('device-1', 'spotify:track:abc').catch((e: unknown) => e);
+    expect(restricted(err)).toBe(true);
+  });
+
+  it('is asked for again with the account’s own country, and the release that plays there named', async () => {
+    const { playableVersion } = await freshApi();
+    stubFetch([
+      answer(200, {}, JSON.stringify({ uri: 'spotify:track:here', is_playable: true, linked_from: { uri: 'spotify:track:abc' } })),
+    ]);
+    await expect(playableVersion('spotify:track:abc')).resolves.toEqual({ uri: 'spotify:track:here' });
+    expect(calls[0]).toMatch(/\/tracks\/abc\?market=from_token$/);
+  });
+
+  it('says why, where no release of it plays', async () => {
+    const { playableVersion } = await freshApi();
+    for (const [reason, said] of [
+      ['market', 'market'],
+      ['explicit', 'explicit'],
+      ['product', 'product'],
+      ['something new', 'unknown'],
+    ]) {
+      stubFetch([
+        answer(200, {}, JSON.stringify({ uri: 'spotify:track:abc', is_playable: false, restrictions: { reason } })),
+      ]);
+      await expect(playableVersion('spotify:track:abc')).resolves.toEqual({ refused: said });
+    }
+  });
+
+  it('has nothing to say when the track plays as it was named', async () => {
+    const { playableVersion } = await freshApi();
+    stubFetch([answer(200, {}, JSON.stringify({ uri: 'spotify:track:abc', is_playable: true }))]);
+    await expect(playableVersion('spotify:track:abc')).resolves.toBeNull();
+    await expect(playableVersion('not a uri')).resolves.toBeNull();
+  });
+});
+
 
 /**
  * A request that never comes back.

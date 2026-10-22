@@ -288,6 +288,11 @@ export const en = {
   /** The sleeve is empty because this record is on the deck. */
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify is asking this app to slow down. {seconds}s to go.',
+  'spotify.refused.market': 'Spotify does not play this song in your country.',
+  'spotify.refused.explicit':
+    "Explicit content is off on your Spotify account, so this song cannot play. It can be turned on in Spotify's settings.",
+  'spotify.refused.product': 'Spotify does not play this song on your kind of account.',
+  'spotify.refused.unknown': 'Spotify will not let this song play here.',
   'spotify.onDeck': 'This record is on the deck.',
   'spotify.editSongs': 'Edit songs',
   'spotify.alreadyHere': 'Already here',

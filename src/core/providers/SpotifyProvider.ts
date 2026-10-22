@@ -33,7 +33,7 @@ import { overhearBars } from '@/core/visualizer';
 import { noteSlow } from './connectionHealth';
 import { log } from '@/platform/log';
 import { BaseProvider } from './BaseProvider';
-import { currentPlayback, playOnDevice } from './spotifyApi';
+import { currentPlayback, playableVersion, playOnDevice, restricted, SpotifyError } from './spotifyApi';
 import { errorText } from '@/core/utils/errorText';
 
 /**
@@ -238,8 +238,18 @@ export class SpotifyProvider extends BaseProvider {
    * to the next song, and a stop.
    */
   private reachable = true;
-  /** What was playing, so an outage can be recovered from rather than waited out. */
+  /**
+   * What was playing, so an outage can be recovered from rather than waited
+   * out: the URI Spotify was asked to play, which for a track it refused here
+   * is the release of it that plays here (`relinked`).
+   */
   private playing: string | null = null;
+  /**
+   * Tracks Spotify refused as they were named and played as another release
+   * of the same song: the URI asked for, and the one played. Kept for the
+   * session, so the next time is not another refusal first.
+   */
+  private relinked = new Map<string, string>();
   /** One restart attempt at a time. */
   private restarting = false;
   /**
@@ -404,8 +414,9 @@ export class SpotifyProvider extends BaseProvider {
     if (!this.player) throw new Error('Spotify player is not connected.');
 
     this.setState('LOADING');
-    this.leaving = this.playing !== trackId ? this.playing : null;
-    this.playing = trackId;
+    const uri = this.relinked.get(trackId) ?? trackId;
+    this.leaving = this.playing !== uri ? this.playing : null;
+    this.playing = uri;
     // Before the command goes out, not after: Spotify can answer with a state
     // before the request that caused it has returned.
     this.expectSound(0);
@@ -414,7 +425,12 @@ export class SpotifyProvider extends BaseProvider {
       // that arrives later on the `ready` event. Picking a track inside that
       // window is entirely normal, so wait for it rather than failing.
       const deviceId = await this.waitForDevice();
-      await playOnDevice(deviceId, trackId);
+      try {
+        await playOnDevice(deviceId, uri);
+      } catch (err) {
+        if (!restricted(err)) throw err;
+        await this.playAnotherRelease(deviceId, trackId, err);
+      }
       // Starting playback through the Web API can hand the device back its own
       // default volume, so the setting is applied again once playback is on.
       await this.player.setVolume(this.volume);
@@ -436,6 +452,36 @@ export class SpotifyProvider extends BaseProvider {
       this.fail(describe(err));
       throw err;
     }
+  }
+
+  /**
+   * Spotify would not play `trackId` here. Play the release of the same song
+   * it will, if there is one; otherwise fail with why, in words, rather than
+   * with "Restriction violated".
+   */
+  private async playAnotherRelease(deviceId: string, trackId: string, refusal: unknown): Promise<void> {
+    const other = await playableVersion(trackId).catch((err: unknown) => {
+      log('warn', 'playback', 'could not ask Spotify which release of a refused track plays here', err);
+      return null;
+    });
+    if (other && 'uri' in other) {
+      log('info', 'playback', 'Spotify refused a track here; playing the release of it that plays here');
+      this.relinked.set(trackId, other.uri);
+      this.playing = other.uri;
+      await playOnDevice(deviceId, other.uri);
+      return;
+    }
+    if (other) {
+      log('info', 'playback', `Spotify will not play a track here: ${other.refused}`);
+      throw new SpotifyError(say(`spotify.refused.${other.refused}`), 403);
+    }
+    throw refusal;
+  }
+
+  /** The track a URI Spotify is playing stands for: what was asked for, where another release was played. */
+  private askedFor(uri: string | null): string | null {
+    for (const [asked, played] of this.relinked) if (played === uri) return asked;
+    return uri;
   }
 
   async pause(): Promise<void> {
@@ -695,7 +741,9 @@ export class SpotifyProvider extends BaseProvider {
         // this provider never assigns, so the payload was always null and the
         // store's stale-`ended` guard (`trackId !== null && …`) could not fire
         // for Spotify at all.
-        this.emit({ type: 'ended', trackId: track?.uri ?? null });
+        // The track the store asked for, which is not the one playing where
+        // another release of it was played instead.
+        this.emit({ type: 'ended', trackId: this.askedFor(track?.uri ?? null) });
         return;
       }
       this.stopListening();

@@ -655,3 +655,45 @@ export async function playOnDevice(
     }),
   });
 }
+
+/**
+ * Whether Spotify refused to play a track because of a restriction on it,
+ * rather than on this app: "Player command failed: Restriction violated".
+ */
+export function restricted(err: unknown): boolean {
+  return err instanceof SpotifyError && err.status === 403 && /restriction/i.test(err.message);
+}
+
+/** Why Spotify will not play a track here, as it says. */
+export type Restriction = 'market' | 'explicit' | 'product' | 'unknown';
+
+/**
+ * The version of a track this account can play, or why there is none.
+ *
+ * A song is often on Spotify more than once — a single and the album, a
+ * release for one country and another for the rest — and a track's id names
+ * one of them. Most of what Groovium is given says nothing of where it is
+ * played: the top-tracks shelf cannot be asked with a country at all, and a
+ * song played on Spotify a hundred times came back as the one release of it
+ * that is not sold here, refused as "Restriction violated". Asked again with
+ * the account's own country, Spotify answers with the release that plays
+ * there ("track relinking"), or says why none does.
+ *
+ * Null when the answer says nothing either way: the track playable as it
+ * was, or nothing found.
+ */
+export async function playableVersion(trackUri: string): Promise<{ uri: string } | { refused: Restriction } | null> {
+  const id = trackUri.split(':')[2];
+  if (!id) return null;
+  const track = await request<{
+    uri?: string;
+    is_playable?: boolean;
+    restrictions?: { reason?: string };
+  }>(`/tracks/${encodeURIComponent(id)}?market=from_token`);
+  if (!track) return null;
+  const reason = track.restrictions?.reason;
+  if (track.is_playable === false || reason) {
+    return { refused: reason === 'market' || reason === 'explicit' || reason === 'product' ? reason : 'unknown' };
+  }
+  return track.uri && track.uri !== trackUri ? { uri: track.uri } : null;
+}

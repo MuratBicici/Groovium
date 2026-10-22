@@ -274,6 +274,11 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   /** The sleeve is empty because this record is on the deck. */
   /** Spotify's rate limit, with how long is left of it. */
   'spotify.throttled': 'Spotify bu uygulamadan yavaşlamasını istiyor. {seconds} sn kaldı.',
+  'spotify.refused.market': 'Spotify bu şarkıyı ülkenizde çalmıyor.',
+  'spotify.refused.explicit':
+    'Spotify hesabınızda açık içerik kapalı, bu yüzden bu şarkı çalınamıyor. Spotify’ın ayarlarından açabilirsiniz.',
+  'spotify.refused.product': 'Spotify bu şarkıyı hesap türünüzde çalmıyor.',
+  'spotify.refused.unknown': 'Spotify bu şarkının burada çalınmasına izin vermiyor.',
   'spotify.onDeck': 'Bu plak plakçalarda.',
   'spotify.editSongs': 'Şarkıları düzenle',
   'spotify.alreadyHere': 'Zaten var',
