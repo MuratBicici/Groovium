@@ -84,6 +84,107 @@ export function withIntro(lines: readonly LyricLine[]): LyricLine[] {
 }
 
 /**
+ * How much longer than its words need a line has to last before the rest of it
+ * is taken for a break. A guess, so a wide margin: a held note, a breath, a
+ * slow bar are all longer than the words and none of them is a break.
+ */
+export const BREAK_WORTH_SHOWING_MS = 5_000;
+
+/** The least a line with words on it is given, however few the words. */
+const LEAST_SUNG_MS = 3_000;
+
+/** Room for the last note to be held, on top of what the words take. */
+const HELD_MS = 1_000;
+
+/** Lines shorter than this say too little about how fast a song is sung. */
+const LEAST_LETTERS_TO_PACE = 6;
+
+const LETTER = /[\p{L}\p{N}]/gu;
+
+function lettersIn(text: string): number {
+  return text.match(LETTER)?.length ?? 0;
+}
+
+/** The value a quarter of the way down from the top. */
+function upperQuartile(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) * 0.75)] ?? null;
+}
+
+/**
+ * How long a letter takes to sing in this song: from the lines that are timed
+ * only as lines, each the time it has over the letters on it. Taken high, at
+ * the upper quartile, so a slow verse is never mistaken for a break; the few
+ * lines that do run on into one sit above it and do not move it.
+ */
+function paceOf(lines: readonly LyricLine[]): number | null {
+  const paces: number[] = [];
+  for (let i = 0; i + 1 < lines.length; i += 1) {
+    const line = lines[i] as LyricLine;
+    const letters = lettersIn(line.text);
+    if (line.words || letters < LEAST_LETTERS_TO_PACE) continue;
+    const span = (lines[i + 1] as LyricLine).timeMs - line.timeMs;
+    if (span > 0) paces.push(span / letters);
+  }
+  return upperQuartile(paces);
+}
+
+/** How far apart a song's syllables are sung, where a source timed them. */
+function syllableStepOf(lines: readonly LyricLine[]): number | null {
+  const steps: number[] = [];
+  for (const line of lines) {
+    const words = line.words ?? [];
+    for (let k = 1; k < words.length; k += 1) {
+      const step = (words[k] as Syllable).timeMs - (words[k - 1] as Syllable).timeMs;
+      if (step > 0) steps.push(step);
+    }
+  }
+  return upperQuartile(steps);
+}
+
+/**
+ * When the singing on a line is over, as near as can be told: after its last
+ * syllable, where a source timed them; otherwise after its letters at the
+ * song's own pace. Null when there is nothing to tell it by.
+ */
+function sungUntil(line: LyricLine, pace: number | null, step: number | null): number | null {
+  const last = line.words?.[line.words.length - 1];
+  if (last) return Math.max(line.timeMs + LEAST_SUNG_MS, last.timeMs + (step ?? 0) + HELD_MS);
+  if (pace === null) return null;
+  return line.timeMs + Math.max(LEAST_SUNG_MS, lettersIn(line.text) * pace + HELD_MS);
+}
+
+/**
+ * The song with the breaks in it that nobody wrote down.
+ *
+ * A break between two verses is drawn as a wave only when whoever timed the
+ * song put an empty line there, and plenty do not: the line before the break
+ * then lasts until the next is sung, and the light crawled across a few words
+ * for the whole of a guitar solo. Wherever a line runs on well past what its
+ * words take, an empty line is put in where they end, and the rest of the wait
+ * is a wave like any other.
+ *
+ * Only what is shown: the timing strip and what it keeps are set against the
+ * source's lines, which this never touches.
+ */
+export function withBreaks(lines: readonly LyricLine[]): LyricLine[] {
+  const pace = paceOf(lines);
+  const step = syllableStepOf(lines);
+  const out: LyricLine[] = [];
+  lines.forEach((line, i) => {
+    out.push(line);
+    const next = lines[i + 1];
+    if (!next || unsung(line) || unsung(next)) return;
+    const end = sungUntil(line, pace, step);
+    if (end !== null && next.timeMs - end >= BREAK_WORTH_SHOWING_MS) {
+      out.push({ timeMs: Math.round(end), text: '' });
+    }
+  });
+  return out;
+}
+
+/**
  * The song without the silence after its last words.
  *
  * Plenty of timers end a song with an empty line where the singing stops, and

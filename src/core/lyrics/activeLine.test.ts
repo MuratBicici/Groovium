@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BREAK_WORTH_SHOWING_MS,
   INTRO_WORTH_SHOWING_MS,
   LAST_LINE_MS,
   acrossWords,
   activeLine,
   isSilence,
   lineSweep,
+  withBreaks,
   withIntro,
   withoutOutro,
+  type LyricLine,
 } from './activeLine';
 
 const lines = [1000, 2000, 2000, 5000].map((timeMs, i) => ({ timeMs, text: `${i}` }));
@@ -178,6 +181,76 @@ describe('a line with no words on it', () => {
   it('is never a line with a word in it, however short', () => {
     for (const words of ['I', 'oh ♪', '♪ la la ♪', 'Instrumental', '1, 2', 'N’olur'])
       expect(isSilence(words), words).toBe(false);
+  });
+});
+
+describe('a break nobody wrote down', () => {
+  // A song as one LRCLIB record times it: each line's start and how many
+  // letters it has, the words themselves left out. Its eighteenth line runs on
+  // for eighteen seconds into a break no empty line marks.
+  const timed: [number, number][] = [
+    [0, 13], [7000, 13], [14160, 28], [15880, 30], [17600, 32], [19130, 34], [21250, 30],
+    [22920, 32], [24760, 31], [26380, 34], [28740, 25], [32020, 29], [35500, 26], [39650, 22],
+    [43050, 28], [46470, 24], [49730, 27], [53290, 30], [71180, 38], [75170, 36], [78900, 41],
+    [82220, 14], [88650, 4], [92370, 47], [95760, 68], [99530, 61], [103050, 65], [106640, 36],
+    [108320, 50], [110160, 32], [111880, 60], [113700, 22], [114890, 32], [116660, 41],
+    [120670, 27], [122570, 33], [124380, 69], [127920, 34], [129730, 28], [131440, 59],
+  ];
+  const song = timed.map(([timeMs, letters]) => ({ timeMs, text: 'x'.repeat(letters) }));
+  const added = (lines: LyricLine[]) => lines.filter((line) => !song.includes(line));
+
+  it('is found where a line runs on far past its words, and nowhere else', () => {
+    const breaks = added(withBreaks(song));
+    expect(breaks).toHaveLength(1);
+    const at = (breaks[0] as LyricLine).timeMs;
+    // The words are over within seconds; the next line is at 71.18 s.
+    expect(at).toBeGreaterThan(53_290 + 2_000);
+    expect(at).toBeLessThanOrEqual(71_180 - BREAK_WORTH_SHOWING_MS);
+  });
+
+  it('comes in just after the line it follows, a line with nothing on it', () => {
+    const shown = withBreaks(song);
+    const at = shown.findIndex((line) => !song.includes(line));
+    expect(shown[at - 1]).toBe(song[17]);
+    expect(shown[at]?.text).toBe('');
+    expect(shown[at + 1]).toBe(song[18]);
+  });
+
+  it('is never added where the song already marks one', () => {
+    const marked = [
+      { timeMs: 1_000, text: 'a line of words' },
+      { timeMs: 4_000, text: '♪' },
+      { timeMs: 30_000, text: 'a line of words' },
+      { timeMs: 33_000, text: 'a line of words' },
+    ];
+    expect(withBreaks(marked)).toEqual(marked);
+  });
+
+  it('is not a held note: a short line given a little longer is left alone', () => {
+    const held = [
+      { timeMs: 0, text: 'a line of words here' },
+      { timeMs: 3_000, text: 'a line of words here' },
+      { timeMs: 6_000, text: 'oh' },
+      { timeMs: 13_000, text: 'a line of words here' },
+      { timeMs: 16_000, text: 'a line of words here' },
+    ];
+    expect(withBreaks(held)).toEqual(held);
+  });
+
+  it('is found after the last syllable, where a source timed them', () => {
+    const syllables = (timeMs: number): LyricLine => ({
+      timeMs,
+      text: 'la la la',
+      words: [0, 300, 600].map((d) => ({ timeMs: timeMs + d, text: 'la ' })),
+    });
+    const sung = [syllables(0), syllables(2_000), syllables(20_000), syllables(22_000)];
+    const breaks = withBreaks(sung).filter((line) => !sung.includes(line));
+    // Its last syllable at 2.6 s, but a line is given three seconds at least.
+    expect(breaks).toEqual([{ timeMs: 5_000, text: '' }]);
+  });
+
+  it('leaves an empty song alone', () => {
+    expect(withBreaks([])).toEqual([]);
   });
 });
 

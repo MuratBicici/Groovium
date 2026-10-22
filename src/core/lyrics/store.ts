@@ -3,7 +3,7 @@ import type { TrackMetadata } from '@/core/types';
 import { libraryIdOf, setLibraryTrackLyricsTiming } from '@/core/library';
 import { log } from '@/platform/log';
 import { getLyrics, type LyricsLookup } from './api';
-import { withIntro, withoutOutro, type LyricLine } from './activeLine';
+import { withBreaks, withIntro, withoutOutro, type LyricLine } from './activeLine';
 import { choose, chosenFor, type LyricsSource } from './sourceChoice';
 import { defaultTiming, fits, isIdentity, retime, type LyricsTiming } from './timing';
 import { keepTiming, timingFor } from './timingChoice';
@@ -69,13 +69,13 @@ let lastTrack: TrackMetadata | null = null;
 
 /**
  * The lookup with the song's own opening in it, where there is one worth
- * showing, and without a silence after its last words. Done once, here, so
- * both views and the frame loop see the same song.
+ * showing, the breaks nobody wrote down, and no silence after its last words.
+ * Done once, here, so both views and the frame loop see the same song.
  */
 function withOpening(lookup: LyricsLookup): LyricsLookup {
   const { result } = lookup;
   if (result.status !== 'Synced') return lookup;
-  return { ...lookup, result: { ...result, data: withIntro(withoutOutro(result.data)) } };
+  return { ...lookup, result: { ...result, data: withIntro(withBreaks(withoutOutro(result.data))) } };
 }
 
 /**
