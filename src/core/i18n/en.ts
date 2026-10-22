@@ -260,6 +260,9 @@ export const en = {
   // Spotify
   'spotify.heading': 'Spotify · {name}',
   'spotify.signOut': 'Sign out',
+  'spotify.signOutTitle': 'Sign out of Spotify?',
+  'spotify.signOutBody':
+    'The Spotify song playing stops, and the copy of your playlists kept on this computer is deleted. You will need to sign in again to listen. Your playlists on Spotify stay as they are.',
   'spotify.close': 'Close Spotify drawer',
   'spotify.checking': 'Checking your Spotify setup…',
   'spotify.waiting': 'Waiting for authorisation in your browser…',

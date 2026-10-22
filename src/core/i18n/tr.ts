@@ -247,6 +247,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
 
   'spotify.heading': 'Spotify · {name}',
   'spotify.signOut': 'Çıkış yap',
+  'spotify.signOutTitle': 'Spotify’dan çıkılsın mı?',
+  'spotify.signOutBody':
+    'Çalan Spotify şarkısı durur ve bu bilgisayarda tutulan çalma listesi kopyası silinir. Yeniden dinlemek için tekrar giriş yapmanız gerekir. Spotify’daki listeleriniz yerinde kalır.',
   'spotify.close': 'Spotify çekmecesini kapat',
   'spotify.checking': 'Spotify kurulumunuz denetleniyor…',
   'spotify.waiting': 'Tarayıcınızda izin vermeniz bekleniyor…',

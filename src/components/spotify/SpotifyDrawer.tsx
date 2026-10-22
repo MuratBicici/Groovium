@@ -17,6 +17,7 @@ import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
 import { OpenCrate } from './OpenCrate';
+import { RemoveSheet, SheetPresence } from './CrateSheets';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
@@ -151,7 +152,27 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
     }
   }
 
+  /**
+   * Asked first. "Sign out" sits beside the search and the close button, and
+   * one press of it used to end the session there and then — the song
+   * stopped, the shelves emptied, and getting back meant signing in again.
+   */
+  const [askingSignOut, setAskingSignOut] = useState(false);
+
+  // Escape puts the question away, before anything under it hears the key.
+  useEffect(() => {
+    if (!askingSignOut) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      setAskingSignOut(false);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [askingSignOut]);
+
   async function disconnect() {
+    setAskingSignOut(false);
     // Through the store rather than straight to `signOut`, so clearing the
     // tokens and stopping what they were playing cannot drift apart.
     await signOutOfSpotify();
@@ -316,7 +337,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           {online && stage === 'connected' && (
             <button
               type="button"
-              onClick={() => void disconnect()}
+              onClick={() => setAskingSignOut(true)}
               className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
             >
               {t('spotify.signOut')}
@@ -438,6 +459,19 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
       {online && opened && openOrigin && (
         <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
       )}
+
+      <SheetPresence show={askingSignOut}>
+        {askingSignOut && (
+          <RemoveSheet
+            label={t('spotify.signOut')}
+            title={t('spotify.signOutTitle')}
+            body={t('spotify.signOutBody')}
+            action={t('spotify.signOut')}
+            onClose={() => setAskingSignOut(false)}
+            onRemove={() => void disconnect()}
+          />
+        )}
+      </SheetPresence>
     </aside>
   );
 }

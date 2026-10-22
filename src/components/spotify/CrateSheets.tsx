@@ -365,6 +365,7 @@ export function RemoveSheet({
   label,
   title,
   body,
+  action,
   onRemove,
   onClose,
 }: {
@@ -374,6 +375,8 @@ export function RemoveSheet({
   title: string;
   /** What happens to it, said before it happens. */
   body: string;
+  /** The button that does it, when it is not removing: signing out, say. */
+  action?: string;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -395,7 +398,7 @@ export function RemoveSheet({
           onClick={onRemove}
           className="rounded-full bg-red-700 px-3 py-1 text-label font-medium tracking-wide text-red-50 uppercase transition-colors hover:bg-red-600"
         >
-          {t('common.remove')}
+          {action ?? t('common.remove')}
         </button>
       </div>
     </Sheet>
