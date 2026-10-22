@@ -165,13 +165,16 @@ export function SettingsPanel({
     else rowRefs.current[lastPage]?.focus({ preventScroll: true });
   }, [page, lastPage]);
 
+  /** A question asked over a page — forgetting a connection — whose Escape it is. */
+  const [asking, setAsking] = useState(false);
+
   // Escape on a page goes back to the list; on the list it is left to the
   // shell, which closes the panel. Captured and kept, as the sheets do, and
   // only while a page is open — an always-listening handler would swallow
   // Escapes meant for everything else. Not while a sheet opened from here is
   // over the window: that Escape is the sheet's.
   useEffect(() => {
-    if (!open || page === null || covered) return;
+    if (!open || page === null || covered || asking) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopImmediatePropagation();
@@ -179,7 +182,7 @@ export function SettingsPanel({
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [open, page, covered, goBack]);
+  }, [open, page, covered, asking, goBack]);
 
   // Back to the list once the panel has gone, so it opens there next time —
   // after its way out rather than during it, which would show the list
@@ -227,6 +230,7 @@ export function SettingsPanel({
             onSetUpSpotify={onSetUpSpotify}
             onSetUpStation={onSetUpStation}
             refresh={refresh}
+            onAsking={setAsking}
           />
         );
       case 'about':

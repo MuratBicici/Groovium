@@ -469,6 +469,12 @@ export const en = {
   'settings.notConfigured': 'Not set up',
   'settings.setUp': 'Set up',
   'settings.forget': 'Forget',
+  'settings.forgetSpotifyTitle': 'Forget Spotify?',
+  'settings.forgetSpotifyBody':
+    'You are signed out of Spotify and the Client ID you entered is deleted. To connect again you will need to enter the Client ID again. Your playlists on Spotify stay as they are.',
+  'settings.forgetLastfmTitle': 'Forget the Last.fm key?',
+  'settings.forgetLastfmBody':
+    'The Last.fm API key you entered is deleted and infinite play turns off. To turn it on again you will need to enter the key again.',
   'settings.spotifyHint': 'Search and play from Spotify.',
   'settings.lastfmHint': 'Finds the next song for infinite play.',
   // The pages Settings is divided into, the headings on their cards, and the

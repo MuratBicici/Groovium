@@ -450,6 +450,12 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.notConfigured': 'Kurulu değil',
   'settings.setUp': 'Kur',
   'settings.forget': 'Unut',
+  'settings.forgetSpotifyTitle': 'Spotify unutulsun mu?',
+  'settings.forgetSpotifyBody':
+    'Spotify’dan çıkış yapılır ve girdiğiniz Client ID silinir. Yeniden bağlanmak için Client ID’yi tekrar girmeniz gerekir. Spotify’daki listeleriniz yerinde kalır.',
+  'settings.forgetLastfmTitle': 'Last.fm anahtarı unutulsun mu?',
+  'settings.forgetLastfmBody':
+    'Girdiğiniz Last.fm API anahtarı silinir ve sonsuz çalma kapanır. Yeniden açmak için anahtarı tekrar girmeniz gerekir.',
   'settings.spotifyHint': 'Spotify’dan arayıp çalın.',
   'settings.lastfmHint': 'Sonsuz çalma için sonraki şarkıyı bulur.',
   'settings.lights': 'Işıklar',
