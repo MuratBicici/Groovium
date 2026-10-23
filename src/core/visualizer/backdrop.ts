@@ -48,10 +48,22 @@ export const BACKDROP = {
   /** Stops between each pair of colours round the wheel. */
   stopsBetween: 12,
   /** The most specks of dust at once, at the middle of the Dust slider. */
-  specks: 36,
+  specks: 48,
   /** How fast dust rises, in window heights per second: at rest, and when loud. */
-  riseAtRest: 0.006,
-  riseWithLevel: 0.022,
+  riseAtRest: 0.012,
+  riseWithLevel: 0.05,
+  /**
+   * How much faster it rises for a moment on a hit, in window heights per
+   * second at full strength, before the Breath slider. Every hit adds to it
+   * and it falls away over `surgeTau`, so a run of kicks drives the dust up
+   * and a gap lets it settle — the listener asked for the beat to be felt in
+   * the speed, not only in the light.
+   */
+  surge: 0.14,
+  surgeTau: 0.45,
+  /** The smallest a speck is, and how much larger the largest is, in CSS pixels. */
+  sizeFrom: 0.65,
+  sizeRange: 1.35,
 } as const;
 
 /** What the five sliders under the light in Settings › Lights mean. */
@@ -205,16 +217,40 @@ export interface Speck {
 
 /** A speck anywhere, for filling the air at the start. */
 export function speck(roll: () => number, y = roll()): Speck {
-  return { x: roll(), y, size: 0.5 + roll() * 1.1, pace: 0.4 + roll() * 0.9, phase: roll() * Math.PI * 2 };
+  return {
+    x: roll(),
+    y,
+    size: BACKDROP.sizeFrom + roll() * BACKDROP.sizeRange,
+    pace: 0.4 + roll() * 0.9,
+    phase: roll() * Math.PI * 2,
+  };
 }
 
 /**
- * The dust a frame on: each speck rising, faster the louder it is, and swaying
- * a little; one that leaves the top comes back in at the foot somewhere else.
- * As many as `count` says, added at the foot or taken away from the top.
+ * The surge a frame on: what is left of it after `seconds`, plus a hit of
+ * strength `hit` scaled by the Breath slider. Nought for no hit and no breath.
  */
-export function drift(specks: readonly Speck[], count: number, level: number, seconds: number, roll: () => number): Speck[] {
-  const rise = (BACKDROP.riseAtRest + BACKDROP.riseWithLevel * Math.max(0, Math.min(1, level))) * seconds;
+export function surging(surge: number, hit: number, breath: number, seconds: number): number {
+  const left = surge * Math.exp(-seconds / BACKDROP.surgeTau);
+  return left + BACKDROP.surge * Math.max(0, Math.min(1, hit)) * breath;
+}
+
+/**
+ * The dust a frame on: each speck rising, faster the louder it is and faster
+ * still while a hit is surging through it, and swaying a little; one that
+ * leaves the top comes back in at the foot somewhere else. As many as `count`
+ * says, added at the foot or taken away from the top.
+ */
+export function drift(
+  specks: readonly Speck[],
+  count: number,
+  level: number,
+  seconds: number,
+  roll: () => number,
+  surge = 0,
+): Speck[] {
+  const rise =
+    (BACKDROP.riseAtRest + BACKDROP.riseWithLevel * Math.max(0, Math.min(1, level)) + Math.max(0, surge)) * seconds;
   const out: Speck[] = [];
   for (const s of specks) {
     if (out.length >= count) break;
@@ -235,5 +271,7 @@ export function drift(specks: readonly Speck[], count: number, level: number, se
  */
 export function glint(near: number, kick: number): number {
   const n = Math.max(0, Math.min(1, near));
-  return Math.min(0.7, 0.07 + 0.24 * n + 0.38 * n * Math.max(0, Math.min(1, kick)));
+  const k = Math.max(0, Math.min(1, kick));
+  // A hit lights all of it a little, and what is near the lamp a lot.
+  return Math.min(0.8, 0.11 + 0.24 * n + 0.38 * n * k + 0.15 * k);
 }

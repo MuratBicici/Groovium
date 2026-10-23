@@ -8,6 +8,7 @@ import {
   easeColour,
   falloffStops,
   glint,
+  surging,
   turned,
   wheel,
   wheelColours,
@@ -137,6 +138,7 @@ export function Backdrop({
     let angle = 0;
     let showing = 0;
     let kick = 0;
+    let surge = 0;
     let beat: Beat = NO_BEAT;
     let specks: Speck[] = [];
     let last = performance.now();
@@ -180,6 +182,7 @@ export function Backdrop({
       const heard = listen(beat, playingRef.current ? spectrum.current : [], seconds);
       beat = heard.beat;
       kick = Math.max(heard.hit, kick * Math.exp(-seconds / BACKDROP.kickTau));
+      surge = surging(surge, heard.hit, breathe, seconds);
 
       // Turned as far as the record turned, at the Speed slider's share of it.
       const recordNow = recordAngle();
@@ -198,7 +201,7 @@ export function Backdrop({
       });
 
       const count = still ? 0 : Math.round(BACKDROP.specks * BACKDROP_TUNING.dust(t.dust));
-      specks = drift(specks, count, showing, seconds, Math.random);
+      specks = drift(specks, count, showing, seconds, Math.random, surge);
       paintDust(ac, specks, centre, width, height, kick * breathe, light);
     };
 

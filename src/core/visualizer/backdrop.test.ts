@@ -7,6 +7,7 @@ import {
   drift,
   falloff,
   falloffStops,
+  surging,
   turned,
   wheel,
   wheelColours,
@@ -125,12 +126,27 @@ describe('dust in the light', () => {
 
   it('rises, faster when it is loud', () => {
     const air = drift([], 20, 0, 0.03, roll);
-    const calm = drift(air, 20, 0, 1, roll);
-    const loud = drift(air, 20, 1, 1, roll);
+    // A short step, so none leaves the top and comes back in at the foot.
+    const calm = drift(air, 20, 0, 0.1, roll);
+    const loud = drift(air, 20, 1, 0.1, roll);
     const rose = (after: typeof air) =>
       air.reduce((sum, s, k) => sum + (s.y - (after[k]?.y ?? s.y)), 0);
     expect(rose(calm)).toBeGreaterThan(0);
     expect(rose(loud)).toBeGreaterThan(rose(calm));
+  });
+
+  it('rises faster on a hit, more for every hit in a row, and settles after', () => {
+    const one = surging(0, 1, 1, 0.03);
+    expect(one).toBeGreaterThan(0);
+    const two = surging(one, 1, 1, 0.03);
+    expect(two).toBeGreaterThan(one);
+    expect(surging(two, 0, 1, 2)).toBeLessThan(two / 50);
+    // Nothing at the bottom of the Breath slider.
+    expect(surging(0, 1, BACKDROP_TUNING.breath(-4), 0.03)).toBe(0);
+
+    const air = drift([], 20, 0.5, 0.03, roll);
+    const rose = (after: typeof air) => air.reduce((sum, s, k) => sum + (s.y - (after[k]?.y ?? s.y)), 0);
+    expect(rose(drift(air, 20, 0.5, 0.1, roll, two))).toBeGreaterThan(rose(drift(air, 20, 0.5, 0.1, roll, 0)));
   });
 
   it('comes back in at the foot when it leaves the top', () => {
