@@ -1218,21 +1218,6 @@ body {
     inset 0 0 0 1px rgb(var(--sheen) / 0.08);
 }
 
-/* The strobe dots round the platter's rim, catching the light. */
-.groove-deck::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: repeating-conic-gradient(
-    color-mix(in oklab, var(--color-brass-400) 40%, rgb(var(--sheen))) 0 1.6deg,
-    transparent 1.6deg 7.2deg
-  );
-  -webkit-mask-image: radial-gradient(circle closest-side, transparent 0 95%, #000 96% 99%, transparent 100%);
-  mask-image: radial-gradient(circle closest-side, transparent 0 95%, #000 96% 99%, transparent 100%);
-  opacity: 0.65;
-}
-
 /*
  * The pin that the hole in a record goes over. Brass, like every other piece of
  * metal on the machine, and sized to the hole VinylDisc draws, so the two read
