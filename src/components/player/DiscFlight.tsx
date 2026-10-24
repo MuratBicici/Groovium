@@ -12,8 +12,11 @@ import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { arcKeyframes, onReducedMotionChange, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
+import { readCover } from '@/core/theme/readCover';
 import { DiscLight } from './DiscLight';
 import { VinylDisc } from './VinylDisc';
+import { parseCssColour, type Rgb } from '@/core/utils/colour';
+import { FALLING_SPIN, glowing, meteorAt, METEOR_MS, meteorKeyframes } from './meteor';
 
 /**
  * The flying disc: click a row, its record arcs up out of the list and lands
@@ -62,13 +65,29 @@ interface Flight {
   from: DOMRect;
   /** The row's own disc, hidden while its copy is in the air. */
   source: HTMLElement;
+  /** Falling like a meteor, as a record chosen in the search does, rather than thrown. */
+  meteor?: boolean;
+}
+
+/** Where a meteor struck, for the light and sparks it leaves behind. */
+interface Impact {
+  key: number;
+  /** Layer coordinates of the platter's centre when it struck. */
+  x: number;
+  y: number;
+  colour: Rgb;
+  /** What was left of its tail, to fade where it was. */
+  tail: { x: number; y: number }[];
 }
 
 interface DiscFlightActions {
   /** DiskPlatter hands over its stable wrapper so flights know where to land. */
   registerPlatter: (el: HTMLElement | null) => void;
-  /** Throw a clone of `sourceDisc` onto the platter. */
-  flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata) => void;
+  /**
+   * Throw a clone of `sourceDisc` onto the platter — or, given `meteor`, let
+   * it fall there like one.
+   */
+  flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata, how?: { meteor?: boolean }) => void;
   /**
    * The deck, for anything carrying a record towards it by hand.
    *
@@ -127,6 +146,8 @@ export function usePendingLanding(): string | null {
 
 export function DiscFlightProvider({ children }: { children: React.ReactNode }) {
   const [flights, setFlights] = useState<Flight[]>([]);
+  const [impacts, setImpacts] = useState<Impact[]>([]);
+  const meteorLayerRef = useRef<HTMLDivElement | null>(null);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const platterRef = useRef<HTMLElement | null>(null);
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -140,7 +161,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     platterRef.current = el;
   }, []);
 
-  const flyToPlatter = useCallback((sourceDisc: HTMLElement, track: TrackMetadata) => {
+  const flyToPlatter = useCallback((sourceDisc: HTMLElement, track: TrackMetadata, how?: { meteor?: boolean }) => {
     // Without a destination or with motion reduced, the click still plays the
     // track — the flight is garnish, never a gate.
     if (prefersReducedMotion() || !platterRef.current) return;
@@ -159,7 +180,17 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
 
     airborne.current.add(track.id);
     setPendingTrackId(track.id);
-    setFlights((current) => [...current, { key: nextKey.current++, track, from, source: sourceDisc }]);
+    const flight: Flight = { key: nextKey.current++, track, from, source: sourceDisc };
+    if (how?.meteor) flight.meteor = true;
+    setFlights((current) => [...current, flight]);
+  }, []);
+
+  /** A meteor struck the platter: its light and sparks outlive the record's flight. */
+  const strike = useCallback((impact: Omit<Impact, 'key'>) => {
+    setImpacts((current) => [...current, { ...impact, key: nextKey.current++ }]);
+  }, []);
+  const faded = useCallback((key: number) => {
+    setImpacts((current) => current.filter((i) => i.key !== key));
   }, []);
 
   const platterEl = useCallback(() => platterRef.current, []);
@@ -209,7 +240,10 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   useEffect(
     () =>
       onReducedMotionChange((reduced) => {
-        if (reduced) setFlights([]);
+        if (reduced) {
+          setFlights([]);
+          setImpacts([]);
+        }
       }),
     [],
   );
@@ -233,17 +267,47 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-[var(--radius-widget)]"
         >
-          {flights.map((flight) => (
-            <FlyingDisc
-              key={flight.key}
-              flight={flight}
-              platterRef={platterRef}
-              layerRef={layerRef}
-              onAirborne={takeSource}
-              onHandOff={handOff}
-              onDone={endFlight}
-            />
+          {flights
+            .filter((flight) => !flight.meteor)
+            .map((flight) => (
+              <FlyingDisc
+                key={flight.key}
+                flight={flight}
+                platterRef={platterRef}
+                layerRef={layerRef}
+                onAirborne={takeSource}
+                onHandOff={handOff}
+                onDone={endFlight}
+              />
+            ))}
+        </div>
+
+        {/* z-40 — a meteor falls from the search, which is a sheet at z-30
+            folding away as it goes: under it, the record would leave its card
+            behind the very dimming that is clearing. Over everything but the
+            window's edge, for the second it is in the air. */}
+        <div
+          ref={meteorLayerRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[var(--radius-widget)]"
+        >
+          {impacts.map((impact) => (
+            <MeteorImpact key={impact.key} impact={impact} layerRef={meteorLayerRef} onFaded={faded} />
           ))}
+          {flights
+            .filter((flight) => flight.meteor)
+            .map((flight) => (
+              <FlyingDisc
+                key={flight.key}
+                flight={flight}
+                platterRef={platterRef}
+                layerRef={meteorLayerRef}
+                onAirborne={takeSource}
+                onHandOff={handOff}
+                onDone={endFlight}
+                onStrike={strike}
+              />
+            ))}
         </div>
       </PendingContext.Provider>
     </ActionsContext.Provider>
@@ -263,6 +327,8 @@ interface FlyingDiscProps {
   onAirborne: (flight: Flight) => void;
   onHandOff: (flight: Flight) => void;
   onDone: (flight: Flight) => void;
+  /** A meteor reached the platter. */
+  onStrike?: (impact: Omit<Impact, 'key'>) => void;
 }
 
 /**
@@ -277,9 +343,11 @@ function FlyingDisc({
   onAirborne,
   onHandOff,
   onDone,
+  onStrike,
 }: FlyingDiscProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const spinRef = useRef<HTMLDivElement | null>(null);
+  const tailRef = useRef<HTMLCanvasElement | null>(null);
   const isPlaying = usePlayerStore((s) => s.playbackState === 'PLAYING');
 
   /**
@@ -357,10 +425,39 @@ function FlyingDisc({
      * on screen is the record holding still while the shell slides out from
      * under it.
      */
+    const meteor = !!flight.meteor;
+    const duration = meteor ? METEOR_MS : FLIGHT_MS;
+    const meteorFrom = { x: srcX - start.x, y: srcY - start.y, r: flight.from.width / 2 };
+    /** The tail: where the head has been, in layer coordinates, oldest first. */
+    const tail: { x: number; y: number; t: number }[] = [];
+    // The cover's own colour for the light it trails, once the cover has been
+    // looked at; the theme's until then.
+    let colour = accentColour();
+    if (meteor && flight.track.coverArtUrl) {
+      void readCover(flight.track.coverArtUrl).then((seen) => {
+        const hue = seen.read ? seen.palette?.hues?.[0] : undefined;
+        const rgb = hue ? parseCssColour(hue) : null;
+        if (rgb) colour = glowing(rgb);
+      });
+    }
+    const tailCanvas = tailRef.current;
+    const tailContext = tailCanvas ? sizeToLayer(tailCanvas, layerEl) : null;
+
     let tracking = 0;
+    let falling = meteor;
+    // Declared here, made below: the first frame of `follow` comes after both.
+    let animation: Animation | null = null;
     const follow = () => {
       tracking = requestAnimationFrame(follow);
-      place(platterCentre());
+      const centre = platterCentre();
+      place(centre);
+      if (!falling || !tailContext || !tailCanvas || !animation) return;
+      const head = meteorAt(Number(animation.currentTime ?? 0), meteorFrom);
+      const now = performance.now();
+      const at = { x: centre.x + head.x, y: centre.y + head.y, t: now };
+      tail.push(at);
+      while (tail.length > 2 && now - (tail[0]?.t ?? now) > TAIL_MS) tail.shift();
+      drawTail(tailContext, tailCanvas, tail, colour, head.r, head.glow, at);
     };
     tracking = requestAnimationFrame(follow);
 
@@ -371,14 +468,17 @@ function FlyingDisc({
     const distance = Math.hypot(srcX - start.x, srcY - start.y);
     const arcHeight = clamp(distance * 0.32, 18, Math.max(18, (srcY + start.y) / 2 - 24));
 
-    const animation = wrapper.animate(
-      arcKeyframes(
-        { x: srcX - start.x, y: srcY - start.y, scale: flight.from.width / PLATTER_SIZE },
-        { x: 0, y: 0, scale: 1 },
-        arcHeight,
-      ),
-      { duration: FLIGHT_MS, easing: 'linear', fill: 'forwards' },
+    const flying = wrapper.animate(
+      meteor
+        ? meteorKeyframes(meteorFrom)
+        : arcKeyframes(
+            { x: srcX - start.x, y: srcY - start.y, scale: flight.from.width / PLATTER_SIZE },
+            { x: 0, y: 0, scale: 1 },
+            arcHeight,
+          ),
+      { duration, easing: 'linear', fill: 'forwards' },
     );
+    animation = flying;
 
     // Match the platter's rotation. Both run the same 4.5s linear spin, but a
     // freshly created element starts at 0deg while the platter's has been
@@ -396,6 +496,8 @@ function FlyingDisc({
       }
     };
     syncSpin();
+    // Spinning fast as it falls, and back to the deck's own pace as it lands.
+    if (meteor) spinRef.current?.getAnimations()[0]?.updatePlaybackRate(FALLING_SPIN);
 
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     let holdTimer: ReturnType<typeof setTimeout> | undefined;
@@ -421,7 +523,7 @@ function FlyingDisc({
       // Hide before cancelling. `cancel()` drops the forwards fill, which would
       // snap the clone to full size dead centre on the platter for a frame.
       wrapper.style.opacity = '0';
-      animation.cancel();
+      flying.cancel();
       onDone(flight);
     };
 
@@ -446,6 +548,24 @@ function FlyingDisc({
       // outlive the first and fire after the flight is gone.
       if (landed) return;
       landed = true;
+      if (meteor) {
+        falling = false;
+        spinRef.current?.getAnimations()[0]?.updatePlaybackRate(1);
+        const centre = platterCentre();
+        tailContext?.clearRect(0, 0, tailCanvas?.width ?? 0, tailCanvas?.height ?? 0);
+        onStrike?.({ x: centre.x, y: centre.y, colour, tail: [...tail] });
+        // The deck takes the hit.
+        platterEl.animate(
+          [
+            { transform: 'translate(0, 0)' },
+            { transform: 'translate(-5px, 2px)' },
+            { transform: 'translate(4px, -1px)' },
+            { transform: 'translate(-2px, 1px)' },
+            { transform: 'translate(0, 0)' },
+          ],
+          { duration: SHAKE_MS, easing: 'ease-out' },
+        );
+      }
       // No re-measure here any more. This used to be the one moment the
       // destination was checked again; `follow` above has been keeping it right
       // every frame since the clone appeared, which is the same correction made
@@ -456,9 +576,9 @@ function FlyingDisc({
       else holdTimer = setTimeout(rest, HOLD_MS);
     };
 
-    animation.onfinish = land;
+    flying.onfinish = land;
     // Belt and braces: `finish` events have gone missing under heavy load.
-    const failsafe = setTimeout(land, FLIGHT_MS + 400);
+    const failsafe = setTimeout(land, duration + 400);
 
     // The cancellation rule. `startTrack` writes `currentTrack` synchronously,
     // so a second click, a track ending mid-flight or a station advance all
@@ -471,7 +591,7 @@ function FlyingDisc({
       if (nowId === flight.track.id) {
         arrived = true;
         // Already resting on the platter and waiting for exactly this.
-        if (animation.playState === 'finished') {
+        if (flying.playState === 'finished') {
           clearTimeout(holdTimer);
           commit();
         }
@@ -493,7 +613,7 @@ function FlyingDisc({
       clearTimeout(settleTimer);
       clearTimeout(holdTimer);
       unsubscribe();
-      animation.cancel();
+      flying.cancel();
     };
     // A flight is immutable once launched; everything it needs is captured.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -504,15 +624,175 @@ function FlyingDisc({
   // which is worse than one frame of nothing. The effect runs before this is
   // ever painted, so neither happens.
   return (
-    <div ref={wrapperRef} className="absolute" style={{ visibility: 'hidden' }}>
-      {/* The spin lives on its own element so it cannot fight the WAAPI
-          transform on the wrapper — same separation the platter uses. */}
-      <div ref={spinRef} className="groove-platter" data-spinning={isPlaying}>
-        <VinylDisc size={PLATTER_SIZE} eager coverArtUrl={flight.track.coverArtUrl} />
+    <>
+      {flight.meteor && <canvas ref={tailRef} className="absolute inset-0 h-full w-full" />}
+      <div ref={wrapperRef} className="absolute" style={{ visibility: 'hidden' }}>
+        {/* The spin lives on its own element so it cannot fight the WAAPI
+            transform on the wrapper — same separation the platter uses. */}
+        <div ref={spinRef} className="groove-platter" data-spinning={isPlaying}>
+          <VinylDisc size={PLATTER_SIZE} eager coverArtUrl={flight.track.coverArtUrl} />
+        </div>
+        {/* The clone crossfades into the platter, so it has to be lit the same
+            way — same sibling, same fixed reflection. */}
+        <DiscLight size={PLATTER_SIZE} />
       </div>
-      {/* The clone crossfades into the platter, so it has to be lit the same
-          way — same sibling, same fixed reflection. */}
-      <DiscLight size={PLATTER_SIZE} />
-    </div>
+    </>
   );
+}
+
+// --- Meteors -------------------------------------------------------------------
+
+/**
+ * How long a stretch of its path the tail is, in milliseconds. By time, not by
+ * a count of frames: counted, it was a quarter as long on a screen that draws
+ * four times as often.
+ */
+const TAIL_MS = 300;
+/** How long the deck shakes when a meteor strikes it. */
+const SHAKE_MS = 260;
+/** How long the light and sparks of a strike last. */
+const IMPACT_MS = 900;
+/** The dust a strike throws off the deck: the colour of the dust in the room. */
+const DUST: Rgb = { r: 240, g: 225, b: 200 };
+/** How many specks of it. */
+const SPARKS = 40;
+
+/** The theme's accent, made to glow, for a tail whose cover has not been looked at yet. */
+function accentColour(): Rgb {
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--color-brass-400');
+  return glowing(parseCssColour(accent.trim()) ?? { r: 224, g: 176, b: 113 });
+}
+
+/** A canvas over the whole layer, at the screen's own pixels. */
+function sizeToLayer(canvas: HTMLCanvasElement, layer: HTMLElement): CanvasRenderingContext2D | null {
+  const box = layer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(box.width * dpr));
+  canvas.height = Math.max(1, Math.round(box.height * dpr));
+  const context = canvas.getContext('2d');
+  context?.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return context;
+}
+
+/** A colour at `alpha`, as the canvas takes it. */
+function withAlpha({ r, g, b }: Rgb, alpha: number): string {
+  return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${alpha})`;
+}
+
+/**
+ * The light a falling record trails: thin and faint where it has been, wide
+ * and bright where it is, and a glow round its head.
+ */
+function drawTail(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  tail: readonly { x: number; y: number }[],
+  colour: Rgb,
+  radius: number,
+  glow: number,
+  head: { x: number; y: number },
+): void {
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  // Added to what is under it, as light is: over the dark room it shines.
+  context.globalCompositeOperation = 'lighter';
+  context.lineCap = 'round';
+  for (let k = 1; k < tail.length; k++) {
+    const a = tail[k - 1];
+    const b = tail[k];
+    if (!a || !b) continue;
+    const along = k / tail.length;
+    context.strokeStyle = withAlpha(colour, along * along * 0.75);
+    context.lineWidth = radius * 1.4 * along;
+    context.beginPath();
+    context.moveTo(a.x, a.y);
+    context.lineTo(b.x, b.y);
+    context.stroke();
+  }
+  if (glow > 0) {
+    const halo = context.createRadialGradient(head.x, head.y, radius * 0.6, head.x, head.y, radius * 1.8);
+    halo.addColorStop(0, withAlpha(colour, 0.45 * glow));
+    halo.addColorStop(1, withAlpha(colour, 0));
+    context.fillStyle = halo;
+    context.beginPath();
+    context.arc(head.x, head.y, radius * 1.8, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * What a meteor leaves where it struck: a ring of light running out from the
+ * platter, dust thrown off it, and the last of its tail fading where it was.
+ * Its own element, because it outlives the record's flight — the record may
+ * hand over to the deck a moment after it lands.
+ */
+function MeteorImpact({
+  impact,
+  layerRef,
+  onFaded,
+}: {
+  impact: Impact;
+  layerRef: React.RefObject<HTMLDivElement | null>;
+  onFaded: (key: number) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const layer = layerRef.current;
+    const context = canvas && layer ? sizeToLayer(canvas, layer) : null;
+    if (!canvas || !context) {
+      onFaded(impact.key);
+      return;
+    }
+    const sparks = Array.from({ length: SPARKS }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 120 + Math.random() * 260;
+      return { x: impact.x, y: impact.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 60 };
+    });
+    const tail = [...impact.tail];
+    const began = performance.now();
+    let last = began;
+    let frame = 0;
+    const draw = (now: number) => {
+      const seconds = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const k = (now - began) / IMPACT_MS;
+      if (k >= 1) {
+        onFaded(impact.key);
+        return;
+      }
+      frame = requestAnimationFrame(draw);
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      // The tail drains into the platter.
+      if (tail.length > 1) tail.shift();
+      if (tail.length > 1) drawTail(context, canvas, tail, impact.colour, 60, 0, impact);
+      // The ring.
+      const ring = Math.min(1, k / 0.66);
+      if (ring < 1) {
+        context.strokeStyle = withAlpha(impact.colour, (1 - ring) * 0.8);
+        context.lineWidth = 5 * (1 - ring) + 1;
+        context.beginPath();
+        context.arc(impact.x, impact.y, PLATTER_SIZE / 2 + 10 + ring * 90, 0, Math.PI * 2);
+        context.stroke();
+      }
+      // The sparks, falling as they fly.
+      const life = 1 - k;
+      context.fillStyle = withAlpha(DUST, life);
+      for (const spark of sparks) {
+        spark.x += spark.vx * seconds;
+        spark.y += spark.vy * seconds;
+        spark.vy += 420 * seconds;
+        context.beginPath();
+        context.arc(spark.x, spark.y, 2.2 * life + 0.6, 0, Math.PI * 2);
+        context.fill();
+      }
+    };
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+    // An impact is immutable once struck.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />;
 }
