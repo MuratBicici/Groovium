@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import type { SpotifyAlbum } from '@/core/providers/spotifyApi';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
@@ -7,6 +7,8 @@ import { VinylDisc } from '@/components/player/VinylDisc';
 import { useT } from '@/core/i18n';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { refuseUnplayable, UNPLAYABLE_LOOK } from './Unplayable';
+import { SHEET_IN_EASING, SHEET_OUT_EASING } from './CrateSheets';
+import { prefersReducedMotion } from '@/core/utils/motion';
 
 /**
  * The pieces both sides of the library drawer search with.
@@ -23,8 +25,8 @@ export type Rect = { x: number; y: number; width: number; height: number };
 
 /** How big a record is in a row of results: big enough to tell covers apart. */
 const ROW_DISC = 32;
-/** And on its own as the best match. */
-const BEST_DISC = 64;
+/** And on its own as the best match: as large as its column comfortably holds. */
+const BEST_DISC = 112;
 
 /**
  * The box, focused as it appears with the caret at the end — so a search opened
@@ -53,7 +55,9 @@ export function SearchBox({
   }, []);
 
   return (
-    <div className="flex shrink-0 items-center gap-2 rounded-full groove-inset px-3 py-1.5 ring-1 ring-[var(--color-edge)] focus-within:ring-brass-500">
+    <div
+      data-swap
+      className="flex shrink-0 items-center gap-2 rounded-full groove-inset px-3 py-1.5 ring-1 ring-[var(--color-edge)] focus-within:ring-brass-500">
       <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 shrink-0 text-brass-400" aria-hidden="true" fill="none">
         <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="1.4" />
         <path d="M7.6 7.6 10.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -129,6 +133,102 @@ export function SearchButton({
   );
 }
 
+/** Coming in: from the right, one after another. */
+const SWAP_IN_MS = 280;
+const SWAP_IN_STEP_MS = 40;
+/** Going: to the left, quicker, and close together. */
+const SWAP_OUT_MS = 170;
+const SWAP_OUT_STEP_MS = 20;
+/** Past this many the rest move with the last, or a long list would take seconds to arrive. */
+const SWAP_STAGGER = 8;
+/** What moves: every row, and whatever else says it is a piece of what is shown. */
+const SWAP_PARTS = 'li, [data-swap]';
+
+/**
+ * What the search shows, changed by sliding: what was shown goes off to the
+ * left, and what replaces it comes in from the right a row at a time — the
+ * way a shelf of records is turned over.
+ *
+ * `id` says which answer this is. A new one plays the change; the same one
+ * with new contents — a cover arriving, a row greyed — is simply shown. A
+ * change asked for while the last is still going waits for it, and then goes
+ * straight to the newest, so typing quickly is never a queue of slides.
+ *
+ * Not on the first showing: the search has just grown out of the magnifier,
+ * and that is the arrival.
+ */
+export function Swap({ id, children }: { id: string; children: React.ReactNode }) {
+  const [shown, setShown] = useState({ id, children });
+  if (id === shown.id && shown.children !== children) setShown({ id, children });
+  const latest = useRef({ id, children });
+  useLayoutEffect(() => {
+    latest.current = { id, children };
+  });
+  const box = useRef<HTMLDivElement | null>(null);
+  const leaving = useRef(false);
+  const arrived = useRef(false);
+
+  const parts = () => [...(box.current?.querySelectorAll<HTMLElement>(SWAP_PARTS) ?? [])];
+
+  // The change asked for: what is shown goes first.
+  useLayoutEffect(() => {
+    if (id === shown.id || leaving.current) return;
+    const going = parts();
+    if (prefersReducedMotion() || going.length === 0) {
+      setShown(latest.current);
+      return;
+    }
+    leaving.current = true;
+    const moves = going.map((el, k) =>
+      el.animate(
+        [
+          { opacity: 1, transform: 'none' },
+          { opacity: 0, transform: 'translateX(-16px)' },
+        ],
+        {
+          duration: SWAP_OUT_MS,
+          delay: Math.min(k, SWAP_STAGGER) * SWAP_OUT_STEP_MS,
+          easing: SHEET_OUT_EASING,
+          fill: 'forwards',
+        },
+      ),
+    );
+    void Promise.allSettled(moves.map((m) => m.finished)).then(() => {
+      leaving.current = false;
+      setShown(latest.current);
+    });
+  }, [id, shown.id]);
+
+  // And what replaces it comes in.
+  useLayoutEffect(() => {
+    if (!arrived.current) {
+      arrived.current = true;
+      return;
+    }
+    if (prefersReducedMotion()) return;
+    parts().forEach((el, k) =>
+      el.animate(
+        [
+          { opacity: 0, transform: 'translateX(22px)' },
+          { opacity: 1, transform: 'none' },
+        ],
+        {
+          duration: SWAP_IN_MS,
+          delay: 30 + Math.min(k, SWAP_STAGGER) * SWAP_IN_STEP_MS,
+          easing: SHEET_IN_EASING,
+          fill: 'backwards',
+        },
+      ),
+    );
+  }, [shown.id]);
+
+  return (
+    <div ref={box} className="flex min-h-0 flex-1 flex-col">
+      {shown.children}
+    </div>
+  );
+}
+
 /** A heading over one kind of result. */
 export function ResultHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -155,7 +255,9 @@ export function Results({ best, children }: { best: React.ReactNode; children: R
   return (
     <div className={`grid min-h-0 flex-1 gap-3 ${best ? 'grid-cols-[38%_minmax(0,1fr)]' : 'grid-cols-1'}`}>
       {best && <div className="min-h-0">{best}</div>}
-      <ul className="min-h-0 overflow-y-auto">{children}</ul>
+      {/* Never sideways: rows sliding in from the right would otherwise put a
+          scrollbar under the list for as long as they are on their way. */}
+      <ul className="min-h-0 overflow-x-hidden overflow-y-auto">{children}</ul>
     </div>
   );
 }
@@ -187,25 +289,30 @@ export function BestMatch({ track, onPlay }: { track: TrackMetadata; onPlay: () 
   return (
     <div
       data-found
-      className="flex flex-col gap-2 rounded-lg bg-shell-700/60 p-3 ring-1 ring-[var(--color-edge)]"
+      data-swap
+      // The whole height of the results beside it, the record and its name in
+      // the middle of it and the way to play it at the foot.
+      className="flex h-full flex-col gap-2 rounded-lg bg-shell-700/60 p-3 ring-1 ring-[var(--color-edge)]"
     >
       <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
         {t('search.bestMatch')}
       </p>
-      {/* The flight measures this wrapper, which does not turn: a turning
-          square's box grows toward its diagonal. */}
-      <span data-disc className={`block w-fit ${refused ? UNPLAYABLE_LOOK : ''}`}>
-        <span className="groove-spin block">
-          <VinylDisc size={BEST_DISC} coverArtUrl={track.coverArtUrl} />
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-center">
+        {/* The flight measures this wrapper, which does not turn: a turning
+            square's box grows toward its diagonal. */}
+        <span data-disc className={`block w-fit ${refused ? UNPLAYABLE_LOOK : ''}`}>
+          <span className="groove-spin block">
+            <VinylDisc size={BEST_DISC} coverArtUrl={track.coverArtUrl} />
+          </span>
         </span>
-      </span>
-      <span className={`min-w-0 ${refused ? UNPLAYABLE_LOOK : ''}`}>
-        <span className="block truncate text-title font-semibold text-cream-50">{track.title}</span>
-        <span className="block truncate text-meta text-cream-400">
-          {t('search.song')} · {track.artist}
+        <span className={`w-full min-w-0 ${refused ? UNPLAYABLE_LOOK : ''}`}>
+          <span className="block truncate text-title font-semibold text-cream-50">{track.title}</span>
+          <span className="block truncate text-meta text-cream-400">
+            {t('search.song')} · {track.artist}
+          </span>
         </span>
-      </span>
-      <span className="mt-1 flex items-center gap-1.5">
+      </div>
+      <span className="flex items-center justify-center gap-1.5">
         <button
           type="button"
           aria-disabled={refused ? true : undefined}
@@ -375,7 +482,7 @@ export function RecentSearches({
   const t = useT();
   if (searches.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-center">
+      <div data-swap className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-center">
         <svg viewBox="0 0 12 12" className="h-9 w-9 text-brass-400/50" aria-hidden="true" fill="none">
           <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="0.9" />
           <path d="M7.6 7.6 10.5 10.5" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" />
@@ -386,7 +493,9 @@ export function RecentSearches({
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 pt-1">
-      <p className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">{t('search.recent')}</p>
+      <p data-swap className="text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+        {t('search.recent')}
+      </p>
       <ul className="flex flex-wrap gap-1.5">
         {searches.map((query) => (
           <li key={query} className="group/chip flex items-center rounded-full bg-shell-700/70 ring-1 ring-[var(--color-edge)]">

@@ -54,6 +54,7 @@ export function SearchAlbum({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <button
+        data-swap
         type="button"
         onClick={onBack}
         className="flex w-fit items-center gap-1.5 text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase transition-colors hover:text-cream-50"
@@ -71,7 +72,7 @@ export function SearchAlbum({
         {t('search.backToResults')}
       </button>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div data-swap className="flex shrink-0 items-center gap-3">
         <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded bg-shell-700 text-title font-semibold text-brass-400 ring-1 ring-[var(--color-edge)]">
           {album.coverArtUrl ? (
             <img
@@ -113,7 +114,7 @@ export function SearchAlbum({
         </span>
       </div>
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <ul className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {failed && <Hint>{failed}</Hint>}
         {!failed && !tracks && <Hint>{t('search.openingAlbum')}</Hint>}
         {tracks?.map((track) => (

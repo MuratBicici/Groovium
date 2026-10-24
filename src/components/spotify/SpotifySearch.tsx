@@ -16,6 +16,7 @@ import {
   ResultHeading,
   Results,
   SearchBox,
+  Swap,
   TrackResult,
   type Rect,
 } from './SearchParts';
@@ -155,95 +156,103 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
     onChosen();
   };
 
-  if (album) {
-    return (
-      <SearchAlbum
-        album={album}
-        onBack={closeAlbum}
-        onPlayed={chose}
-      />
-    );
-  }
-
   const typed = query.trim().length > 0;
   const nothing = !loading && results.length === 0 && albums.length === 0 && lists.length === 0;
   const [best, ...songs] = results;
+  // Which answer is shown, so the results slide only when it is another one —
+  // not on every letter, and not when only a cover has arrived.
+  const answer = !typed
+    ? 'recent'
+    : [
+        nothing ? 'nothing' : loading && results.length === 0 ? 'searching' : '',
+        ...results.map((r) => r.id),
+        ...albums.map((a) => a.id),
+        ...lists.map((p) => p.id),
+      ].join('|');
+
+  const shown = !typed ? (
+    <RecentSearches
+      searches={recent}
+      hint={t('spotify.typeToFind')}
+      onPick={setQuery}
+      onForget={(q) => setRecent(forgetSearch('spotify', q))}
+    />
+  ) : (
+    // No `groove-scroll-fade` here: that fade paints the surface's own
+    // colour over the end of a list, which only works on a flat surface.
+    <Results
+      best={
+        best && (
+          <BestMatch
+            track={best}
+            onPlay={() => {
+              chose();
+              void playSingle(best);
+            }}
+          />
+        )
+      }
+    >
+      {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
+      {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
+
+      {songs.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
+      {songs.map((track) => (
+        <TrackResult
+          key={track.id}
+          track={track}
+          onPlay={() => {
+            chose();
+            void playSingle(track);
+          }}
+        />
+      ))}
+
+      {albums.length > 0 && <ResultHeading>{t('search.albums')}</ResultHeading>}
+      {albums.map((found) => (
+        <AlbumResult
+          key={found.id}
+          album={found}
+          onOpen={() => {
+            setRecent(rememberSearch('spotify', query));
+            setAlbum(found);
+          }}
+        />
+      ))}
+
+      {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
+      {lists.map((playlist) => (
+        <CrateResult
+          key={playlist.id}
+          name={playlist.name}
+          cover={playlist.coverArtUrl}
+          trackCount={playlist.trackCount}
+          onOpen={(from: Rect) => {
+            chose();
+            void openCrate(playlist.id, from);
+          }}
+        />
+      ))}
+    </Results>
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <SearchBox value={query} onChange={setQuery} placeholder={t('spotify.searchPlaceholder')} />
-
-      {problem && (
-        <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
-          {problem}
-        </p>
-      )}
-
-      {!typed ? (
-        <RecentSearches
-          searches={recent}
-          hint={t('spotify.typeToFind')}
-          onPick={setQuery}
-          onForget={(q) => setRecent(forgetSearch('spotify', q))}
-        />
+    <Swap id={album ? `album:${album.id}` : 'search'}>
+      {album ? (
+        <SearchAlbum album={album} onBack={closeAlbum} onPlayed={chose} />
       ) : (
-        // No `groove-scroll-fade` here: that fade paints the surface's own
-        // colour over the end of a list, which only works on a flat surface.
-        <Results
-          best={
-            best && (
-              <BestMatch
-                track={best}
-                onPlay={() => {
-                  chose();
-                  void playSingle(best);
-                }}
-              />
-            )
-          }
-        >
-          {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
-          {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <SearchBox value={query} onChange={setQuery} placeholder={t('spotify.searchPlaceholder')} />
 
-          {songs.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
-          {songs.map((track) => (
-            <TrackResult
-              key={track.id}
-              track={track}
-              onPlay={() => {
-                chose();
-                void playSingle(track);
-              }}
-            />
-          ))}
+          {problem && (
+            <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+              {problem}
+            </p>
+          )}
 
-          {albums.length > 0 && <ResultHeading>{t('search.albums')}</ResultHeading>}
-          {albums.map((found) => (
-            <AlbumResult
-              key={found.id}
-              album={found}
-              onOpen={() => {
-                setRecent(rememberSearch('spotify', query));
-                setAlbum(found);
-              }}
-            />
-          ))}
-
-          {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
-          {lists.map((playlist) => (
-            <CrateResult
-              key={playlist.id}
-              name={playlist.name}
-              cover={playlist.coverArtUrl}
-              trackCount={playlist.trackCount}
-              onOpen={(from: Rect) => {
-                chose();
-                void openCrate(playlist.id, from);
-              }}
-            />
-          ))}
-        </Results>
+          <Swap id={answer}>{shown}</Swap>
+        </div>
       )}
-    </div>
+    </Swap>
   );
 }

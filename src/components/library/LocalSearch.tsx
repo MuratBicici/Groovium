@@ -12,6 +12,7 @@ import {
   ResultHeading,
   Results,
   SearchBox,
+  Swap,
   TrackResult,
   type Rect,
 } from '@/components/spotify/SearchParts';
@@ -79,45 +80,49 @@ export function LocalSearch({
   };
 
   const [best, ...rest] = shown;
+  // Which answer is shown, so the results slide only when it is another one —
+  // a letter that finds the same songs moves nothing.
+  const answer = !typed
+    ? 'recent'
+    : [nothing ? 'nothing' : '', ...shown.map((track) => track.id), ...lists.map((p) => p.id)].join('|');
+
+  const found = !typed ? (
+    <RecentSearches
+      searches={recent}
+      hint={t('library.typeToFind')}
+      onPick={setQuery}
+      onForget={(q) => setRecent(forgetSearch('local', q))}
+    />
+  ) : (
+    <Results best={best && <BestMatch track={libraryTrackToMetadata(best)} onPlay={() => play(best)} />}>
+      {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
+
+      {rest.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
+      {rest.map((track) => (
+        <TrackResult key={track.id} track={libraryTrackToMetadata(track)} onPlay={() => play(track)} />
+      ))}
+      {songs.length > shown.length && <Hint>{t('search.more', { count: songs.length - shown.length })}</Hint>}
+
+      {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
+      {lists.map((playlist) => (
+        <CrateResult
+          key={playlist.id}
+          name={playlist.name}
+          cover={coverOf(playlist)}
+          trackCount={playlist.items.length}
+          onOpen={(from) => {
+            chose();
+            onOpenPlaylist(playlist.id, from);
+          }}
+        />
+      ))}
+    </Results>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <SearchBox value={query} onChange={setQuery} placeholder={t('library.searchPlaceholder')} />
-
-      {!typed ? (
-        <RecentSearches
-          searches={recent}
-          hint={t('library.typeToFind')}
-          onPick={setQuery}
-          onForget={(q) => setRecent(forgetSearch('local', q))}
-        />
-      ) : (
-        <Results best={best && <BestMatch track={libraryTrackToMetadata(best)} onPlay={() => play(best)} />}>
-          {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
-
-          {rest.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
-          {rest.map((track) => (
-            <TrackResult key={track.id} track={libraryTrackToMetadata(track)} onPlay={() => play(track)} />
-          ))}
-          {songs.length > shown.length && (
-            <Hint>{t('search.more', { count: songs.length - shown.length })}</Hint>
-          )}
-
-          {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
-          {lists.map((playlist) => (
-            <CrateResult
-              key={playlist.id}
-              name={playlist.name}
-              cover={coverOf(playlist)}
-              trackCount={playlist.items.length}
-              onOpen={(from) => {
-                chose();
-                onOpenPlaylist(playlist.id, from);
-              }}
-            />
-          ))}
-        </Results>
-      )}
+      <Swap id={answer}>{found}</Swap>
     </div>
   );
 }
