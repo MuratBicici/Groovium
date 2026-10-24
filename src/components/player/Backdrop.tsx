@@ -202,13 +202,18 @@ export function Backdrop({
      * they were made again on every frame of the drawer's movement — a fresh
      * backing store a frame, for the largest canvas on the page — and that was
      * the frame the dust stalled on.
+     *
+     * Whether anything moved: the shell's size, or the record's place in it —
+     * which, with the drawer on the left, is the shell moving under it.
      */
-    const measure = () => {
+    const measure = (): boolean => {
       const box = swirl.parentElement?.getBoundingClientRect();
-      if (!box) return;
+      if (!box) return false;
+      const was = { width, height, x: centre.x, y: centre.y };
       width = Math.max(1, Math.round(box.width));
       height = Math.max(1, Math.round(box.height));
       centre = places.recordCentre(box);
+      const moved = width !== was.width || height !== was.height || centre.x !== was.x || centre.y !== was.y;
       // As wide as the window ever gets from the first frame, and only ever
       // grown: shrinking back to the player after the drawer shut was tried,
       // and measured no cheaper, but it put the canvases' making back at the
@@ -227,22 +232,25 @@ export function Backdrop({
         air.style.height = `${storeHeight}px`;
         drawn = '';
       }
+      return moved;
     };
 
     // Every frame the screen draws while music plays, not at the spectrum's
     // thirty a second: dust moving fast stepped visibly at thirty, a speck
     // jumping a few pixels at a time. With nothing playing, thirty is plenty
-    // for dust drifting at its slowest.
+    // for dust drifting at its slowest — but not while the drawer moves: the
+    // shell moved every frame and the light only every other, so with a song
+    // paused or no record on, the light slid and caught up behind it.
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       // Capped, so a window that was hidden for a while does not come back to
       // all of that motion resolved in one step.
       owed += Math.min(0.1, (now - last) / 1000);
       last = now;
-      if (!playingRef.current && owed < 1 / 30) return;
+      const moved = measure();
+      if (!playingRef.current && !moved && owed < 1 / 30) return;
       const seconds = owed;
       owed = 0;
-      measure();
 
       const still = prefersReducedMotion();
       const t = tuning.current;
