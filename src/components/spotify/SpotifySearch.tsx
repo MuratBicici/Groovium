@@ -16,6 +16,7 @@ import {
   ResultHeading,
   Results,
   SearchBox,
+  pressShown,
   Swap,
   TrackResult,
   type Rect,
@@ -81,6 +82,11 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
   const [problem, setProblem] = useState<string | null>(null);
   const [recent, setRecent] = useState(() => recentSearches('spotify'));
   const [album, setAlbum] = useState<SpotifyAlbum | null>(null);
+  /** The words the results on screen answer, so Enter knows whether they are this search's. */
+  const [answeredFor, setAnsweredFor] = useState<string | null>(null);
+  /** Enter was pressed before the answer came: it is chosen when it does. */
+  const enterWaiting = useRef(false);
+  const root = useRef<HTMLDivElement | null>(null);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
 
@@ -118,6 +124,7 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
       setAlbums([]);
       setProblem(null);
       setLoading(false);
+      setAnsweredFor(text.trim());
       return;
     }
 
@@ -129,12 +136,14 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
       if (seq === requestSeq.current) {
         setResults(found.tracks);
         setAlbums(found.albums);
+        setAnsweredFor(text.trim());
       }
     } catch (err) {
       if (seq === requestSeq.current) {
         setProblem(errorText(err));
         setResults([]);
         setAlbums([]);
+        setAnsweredFor(text.trim());
       }
     } finally {
       if (seq === requestSeq.current) setLoading(false);
@@ -156,9 +165,50 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
     onChosen();
   };
 
+  const [best, ...songs] = results;
+
+  /**
+   * Enter in the box: the best match plays, as its button would play it; with
+   * no song found, the first album opens, or else the first playlist.
+   */
+  const chooseBest = () => {
+    if (best) {
+      if (!pressShown(root.current, 'data-play', best.id)) {
+        // Still sliding in: played without its flight rather than not at all.
+        chose();
+        void playSingle(best);
+      }
+      return;
+    }
+    const firstAlbum = albums[0];
+    if (firstAlbum) {
+      setRecent(rememberSearch('spotify', query));
+      setAlbum(firstAlbum);
+      return;
+    }
+    const firstList = lists[0];
+    if (firstList) pressShown(root.current, 'data-open', firstList.id);
+  };
+  // Typed and Enter pressed before Spotify answered: asked now rather than at
+  // the end of the wait for typing to settle, and chosen when it answers.
+  const enter = () => {
+    const words = query.trim();
+    if (!words) return;
+    if (answeredFor === words || words.length < SHORTEST_QUERY) {
+      chooseBest();
+      return;
+    }
+    enterWaiting.current = true;
+    void run(query);
+  };
+  useEffect(() => {
+    if (!enterWaiting.current || answeredFor !== query.trim()) return;
+    enterWaiting.current = false;
+    chooseBest();
+  });
+
   const typed = query.trim().length > 0;
   const nothing = !loading && results.length === 0 && albums.length === 0 && lists.length === 0;
-  const [best, ...songs] = results;
   // Which answer is shown, so the results slide only when it is another one —
   // not on every letter, and not when only a cover has arrived.
   const answer = !typed
@@ -224,6 +274,7 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
       {lists.map((playlist) => (
         <CrateResult
           key={playlist.id}
+          id={playlist.id}
           name={playlist.name}
           cover={playlist.coverArtUrl}
           trackCount={playlist.trackCount}
@@ -241,8 +292,13 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
       {album ? (
         <SearchAlbum album={album} onBack={closeAlbum} onPlayed={chose} />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <SearchBox value={query} onChange={setQuery} placeholder={t('spotify.searchPlaceholder')} />
+        <div ref={root} className="flex min-h-0 flex-1 flex-col gap-3">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            onEnter={enter}
+            placeholder={t('spotify.searchPlaceholder')}
+          />
 
           {problem && (
             <p className="shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">

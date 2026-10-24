@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { libraryTrackToMetadata, type LibraryTrack, type Playlist } from '@/core/library';
 import { findIn } from '@/core/library/search';
 import { forgetSearch, recentSearches, rememberSearch } from '@/core/search/recent';
@@ -12,6 +12,7 @@ import {
   ResultHeading,
   Results,
   SearchBox,
+  pressShown,
   Swap,
   TrackResult,
   type Rect,
@@ -80,6 +81,21 @@ export function LocalSearch({
   };
 
   const [best, ...rest] = shown;
+  const root = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Enter in the box: the best match plays, as its button would play it; with
+   * no song found, the first playlist opens.
+   */
+  const chooseBest = () => {
+    if (best) {
+      // Still sliding in: played without its flight rather than not at all.
+      if (!pressShown(root.current, 'data-play', libraryTrackToMetadata(best).id)) play(best);
+      return;
+    }
+    const firstList = lists[0];
+    if (firstList) pressShown(root.current, 'data-open', firstList.id);
+  };
   // Which answer is shown, so the results slide only when it is another one —
   // a letter that finds the same songs moves nothing.
   const answer = !typed
@@ -107,6 +123,7 @@ export function LocalSearch({
       {lists.map((playlist) => (
         <CrateResult
           key={playlist.id}
+          id={playlist.id}
           name={playlist.name}
           cover={coverOf(playlist)}
           trackCount={playlist.items.length}
@@ -120,8 +137,13 @@ export function LocalSearch({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <SearchBox value={query} onChange={setQuery} placeholder={t('library.searchPlaceholder')} />
+    <div ref={root} className="flex min-h-0 flex-1 flex-col gap-3">
+      <SearchBox
+        value={query}
+        onChange={setQuery}
+        onEnter={() => query.trim() && chooseBest()}
+        placeholder={t('library.searchPlaceholder')}
+      />
       <Swap id={answer}>{found}</Swap>
     </div>
   );

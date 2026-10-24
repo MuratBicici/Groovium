@@ -39,10 +39,13 @@ export function SearchBox({
   value,
   onChange,
   placeholder,
+  onEnter,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  /** Enter pressed in the box: the best of what was found is chosen. */
+  onEnter?: () => void;
 }) {
   const t = useT();
   const box = useRef<HTMLInputElement | null>(null);
@@ -70,6 +73,13 @@ export function SearchBox({
         placeholder={placeholder}
         aria-label={placeholder}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          // Not while a word is still being composed: that Enter is the
+          // input method's, accepting what it offered.
+          if (e.key !== 'Enter' || e.nativeEvent.isComposing || !onEnter) return;
+          e.preventDefault();
+          onEnter();
+        }}
         className="min-w-0 flex-1 bg-transparent text-body text-cream-50 outline-none placeholder:text-cream-400/70"
       />
       {value !== '' && (
@@ -229,6 +239,18 @@ export function Swap({ id, children }: { id: string; children: React.ReactNode }
   );
 }
 
+/**
+ * Press what Enter chose, where it is on screen — so it plays or opens exactly
+ * as pressing it would, record flight and all. False when it is not there to
+ * be pressed: the results are still sliding over from the last answer.
+ */
+export function pressShown(root: HTMLElement | null, attribute: 'data-play' | 'data-open', id: string): boolean {
+  const button = root?.querySelector<HTMLButtonElement>(`[${attribute}="${CSS.escape(id)}"]`);
+  if (!button) return false;
+  button.click();
+  return true;
+}
+
 /** A heading over one kind of result. */
 export function ResultHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -315,6 +337,8 @@ export function BestMatch({ track, onPlay }: { track: TrackMetadata; onPlay: () 
       <span className="flex items-center justify-center gap-1.5">
         <button
           type="button"
+          // What Enter in the box presses, when this is still the best match.
+          data-play={track.id}
           aria-disabled={refused ? true : undefined}
           title={refused ? whyUnplayable(refused) : undefined}
           onClick={press}
@@ -411,11 +435,13 @@ const artOf = (el: HTMLElement): Rect => {
  * shelf.
  */
 export function CrateResult({
+  id,
   name,
   cover,
   trackCount,
   onOpen,
 }: {
+  id: string;
   name: string;
   cover: string | undefined;
   trackCount: number;
@@ -426,6 +452,7 @@ export function CrateResult({
     <li>
       <button
         type="button"
+        data-open={id}
         onClick={(e) => onOpen(artOf(e.currentTarget))}
         className="flex w-full min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-shell-700/60"
       >
