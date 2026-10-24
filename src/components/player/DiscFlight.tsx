@@ -77,7 +77,7 @@ interface Impact {
   y: number;
   colour: Rgb;
   /** What was left of its tail, to fade where it was. */
-  tail: { x: number; y: number }[];
+  tail: TailPoint[];
 }
 
 interface DiscFlightActions {
@@ -429,7 +429,7 @@ function FlyingDisc({
     const duration = meteor ? METEOR_MS : FLIGHT_MS;
     const meteorFrom = { x: srcX - start.x, y: srcY - start.y, r: flight.from.width / 2 };
     /** The tail: where the head has been, in layer coordinates, oldest first. */
-    const tail: { x: number; y: number; t: number }[] = [];
+    const tail: TailPoint[] = [];
     // The cover's own colour for the light it trails, once the cover has been
     // looked at; the theme's until then.
     let colour = accentColour();
@@ -454,10 +454,13 @@ function FlyingDisc({
       if (!falling || !tailContext || !tailCanvas || !animation) return;
       const head = meteorAt(Number(animation.currentTime ?? 0), meteorFrom);
       const now = performance.now();
-      const at = { x: centre.x + head.x, y: centre.y + head.y, t: now };
-      tail.push(at);
+      const at = { x: centre.x + head.x, y: centre.y + head.y, r: head.r, t: now };
+      // Not a new point for every frame of a slow lift: drawn over each other,
+      // they gathered into a bright blot under the record.
+      const newest = tail.at(-1);
+      if (!newest || Math.hypot(at.x - newest.x, at.y - newest.y) >= TAIL_STEP) tail.push(at);
       while (tail.length > 2 && now - (tail[0]?.t ?? now) > TAIL_MS) tail.shift();
-      drawTail(tailContext, tailCanvas, tail, colour, head.r, head.glow, at);
+      drawTail(tailContext, tailCanvas, tail, colour, { ...at, glow: head.glow });
     };
     tracking = requestAnimationFrame(follow);
 
@@ -646,8 +649,27 @@ function FlyingDisc({
  * How long a stretch of its path the tail is, in milliseconds. By time, not by
  * a count of frames: counted, it was a quarter as long on a screen that draws
  * four times as often.
+ *
+ * This and the three below are the listener's, set with a tuner after the
+ * first tail was far too much: a faint, thin streak, not a beam.
  */
-const TAIL_MS = 300;
+const TAIL_MS = 170;
+/** How wide the tail is at the head, against the record's width there. */
+const TAIL_WIDTH = 0.45;
+/** How bright the tail is at the head. */
+const TAIL_ALPHA = 0.35;
+/** How bright the glow round the head is. */
+const HEAD_GLOW = 0.15;
+/** How far the head moves before its tail gets another point, in CSS pixels. */
+const TAIL_STEP = 3;
+
+/** A place the head has been: where, how big the record was there, and when. */
+interface TailPoint {
+  x: number;
+  y: number;
+  r: number;
+  t: number;
+}
 /** How long the deck shakes when a meteor strikes it. */
 const SHAKE_MS = 260;
 /** How long the light and sparks of a strike last. */
@@ -680,41 +702,40 @@ function withAlpha({ r, g, b }: Rgb, alpha: number): string {
 }
 
 /**
- * The light a falling record trails: thin and faint where it has been, wide
- * and bright where it is, and a glow round its head.
+ * The light a falling record trails: thin and faint where it has been, its
+ * width at the head a share of the record's own there, and a soft glow round
+ * the head while it is in the air.
  */
 function drawTail(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  tail: readonly { x: number; y: number }[],
+  tail: readonly TailPoint[],
   colour: Rgb,
-  radius: number,
-  glow: number,
-  head: { x: number; y: number },
+  head?: { x: number; y: number; r: number; glow: number },
 ): void {
   context.clearRect(0, 0, canvas.width, canvas.height);
-  // Added to what is under it, as light is: over the dark room it shines.
-  context.globalCompositeOperation = 'lighter';
   context.lineCap = 'round';
   for (let k = 1; k < tail.length; k++) {
     const a = tail[k - 1];
     const b = tail[k];
     if (!a || !b) continue;
     const along = k / tail.length;
-    context.strokeStyle = withAlpha(colour, along * along * 0.75);
-    context.lineWidth = radius * 1.4 * along;
+    context.strokeStyle = withAlpha(colour, along * along * TAIL_ALPHA);
+    context.lineWidth = b.r * 2 * TAIL_WIDTH * along;
     context.beginPath();
     context.moveTo(a.x, a.y);
     context.lineTo(b.x, b.y);
     context.stroke();
   }
-  if (glow > 0) {
-    const halo = context.createRadialGradient(head.x, head.y, radius * 0.6, head.x, head.y, radius * 1.8);
-    halo.addColorStop(0, withAlpha(colour, 0.45 * glow));
+  if (head && head.glow > 0) {
+    // The glow added to what is under it, as light is.
+    context.globalCompositeOperation = 'lighter';
+    const halo = context.createRadialGradient(head.x, head.y, head.r * 0.6, head.x, head.y, head.r * 1.8);
+    halo.addColorStop(0, withAlpha(colour, HEAD_GLOW * head.glow));
     halo.addColorStop(1, withAlpha(colour, 0));
     context.fillStyle = halo;
     context.beginPath();
-    context.arc(head.x, head.y, radius * 1.8, 0, Math.PI * 2);
+    context.arc(head.x, head.y, head.r * 1.8, 0, Math.PI * 2);
     context.fill();
   }
   context.globalCompositeOperation = 'source-over';
@@ -766,7 +787,9 @@ function MeteorImpact({
       context.clearRect(0, 0, canvas.width, canvas.height);
       // The tail drains into the platter.
       if (tail.length > 1) tail.shift();
-      if (tail.length > 1) drawTail(context, canvas, tail, impact.colour, 60, 0, impact);
+      // At the width it had where it was, not at the deck's record's: drawn
+      // at that, it was a great band across the window as it went.
+      if (tail.length > 1) drawTail(context, canvas, tail, impact.colour);
       // The ring.
       const ring = Math.min(1, k / 0.66);
       if (ring < 1) {

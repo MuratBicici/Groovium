@@ -50,8 +50,12 @@ export const FALLING_SPIN = 6;
 const LIFT = 30;
 /** How far it swings round the platter: a little more than half a turn. */
 const SWEEP = Math.PI * 1.15;
-/** How far outside the platter's edge it swings, at most. */
-const OUT = 70;
+/**
+ * How far outside the platter's edge it swings: far enough to leave the
+ * window for a moment at the far side and over the top, as the listener set
+ * it with a tuner.
+ */
+const OUT = 120;
 /** The swing is an ellipse, flatter than wide, as a tilted ring looks. */
 const SQUASH = 0.7;
 /**

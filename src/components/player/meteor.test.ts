@@ -55,8 +55,11 @@ describe('the meteor', () => {
       for (let ms = 0; ms <= METEOR_MS; ms += 4) top = Math.min(top, meteorAt(ms, card).y);
       return top;
     };
-    expect(highest(far)).toBeGreaterThan(-140);
-    expect(highest(near)).toBeGreaterThan(-140);
+    // Hardly higher than its ring round the platter, whichever card it left:
+    // over the top it may leave the window, but only for a moment.
+    const ring = (PLATTER_RADIUS + 120) * 0.7;
+    expect(highest(far)).toBeGreaterThan(-ring * 1.15);
+    expect(highest(near)).toBeGreaterThan(-ring * 1.15);
   });
 
   it('starts from a card on either side of the deck', () => {
