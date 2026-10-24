@@ -195,7 +195,10 @@ export function Backdrop({
      * drew the light where the record had been.
      *
      * The canvases are made as wide as the window ever gets, once, and only
-     * grow; the shell clips what is past its edge. Sized to the shell instead,
+     * grow; what is past the shell's edge is clipped by the box they sit in,
+     * which cannot scroll. Clipped by the shell itself, they made it a scroll
+     * box three times its width, and the window could move them under the
+     * record as the drawer came and went. Sized to the shell instead,
      * they were made again on every frame of the drawer's movement — a fresh
      * backing store a frame, for the largest canvas on the page — and that was
      * the frame the dust stalled on.
@@ -232,9 +235,9 @@ export function Backdrop({
     // for dust drifting at its slowest.
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
-      // Up to a quarter of a second, so a frame that comes late moves the dust
-      // as far as the time it took rather than slowing it for that moment.
-      owed += Math.min(0.25, (now - last) / 1000);
+      // Capped, so a window that was hidden for a while does not come back to
+      // all of that motion resolved in one step.
+      owed += Math.min(0.1, (now - last) / 1000);
       last = now;
       if (!playingRef.current && owed < 1 / 30) return;
       const seconds = owed;
@@ -317,22 +320,16 @@ export function Backdrop({
 
   if (!on) return null;
 
-  // All four at `-z-10`, under the shell's content and — earlier in the
-  // document — under the visualiser too. The two canvases are sized in pixels
-  // from `measure`, as wide as the window ever gets, and pinned to the shell's
-  // corner: the shell's own rounded clip cuts them to it.
+  // All at `-z-10`, under the shell's content and — earlier in the document —
+  // under the visualiser too. The two canvases are sized in pixels from
+  // `measure`, as wide as the window ever gets, and pinned to the corner of a
+  // box over the shell that clips them without becoming something to scroll.
   return (
     <>
-      <canvas
-        ref={wheelCanvas}
-        aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-0 -z-10"
-      />
-      <canvas
-        ref={dustCanvas}
-        aria-hidden="true"
-        className="pointer-events-none absolute top-0 left-0 -z-10"
-      />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-clip">
+        <canvas ref={wheelCanvas} className="absolute top-0 left-0" />
+        <canvas ref={dustCanvas} className="absolute top-0 left-0" />
+      </div>
       <div aria-hidden="true" className="groove-backdrop-grain pointer-events-none absolute inset-0 -z-10" />
       <div aria-hidden="true" className="groove-backdrop-shade pointer-events-none absolute inset-0 -z-10" />
     </>
