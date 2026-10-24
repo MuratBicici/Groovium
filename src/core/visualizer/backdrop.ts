@@ -316,9 +316,14 @@ export function surging(surge: number, hit: number, breath: number, seconds: num
  * still while a hit is surging through it, and swaying a little; one that
  * leaves the top comes back in at the foot somewhere else. As many as `count`
  * says, added at the foot or taken away from the top.
+ *
+ * In place: the same array and the same specks, moved. Run every frame the
+ * screen draws, over a few hundred specks, a fresh object for each was tens of
+ * thousands a second for the collector to sweep up, and a sweep is a frame
+ * that comes late.
  */
 export function drift(
-  specks: readonly Speck[],
+  specks: Speck[],
   count: number,
   level: number,
   seconds: number,
@@ -327,17 +332,17 @@ export function drift(
 ): Speck[] {
   const rise =
     (BACKDROP.riseAtRest + BACKDROP.riseWithLevel * Math.max(0, Math.min(1, level)) + Math.max(0, surge)) * seconds;
-  const out: Speck[] = [];
-  for (const s of specks) {
-    if (out.length >= count) break;
-    const y = s.y - rise * s.pace;
-    const phase = s.phase + seconds * 0.6;
-    out.push(y < -0.02 ? speck(roll, 1.02) : { ...s, y, phase, x: s.x + Math.sin(phase) * 0.00025 });
-  }
   // At the start the air is already full; later ones drift in from the foot.
   const starting = specks.length === 0;
-  while (out.length < count) out.push(starting ? speck(roll) : speck(roll, 1.02));
-  return out;
+  if (specks.length > count) specks.length = count;
+  for (const s of specks) {
+    s.y -= rise * s.pace;
+    s.phase += seconds * 0.6;
+    s.x += Math.sin(s.phase) * 0.00025;
+    if (s.y < -0.02) Object.assign(s, speck(roll, 1.02));
+  }
+  while (specks.length < count) specks.push(starting ? speck(roll) : speck(roll, 1.02));
+  return specks;
 }
 
 /**

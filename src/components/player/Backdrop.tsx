@@ -144,14 +144,31 @@ export function Backdrop({
     themed.observe(root, { attributes: true, attributeFilter: ['data-theme', 'data-ground', 'style'] });
     const fading = whilePaletteMoves(reread);
 
-    /** The cover's colours, the theme's where it has too few, all kept apart from the accent. */
-    const wanted = () =>
-      wheelColours(coverHues.current, theme.colours).map((c) => rgbToOklab(apartFrom(c, theme.accent)));
+    /**
+     * The cover's colours, the theme's where it has too few, all kept apart
+     * from the accent — worked out again only when the cover or the theme is
+     * another, not every frame.
+     */
+    let wantedFor: { hues: Rgb[]; theme: typeof theme } | null = null;
+    let wantedLab: ReturnType<typeof rgbToOklab>[] = [];
+    const wanted = () => {
+      if (wantedFor?.hues !== coverHues.current || wantedFor.theme !== theme) {
+        wantedFor = { hues: coverHues.current, theme };
+        wantedLab = wheelColours(coverHues.current, theme.colours).map((c) => rgbToOklab(apartFrom(c, theme.accent)));
+      }
+      return wantedLab;
+    };
     /** Where each colour has got to, kept in OKLab as fractions so a slow change arrives. */
-    let colours = wanted();
+    let colours = wanted().map((c) => ({ ...c }));
+    /** The wheel's stops as the gradient takes them, kept until the colours move. */
+    let stops: { at: number; css: string }[] = [];
+    let stopsFor: string = '';
+    /** What the wheel was last drawn with, so a frame that would draw the same is skipped. */
+    let drawn = '';
     let width = 0;
     let height = 0;
     let centre = { x: 0, y: 0 };
+    const places = placesOnPage();
     let recordWas: number | null = null;
     let angle = 0;
     let showing = 0;
@@ -165,41 +182,63 @@ export function Backdrop({
     let unheard = 0;
     let specks: Speck[] = [];
     let last = performance.now();
+    let owed = 0;
     let frame = 0;
+    /** The backing stores' sizes, which only ever grow. */
+    let storeWidth = 0;
+    let storeHeight = 0;
 
     /**
      * The shell's size and the record's place in it, every frame. Every frame
      * because the drawer opening is the shell changing size under the light
      * for a fifth of a second, and a measurement kept for even a few frames
-     * drew the light where the record had been. Whether it changed, so a
-     * frame that has to be redrawn at the new size is not skipped.
+     * drew the light where the record had been.
+     *
+     * The canvases are made as wide as the window ever gets, once, and only
+     * grow; the shell clips what is past its edge. Sized to the shell instead,
+     * they were made again on every frame of the drawer's movement — a fresh
+     * backing store a frame, for the largest canvas on the page — and that was
+     * the frame the dust stalled on.
      */
-    const measure = (): boolean => {
+    const measure = () => {
       const box = swirl.parentElement?.getBoundingClientRect();
-      if (!box) return false;
-      const w = Math.max(1, Math.round(box.width));
-      const h = Math.max(1, Math.round(box.height));
-      const was = centre;
-      centre = recordCentre(box);
-      if (w !== width || h !== height) {
-        width = w;
-        height = h;
-        swirl.width = Math.max(2, Math.ceil(w / SHRINK));
-        swirl.height = Math.max(2, Math.ceil(h / SHRINK));
-        air.width = w;
-        air.height = h;
-        return true;
+      if (!box) return;
+      width = Math.max(1, Math.round(box.width));
+      height = Math.max(1, Math.round(box.height));
+      centre = places.recordCentre(box);
+      // As wide as the window ever gets from the first frame, and only ever
+      // grown: shrinking back to the player after the drawer shut was tried,
+      // and measured no cheaper, but it put the canvases' making back at the
+      // start of the drawer's next opening — the moment that had to be smooth.
+      const needWidth = Math.max(width, PLAYER_WIDTH + DRAWER_WIDTH);
+      if (needWidth > storeWidth || height > storeHeight) {
+        storeWidth = Math.max(storeWidth, needWidth);
+        storeHeight = Math.max(storeHeight, height);
+        swirl.width = Math.ceil(storeWidth / SHRINK);
+        swirl.height = Math.ceil(storeHeight / SHRINK);
+        swirl.style.width = `${swirl.width * SHRINK}px`;
+        swirl.style.height = `${swirl.height * SHRINK}px`;
+        air.width = storeWidth;
+        air.height = storeHeight;
+        air.style.width = `${storeWidth}px`;
+        air.style.height = `${storeHeight}px`;
+        drawn = '';
       }
-      return was.x !== centre.x || was.y !== centre.y;
     };
 
-    // Every frame the screen draws, not at the spectrum's thirty a second: dust
-    // moving fast stepped visibly at thirty, a speck jumping a few pixels at a
-    // time. The wheel is a few dozen pixels across and costs nothing to redraw.
+    // Every frame the screen draws while music plays, not at the spectrum's
+    // thirty a second: dust moving fast stepped visibly at thirty, a speck
+    // jumping a few pixels at a time. With nothing playing, thirty is plenty
+    // for dust drifting at its slowest.
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
-      const seconds = Math.min(0.1, (now - last) / 1000);
+      // Up to a quarter of a second, so a frame that comes late moves the dust
+      // as far as the time it took rather than slowing it for that moment.
+      owed += Math.min(0.25, (now - last) / 1000);
       last = now;
+      if (!playingRef.current && owed < 1 / 30) return;
+      const seconds = owed;
+      owed = 0;
       measure();
 
       const still = prefersReducedMotion();
@@ -227,24 +266,38 @@ export function Backdrop({
       surge = ease(surge, surgeWanted, seconds, BACKDROP.surgeRise);
 
       // Turned as far as the record turned, at the Speed slider's share of it.
-      const recordNow = recordAngle();
+      const recordNow = places.recordAngle();
       if (recordNow !== null && recordWas !== null && !still) {
         angle += turned(recordWas, recordNow, BACKDROP_TUNING.speed(t.speed));
       }
       recordWas = recordNow;
 
-      colours = wanted().map((to, k) => easeColour(colours[k] ?? to, to, seconds));
+      const target = wanted();
+      colours = target.map((to, k) => easeColour(colours[k] ?? to, to, seconds));
+
+      // The stops again only when the colours have moved enough to show.
+      const key = colours.map((c) => `${c.L.toFixed(3)},${c.a.toFixed(3)},${c.b.toFixed(3)}`).join('|');
+      if (key !== stopsFor) {
+        stopsFor = key;
+        stops = wheel(colours.map(oklabToRgb)).map((stop) => ({ at: stop.at, css: rgb(stop.colour) }));
+      }
 
       // How far things reach is measured against the player, which the drawer
       // opening does not change, rather than against the window, which it
       // triples: the light spread three times as far as the window widened.
       const room = Math.max(height, PLAYER_WIDTH);
-
-      paintWheel(sc, swirl, colours.map(oklabToRgb), angle, centre, width, height, room, {
+      const look = {
         ...breathing(showing, kick, breathe),
         strength: BACKDROP_TUNING.brightness(t.brightness) * (light ? 0.55 : 1),
         spread: BACKDROP_TUNING.spread(t.spread),
-      });
+      };
+      // Nothing to redraw when nothing about the wheel has moved: a paused
+      // song with its colours arrived is the same picture every frame.
+      const picture = `${stopsFor}/${angle.toFixed(4)}/${centre.x},${centre.y}/${room}/${look.alpha.toFixed(4)},${look.reach.toFixed(4)},${look.strength.toFixed(4)},${look.spread.toFixed(4)}`;
+      if (picture !== drawn) {
+        drawn = picture;
+        paintWheel(sc, swirl, stops, angle, centre, room, look);
+      }
 
       // As many as the widest the window gets needs, so the drawer opening
       // shows dust that was already there rather than spreading the rest out.
@@ -265,19 +318,20 @@ export function Backdrop({
   if (!on) return null;
 
   // All four at `-z-10`, under the shell's content and — earlier in the
-  // document — under the visualiser too. A canvas needs a CSS size as well as
-  // `inset-0`; see the note in `Visualizer`.
+  // document — under the visualiser too. The two canvases are sized in pixels
+  // from `measure`, as wide as the window ever gets, and pinned to the shell's
+  // corner: the shell's own rounded clip cuts them to it.
   return (
     <>
       <canvas
         ref={wheelCanvas}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 h-full w-full rounded-[var(--radius-widget)]"
+        className="pointer-events-none absolute top-0 left-0 -z-10"
       />
       <canvas
         ref={dustCanvas}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 h-full w-full rounded-[var(--radius-widget)]"
+        className="pointer-events-none absolute top-0 left-0 -z-10"
       />
       <div aria-hidden="true" className="groove-backdrop-grain pointer-events-none absolute inset-0 -z-10" />
       <div aria-hidden="true" className="groove-backdrop-shade pointer-events-none absolute inset-0 -z-10" />
@@ -309,62 +363,84 @@ function themeColours(root: HTMLElement): { accent: Rgb; colours: Rgb[] } {
   };
 }
 
-/**
- * Where the record on the deck is, against the shell; or, with no record on
- * the deck to be seen, where it would be — the upper middle of the player.
- */
-function recordCentre(shell: DOMRect): { x: number; y: number } {
-  const disc = document.querySelector<HTMLElement>('[data-morph="disc"]');
-  const box = disc?.getBoundingClientRect();
-  if (box && box.width > 8 && disc?.offsetParent !== null) {
-    return { x: box.left + box.width / 2 - shell.left, y: box.top + box.height / 2 - shell.top };
-  }
-  const player = document.querySelector('main')?.getBoundingClientRect();
-  if (player) return { x: player.left + player.width / 2 - shell.left, y: player.top + player.height * 0.32 - shell.top };
-  return { x: shell.width / 2, y: shell.height * 0.32 };
-}
+/** How often an element looked for and not found is looked for again, in milliseconds. */
+const LOOK_AGAIN_MS = 250;
 
-/** The record's angle, in radians, from its own animation; null with none running. */
-function recordAngle(): number | null {
-  const spin = document.querySelector('.groove-platter')?.getAnimations()[0];
-  const at = spin?.currentTime;
-  if (typeof at !== 'number') return null;
-  return ((at % RECORD_TURN_MS) / RECORD_TURN_MS) * Math.PI * 2;
+/**
+ * The record's place and angle, from the elements that show them — kept once
+ * found rather than looked up in the document every frame, and looked for
+ * again only when the one kept has left the page (a record put on in its
+ * place), or a quarter of a second after one was not there to be found.
+ */
+function placesOnPage() {
+  const kept = new Map<string, { el: Element | null; at: number }>();
+  const find = (selector: string): Element | null => {
+    const now = performance.now();
+    const had = kept.get(selector);
+    if (had?.el?.isConnected) return had.el;
+    if (had && !had.el && now - had.at < LOOK_AGAIN_MS) return null;
+    const el = document.querySelector(selector);
+    kept.set(selector, { el, at: now });
+    return el;
+  };
+  return {
+    /**
+     * Where the record on the deck is, against the shell; or, with no record
+     * on the deck to be seen, where it would be — the upper middle of the player.
+     */
+    recordCentre(shell: DOMRect): { x: number; y: number } {
+      const disc = find('[data-morph="disc"]') as HTMLElement | null;
+      const box = disc?.getBoundingClientRect();
+      if (box && box.width > 8 && disc?.offsetParent !== null) {
+        return { x: box.left + box.width / 2 - shell.left, y: box.top + box.height / 2 - shell.top };
+      }
+      const player = find('main')?.getBoundingClientRect();
+      if (player) return { x: player.left + player.width / 2 - shell.left, y: player.top + player.height * 0.32 - shell.top };
+      return { x: shell.width / 2, y: shell.height * 0.32 };
+    },
+    /** The record's angle, in radians, from its own animation; null with none running. */
+    recordAngle(): number | null {
+      const at = find('.groove-platter')?.getAnimations()[0]?.currentTime;
+      if (typeof at !== 'number') return null;
+      return ((at % RECORD_TURN_MS) / RECORD_TURN_MS) * Math.PI * 2;
+    },
+  };
 }
 
 const rgb = ({ r, g, b }: Rgb, alpha = 1) => `rgba(${r},${g},${b},${alpha})`;
+
+/** How strong the light is with distance, as stops: the same every frame, so worked out once. */
+const FALLOFF = falloffStops();
 
 /** The wheel, small: a turn of colour round the record, fading but never to nothing. */
 function paintWheel(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  colours: Rgb[],
+  stops: readonly { at: number; css: string }[],
   angle: number,
   centre: { x: number; y: number },
-  width: number,
-  height: number,
   /** The size the reach is measured against, in CSS pixels: the player's, not the window's. */
   room: number,
   look: { alpha: number; reach: number; strength: number; spread: number },
 ): void {
   const w = canvas.width;
   const h = canvas.height;
-  const cx = (centre.x / width) * w;
-  const cy = (centre.y / height) * h;
-  const small = w / width;
+  // The canvas is the window's pixels a tenth over, from the same corner.
+  const cx = centre.x / SHRINK;
+  const cy = centre.y / SHRINK;
   context.globalCompositeOperation = 'source-over';
   context.clearRect(0, 0, w, h);
 
   const turn = context.createConicGradient(angle, cx, cy);
-  for (const stop of wheel(colours)) turn.addColorStop(stop.at, rgb(stop.colour));
+  for (const stop of stops) turn.addColorStop(stop.at, stop.css);
   context.fillStyle = turn;
   context.fillRect(0, 0, w, h);
 
   // Faded by distance, and by how strongly it shows at all, in one pass.
-  const reach = room * small * look.reach * look.spread;
+  const reach = (room / SHRINK) * look.reach * look.spread;
   const fade = context.createRadialGradient(cx, cy, 0, cx, cy, reach * 1.6);
   const shown = Math.min(1, look.alpha * look.strength);
-  for (const stop of falloffStops()) fade.addColorStop(stop.at, `rgba(0,0,0,${(stop.strength * shown).toFixed(4)})`);
+  for (const stop of FALLOFF) fade.addColorStop(stop.at, `rgba(0,0,0,${(stop.strength * shown).toFixed(4)})`);
   context.globalCompositeOperation = 'destination-in';
   context.fillStyle = fade;
   context.fillRect(0, 0, w, h);
@@ -383,13 +459,18 @@ function paintDust(
   kick: number,
   light: boolean,
 ): void {
-  context.clearRect(0, 0, width, height);
+  // The whole of what was last drawn, which is wider than the window when the
+  // drawer has just shut.
+  context.clearRect(0, 0, context.canvas.width, height);
   if (specks.length === 0) return;
   // The lamp hangs a little above the record.
   const lampX = centre.x;
   const lampY = centre.y - height * 0.12;
   const reach = room * 0.55;
-  const tint = light ? { r: 60, g: 46, b: 34 } : { r: 255, g: 232, b: 200 };
+  // One colour for all of it, each speck's strength as the context's alpha
+  // rather than a colour written out afresh for every speck every frame.
+  context.fillStyle = light ? 'rgb(60,46,34)' : 'rgb(255,232,200)';
+  const dim = light ? 0.6 : 1;
   for (const s of specks) {
     // Across the dust's own air, centred on the record, and not drawn where
     // the window does not reach.
@@ -397,10 +478,10 @@ function paintDust(
     if (x < -4 || x > width + 4) continue;
     const y = s.y * height;
     const near = Math.max(0, 1 - Math.hypot(x - lampX, y - lampY) / reach);
-    const alpha = glint(near, kick) * (light ? 0.6 : 1);
-    context.fillStyle = rgb(tint, Number(alpha.toFixed(3)));
+    context.globalAlpha = glint(near, kick) * dim;
     context.beginPath();
     context.arc(x, y, s.size * (1 + 0.35 * near * kick), 0, Math.PI * 2);
     context.fill();
   }
+  context.globalAlpha = 1;
 }

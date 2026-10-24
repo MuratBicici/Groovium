@@ -15,6 +15,7 @@ import {
   turned,
   wheel,
   wheelColours,
+  type Speck,
 } from './backdrop';
 
 const PURPLE: Rgb = { r: 126, g: 69, b: 211 };
@@ -173,18 +174,29 @@ describe('dust in the light', () => {
     return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
   })();
 
+  /** A copy of the air, since `drift` moves it where it is. */
+  const copy = (air: Speck[]) => air.map((s) => ({ ...s }));
+
   it('fills the air at the start and keeps to the count it is given', () => {
     const air = drift([], 30, 0, 0.03, roll);
     expect(air).toHaveLength(30);
+    expect(drift(copy(air), 40, 0, 0.03, roll)).toHaveLength(40);
     expect(drift(air, 10, 0, 0.03, roll)).toHaveLength(10);
     expect(drift(air, 0, 0, 0.03, roll)).toHaveLength(0);
+  });
+
+  it('moves the air it is given rather than making more', () => {
+    const air = drift([], 5, 0, 0.03, roll);
+    const first = air[0];
+    expect(drift(air, 5, 0.5, 0.01, roll)).toBe(air);
+    expect(air[0]).toBe(first);
   });
 
   it('rises, faster when it is loud', () => {
     const air = drift([], 20, 0, 0.03, roll);
     // A short step, so none leaves the top and comes back in at the foot.
-    const calm = drift(air, 20, 0, 0.1, roll);
-    const loud = drift(air, 20, 1, 0.1, roll);
+    const calm = drift(copy(air), 20, 0, 0.1, roll);
+    const loud = drift(copy(air), 20, 1, 0.1, roll);
     const rose = (after: typeof air) =>
       air.reduce((sum, s, k) => sum + (s.y - (after[k]?.y ?? s.y)), 0);
     expect(rose(calm)).toBeGreaterThan(0);
@@ -202,7 +214,7 @@ describe('dust in the light', () => {
 
     const air = drift([], 20, 0.5, 0.03, roll);
     const rose = (after: typeof air) => air.reduce((sum, s, k) => sum + (s.y - (after[k]?.y ?? s.y)), 0);
-    expect(rose(drift(air, 20, 0.5, 0.1, roll, two))).toBeGreaterThan(rose(drift(air, 20, 0.5, 0.1, roll, 0)));
+    expect(rose(drift(copy(air), 20, 0.5, 0.1, roll, two))).toBeGreaterThan(rose(drift(copy(air), 20, 0.5, 0.1, roll, 0)));
   });
 
   it('comes back in at the foot when it leaves the top', () => {
