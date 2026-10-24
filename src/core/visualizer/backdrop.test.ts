@@ -217,6 +217,17 @@ describe('dust in the light', () => {
     expect(rose(drift(copy(air), 20, 0.5, 0.1, roll, two))).toBeGreaterThan(rose(drift(copy(air), 20, 0.5, 0.1, roll, 0)));
   });
 
+  it('moves as far in a second however many frames the second is drawn in', () => {
+    const air = drift([], 20, 0.5, 0.03, roll);
+    const once = drift(copy(air), 20, 0.5, 0.2, roll);
+    let often = copy(air);
+    for (let k = 0; k < 33; k++) often = drift(often, 20, 0.5, 0.2 / 33, roll);
+    once.forEach((s, k) => {
+      expect(often[k]!.y).toBeCloseTo(s.y, 4);
+      expect(often[k]!.x).toBeCloseTo(s.x, 3);
+    });
+  });
+
   it('comes back in at the foot when it leaves the top', () => {
     const leaving = [{ x: 0.5, y: -0.019, size: 1, pace: 1, phase: 0 }];
     const after = drift(leaving, 1, 1, 1, roll);

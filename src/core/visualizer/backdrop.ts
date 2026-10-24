@@ -53,6 +53,14 @@ export const BACKDROP = {
   riseAtRest: 0.012,
   riseWithLevel: 0.05,
   /**
+   * How far dust sways to the side, in widths of its air per second at the
+   * height of a sway. Once a step for every frame drawn, so it swayed five
+   * times as fast when the drawer moving made the light draw every frame
+   * rather than thirty a second; this is that step at the 165 frames a second
+   * it was tuned on.
+   */
+  sway: 0.04,
+  /**
    * How much faster it rises for a moment on a hit, in window heights per
    * second at full strength, before the Breath slider. Every hit adds to it
    * and it falls away over `surgeTau`, so a run of kicks drives the dust up
@@ -338,7 +346,7 @@ export function drift(
   for (const s of specks) {
     s.y -= rise * s.pace;
     s.phase += seconds * 0.6;
-    s.x += Math.sin(s.phase) * 0.00025;
+    s.x += Math.sin(s.phase) * BACKDROP.sway * seconds;
     if (s.y < -0.02) Object.assign(s, speck(roll, 1.02));
   }
   while (specks.length < count) specks.push(starting ? speck(roll) : speck(roll, 1.02));
