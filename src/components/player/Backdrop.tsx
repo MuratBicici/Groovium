@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  apartFrom,
   BACKDROP,
   BACKDROP_TUNING,
   breathing,
@@ -10,6 +11,7 @@ import {
   glint,
   surging,
   turned,
+  turnHue,
   wheel,
   wheelColours,
   type Speck,
@@ -18,10 +20,11 @@ import { levelFrom, watchBars } from '@/core/visualizer';
 import { listen, NO_BEAT, type Beat } from '@/core/visualizer/onset';
 import { readCover } from '@/core/theme/readCover';
 import { whilePaletteMoves } from '@/core/theme/palette';
-import { mixOklab, parseCssColour, parseHex, type Rgb } from '@/core/utils/colour';
+import { mixOklab, oklabToRgb, parseCssColour, parseHex, rgbToOklab, type Rgb } from '@/core/utils/colour';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { usePlayerStore } from '@/core/store';
 import { useShown } from '@/platform/shown';
+import { useHeldTrack } from './DiscHold';
 import { DRAWER_WIDTH, PLAYER_WIDTH } from '@/platform/window';
 
 /**
@@ -41,8 +44,6 @@ import { DRAWER_WIDTH, PLAYER_WIDTH } from '@/platform/window';
 
 /** How much smaller than the window the wheel is drawn. */
 const SHRINK = 10;
-/** Frames a second: the spectrum's own rate, and plenty for something this slow. */
-const FPS = 30;
 /**
  * How wide the dust's air is, in CSS pixels, centred on the record: the player
  * and a drawer's width either side of it, which is the widest the window gets
@@ -78,7 +79,11 @@ export function Backdrop({
   const coverHues = useRef<Rgb[]>([]);
   const playing = usePlayerStore((s) => s.playbackState === 'PLAYING');
   const playingRef = useRef(playing);
-  const cover = usePlayerStore((s) => (s.currentTrack ?? s.starting)?.coverArtUrl);
+  const onDeck = usePlayerStore((s) => (s.currentTrack ?? s.starting)?.coverArtUrl);
+  // A record lifted off the deck takes its colours with it: the room goes back
+  // to the theme's for as long as it is in the hand, as the theme itself does.
+  const inHand = useHeldTrack() !== null;
+  const cover = inHand ? undefined : onDeck;
 
   // The sliders, read each frame rather than redrawn for: dragging one should
   // change the light under the hand, not start it over.
@@ -109,11 +114,14 @@ export function Backdrop({
     };
   }, [on, cover]);
 
+  /** Counted up by every frame of bands, so the hits are listened for once a frame of them. */
+  const heardFrames = useRef(0);
   useEffect(() => {
     if (!on || !shown) return;
     return watchBars((bars) => {
       measured.current = levelFrom(bars);
       spectrum.current = bars;
+      heardFrames.current += 1;
     });
   }, [on, shown]);
 
@@ -136,7 +144,11 @@ export function Backdrop({
     themed.observe(root, { attributes: true, attributeFilter: ['data-theme', 'data-ground', 'style'] });
     const fading = whilePaletteMoves(reread);
 
-    let colours = wheelColours(coverHues.current, theme);
+    /** The cover's colours, the theme's where it has too few, all kept apart from the accent. */
+    const wanted = () =>
+      wheelColours(coverHues.current, theme.colours).map((c) => rgbToOklab(apartFrom(c, theme.accent)));
+    /** Where each colour has got to, kept in OKLab as fractions so a slow change arrives. */
+    let colours = wanted();
     let width = 0;
     let height = 0;
     let centre = { x: 0, y: 0 };
@@ -144,11 +156,15 @@ export function Backdrop({
     let angle = 0;
     let showing = 0;
     let kick = 0;
+    /** The surge the hits have asked for, and the one being drawn, which eases up to it. */
+    let surgeWanted = 0;
     let surge = 0;
     let beat: Beat = NO_BEAT;
+    /** The frame of bands last listened to, and the time gone since. */
+    let heardAt = heardFrames.current;
+    let unheard = 0;
     let specks: Speck[] = [];
     let last = performance.now();
-    let owed = 0;
     let frame = 0;
 
     /**
@@ -177,15 +193,14 @@ export function Backdrop({
       return was.x !== centre.x || was.y !== centre.y;
     };
 
+    // Every frame the screen draws, not at the spectrum's thirty a second: dust
+    // moving fast stepped visibly at thirty, a speck jumping a few pixels at a
+    // time. The wheel is a few dozen pixels across and costs nothing to redraw.
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
-      owed += Math.min(0.1, (now - last) / 1000);
+      const seconds = Math.min(0.1, (now - last) / 1000);
       last = now;
-      const moved = measure();
-      // A canvas just resized is blank: drawn now, not at the next turn.
-      if (owed < 1 / FPS && !moved) return;
-      const seconds = owed;
-      owed = 0;
+      measure();
 
       const still = prefersReducedMotion();
       const t = tuning.current;
@@ -195,10 +210,21 @@ export function Backdrop({
       // only while something is playing: a paused song is a still room.
       const level = playingRef.current ? measured.current : 0;
       showing = ease(showing, level, seconds, BACKDROP.levelTau);
-      const heard = listen(beat, playingRef.current ? spectrum.current : [], seconds);
-      beat = heard.beat;
-      kick = Math.max(heard.hit, kick * Math.exp(-seconds / BACKDROP.kickTau));
-      surge = surging(surge, heard.hit, breathe, seconds);
+      // The hits are listened for once per frame of bands, with the time since
+      // the last one: the same frame heard twice is no step at all.
+      unheard += seconds;
+      let hit = 0;
+      if (heardFrames.current !== heardAt) {
+        heardAt = heardFrames.current;
+        const heard = listen(beat, playingRef.current ? spectrum.current : [], unheard);
+        beat = heard.beat;
+        hit = heard.hit;
+        unheard = 0;
+      }
+      kick = Math.max(hit, kick * Math.exp(-seconds / BACKDROP.kickTau));
+      // Eased in rather than added at once, so a hit is a push and not a jolt.
+      surgeWanted = surging(surgeWanted, hit, breathe, seconds);
+      surge = ease(surge, surgeWanted, seconds, BACKDROP.surgeRise);
 
       // Turned as far as the record turned, at the Speed slider's share of it.
       const recordNow = recordAngle();
@@ -207,15 +233,14 @@ export function Backdrop({
       }
       recordWas = recordNow;
 
-      const target = wheelColours(coverHues.current, theme);
-      colours = target.map((to, k) => easeColour(colours[k] ?? to, to, seconds));
+      colours = wanted().map((to, k) => easeColour(colours[k] ?? to, to, seconds));
 
       // How far things reach is measured against the player, which the drawer
       // opening does not change, rather than against the window, which it
       // triples: the light spread three times as far as the window widened.
       const room = Math.max(height, PLAYER_WIDTH);
 
-      paintWheel(sc, swirl, colours, angle, centre, width, height, room, {
+      paintWheel(sc, swirl, colours.map(oklabToRgb), angle, centre, width, height, room, {
         ...breathing(showing, kick, breathe),
         strength: BACKDROP_TUNING.brightness(t.brightness) * (light ? 0.55 : 1),
         spread: BACKDROP_TUNING.spread(t.spread),
@@ -260,14 +285,28 @@ export function Backdrop({
   );
 }
 
-/** The theme's own colours, for a cover with too few of its own, or none. */
-function themeColours(root: HTMLElement): Rgb[] {
+/**
+ * The theme's accent — what the grooves and the edge light are drawn in, and
+ * what the light keeps apart from — and the theme's own colours for a cover
+ * with too few, or none.
+ *
+ * Not the accent itself, which is the one colour the light must not be: the
+ * shell lifted, and the accent turned a little either way round the wheel and
+ * quietened, so they read as the theme's and not as colours of their own.
+ */
+function themeColours(root: HTMLElement): { accent: Rgb; colours: Rgb[] } {
   const css = getComputedStyle(root);
   const read = (name: string, fallback: Rgb) => parseCssColour(css.getPropertyValue(name).trim()) ?? fallback;
-  const bright = read('--color-brass-400', { r: 224, g: 176, b: 113 });
-  const deep = read('--color-brass-600', { r: 162, g: 116, b: 63 });
+  const accent = read('--color-brass-400', { r: 224, g: 176, b: 113 });
   const shell = read('--color-shell-600', { r: 74, g: 58, b: 46 });
-  return [bright, deep, mixOklab(bright, shell, 0.55)];
+  return {
+    accent,
+    colours: [
+      mixOklab(shell, accent, 0.25),
+      mixOklab(turnHue(accent, -50), shell, 0.45),
+      mixOklab(turnHue(accent, 50), shell, 0.45),
+    ],
+  };
 }
 
 /**

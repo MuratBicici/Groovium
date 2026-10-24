@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { rgbToOklab, type Rgb } from '@/core/utils/colour';
+import { oklabToRgb, rgbToOklab, type Rgb } from '@/core/utils/colour';
 import {
+  APART_DEGREES,
+  apartFrom,
   BACKDROP,
   BACKDROP_TUNING,
+  BELOW_ACCENT,
   breathing,
   drift,
+  easeColour,
   falloff,
   falloffStops,
   surging,
@@ -51,12 +55,64 @@ describe('the wheel of colour', () => {
     expect(wheel([])).toEqual([]);
   });
 
-  it('takes the theme where the cover has too few, and always has the same count', () => {
-    const theme = [BRASS, RED, PURPLE];
-    expect(wheelColours([PURPLE], theme)).toHaveLength(3);
-    expect(wheelColours([PURPLE], theme)[0]).toEqual(PURPLE);
-    expect(wheelColours([], theme)).toEqual(theme);
+  it('fills a cover with too few from its own colours, and always has the same count', () => {
+    const theme = [BRASS, RED, BRASS];
+    const filled = wheelColours([PURPLE], theme);
+    expect(filled).toHaveLength(3);
+    expect(filled[0]).toEqual(PURPLE);
+    // Purple's neighbours, not the theme's brass and red.
+    for (const stand of filled.slice(1)) {
+      expect(distance(stand, PURPLE)).toBeLessThan(distance(stand, BRASS));
+      expect(stand).not.toEqual(PURPLE);
+    }
     expect(wheelColours([PURPLE, RED, BRASS, BRASS], theme)).toEqual([PURPLE, RED, BRASS]);
+  });
+
+  it('arrives at a new cover’s colour however often it is drawn', () => {
+    // At the screen's own rate a frame is a few milliseconds, and eased in
+    // whole bytes every step rounded back to where it was.
+    let at = rgbToOklab(BRASS);
+    const to = rgbToOklab(PURPLE);
+    for (let frame = 0; frame < 1500; frame++) at = easeColour(at, to, 1 / 240);
+    expect(distance(oklabToRgb(at), PURPLE)).toBeLessThan(0.01);
+  });
+
+  it('takes the theme only with no cover colours at all', () => {
+    expect(wheelColours([], [BRASS, RED, PURPLE])).toEqual([BRASS, RED, PURPLE]);
+  });
+});
+
+describe('the light kept apart from the accent the grooves are drawn in', () => {
+  const hueOf = (c: Rgb) => {
+    const { a, b } = rgbToOklab(c);
+    return (Math.atan2(b, a) * 180) / Math.PI;
+  };
+  const between = (x: number, y: number) => {
+    let d = Math.abs(x - y) % 360;
+    if (d > 180) d = 360 - d;
+    return d;
+  };
+
+  it('turns a colour too close to the accent away from it round the wheel', () => {
+    const nearBrass: Rgb = { r: 200, g: 150, b: 90 };
+    const kept = apartFrom(nearBrass, BRASS);
+    expect(between(hueOf(kept), hueOf(BRASS))).toBeGreaterThanOrEqual(APART_DEGREES - 2);
+  });
+
+  it('leaves the hue of a colour already far from it', () => {
+    const kept = apartFrom(PURPLE, BRASS);
+    expect(between(hueOf(kept), hueOf(PURPLE))).toBeLessThan(2);
+  });
+
+  it('keeps every colour darker than the accent', () => {
+    const bright: Rgb = { r: 250, g: 240, b: 255 };
+    expect(rgbToOklab(apartFrom(bright, BRASS)).L).toBeLessThanOrEqual(rgbToOklab(BRASS).L - BELOW_ACCENT + 0.01);
+  });
+
+  it('only darkens a grey, which has no hue to turn', () => {
+    const grey: Rgb = { r: 90, g: 90, b: 90 };
+    const kept = apartFrom(grey, BRASS);
+    expect(Math.hypot(rgbToOklab(kept).a, rgbToOklab(kept).b)).toBeLessThan(0.01);
   });
 });
 

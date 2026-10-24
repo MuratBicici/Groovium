@@ -503,7 +503,12 @@ export default function App() {
     >
       <PlaylistPickerProvider>
       <LyricsMatchProvider>
-      {/* Under the visualiser: the room, and the grooves in front of it. */}
+      <DiscFlightProvider>
+      <DiscHoldProvider>
+      {/* Under the visualiser: the room, and the grooves in front of it. Inside
+          the hold provider, as `CoverTheme` is, so a record lifted off the deck
+          takes its colours with it. Both providers draw their children before
+          their own layers, so these are still first in the shell. */}
       <Backdrop
         on={backdrop}
         brightness={backdropBrightness}
@@ -519,8 +524,6 @@ export default function App() {
         covered={lyricsInDrawer && !compact ? drawerSide : null}
       />
 
-      <DiscFlightProvider>
-      <DiscHoldProvider>
       {/* Draws nothing; it paints the palette from the sleeve on the deck.
           Inside the hold provider because "on the deck" is meant literally —
           a record in the hand is not one the window takes its colours from. */}

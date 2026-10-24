@@ -1,4 +1,4 @@
-import { mixOklab, type Rgb } from '@/core/utils/colour';
+import { mixOklab, oklabToRgb, rgbToOklab, type Oklab, type Rgb } from '@/core/utils/colour';
 import { NOTCHES, span } from './index';
 
 /**
@@ -61,6 +61,8 @@ export const BACKDROP = {
    */
   surge: 0.14,
   surgeTau: 0.45,
+  /** How long a hit takes to come through in the speed, in seconds: a push rather than a jolt. */
+  surgeRise: 0.08,
   /** The smallest a speck is, and how much larger the largest is, in CSS pixels. */
   sizeFrom: 0.65,
   sizeRange: 1.35,
@@ -182,20 +184,94 @@ export function breathing(level: number, kick: number, breath: number): { alpha:
   };
 }
 
-/** One colour towards another over a frame, for a cover changing under the light. */
-export function easeColour(from: Rgb, to: Rgb, seconds: number): Rgb {
-  return mixOklab(from, to, 1 - Math.exp(-seconds / BACKDROP.colourTau));
+/**
+ * One colour towards another over a frame, for a cover changing under the
+ * light — in OKLab, and never rounded on the way.
+ *
+ * It was eased in RGB, a byte a channel, which rounds every frame: once a
+ * frame's step was under half a unit it rounded back to where it had been,
+ * and the colour stopped short of the cover's. The more often it was drawn the
+ * smaller the steps and the sooner it stuck — at the screen's own rate it
+ * barely left the theme's colours at all. Kept as fractions here, it arrives.
+ */
+export function easeColour(from: Oklab, to: Oklab, seconds: number): Oklab {
+  const t = 1 - Math.exp(-seconds / BACKDROP.colourTau);
+  return { L: from.L + (to.L - from.L) * t, a: from.a + (to.a - from.a) * t, b: from.b + (to.b - from.b) * t };
 }
 
 /**
- * The wheel's colours: the cover's, and the theme's where the cover has too
- * few. Always the same count, so a change of cover is each colour moving to
- * its successor rather than the wheel being redrawn with a different number.
+ * How far round the colour wheel the light's colours keep from the accent, in
+ * degrees, and how much darker than it they stay.
+ *
+ * The grooves and the edge light are drawn in the accent. A cover whose
+ * colours are its accent's — which, with the palette taken from the cover, is
+ * every cover — lit the room in the same colour as the lights in it, and the
+ * three ran together into one wash. Turned away from it and kept below it, the
+ * room is a ground the lights stand out on.
+ */
+export const APART_DEGREES = 40;
+export const BELOW_ACCENT = 0.1;
+
+/** Under this much colour, a colour is a grey and has no hue to turn. */
+const GREYISH = 0.025;
+
+/** A colour turned round the colour wheel by `degrees`, its lightness and strength kept. */
+export function turnHue(colour: Rgb, degrees: number): Rgb {
+  const { L, a, b } = rgbToOklab(colour);
+  const c = Math.hypot(a, b);
+  const h = Math.atan2(b, a) + (degrees * Math.PI) / 180;
+  return oklabToRgb({ L, a: c * Math.cos(h), b: c * Math.sin(h) });
+}
+
+/**
+ * A colour kept apart from the accent: turned away from it round the wheel if
+ * it is within `APART_DEGREES` of it, the way it already leans, and kept
+ * `BELOW_ACCENT` darker than it. A grey is only darkened.
+ */
+export function apartFrom(colour: Rgb, accent: Rgb): Rgb {
+  const lab = rgbToOklab(colour);
+  const acc = rgbToOklab(accent);
+  let { a, b } = lab;
+  const chroma = Math.hypot(a, b);
+  if (chroma >= GREYISH && Math.hypot(acc.a, acc.b) >= GREYISH) {
+    const hue = Math.atan2(b, a);
+    const accentHue = Math.atan2(acc.b, acc.a);
+    let off = hue - accentHue;
+    while (off > Math.PI) off -= Math.PI * 2;
+    while (off < -Math.PI) off += Math.PI * 2;
+    const least = (APART_DEGREES * Math.PI) / 180;
+    if (Math.abs(off) < least) {
+      const turned = accentHue + (off < 0 ? -least : least);
+      a = chroma * Math.cos(turned);
+      b = chroma * Math.sin(turned);
+    }
+  }
+  return oklabToRgb({ L: Math.min(lab.L, Math.max(0, acc.L - BELOW_ACCENT)), a, b });
+}
+
+/** How far a cover's own colour is turned to stand in for one it does not have, in degrees. */
+const STAND_IN_DEGREES = 30;
+
+/**
+ * The wheel's colours: the cover's, and with too few of them, its own turned
+ * a little either way round the wheel — a blue cover is lit in blues, not in
+ * blue and whatever the theme happens to be. The theme's only for a cover with
+ * no colour at all, or none on the deck. Always the same count, so a change of
+ * cover is each colour moving to its successor rather than the wheel being
+ * redrawn with a different number.
  */
 export function wheelColours(cover: readonly Rgb[], theme: readonly Rgb[], count = 3): Rgb[] {
   const out: Rgb[] = [];
   for (let k = 0; k < count; k++) {
-    const colour = cover[k] ?? theme[(k - cover.length + theme.length) % Math.max(1, theme.length)];
+    const own = cover[k];
+    if (own) {
+      out.push(own);
+      continue;
+    }
+    const base = cover[k % Math.max(1, cover.length)];
+    const colour = base
+      ? turnHue(base, (k % 2 === 0 ? -1 : 1) * STAND_IN_DEGREES)
+      : theme[k % Math.max(1, theme.length)];
     if (colour) out.push(colour);
   }
   return out;
