@@ -22,6 +22,7 @@ import { mixOklab, parseCssColour, parseHex, type Rgb } from '@/core/utils/colou
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { usePlayerStore } from '@/core/store';
 import { useShown } from '@/platform/shown';
+import { DRAWER_WIDTH, PLAYER_WIDTH } from '@/platform/window';
 
 /**
  * The light behind everything: the cover's colours turning with the record,
@@ -42,8 +43,14 @@ import { useShown } from '@/platform/shown';
 const SHRINK = 10;
 /** Frames a second: the spectrum's own rate, and plenty for something this slow. */
 const FPS = 30;
-/** How long the record's place is trusted before it is measured again. */
-const MEASURE_MS = 400;
+/**
+ * How wide the dust's air is, in CSS pixels, centred on the record: the player
+ * and a drawer's width either side of it, which is the widest the window gets
+ * on either side. The specks keep their place against the record, so opening
+ * the drawer uncovers dust that was already in the air instead of stretching
+ * what was showing across the new width.
+ */
+const DUST_FIELD = PLAYER_WIDTH + 2 * DRAWER_WIDTH;
 /** One turn of the record, in milliseconds: `.groove-platter`'s animation. */
 const RECORD_TURN_MS = 4500;
 
@@ -133,7 +140,6 @@ export function Backdrop({
     let width = 0;
     let height = 0;
     let centre = { x: 0, y: 0 };
-    let measuredAt = -Infinity;
     let recordWas: number | null = null;
     let angle = 0;
     let showing = 0;
@@ -145,11 +151,20 @@ export function Backdrop({
     let owed = 0;
     let frame = 0;
 
-    const measure = (now: number) => {
+    /**
+     * The shell's size and the record's place in it, every frame. Every frame
+     * because the drawer opening is the shell changing size under the light
+     * for a fifth of a second, and a measurement kept for even a few frames
+     * drew the light where the record had been. Whether it changed, so a
+     * frame that has to be redrawn at the new size is not skipped.
+     */
+    const measure = (): boolean => {
       const box = swirl.parentElement?.getBoundingClientRect();
-      if (!box) return;
+      if (!box) return false;
       const w = Math.max(1, Math.round(box.width));
       const h = Math.max(1, Math.round(box.height));
+      const was = centre;
+      centre = recordCentre(box);
       if (w !== width || h !== height) {
         width = w;
         height = h;
@@ -157,19 +172,20 @@ export function Backdrop({
         swirl.height = Math.max(2, Math.ceil(h / SHRINK));
         air.width = w;
         air.height = h;
+        return true;
       }
-      centre = recordCentre(box);
-      measuredAt = now;
+      return was.x !== centre.x || was.y !== centre.y;
     };
 
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       owed += Math.min(0.1, (now - last) / 1000);
       last = now;
-      if (owed < 1 / FPS) return;
+      const moved = measure();
+      // A canvas just resized is blank: drawn now, not at the next turn.
+      if (owed < 1 / FPS && !moved) return;
       const seconds = owed;
       owed = 0;
-      if (now - measuredAt > MEASURE_MS) measure(now);
 
       const still = prefersReducedMotion();
       const t = tuning.current;
@@ -194,18 +210,25 @@ export function Backdrop({
       const target = wheelColours(coverHues.current, theme);
       colours = target.map((to, k) => easeColour(colours[k] ?? to, to, seconds));
 
-      paintWheel(sc, swirl, colours, angle, centre, width, height, {
+      // How far things reach is measured against the player, which the drawer
+      // opening does not change, rather than against the window, which it
+      // triples: the light spread three times as far as the window widened.
+      const room = Math.max(height, PLAYER_WIDTH);
+
+      paintWheel(sc, swirl, colours, angle, centre, width, height, room, {
         ...breathing(showing, kick, breathe),
         strength: BACKDROP_TUNING.brightness(t.brightness) * (light ? 0.55 : 1),
         spread: BACKDROP_TUNING.spread(t.spread),
       });
 
-      const count = still ? 0 : Math.round(BACKDROP.specks * BACKDROP_TUNING.dust(t.dust));
+      // As many as the widest the window gets needs, so the drawer opening
+      // shows dust that was already there rather than spreading the rest out.
+      const count = still ? 0 : Math.round(BACKDROP.specks * BACKDROP_TUNING.dust(t.dust) * DUST_FIELD / PLAYER_WIDTH);
       specks = drift(specks, count, showing, seconds, Math.random, surge);
-      paintDust(ac, specks, centre, width, height, kick * breathe, light);
+      paintDust(ac, specks, centre, width, height, room, kick * breathe, light);
     };
 
-    measure(performance.now());
+    measure();
     frame = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(frame);
@@ -281,12 +304,15 @@ function paintWheel(
   centre: { x: number; y: number },
   width: number,
   height: number,
+  /** The size the reach is measured against, in CSS pixels: the player's, not the window's. */
+  room: number,
   look: { alpha: number; reach: number; strength: number; spread: number },
 ): void {
   const w = canvas.width;
   const h = canvas.height;
   const cx = (centre.x / width) * w;
   const cy = (centre.y / height) * h;
+  const small = w / width;
   context.globalCompositeOperation = 'source-over';
   context.clearRect(0, 0, w, h);
 
@@ -296,7 +322,7 @@ function paintWheel(
   context.fillRect(0, 0, w, h);
 
   // Faded by distance, and by how strongly it shows at all, in one pass.
-  const reach = Math.max(w, h) * look.reach * look.spread;
+  const reach = room * small * look.reach * look.spread;
   const fade = context.createRadialGradient(cx, cy, 0, cx, cy, reach * 1.6);
   const shown = Math.min(1, look.alpha * look.strength);
   for (const stop of falloffStops()) fade.addColorStop(stop.at, `rgba(0,0,0,${(stop.strength * shown).toFixed(4)})`);
@@ -313,6 +339,8 @@ function paintDust(
   centre: { x: number; y: number },
   width: number,
   height: number,
+  /** The size the lamp's reach is measured against: the player's, not the window's. */
+  room: number,
   kick: number,
   light: boolean,
 ): void {
@@ -321,10 +349,13 @@ function paintDust(
   // The lamp hangs a little above the record.
   const lampX = centre.x;
   const lampY = centre.y - height * 0.12;
-  const reach = Math.max(width, height) * 0.55;
+  const reach = room * 0.55;
   const tint = light ? { r: 60, g: 46, b: 34 } : { r: 255, g: 232, b: 200 };
   for (const s of specks) {
-    const x = s.x * width;
+    // Across the dust's own air, centred on the record, and not drawn where
+    // the window does not reach.
+    const x = centre.x + (s.x - 0.5) * DUST_FIELD;
+    if (x < -4 || x > width + 4) continue;
     const y = s.y * height;
     const near = Math.max(0, 1 - Math.hypot(x - lampX, y - lampY) / reach);
     const alpha = glint(near, kick) * (light ? 0.6 : 1);
