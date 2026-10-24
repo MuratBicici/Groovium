@@ -8,6 +8,7 @@ import {
   type DrawerSide,
   type GlowKnob,
   type GlowListens,
+  type PickAnimation,
   type VisualizerLook,
   type LibraryTab,
   type Language,
@@ -70,6 +71,7 @@ interface SettingsStore extends Settings {
   setGlow: (knob: GlowKnob, notch: number) => void;
   setGlowListens: (listens: GlowListens) => void;
   setVisualizerLook: (look: VisualizerLook) => void;
+  setPickAnimation: (how: PickAnimation) => void;
   setVisualizerBrightness: (notch: number) => void;
   setBackdrop: (on: boolean) => void;
   setBackdropKnob: (knob: BackdropKnob, notch: number) => void;
@@ -332,7 +334,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare, glowListens } = get();
-    const { visualizerLook, visualizerBrightness } = get();
+    const { visualizerLook, visualizerBrightness, pickAnimation } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -362,6 +364,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       glowFlare,
       glowListens,
       visualizerLook,
+      pickAnimation,
       visualizerBrightness,
       backdrop,
       backdropBrightness,
@@ -450,6 +453,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       commit({ [knob]: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setGlowListens: (glowListens) => commit({ glowListens }),
     setVisualizerLook: (visualizerLook) => commit({ visualizerLook }),
+    setPickAnimation: (pickAnimation) => commit({ pickAnimation }),
     setVisualizerBrightness: (notch) =>
       commit({ visualizerBrightness: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setBackdrop: (backdrop) => commit({ backdrop }),

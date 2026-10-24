@@ -18,6 +18,8 @@ export function GeneralPage() {
   const setDrawerSide = useSettingsStore((s) => s.setDrawerSide);
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
+  const pickAnimation = useSettingsStore((s) => s.pickAnimation);
+  const setPickAnimation = useSettingsStore((s) => s.setPickAnimation);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
 
@@ -72,6 +74,18 @@ export function GeneralPage() {
           on={reduceMotion}
           onChange={setReduceMotion}
         />
+        <CardDivider />
+        {/* Two buttons: neither way of arriving is the absence of the other. */}
+        <Field label={t('settings.pickAnimation')} hint={t('settings.pickAnimationHint')}>
+          <div className="flex gap-1.5">
+            <Choice active={pickAnimation === 'arc'} onClick={() => setPickAnimation('arc')}>
+              {t('settings.pickAnimationArc')}
+            </Choice>
+            <Choice active={pickAnimation === 'meteor'} onClick={() => setPickAnimation('meteor')}>
+              {t('settings.pickAnimationMeteor')}
+            </Choice>
+          </div>
+        </Field>
         <CardDivider />
         {/* Whether any of the ornaments run while nobody can see them. */}
         <Toggle

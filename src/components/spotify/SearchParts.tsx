@@ -320,8 +320,7 @@ function usePlayFound(track: TrackMetadata, onPlay: () => void) {
       return;
     }
     const disc = e.currentTarget.closest('[data-found]')?.querySelector<HTMLElement>('[data-disc]');
-    // Chosen in the search, it does not arc onto the deck — it falls there.
-    if (disc) flyToPlatter(disc, track, { meteor: true });
+    if (disc) flyToPlatter(disc, track);
     onPlay();
   };
   return { refused, press };

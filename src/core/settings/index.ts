@@ -161,6 +161,12 @@ export interface Settings {
    */
   visualizerLook: VisualizerLook;
   /**
+   * How a record comes to the deck when a song is pressed: thrown there in a
+   * short arc, as it always was, or falling like a meteor — up over the
+   * platter, round past its far side and down onto it trailing light.
+   */
+  pickAnimation: PickAnimation;
+  /**
    * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
    * the quarter it has always been drawn at; see `visualizerOpacity`.
    */
@@ -227,6 +233,9 @@ export type GlowListens = 'all' | 'bass';
 /** How the visualiser is drawn; see `visualizerLook`. */
 export type VisualizerLook = 'grooves' | 'blocks';
 
+/** How a pressed song's record comes to the deck; see `pickAnimation`. */
+export type PickAnimation = 'arc' | 'meteor';
+
 /** Which of the edge light's dials the settings panel is moving. */
 export const GLOW_KNOBS = [
   'glowStrength',
@@ -273,6 +282,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glowFlare: 0,
   glowListens: 'all',
   visualizerLook: 'grooves',
+  pickAnimation: 'meteor',
   visualizerBrightness: 0,
   backdrop: true,
   backdropBrightness: 0,
@@ -314,6 +324,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.libraryTab !== 'spotify') settings.libraryTab = 'groovium';
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
+    if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
     settings.lyricsOn = settings.lyricsOn === true;
     settings.backdrop = settings.backdrop !== false;
     settings.scale = nearestScale(Number(settings.scale));

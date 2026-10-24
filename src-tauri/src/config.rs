@@ -156,6 +156,11 @@ pub struct Settings {
     /// be. Anything unrecognised reads as grooves on the way in.
     #[serde(default = "grooves")]
     pub visualizer_look: String,
+    /// How a pressed song's record comes to the deck: `"meteor"`, or the
+    /// `"arc"` it was always thrown in. Anything unrecognised, and a config
+    /// written before there was a choice, reads as the meteor on the way in.
+    #[serde(default = "meteor")]
+    pub pick_animation: String,
     /// How brightly the visualiser shows through: a notch from -4 to 4, nought
     /// being the quarter it has always been drawn at.
     #[serde(default, deserialize_with = "notch")]
@@ -234,6 +239,7 @@ impl Default for Settings {
             glow_flare: 0,
             glow_listens: all_of_it(),
             visualizer_look: grooves(),
+            pick_animation: meteor(),
             visualizer_brightness: 0,
             backdrop: on_unless_turned_off(),
             backdrop_brightness: 0,
@@ -293,6 +299,10 @@ fn compact_place() -> String {
 
 fn all_of_it() -> String {
     "all".to_owned()
+}
+
+fn meteor() -> String {
+    "meteor".into()
 }
 
 fn grooves() -> String {
@@ -437,6 +447,7 @@ mod tests {
             glow_flare: 2,
             glow_listens: "bass".into(),
             visualizer_look: "blocks".into(),
+            pick_animation: "arc".into(),
             visualizer_brightness: 2,
             backdrop: false,
             backdrop_brightness: 1,
@@ -484,6 +495,17 @@ mod tests {
             serde_json::from_str(r#"{"settings":{"backdrop":false,"backdropDust":-9}}"#).expect("parses");
         assert!(!chosen.settings.backdrop);
         assert_eq!(chosen.settings.backdrop_dust, -4);
+    }
+
+    #[test]
+    fn a_config_from_before_the_choice_drops_records_like_meteors() {
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert_eq!(config.settings.pick_animation, "meteor");
+        let chosen: AppConfig =
+            serde_json::from_str(r#"{"settings":{"pickAnimation":"arc"}}"#).expect("parses");
+        assert_eq!(chosen.settings.pick_animation, "arc");
+        let written = serde_json::to_string(&chosen).expect("writes");
+        assert!(written.contains(r#""pickAnimation":"arc""#));
     }
 
     #[test]

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
+import { useSettingsStore } from '@/core/settings/store';
 import { arcKeyframes, onReducedMotionChange, prefersReducedMotion } from '@/core/utils/motion';
 import { clamp } from '@/core/utils/time';
 import { readCover } from '@/core/theme/readCover';
@@ -65,7 +66,7 @@ interface Flight {
   from: DOMRect;
   /** The row's own disc, hidden while its copy is in the air. */
   source: HTMLElement;
-  /** Falling like a meteor, as a record chosen in the search does, rather than thrown. */
+  /** Falling like a meteor rather than thrown, as the Song pick animation setting says. */
   meteor?: boolean;
 }
 
@@ -84,10 +85,10 @@ interface DiscFlightActions {
   /** DiskPlatter hands over its stable wrapper so flights know where to land. */
   registerPlatter: (el: HTMLElement | null) => void;
   /**
-   * Throw a clone of `sourceDisc` onto the platter — or, given `meteor`, let
-   * it fall there like one.
+   * Send a clone of `sourceDisc` to the platter: thrown there in an arc, or
+   * falling like a meteor, as the Song pick animation setting says.
    */
-  flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata, how?: { meteor?: boolean }) => void;
+  flyToPlatter: (sourceDisc: HTMLElement, track: TrackMetadata) => void;
   /**
    * The deck, for anything carrying a record towards it by hand.
    *
@@ -161,7 +162,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     platterRef.current = el;
   }, []);
 
-  const flyToPlatter = useCallback((sourceDisc: HTMLElement, track: TrackMetadata, how?: { meteor?: boolean }) => {
+  const flyToPlatter = useCallback((sourceDisc: HTMLElement, track: TrackMetadata) => {
     // Without a destination or with motion reduced, the click still plays the
     // track — the flight is garnish, never a gate.
     if (prefersReducedMotion() || !platterRef.current) return;
@@ -181,7 +182,8 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
     airborne.current.add(track.id);
     setPendingTrackId(track.id);
     const flight: Flight = { key: nextKey.current++, track, from, source: sourceDisc };
-    if (how?.meteor) flight.meteor = true;
+    // Read at the press, so a change of the setting is the next flight's.
+    if (useSettingsStore.getState().pickAnimation === 'meteor') flight.meteor = true;
     setFlights((current) => [...current, flight]);
   }, []);
 
@@ -282,10 +284,11 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
             ))}
         </div>
 
-        {/* z-40 — a meteor falls from the search, which is a sheet at z-30
-            folding away as it goes: under it, the record would leave its card
-            behind the very dimming that is clearing. Over everything but the
-            window's edge, for the second it is in the air. */}
+        {/* z-40 — a meteor falls over everything but the window's edge, for
+            the second it is in the air: out of a panel, over the deck, and out
+            of the search, which is a sheet at z-30 folding away as it goes —
+            under it, the record would leave its card behind the very dimming
+            that is clearing. */}
         <div
           ref={meteorLayerRef}
           aria-hidden="true"

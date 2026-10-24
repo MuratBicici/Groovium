@@ -1,14 +1,13 @@
 import { oklabToRgb, rgbToOklab, type Rgb } from '@/core/utils/colour';
 
 /**
- * How a record chosen in the search falls onto the deck.
+ * How a record falls onto the deck like a meteor, when the Song pick
+ * animation setting says so rather than the usual arc.
  *
- * A record pressed in a list is thrown to the deck in a short arc. One chosen in
- * the search is a bigger moment — the search folds away and the record is the
- * thing left moving — so it falls like a meteor instead, as the listener chose
- * from three tried in previews: it rises off its card, sweeps up over the
- * platter and out past its far side, and curls back in to strike it, throwing
- * dust off as it lands.
+ * Chosen by the listener from three tried in previews, first for the search
+ * and then for every song pressed: it rises off where it was shown, sweeps up
+ * over the platter and out past its far side, and curls back in to strike
+ * it, throwing dust off as it lands.
  *
  * Everything here is in the flight's own frame: offsets from the platter's
  * centre in CSS pixels, and the record's radius. The platter is at the origin
