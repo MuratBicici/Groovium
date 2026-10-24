@@ -189,7 +189,10 @@ export function SearchSheet({
         tabIndex={-1}
         aria-label={t('search.close')}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-shell-900/70 backdrop-blur-[2px]"
+        // Dimmed, not blurred as the other sheets are: blurring the whole
+        // window cost a frame in every few while it faded out under a record
+        // falling to the deck.
+        className="absolute inset-0 cursor-default bg-shell-900/75"
       />
       <div
         ref={panel}
