@@ -291,6 +291,7 @@ export function Visualizer({
       // A resize empties the canvas and moves every column, so what each one
       // is showing is no longer known.
       afresh = true;
+      resized = true;
       el.width = Math.round(w * dpr);
       el.height = Math.round(h * dpr);
       // Writing either of those resets the context, so the scale goes back on
@@ -325,6 +326,8 @@ export function Visualizer({
     let standing: number[] = [];
     /** Everything down again: the first frame, a resize, a change of palette. */
     let afresh = true;
+    /** The window changed size since the grooves were last laid out. */
+    let resized = false;
 
     const drawBlocks = () => {
       const values = bars.current;
@@ -387,6 +390,9 @@ export function Visualizer({
     /** Where across the window the grooves are drawn, as it eases; see `squeeze`. */
     let spanFrom = 0;
     let spanTo = 0;
+    /** Where the grooves were last told to go, so a resize can carry them along. */
+    let wasFrom = 0;
+    let wasTo = 0;
     /** How present the grooves are, nought to one; see `presence`. */
     let present = 0;
 
@@ -410,7 +416,16 @@ export function Visualizer({
       if (spanTo <= spanFrom) {
         spanFrom = toFrom;
         spanTo = toTo;
+      } else if (resized) {
+        // The window changing size takes the grooves' ends with it, at once:
+        // eased there too, they trailed the drawer's edge all the way out and
+        // back. Only the lyrics record coming and going is eased.
+        spanFrom += toFrom - wasFrom;
+        spanTo += toTo - wasTo;
       }
+      resized = false;
+      wasFrom = toFrom;
+      wasTo = toTo;
       spanFrom = ease(spanFrom, toFrom, seconds, SQUEEZE / 3);
       spanTo = ease(spanTo, toTo, seconds, SQUEEZE / 3);
       if (Math.abs(spanFrom - toFrom) > 0.5 || Math.abs(spanTo - toTo) > 0.5) moving = true;
