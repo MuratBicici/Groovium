@@ -3,9 +3,10 @@ import { rgbToOklab } from '@/core/utils/colour';
 import { glowing, meteorAt, METEOR_MS, meteorKeyframes, PLATTER_RADIUS } from './meteor';
 
 /**
- * A record chosen in the search falls onto the deck: it lifts, swings round the
- * platter and strikes it. It has to leave from where its card showed it and
- * end exactly on the platter, or the hand-over to the real record would jump.
+ * A record chosen in the search falls onto the deck: it rises, sweeps over the
+ * platter and curls in to strike it. It has to leave from where its card
+ * showed it and end exactly on the platter, or the hand-over to the real
+ * record would jump.
  */
 const from = { x: 340, y: 40, r: 56 };
 
@@ -30,6 +31,26 @@ describe('the meteor', () => {
       const now = meteorAt(ms, from);
       expect(Math.hypot(now.x - last.x, now.y - last.y)).toBeLessThan(60);
       last = now;
+    }
+  });
+
+  it('never turns a corner: its direction changes little from one moment to the next', () => {
+    for (const card of [from, { x: -503, y: 104, r: 56 }, { x: 173, y: 104, r: 56 }]) {
+      for (let ms = 16; ms <= METEOR_MS - 16; ms += 8) {
+        const a = meteorAt(ms - 8, card);
+        const b = meteorAt(ms, card);
+        const c = meteorAt(ms + 8, card);
+        const v1 = { x: b.x - a.x, y: b.y - a.y };
+        const v2 = { x: c.x - b.x, y: c.y - b.y };
+        const s1 = Math.hypot(v1.x, v1.y);
+        const s2 = Math.hypot(v2.x, v2.y);
+        // Where it is barely moving, its heading means nothing.
+        if (s1 < 1 || s2 < 1) continue;
+        const turn = Math.acos(Math.max(-1, Math.min(1, (v1.x * v2.x + v1.y * v2.y) / (s1 * s2))));
+        expect(turn).toBeLessThan(0.3);
+        // Nor does its speed jump.
+        expect(Math.max(s1, s2) / Math.min(s1, s2)).toBeLessThan(1.8);
+      }
     }
   });
 
