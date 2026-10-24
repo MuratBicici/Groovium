@@ -177,19 +177,35 @@ export function Swap({ id, children }: { id: string; children: React.ReactNode }
   const box = useRef<HTMLDivElement | null>(null);
   const leaving = useRef(false);
   const arrived = useRef(false);
+  /**
+   * The slides out, kept so they can be undone once what replaced them is on
+   * screen. They hold their last frame — gone — and a row React carries over
+   * into the next answer, the same song found again or the heading in the same
+   * place, is the same element: left alone, it stayed gone, there to be
+   * pressed and not seen.
+   */
+  const going = useRef<Animation[]>([]);
+  const settle = () => {
+    for (const move of going.current) move.cancel();
+    going.current = [];
+  };
+  const shownId = useRef(shown.id);
+  useLayoutEffect(() => {
+    shownId.current = shown.id;
+  });
 
   const parts = () => [...(box.current?.querySelectorAll<HTMLElement>(SWAP_PARTS) ?? [])];
 
   // The change asked for: what is shown goes first.
   useLayoutEffect(() => {
     if (id === shown.id || leaving.current) return;
-    const going = parts();
-    if (prefersReducedMotion() || going.length === 0) {
+    const parting = parts();
+    if (prefersReducedMotion() || parting.length === 0) {
       setShown(latest.current);
       return;
     }
     leaving.current = true;
-    const moves = going.map((el, k) =>
+    const moves = parting.map((el, k) =>
       el.animate(
         [
           { opacity: 1, transform: 'none' },
@@ -203,14 +219,20 @@ export function Swap({ id, children }: { id: string; children: React.ReactNode }
         },
       ),
     );
+    going.current = moves;
     void Promise.allSettled(moves.map((m) => m.finished)).then(() => {
       leaving.current = false;
-      setShown(latest.current);
+      const next = latest.current;
+      // Typed back to what was already shown before it had gone: nothing new
+      // comes in, so it is simply shown again where it is.
+      if (next.id === shownId.current) settle();
+      setShown(next);
     });
   }, [id, shown.id]);
 
   // And what replaces it comes in.
   useLayoutEffect(() => {
+    settle();
     if (!arrived.current) {
       arrived.current = true;
       return;
