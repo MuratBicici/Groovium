@@ -263,14 +263,33 @@ function Sleeve({ url, eager }: { url: string; eager: boolean }) {
 
   useLayoutEffect(() => {
     const el = image.current;
-    if (!el || (el.complete && el.naturalWidth > 0)) return;
+    if (!el) return;
+    if (el.complete && el.naturalWidth > 0) {
+      // Here already — and shown, whatever an earlier run of this left on it.
+      el.style.opacity = '';
+      return;
+    }
     el.style.opacity = '0';
+    let live = true;
     const show = () => {
+      if (!live) return;
+      live = false;
       if (!prefersReducedMotion()) el.style.transition = `opacity ${SLEEVE_ARRIVES_MS}ms ease-out`;
       el.style.opacity = '1';
     };
     el.addEventListener('load', show, { once: true });
-    return () => el.removeEventListener('load', show);
+    // And asked directly, not only told. The load event alone left a sleeve
+    // hidden for good on the large best-match record in the search: the
+    // picture was there, loaded and full size, and the event that would have
+    // shown it never came to this listener — an eager picture can finish
+    // before React has put it on the page. A decode settles either way, so a
+    // picture that has arrived is shown however it arrived; one that fails
+    // leaves the brass label, as before.
+    el.decode().then(show, () => {});
+    return () => {
+      live = false;
+      el.removeEventListener('load', show);
+    };
   }, []);
 
   return (
