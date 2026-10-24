@@ -18,6 +18,7 @@ import { DiscLight } from './DiscLight';
 import { VinylDisc } from './VinylDisc';
 import { parseCssColour, type Rgb } from '@/core/utils/colour';
 import { FALLING_SPIN, glowing, meteorAt, METEOR_MS, meteorKeyframes } from './meteor';
+import { shake, SHOCK_SPEED } from './shockwave';
 
 /**
  * The flying disc: click a row, its record arcs up out of the list and lands
@@ -136,6 +137,9 @@ const JUST_LANDED_MS = 400;
  */
 const PendingContext = createContext<string | null>(null);
 
+/** Whether a meteor's shock is still going through the window; see `useShaking`. */
+const ShakingContext = createContext(false);
+
 export function useDiscFlight(): DiscFlightActions {
   return useContext(ActionsContext);
 }
@@ -143,6 +147,15 @@ export function useDiscFlight(): DiscFlightActions {
 /** The track whose disc is still in the air, so the platter can stay empty. */
 export function usePendingLanding(): string | null {
   return useContext(PendingContext);
+}
+
+/**
+ * Whether the shock of a meteor striking the deck is still running through the
+ * window, so what would repaint all of it — the colours turning to a new
+ * record's — can wait for it to pass.
+ */
+export function useShaking(): boolean {
+  return useContext(ShakingContext);
 }
 
 export function DiscFlightProvider({ children }: { children: React.ReactNode }) {
@@ -258,6 +271,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   return (
     <ActionsContext.Provider value={actions}>
       <PendingContext.Provider value={pendingTrackId}>
+        <ShakingContext.Provider value={impacts.length > 0}>
         {children}
 
         {/* z-10 — the disc-motion layer, above the stage and below the panels
@@ -312,6 +326,7 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
               />
             ))}
         </div>
+        </ShakingContext.Provider>
       </PendingContext.Provider>
     </ActionsContext.Provider>
   );
@@ -571,6 +586,14 @@ function FlyingDisc({
           ],
           { duration: SHAKE_MS, easing: 'ease-out' },
         );
+        // And the window takes the shock: everything in it pushed away from
+        // the deck as the ring from the strike goes by.
+        const shell = layerEl.parentElement;
+        const deck = platterEl.getBoundingClientRect();
+        if (shell) {
+          // Not the deck, which has its own shake, nor this record, still on it.
+          shake(shell, { x: deck.left + deck.width / 2, y: deck.top + deck.height / 2 }, [platterEl, layerEl], PLATTER_SIZE / 2);
+        }
       }
       // No re-measure here any more. This used to be the one moment the
       // destination was checked again; `follow` above has been keeping it right
@@ -775,14 +798,27 @@ function MeteorImpact({
       return { x: impact.x, y: impact.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 60 };
     });
     const tail = [...impact.tail];
+    // The ring runs out until it has crossed the whole window: to the corner
+    // furthest from the deck.
+    const room = layer?.getBoundingClientRect();
+    const farthest = room
+      ? Math.max(
+          Math.hypot(impact.x, impact.y),
+          Math.hypot(room.width - impact.x, impact.y),
+          Math.hypot(impact.x, room.height - impact.y),
+          Math.hypot(room.width - impact.x, room.height - impact.y),
+        )
+      : 1200;
+    const lasts = Math.max(IMPACT_MS, (farthest - PLATTER_SIZE / 2) / SHOCK_SPEED);
     const began = performance.now();
     let last = began;
     let frame = 0;
     const draw = (now: number) => {
       const seconds = Math.min(0.05, (now - last) / 1000);
       last = now;
-      const k = (now - began) / IMPACT_MS;
-      if (k >= 1) {
+      const since = now - began;
+      const k = since / IMPACT_MS;
+      if (since >= lasts) {
         onFaded(impact.key);
         return;
       }
@@ -793,19 +829,26 @@ function MeteorImpact({
       // At the width it had where it was, not at the deck's record's: drawn
       // at that, it was a great band across the window as it went.
       if (tail.length > 1) drawTail(context, canvas, tail, impact.colour);
-      // The ring.
-      const ring = Math.min(1, k / 0.66);
-      if (ring < 1) {
-        context.strokeStyle = withAlpha(impact.colour, (1 - ring) * 0.8);
-        context.lineWidth = 5 * (1 - ring) + 1;
+      // The shock: a ring running out across the whole window at the speed
+      // the pieces of the interface are pushed by it, fading as it goes.
+      const radius = PLATTER_SIZE / 2 + since * SHOCK_SPEED;
+      if (radius < farthest) {
+        const left = 1 - radius / farthest;
+        context.strokeStyle = withAlpha(impact.colour, 0.15 * left);
+        context.lineWidth = 18;
         context.beginPath();
-        context.arc(impact.x, impact.y, PLATTER_SIZE / 2 + 10 + ring * 90, 0, Math.PI * 2);
+        context.arc(impact.x, impact.y, Math.max(1, radius - 10), 0, Math.PI * 2);
+        context.stroke();
+        context.strokeStyle = withAlpha(impact.colour, 0.55 * left);
+        context.lineWidth = 3;
+        context.beginPath();
+        context.arc(impact.x, impact.y, radius, 0, Math.PI * 2);
         context.stroke();
       }
       // The sparks, falling as they fly.
-      const life = 1 - k;
+      const life = Math.max(0, 1 - k);
       context.fillStyle = withAlpha(DUST, life);
-      for (const spark of sparks) {
+      if (life > 0) for (const spark of sparks) {
         spark.x += spark.vx * seconds;
         spark.y += spark.vy * seconds;
         spark.vy += 420 * seconds;

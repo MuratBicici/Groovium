@@ -6,7 +6,7 @@ import { log } from '@/platform/log';
 import { useSettingsStore } from '@/core/settings/store';
 import { upcomingCovers, usePlayerStore } from '@/core/store';
 import { useHeldTrack } from './DiscHold';
-import { usePendingLanding } from './DiscFlight';
+import { usePendingLanding, useShaking } from './DiscFlight';
 
 /**
  * The palette, taken from whatever is on the deck.
@@ -55,7 +55,11 @@ export function CoverTheme() {
    * of every flight to a new song.
    */
   const landing = usePendingLanding();
-  const flying = landing !== null && landing === onDeck;
+  // And until the shock of its landing has gone through the window, which
+  // moves everything in it: the two at once were the heaviest second of a
+  // song change.
+  const shaking = useShaking();
+  const flying = (landing !== null && landing === onDeck) || shaking;
   /** The covers that could be on the deck next — see `upcomingCovers`. */
   const upcoming = usePlayerStore(upcomingCovers);
 
