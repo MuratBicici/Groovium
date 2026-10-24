@@ -511,6 +511,96 @@ export async function searchTracks(query: string): Promise<TrackMetadata[]> {
     .map(toTrackMetadata);
 }
 
+/** An album found on Spotify, as the search shows it and opens it. */
+export interface SpotifyAlbum {
+  id: string;
+  name: string;
+  artist: string;
+  /** The year it came out, when Spotify says. */
+  year?: string;
+  coverArtUrl?: string;
+  trackCount: number;
+}
+
+export interface ApiAlbum {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  images?: ApiImage[];
+  release_date?: string;
+  total_tracks?: number;
+}
+
+/** Map a Spotify album onto what the search shows. */
+export function toAlbum(album: ApiAlbum): SpotifyAlbum {
+  const found: SpotifyAlbum = {
+    id: album.id,
+    name: album.name,
+    artist: album.artists.map((a) => a.name).join(', ') || 'Unknown Artist',
+    trackCount: album.total_tracks ?? 0,
+  };
+  const year = /^\d{4}/.exec(album.release_date ?? '')?.[0];
+  if (year) found.year = year;
+  const cover = pickCover(album.images);
+  if (cover) found.coverArtUrl = cover;
+  return found;
+}
+
+interface CatalogueResponse extends SearchResponse {
+  albums?: { items: (ApiAlbum | null)[] };
+}
+
+/**
+ * Songs and albums for the search box, in one request.
+ *
+ * One rather than two because `/search` is the quota this app runs out of:
+ * asking for both kinds at once costs what asking for songs alone did. The
+ * station keeps using `searchTracks`, whose answers are a different request
+ * and remembered apart.
+ */
+export async function searchCatalogue(query: string): Promise<{ tracks: TrackMetadata[]; albums: SpotifyAlbum[] }> {
+  const trimmed = query.trim();
+  if (!trimmed) return { tracks: [], albums: [] };
+
+  const params = new URLSearchParams({
+    q: trimmed,
+    type: 'track,album',
+    limit: String(SEARCH_LIMIT),
+    market: HERE,
+  });
+  const data = await request<CatalogueResponse>(`/search?${params}`);
+  return {
+    tracks: (data?.tracks?.items ?? [])
+      .filter((track): track is ApiTrack => track !== null && !!track.uri)
+      .map(toTrackMetadata),
+    albums: (data?.albums?.items ?? [])
+      .filter((album): album is ApiAlbum => album !== null && !!album.id)
+      .map(toAlbum),
+  };
+}
+
+/** As many of an album's songs as one page holds, which is every song on nearly every album. */
+const ALBUM_PAGE = 50;
+
+/**
+ * An album's songs, ready to play.
+ *
+ * Spotify sends an album's songs without the album on them, so it is put back
+ * from what the search already showed — the cover each record is drawn with,
+ * and the name the deck says. Asked with the account's country, so what will
+ * not play here says so, as a song found by searching does.
+ */
+export async function albumTracks(album: SpotifyAlbum): Promise<TrackMetadata[]> {
+  const params = new URLSearchParams({ limit: String(ALBUM_PAGE), market: HERE });
+  const data = await request<{ items?: (ApiTrack | null)[] }>(
+    `/albums/${encodeURIComponent(album.id)}/tracks?${params}`,
+  );
+  const images = album.coverArtUrl ? [{ url: album.coverArtUrl, width: null }] : [];
+  return (data?.items ?? [])
+    .filter((track): track is ApiTrack => track !== null && !!track.uri)
+    .map((track) => toTrackMetadata({ ...track, album: { name: album.name, images } }));
+}
+
 // --- Finding music like other music -----------------------------------------
 
 /**

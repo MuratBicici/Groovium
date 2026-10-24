@@ -7,6 +7,7 @@ import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { LyricsMatchProvider } from '@/components/lyrics/LyricsMatch';
+import { SheetHost } from '@/components/SheetHost';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
 import { DiscHoldProvider, useCarryKind } from '@/components/player/DiscHold';
 import { Visualizer } from '@/components/player/Visualizer';
@@ -93,7 +94,7 @@ type Overlay = 'none' | keyof typeof PANEL_IDS;
  * | z-[5]  | The title bar, over the lyrics record under it  |
  * | z-10   | Disc motion: the flight layer and the ghost     |
  * | z-20   | Panels: Library, Playlists, Spotify             |
- * | z-30   | Modal sheets: playlist picker, station setup    |
+ * | z-30   | Modal sheets: playlist picker, station setup, the search |
  * | z-40   | The picker's confirmation, over its own sheet   |
  * | z-50   | The window's edge and its light, which nothing may cover |
  *
@@ -298,6 +299,10 @@ export default function App() {
     settingsReady,
     drawerSide,
   );
+  // The shell as an element rather than a ref, for what is drawn into it from
+  // inside a panel — the search — to be drawn again once it is there.
+  const [shellEl, setShellEl] = useState<HTMLElement | null>(null);
+  useEffect(() => setShellEl(shellRef.current), [shellRef]);
   // Files dragged over the window from outside: the record rises to take
   // them, a little larger and lit, and says where to let go where its title
   // was. Scaled and never moved — the record's centre is what its flights
@@ -501,6 +506,7 @@ export default function App() {
         settingsReady ? '' : 'invisible'
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
+      <SheetHost.Provider value={shellEl}>
       <PlaylistPickerProvider>
       <LyricsMatchProvider>
       <DiscFlightProvider>
@@ -792,6 +798,7 @@ export default function App() {
       </DiscFlightProvider>
       </LyricsMatchProvider>
       </PlaylistPickerProvider>
+      </SheetHost.Provider>
     </div>
   );
 }

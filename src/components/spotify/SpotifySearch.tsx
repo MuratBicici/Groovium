@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { searchTracks } from '@/core/providers/spotifyApi';
+import { searchCatalogue, type SpotifyAlbum } from '@/core/providers/spotifyApi';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { findIn } from '@/core/library/search';
+import { forgetSearch, recentSearches, rememberSearch } from '@/core/search/recent';
 import { errorText } from '@/core/utils/errorText';
 import { useT } from '@/core/i18n';
-import { CrateResult, Hint, ResultHeading, SearchBox, TrackResult, type Rect } from './SearchParts';
+import {
+  AlbumResult,
+  BestMatch,
+  CrateResult,
+  Hint,
+  RecentSearches,
+  ResultHeading,
+  Results,
+  SearchBox,
+  TrackResult,
+  type Rect,
+} from './SearchParts';
+import { SearchAlbum } from './SearchAlbum';
+import { useSearchBack } from './SearchLayer';
 
 /**
  * Wait for typing to settle before spending a request.
@@ -28,20 +42,18 @@ const DEBOUNCE_MS = 450;
 const SHORTEST_QUERY = 2;
 
 /**
- * Find a song on Spotify, or one of your own playlists there.
+ * Find a song or an album on Spotify, or one of your own playlists there.
  *
- * Songs are Spotify's whole catalogue, asked for. Playlists are only the ones on
- * the shelf below — yours and the ones you follow — found by name among what
- * the drawer has already loaded, so they answer as each letter is typed and cost
- * nothing. Albums and other people's playlists are not here: browsing those
- * belongs to Spotify's own client, and keeping music belongs to this app's
- * library and playlists.
+ * Songs and albums are Spotify's whole catalogue, asked for in one request.
+ * Playlists are only the ones on the shelf — yours and the ones you follow —
+ * found by name among what the drawer has already loaded, so they answer as
+ * each letter is typed and cost nothing. Other people's playlists are not
+ * here: browsing those belongs to Spotify's own client, and keeping music
+ * belongs to this app's library and playlists.
  *
- * This used to sit in the drawer permanently, sharing the height evenly with
- * the crates because both were `flex-1`. That meant a person who was not
- * searching gave up half the drawer to a box that said "type to find a song",
- * and a person who *was* searching read the results through a slot half the
- * height of the one they are read in now. It opens on request instead.
+ * An album opens here, in the search, rather than on the shelf: it is not one
+ * of yours, and nothing about it can be changed — it is a list of songs to
+ * play, and the way back from it is to the results it was found among.
  */
 interface SpotifySearchProps {
   /**
@@ -63,8 +75,11 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
   const t = useT();
   const [query, setQuery] = useState(opensWith ?? '');
   const [results, setResults] = useState<TrackMetadata[]>([]);
+  const [albums, setAlbums] = useState<SpotifyAlbum[]>([]);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [recent, setRecent] = useState(() => recentSearches('spotify'));
+  const [album, setAlbum] = useState<SpotifyAlbum | null>(null);
 
   const playSingle = usePlayerStore((s) => s.playSingle);
 
@@ -99,6 +114,7 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
     if (text.trim().length < SHORTEST_QUERY) {
       requestSeq.current += 1;
       setResults([]);
+      setAlbums([]);
       setProblem(null);
       setLoading(false);
       return;
@@ -108,12 +124,16 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
     setLoading(true);
     setProblem(null);
     try {
-      const found = await searchTracks(text);
-      if (seq === requestSeq.current) setResults(found);
+      const found = await searchCatalogue(text);
+      if (seq === requestSeq.current) {
+        setResults(found.tracks);
+        setAlbums(found.albums);
+      }
     } catch (err) {
       if (seq === requestSeq.current) {
         setProblem(errorText(err));
         setResults([]);
+        setAlbums([]);
       }
     } finally {
       if (seq === requestSeq.current) setLoading(false);
@@ -125,11 +145,32 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
     return () => clearTimeout(timer);
   }, [query, run]);
 
+  // Escape steps back out of an album before it closes the search.
+  const closeAlbum = useCallback(() => setAlbum(null), []);
+  useSearchBack(album ? closeAlbum : null);
+
+  /** A result was chosen: the search is worth offering again next time. */
+  const chose = () => {
+    rememberSearch('spotify', query);
+    onChosen();
+  };
+
+  if (album) {
+    return (
+      <SearchAlbum
+        album={album}
+        onBack={closeAlbum}
+        onPlayed={chose}
+      />
+    );
+  }
+
   const typed = query.trim().length > 0;
-  const nothing = !loading && results.length === 0 && lists.length === 0;
+  const nothing = !loading && results.length === 0 && albums.length === 0 && lists.length === 0;
+  const [best, ...songs] = results;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <SearchBox value={query} onChange={setQuery} placeholder={t('spotify.searchPlaceholder')} />
 
       {problem && (
@@ -138,43 +179,71 @@ export function SpotifySearch({ onChosen, opensWith }: SpotifySearchProps) {
         </p>
       )}
 
-      {/* No `groove-scroll-fade` here, or anywhere else in the drawer. That
-          fade works by painting the surface's own colour over the end of a
-          list, which is invisible on a panel with an opaque surface and is a
-          dark stripe here: the drawer has no surface, the visualiser is behind
-          it, and the one opaque thing in the whole column was the fade. */}
-      <ul className="min-h-0 flex-1 overflow-y-auto">
-        {nothing && <Hint>{typed ? t('spotify.nothingFound') : t('spotify.typeToFind')}</Hint>}
+      {!typed ? (
+        <RecentSearches
+          searches={recent}
+          hint={t('spotify.typeToFind')}
+          onPick={setQuery}
+          onForget={(q) => setRecent(forgetSearch('spotify', q))}
+        />
+      ) : (
+        // No `groove-scroll-fade` here: that fade paints the surface's own
+        // colour over the end of a list, which only works on a flat surface.
+        <Results
+          best={
+            best && (
+              <BestMatch
+                track={best}
+                onPlay={() => {
+                  chose();
+                  void playSingle(best);
+                }}
+              />
+            )
+          }
+        >
+          {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
+          {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
 
-        {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
-        {lists.map((playlist) => (
-          <CrateResult
-            key={playlist.id}
-            name={playlist.name}
-            cover={playlist.coverArtUrl}
-            trackCount={playlist.trackCount}
-            onOpen={(from: Rect) => {
-              onChosen();
-              void openCrate(playlist.id, from);
-            }}
-          />
-        ))}
+          {songs.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
+          {songs.map((track) => (
+            <TrackResult
+              key={track.id}
+              track={track}
+              onPlay={() => {
+                chose();
+                void playSingle(track);
+              }}
+            />
+          ))}
 
-        {(results.length > 0 || (loading && typed)) && lists.length > 0 && (
-          <ResultHeading>{t('search.songs')}</ResultHeading>
-        )}
-        {loading && results.length === 0 && <Hint>{t('spotify.searching')}</Hint>}
-        {results.map((track) => (
-          <TrackResult
-            key={track.id}
-            track={track}
-            onPlay={() => {
-              onChosen();
-              void playSingle(track);
-            }}
-          />
-        ))}
-      </ul>
+          {albums.length > 0 && <ResultHeading>{t('search.albums')}</ResultHeading>}
+          {albums.map((found) => (
+            <AlbumResult
+              key={found.id}
+              album={found}
+              onOpen={() => {
+                setRecent(rememberSearch('spotify', query));
+                setAlbum(found);
+              }}
+            />
+          ))}
+
+          {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
+          {lists.map((playlist) => (
+            <CrateResult
+              key={playlist.id}
+              name={playlist.name}
+              cover={playlist.coverArtUrl}
+              trackCount={playlist.trackCount}
+              onOpen={(from: Rect) => {
+                chose();
+                void openCrate(playlist.id, from);
+              }}
+            />
+          ))}
+        </Results>
+      )}
     </div>
   );
 }

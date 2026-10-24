@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { libraryTrackToMetadata, type LibraryTrack, type Playlist } from '@/core/library';
 import { findIn } from '@/core/library/search';
+import { forgetSearch, recentSearches, rememberSearch } from '@/core/search/recent';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import {
+  BestMatch,
   CrateResult,
   Hint,
+  RecentSearches,
   ResultHeading,
+  Results,
   SearchBox,
   TrackResult,
   type Rect,
@@ -48,6 +52,7 @@ export function LocalSearch({
 }) {
   const t = useT();
   const [query, setQuery] = useState(opensWith ?? '');
+  const [recent, setRecent] = useState(() => recentSearches('local'));
   const playFrom = usePlayerStore((s) => s.playFrom);
 
   const lists = useMemo(() => findIn(playlists, query, (p) => [p.name]), [playlists, query]);
@@ -60,47 +65,59 @@ export function LocalSearch({
   const typed = query.trim().length > 0;
   const nothing = songs.length === 0 && lists.length === 0;
 
+  /** A result was chosen: the search is worth offering again next time. */
+  const chose = () => {
+    rememberSearch('local', query);
+    onChosen();
+  };
+  // The library from this song, as pressing it on the shelf does: Next
+  // carries on through the library rather than stopping.
+  const play = (track: LibraryTrack) => {
+    chose();
+    const index = library.indexOf(track);
+    if (index >= 0) void playFrom('library', index);
+  };
+
+  const [best, ...rest] = shown;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <SearchBox value={query} onChange={setQuery} placeholder={t('library.searchPlaceholder')} />
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
-        {nothing && (
-          <Hint>{typed ? t('spotify.nothingFound') : t('library.typeToFind')}</Hint>
-        )}
+      {!typed ? (
+        <RecentSearches
+          searches={recent}
+          hint={t('library.typeToFind')}
+          onPick={setQuery}
+          onForget={(q) => setRecent(forgetSearch('local', q))}
+        />
+      ) : (
+        <Results best={best && <BestMatch track={libraryTrackToMetadata(best)} onPlay={() => play(best)} />}>
+          {nothing && <Hint>{t('spotify.nothingFound')}</Hint>}
 
-        {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
-        {lists.map((playlist) => (
-          <CrateResult
-            key={playlist.id}
-            name={playlist.name}
-            cover={coverOf(playlist)}
-            trackCount={playlist.items.length}
-            onOpen={(from) => {
-              onChosen();
-              onOpenPlaylist(playlist.id, from);
-            }}
-          />
-        ))}
+          {rest.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
+          {rest.map((track) => (
+            <TrackResult key={track.id} track={libraryTrackToMetadata(track)} onPlay={() => play(track)} />
+          ))}
+          {songs.length > shown.length && (
+            <Hint>{t('search.more', { count: songs.length - shown.length })}</Hint>
+          )}
 
-        {songs.length > 0 && lists.length > 0 && <ResultHeading>{t('search.songs')}</ResultHeading>}
-        {shown.map((track) => (
-          <TrackResult
-            key={track.id}
-            track={libraryTrackToMetadata(track)}
-            onPlay={() => {
-              onChosen();
-              // The library from this song, as pressing it on the shelf does:
-              // Next carries on through the library rather than stopping.
-              const index = library.indexOf(track);
-              if (index >= 0) void playFrom('library', index);
-            }}
-          />
-        ))}
-        {songs.length > shown.length && (
-          <Hint>{t('search.more', { count: songs.length - shown.length })}</Hint>
-        )}
-      </ul>
+          {lists.length > 0 && <ResultHeading>{t('search.playlists')}</ResultHeading>}
+          {lists.map((playlist) => (
+            <CrateResult
+              key={playlist.id}
+              name={playlist.name}
+              cover={coverOf(playlist)}
+              trackCount={playlist.items.length}
+              onOpen={(from) => {
+                chose();
+                onOpenPlaylist(playlist.id, from);
+              }}
+            />
+          ))}
+        </Results>
+      )}
     </div>
   );
 }

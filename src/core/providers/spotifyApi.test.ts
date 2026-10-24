@@ -593,3 +593,76 @@ describe('when Spotify succeeds without a body', () => {
   });
 });
 
+
+describe('albums in the search box', () => {
+  const track = (uri: string, more: object = {}) => ({ uri, name: 'Song', duration_ms: 1, artists: [{ id: 'a', name: 'Wren' }], ...more });
+  const album = (id: string, more: object = {}) => ({
+    id,
+    name: 'Northbound Static',
+    artists: [{ name: 'The Velvet Almanac' }, { name: 'Wren' }],
+    images: [{ url: 'small', width: 64 }, { url: 'big', width: 640 }, { url: 'mid', width: 300 }],
+    release_date: '2019-04-02',
+    total_tracks: 9,
+    ...more,
+  });
+
+  it('are asked for in the same request as the songs', async () => {
+    const { searchCatalogue } = await freshApi();
+    stubFetch([
+      answer(
+        200,
+        {},
+        JSON.stringify({
+          tracks: { items: [track('spotify:track:one'), null] },
+          albums: { items: [album('al1'), null, album('al2', { release_date: undefined, images: [] })] },
+        }),
+      ),
+    ]);
+    const found = await searchCatalogue('north');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('type=track%2Calbum');
+    expect(calls[0]).toContain('market=from_token');
+    expect(found.tracks.map((t) => t.id)).toEqual(['spotify:track:one']);
+    expect(found.albums).toEqual([
+      {
+        id: 'al1',
+        name: 'Northbound Static',
+        artist: 'The Velvet Almanac, Wren',
+        year: '2019',
+        coverArtUrl: 'mid',
+        trackCount: 9,
+      },
+      { id: 'al2', name: 'Northbound Static', artist: 'The Velvet Almanac, Wren', trackCount: 9 },
+    ]);
+  });
+
+  it('ask nothing for a search of nothing', async () => {
+    const { searchCatalogue } = await freshApi();
+    stubFetch([answer(200, {}, '{}')]);
+    await expect(searchCatalogue('  ')).resolves.toEqual({ tracks: [], albums: [] });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("open to their songs, carrying the album's name and cover, and saying which will not play", async () => {
+    const { albumTracks } = await freshApi();
+    stubFetch([
+      answer(
+        200,
+        {},
+        JSON.stringify({
+          items: [
+            track('spotify:track:one'),
+            track('spotify:track:two', { is_playable: false, restrictions: { reason: 'market' } }),
+          ],
+        }),
+      ),
+    ]);
+    const songs = await albumTracks({ id: 'al1', name: 'Northbound Static', artist: 'Wren', trackCount: 2, coverArtUrl: 'mid' });
+    expect(calls[0]).toContain('/albums/al1/tracks');
+    expect(calls[0]).toContain('market=from_token');
+    expect(songs.map((s) => [s.id, s.album, s.coverArtUrl, s.unplayable])).toEqual([
+      ['spotify:track:one', 'Northbound Static', 'mid', undefined],
+      ['spotify:track:two', 'Northbound Static', 'mid', 'market'],
+    ]);
+  });
+});

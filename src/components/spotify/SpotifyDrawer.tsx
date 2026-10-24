@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   account as fetchAccount,
   beginAuth,
@@ -11,7 +11,7 @@ import {
 import { usePlayerStore } from '@/core/store';
 import { describeAuthError } from '@/core/security/authErrors';
 import { SetupSteps } from './SetupSteps';
-import { SearchLayer, opensSearch } from './SearchLayer';
+import { SearchSheet, opensSearch } from './SearchLayer';
 import { SearchButton } from './SearchParts';
 import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
@@ -59,6 +59,9 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
    * started typing.
    */
   const [searching, setSearching] = useState<string | null>(null);
+  /** The magnifier, which the search grows out of and goes back into. */
+  const magnifier = useRef<HTMLButtonElement | null>(null);
+  const closeSearch = useCallback(() => setSearching(null), []);
   const signOutOfSpotify = usePlayerStore((s) => s.signOutOfSpotify);
   const forgetSpotify = usePlayerStore((s) => s.forgetSpotify);
   const [stage, setStage] = useState<Stage>('loading');
@@ -332,7 +335,12 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
         )}
         <div className="flex shrink-0 items-center gap-2">
           {online && stage === 'connected' && (
-            <SearchButton label={t('spotify.searchHeading')} onPress={() => setSearching('')} />
+            <SearchButton
+              ref={magnifier}
+              label={t('spotify.searchHeading')}
+              lifted={searching !== null}
+              onPress={() => setSearching('')}
+            />
           )}
           {online && stage === 'connected' && (
             <button
@@ -448,14 +456,17 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
         )}
       </div>
 
-      {/* Two layers over the drawer, never both: opening a crate is not
-          something that happens while a search is on screen, and the search
-          closes itself the moment a result is played. */}
-      {online && searching !== null && (
-        <SearchLayer heading={t('spotify.searchHeading')} onClose={() => setSearching(null)}>
-          <SpotifySearch opensWith={searching} onChosen={() => setSearching(null)} />
-        </SearchLayer>
-      )}
+      {/* The search over the window and a crate over the drawer, never both
+          at once: opening a playlist from the search closes the search, and
+          the crate grows out of the row it was found on. */}
+      <SearchSheet
+        open={online && searching !== null}
+        label={t('spotify.searchHeading')}
+        magnifier={magnifier}
+        onClose={closeSearch}
+      >
+        {online && searching !== null && <SpotifySearch opensWith={searching} onChosen={closeSearch} />}
+      </SearchSheet>
       {online && opened && openOrigin && (
         <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
       )}

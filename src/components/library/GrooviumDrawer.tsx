@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLibrary, usePlaylists, usePlayerStore } from '@/core/store';
 import {
   libraryTrackToMetadata,
@@ -13,7 +13,7 @@ import { RecordCard, RECORD_SIZE } from '@/components/spotify/RecordCard';
 import { Crate, NewCrate, useCrateCarry, type CrateFace } from '@/components/spotify/SpotifyCrates';
 import { COVER_FAILURES, CrateLayer, type CrateSource } from '@/components/spotify/OpenCrate';
 import { CoverCrop, SheetPresence, SongDetailsSheet } from '@/components/spotify/CrateSheets';
-import { SearchLayer, opensSearch } from '@/components/spotify/SearchLayer';
+import { SearchSheet, opensSearch } from '@/components/spotify/SearchLayer';
 import { SearchButton } from '@/components/spotify/SearchParts';
 import { LocalSearch } from './LocalSearch';
 import { useLyricsMatch } from '@/components/lyrics/LyricsMatch';
@@ -141,11 +141,15 @@ export function GrooviumDrawer({
    * empty when it was opened by the magnifier or Ctrl+F.
    */
   const [searching, setSearching] = useState<string | null>(null);
+  /** The magnifier, which the search grows out of and goes back into. */
+  const magnifier = useRef<HTMLButtonElement | null>(null);
 
   // Opened from the keyboard the way Spotify's is: Ctrl+F, or simply starting
   // to type at the drawer. Not while anything is already over the shelves — a
   // crate, a song's details, a question — since a letter typed there is not
   // the start of a search of what they cover.
+  const closeSearch = useCallback(() => setSearching(null), []);
+
   const covered =
     open !== null || editingSong !== null || pending !== null || offered !== null || confirmRemove !== null;
   useEffect(() => {
@@ -211,7 +215,12 @@ export function GrooviumDrawer({
       <div data-drawer-head className="flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         {switcher}
         <div className="flex shrink-0 items-center gap-2">
-          <SearchButton label={t('library.searchHeading')} onPress={() => setSearching('')} />
+          <SearchButton
+            ref={magnifier}
+            label={t('library.searchHeading')}
+            lifted={searching !== null}
+            onPress={() => setSearching('')}
+          />
           <CloseButton label={t('library.close')} onPress={onClose} />
         </div>
       </div>
@@ -390,18 +399,23 @@ export function GrooviumDrawer({
         )}
       </SheetPresence>
 
-      {searching !== null && (
-        <SearchLayer heading={t('library.searchHeading')} onClose={() => setSearching(null)}>
+      <SearchSheet
+        open={searching !== null}
+        label={t('library.searchHeading')}
+        magnifier={magnifier}
+        onClose={closeSearch}
+      >
+        {searching !== null && (
           <LocalSearch
             library={library}
             playlists={playlists}
             coverOf={(playlist) => faceOf(playlist, library).covers[0]}
             opensWith={searching}
             onOpenPlaylist={(playlistId, origin) => setOpen({ id: playlistId, origin })}
-            onChosen={() => setSearching(null)}
+            onChosen={closeSearch}
           />
-        </SearchLayer>
-      )}
+        )}
+      </SearchSheet>
       {opened && open && (
         <GrooviumCrate
           playlist={opened}

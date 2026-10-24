@@ -5,7 +5,7 @@ import { crates, mostPlayed, recentlyPlayed, tracks } from './catalogue';
  * Spotify's Web API, answered from the demo's collection.
  *
  * Only what the drawer reads: the account's playlists, what is in each, the
- * two spotlight rows, and search. Writes are agreed to and forgotten. Anything
+ * two spotlight rows, search, and an album opened from it. Writes are agreed to and forgotten. Anything
  * else is a 404, which every caller already knows how to take.
  */
 
@@ -37,6 +37,38 @@ function apiTrack(track: TrackMetadata, market: string | null = null) {
     artists: [{ id: `artist-${track.artist}`, name: track.artist }],
     album: { name: track.album, images },
     ...(market && { is_playable: !refused, ...(refused && { restrictions: { reason: 'market' } }) }),
+  };
+}
+
+/**
+ * The collection's Spotify songs gathered by album, as the search finds albums
+ * and opens them. The id is made from the album's name, which is unique here.
+ */
+function albums(): { id: string; name: string; artist: string; tracks: TrackMetadata[] }[] {
+  const byName = new Map<string, { id: string; name: string; artist: string; tracks: TrackMetadata[] }>();
+  for (const track of tracks().filter((t) => t.source === 'spotify')) {
+    const found = byName.get(track.album) ?? {
+      id: `demo-album-${track.album.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      name: track.album,
+      artist: track.artist,
+      tracks: [],
+    };
+    found.tracks.push(track);
+    byName.set(track.album, found);
+  }
+  return [...byName.values()];
+}
+
+/** An album as the Web API spells it in a search. */
+function apiAlbum(album: ReturnType<typeof albums>[number]) {
+  const cover = album.tracks[0]?.coverArtUrl;
+  return {
+    id: album.id,
+    name: album.name,
+    artists: [{ name: album.artist }],
+    images: cover ? [{ url: cover, width: 300, height: 300 }] : [],
+    release_date: '2021-05-14',
+    total_tracks: album.tracks.length,
   };
 }
 
@@ -122,7 +154,23 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
       const text = `${track.title} ${track.artist} ${track.album}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
-    return json({ tracks: page(found.map((track) => apiTrack(track, market)), url), artists: { items: [] } });
+    const types = (url.searchParams.get('type') ?? 'track').split(',');
+    const shelved = types.includes('album')
+      ? albums().filter((album) => words.every((word) => `${album.name} ${album.artist}`.toLowerCase().includes(word)))
+      : [];
+    return json({
+      tracks: page(found.map((track) => apiTrack(track, market)), url),
+      artists: { items: [] },
+      ...(types.includes('album') && { albums: page(shelved.map(apiAlbum), url) }),
+    });
+  }
+
+  const onAlbum = /^\/albums\/([^/]+)\/tracks$/.exec(path);
+  if (onAlbum) {
+    const album = albums().find((a) => a.id === decodeURIComponent(onAlbum[1] ?? ''));
+    if (!album) return json({ error: { status: 404, message: 'Not found' } }, 404);
+    // Without the album on each song, as the real one sends them.
+    return json(page(album.tracks.map((track) => ({ ...apiTrack(track, market), album: undefined })), url));
   }
 
   return json({ error: { status: 404, message: 'Not in the demo' } }, 404);
