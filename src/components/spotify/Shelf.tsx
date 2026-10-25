@@ -160,7 +160,7 @@ export function Shelf({
             goes above it as well, and a record that lifts on hover lifts
             upwards — with the padding all at the foot, the lift happened and
             nobody could see it. */}
-        <div ref={row} className="flex w-max gap-3.5 pt-0.5 pb-0.5">
+        <div ref={row} data-shelf-row className="flex w-max gap-3.5 pt-0.5 pb-0.5">
           {children}
         </div>
       </div>

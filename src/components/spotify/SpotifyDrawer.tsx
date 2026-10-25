@@ -17,6 +17,8 @@ import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
 import { GenreShelves, LikedShelf, RecentShelf } from './SpotifyHome';
+import { ArrangedShelves } from './ArrangedShelves';
+import { readOrder, writeOrder } from './arrange';
 import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
 import { RemoveSheet, SheetPresence } from './CrateSheets';
@@ -84,6 +86,13 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
    * one shelf and not the drawer.
    */
   const blocking = missing.filter((scope) => scope !== LIKED_SCOPE);
+  /** Whether the shelves are loose and being put in order — see `ArrangedShelves`. */
+  const [arranging, setArranging] = useState(false);
+  const [order, setOrder] = useState(() => readOrder(HOME_SHELVES));
+  const reorder = useCallback((next: string[]) => {
+    setOrder(next);
+    writeOrder(next);
+  }, []);
 
   const openId = useSpotifyPlaylistsStore((s) => s.openId);
   const openOrigin = useSpotifyPlaylistsStore((s) => s.openOrigin);
@@ -264,7 +273,9 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
   useEffect(() => {
     // Nor over an open crate: a letter typed there is not the start of a search
     // of the shelf it is covering.
-    if (!active || !online || stage !== 'connected' || searching !== null || openId !== null) return;
+    if (!active || !online || stage !== 'connected' || searching !== null || openId !== null || arranging) {
+      return;
+    }
 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -286,7 +297,24 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [active, online, stage, searching, openId]);
+  }, [active, online, stage, searching, openId, arranging]);
+
+  /**
+   * Escape puts the shelves back rather than closing the drawer: arranging is
+   * the thing being done, and it is what somebody pressing Escape means to
+   * stop. Caught before the drawer's own handler, as the search's is.
+   */
+  useEffect(() => {
+    if (!arranging) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setArranging(false);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [arranging]);
 
   return (
     <aside
@@ -334,12 +362,18 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
           </span>
         )}
         <div className="flex shrink-0 items-center gap-2">
+          {online && stage === 'connected' && blocking.length === 0 && (
+            <ArrangeButton arranging={arranging} onPress={() => setArranging((on) => !on)} />
+          )}
           {online && stage === 'connected' && (
             <SearchButton
               ref={magnifier}
               label={t('spotify.searchHeading')}
               lifted={searching !== null}
-              onPress={() => setSearching('')}
+              onPress={() => {
+                setArranging(false);
+                setSearching('');
+              }}
             />
           )}
           {/* Whose Spotify it is, and the way out of it, in one place. The name
@@ -424,14 +458,26 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
                 Search is not here any more. It was `flex-1` beside the crates,
                 which split the drawer's height evenly between a shelf somebody
                 is looking at and a box somebody is not — see `SearchLayer`. */}
+            {blocking.length === 0 && arranging && (
+              <p className="-mb-1 px-0.5 text-meta text-cream-400">{t('home.arrangeHint')}</p>
+            )}
             {blocking.length === 0 && (
-              <>
-                <RecentShelf />
-                <GenreShelves />
-                <LikedShelf allowed={!missing.includes(LIKED_SCOPE)} onAllow={() => void connect()} />
-                <SpotlightStrip which="top" />
-                <SpotifyCrates />
-              </>
+              <ArrangedShelves
+                arranging={arranging}
+                order={order}
+                onOrder={reorder}
+                items={[
+                  { id: 'recent', label: t('home.recent'), node: <RecentShelf /> },
+                  { id: 'genres', label: t('home.genresHeading'), node: <GenreShelves /> },
+                  {
+                    id: 'liked',
+                    label: t('home.liked'),
+                    node: <LikedShelf allowed={!missing.includes(LIKED_SCOPE)} onAllow={() => void connect()} />,
+                  },
+                  { id: 'top', label: t('spotlight.top'), node: <SpotlightStrip which="top" /> },
+                  { id: 'playlists', label: t('spotify.playlistsShelf'), node: <SpotifyCrates /> },
+                ]}
+              />
             )}
             {blocking.length > 0 && (
               <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">
@@ -528,6 +574,34 @@ function Offline() {
  * purpose rather than a word sitting among the icons waiting to be pressed by
  * accident — it asks first all the same.
  */
+/** The front page's shelves, in the order they come before anybody moves them. */
+const HOME_SHELVES = ['recent', 'genres', 'liked', 'top', 'playlists'];
+
+/**
+ * Loosens the shelves to be put in order, and fixes them again.
+ *
+ * A word rather than an icon: what it does is not a thing anyone has a
+ * picture for. Lit while arranging, so the way out is the brightest thing in
+ * the row.
+ */
+function ArrangeButton({ arranging, onPress }: { arranging: boolean; onPress: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      aria-pressed={arranging}
+      onClick={onPress}
+      className={`flex h-6 items-center rounded-full px-3 text-meta transition-colors ${
+        arranging
+          ? 'bg-brass-600 font-medium text-on-accent hover:bg-brass-500'
+          : 'groove-inset text-cream-400 ring-1 ring-[var(--color-edge)] hover:text-cream-100 hover:ring-brass-500/60'
+      }`}
+    >
+      {arranging ? t('home.done') : t('home.arrange')}
+    </button>
+  );
+}
+
 function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);

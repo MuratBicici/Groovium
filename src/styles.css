@@ -511,6 +511,69 @@ body {
 }
 
 /*
+ * Arranging the front page: the shelves have come loose.
+ *
+ * Each shelf wobbles barely, and each record on it a good deal more, on beats
+ * of their own — the user chose "very noticeable" for the records and a shelf
+ * that only just moves. The beats are spread by position rather than chosen at
+ * random, which CSS cannot do, and enough of them overlap that no two
+ * neighbours keep time.
+ */
+@keyframes groove-shelf-wobble {
+  from { transform: rotate(-0.15deg); }
+  to { transform: rotate(0.15deg); }
+}
+
+@keyframes groove-record-wobble {
+  from { transform: rotate(-3.5deg) translateY(0.6px); }
+  to { transform: rotate(3.5deg) translateY(-0.6px); }
+}
+
+.groove-arranging section {
+  animation: groove-shelf-wobble 0.38s ease-in-out infinite alternate;
+}
+.groove-arranging section:nth-of-type(2n) {
+  animation-duration: 0.42s;
+  animation-delay: -0.2s;
+}
+
+.groove-arranging [data-shelf-row] > * .groove-sleeve-body,
+.groove-arranging [data-shelf-row] > .groove-sleeve-body {
+  animation: groove-record-wobble 0.23s ease-in-out infinite alternate;
+}
+.groove-arranging [data-shelf-row] > :nth-child(2n) .groove-sleeve-body {
+  animation-duration: 0.27s;
+  animation-delay: -0.11s;
+}
+.groove-arranging [data-shelf-row] > :nth-child(3n) .groove-sleeve-body {
+  animation-duration: 0.21s;
+  animation-delay: -0.05s;
+}
+.groove-arranging [data-shelf-row] > :nth-child(5n + 1) .groove-sleeve-body {
+  animation-delay: -0.17s;
+}
+.groove-arranging [data-shelf-row] > :nth-child(7n + 3) .groove-sleeve-body {
+  animation-duration: 0.25s;
+}
+
+/* The one in the hand: held still, a little larger, and above the rest. */
+.groove-lifted {
+  scale: 1.02;
+  background: color-mix(in oklab, var(--color-brass-500) 14%, transparent);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.5);
+}
+.groove-lifted section {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-arranging section,
+  .groove-arranging .groove-sleeve-body {
+    animation: none !important;
+  }
+}
+
+/*
  * A sleeve lying on the shelf: the shadow it casts, record and all.
  *
  * A filter rather than a box shadow. The artwork is masked for the opening,
