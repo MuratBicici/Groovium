@@ -92,6 +92,7 @@
   --text-label: 9px;          /* uppercase section headings */
   --text-meta: 10px;          /* durations, buttons, secondary detail */
   --text-body: 11px;          /* row titles and prose */
+  --text-heading: 13px;       /* a shelf's name */
   --text-title: 15px;         /* the track that is playing */
 
   --text-body--line-height: 1.45;
@@ -483,19 +484,11 @@ body {
      obvious at the bottom — the card would fade in as you scrolled. Two solid
      shades a step above the darkest thing near them keeps a sleeve the same
      object wherever on the shelf it happens to be. */
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--color-shell-600) 50%, var(--color-shell-700)),
-    var(--color-shell-700)
-  );
-  /* No hairline ring around the box. A ring follows the card's border box and
-     the notch below is cut out of the artwork inside it, so the ring drew a
-     one-pixel wire straight across the opening. The card's edge is the shadow
-     and the printed face's own inset line instead. */
-  box-shadow: 0 4px 10px -5px rgb(0 0 0 / calc(0.7 * var(--shade)));
-  transition:
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 180ms ease;
+  /* No card under the sleeve any more. The name used to be printed on a card
+     below the artwork, which made a playlist a different object from a song
+     beside it; now both are a sleeve on the shelf with the name under it, on
+     the shelf itself, and the shadow is the sleeve's own (below). */
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .groove-sleeve:hover {
@@ -504,7 +497,32 @@ body {
      does not behave differently from the rest. */
   z-index: 1;
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -8px rgb(0 0 0 / calc(0.8 * var(--shade)));
+}
+
+/*
+ * The drawer's shelves, fading out at the foot of the window: a shelf cut
+ * square at the bottom edge looked like the last thing there was. Over the
+ * last stretch only, which is the list's own padding when it is scrolled to
+ * the end, so nothing at the end is ever faded.
+ */
+.groove-drawer-list {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+}
+
+/*
+ * A sleeve lying on the shelf: the shadow it casts, record and all.
+ *
+ * A filter rather than a box shadow. The artwork is masked for the opening,
+ * and a box shadow on it is masked with it; the shadow has to follow the
+ * sleeve's shape, notch included, and the record showing in the notch.
+ */
+.groove-sleeve-body {
+  filter: drop-shadow(0 4px 5px rgb(0 0 0 / calc(0.55 * var(--shade))));
+}
+.group:hover .groove-sleeve-body,
+.groove-sleeve:hover .groove-sleeve-body {
+  filter: drop-shadow(0 8px 9px rgb(0 0 0 / calc(0.65 * var(--shade))));
 }
 
 /*
@@ -522,7 +540,10 @@ body {
  * taken off above.
  */
 .groove-sleeve-art {
-  --notch: 36px;
+  /* A little over a third of the sleeve: the record shows, and the cover is
+     still most of the sleeve. At 36px on a 78px sleeve the cut took nearly
+     half the artwork. */
+  --notch: 28px;
   -webkit-mask-image: radial-gradient(
     circle var(--notch) at 100% 50%,
     transparent 0 calc(var(--notch) - 1px),

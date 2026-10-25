@@ -24,9 +24,15 @@ const EDGE_REPEAT_MS = 650;
 
 export function Shelf({
   heading,
+  count,
+  note,
   children,
 }: {
   heading: string;
+  /** How many are on it, said beside the name rather than inside it. */
+  count?: number;
+  /** A line under the name saying what the shelf is, where that is not obvious. */
+  note?: string;
   children: React.ReactNode;
 }) {
   const t = useT();
@@ -108,10 +114,14 @@ export function Shelf({
 
   return (
     <section className="flex shrink-0 flex-col" aria-label={heading}>
-      <div className="flex items-center justify-between gap-2 px-0.5 pb-1">
-        <span className="min-w-0 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-          {heading}
-        </span>
+      {/* The name as it is written, a size up from the songs under it, and the
+          count beside it rather than run into it with a dot. It was the same
+          small spaced capitals as every other word in the drawer that was not
+          a song, which is the type of a form, not of a shelf. */}
+      <div className="flex items-center gap-2 px-0.5 pb-1.5">
+        <h3 className="min-w-0 truncate text-heading font-semibold text-cream-50">{heading}</h3>
+        {count !== undefined && <span className="shrink-0 text-meta text-cream-400">{count}</span>}
+        <span className="flex-1" />
         {/* Nothing at all on a shelf that fits. A pair of arrows that can never
             do anything is furniture, and three rows of it is a lot of
             furniture. */}
@@ -127,6 +137,7 @@ export function Shelf({
           </div>
         )}
       </div>
+      {note && <p className="-mt-1 px-0.5 pb-1.5 text-meta leading-snug text-cream-400">{note}</p>}
       <div
         ref={rail}
         onScroll={measure}
@@ -134,7 +145,11 @@ export function Shelf({
         // No bar. The arrows are the control, the wheel still works, and a
         // scrollbar under every one of three rows is three grey lines across a
         // drawer that is mostly artwork.
-        style={{ scrollbarWidth: 'none' }}
+        //
+        // And fading out at whichever end there is more, so a row that runs on
+        // says so: cut off square at the drawer's edge, the last record looked
+        // like the last one there was.
+        style={{ scrollbarWidth: 'none', ...edgeFade(canGo(reach, 'left'), canGo(reach, 'right')) }}
       >
         {/* `w-max` so the row is as wide as what is on it. Left to the flex
             default it would be the scroller's width, there would be nothing to
@@ -145,12 +160,22 @@ export function Shelf({
             goes above it as well, and a record that lifts on hover lifts
             upwards — with the padding all at the foot, the lift happened and
             nobody could see it. */}
-        <div ref={row} className="flex w-max gap-2.5 pt-0.5 pb-0.5">
+        <div ref={row} className="flex w-max gap-3.5 pt-0.5 pb-0.5">
           {children}
         </div>
       </div>
     </section>
   );
+}
+
+/** How far the row fades at an end that has more beyond it. */
+const FADE_PX = 28;
+
+/** A mask that fades the row out at whichever ends have more past them. */
+function edgeFade(left: boolean, right: boolean): React.CSSProperties {
+  if (!left && !right) return {};
+  const mask = `linear-gradient(to right, ${left ? 'transparent' : '#000'} 0, #000 ${left ? FADE_PX : 0}px, #000 calc(100% - ${right ? FADE_PX : 0}px), ${right ? 'transparent' : '#000'} 100%)`;
+  return { maskImage: mask, WebkitMaskImage: mask };
 }
 
 function Arrow({
@@ -172,7 +197,7 @@ function Arrow({
       title={label}
       disabled={spent}
       onClick={() => onPress(way)}
-      className="flex h-3.5 w-3.5 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:pointer-events-none disabled:opacity-25"
+      className="flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/40 text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:pointer-events-none disabled:opacity-25"
     >
       <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none">
         <path

@@ -20,7 +20,7 @@ const DRAG_THRESHOLD = 5;
  * the drawer's height has two other rows in it. Wide enough that the artwork
  * is still the thing being read and the name under it is still a name.
  */
-export const CRATE_SIZE = 84;
+export const CRATE_SIZE = 78;
 
 /**
  * Putting a record into a crate on the shelf.
@@ -273,7 +273,7 @@ export function SpotifyCrates() {
           </button>
         </div>
       )}
-      <Shelf heading={t('panel.playlists')}>
+      <Shelf heading={t('spotify.playlistsShelf')}>
         {!error && (
           <NewCrate
             onCreate={async (name) => {
@@ -377,18 +377,8 @@ export function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boo
       className={`relative flex shrink-0 flex-col rounded-md ${working ? 'animate-pulse' : ''}`}
       style={{ width: CRATE_SIZE }}
     >
-      <button
-        type="button"
-        aria-label={t('spotify.newPlaylist')}
-        title={t('spotify.newPlaylist')}
-        onClick={() => setNaming(true)}
-        className="flex aspect-square w-full items-center justify-center rounded-md border border-dashed border-cream-400/40 text-cream-400 transition-colors hover:border-brass-400 hover:text-brass-400"
-      >
-        <svg viewBox="0 0 16 16" className="h-6 w-6" aria-hidden="true">
-          <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </button>
-      <span className="flex min-w-0 flex-col px-0.5 py-1 text-center">
+      <EmptySleeve label={t('spotify.newPlaylist')} onPress={() => setNaming(true)} />
+      <span className="mt-1.5 flex min-w-0 flex-col">
         {naming ? (
           <input
             type="text"
@@ -409,13 +399,39 @@ export function NewCrate({ onCreate }: { onCreate: (name: string) => Promise<boo
                 setNaming(false);
               }
             }}
-            className="w-full groove-inset rounded px-1 py-0.5 text-center text-meta text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
+            className="w-full groove-inset rounded px-1 py-0.5 text-body text-cream-50 outline-none ring-1 ring-[var(--color-edge)] focus:ring-brass-500"
           />
         ) : (
-          <span className="truncate text-meta text-cream-400">{t('spotify.newPlaylist')}</span>
+          <>
+            <span className="truncate text-body font-medium text-cream-50">{t('spotify.newPlaylist')}</span>
+            <span className="truncate text-meta text-cream-400">{t('spotify.newPlaylistHint')}</span>
+          </>
         )}
       </span>
     </div>
+  );
+}
+
+/**
+ * A sleeve with nothing in it yet, for starting something: a playlist, or
+ * bringing music in. The same size as every other sleeve on the shelf and
+ * named the same way underneath, so it is the first card of the row rather
+ * than a form put in front of it — it was a dashed box, which is what a form
+ * field looks like.
+ */
+export function EmptySleeve({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onPress}
+      className="flex aspect-square w-full items-center justify-center rounded-md bg-shell-900/35 text-brass-400 ring-1 ring-brass-500/35 transition-colors ring-inset hover:bg-shell-900/60 hover:ring-brass-400"
+    >
+      <svg viewBox="0 0 16 16" className="h-6 w-6" aria-hidden="true">
+        <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    </button>
   );
 }
 
@@ -663,7 +679,7 @@ export function Crate({
       <span ref={rim} aria-hidden="true" className="groove-rim absolute inset-0 rounded-md" />
       <span
         ref={art}
-        className={`relative aspect-square w-full ${away ? 'invisible' : ''}`}
+        className={`groove-sleeve-body relative aspect-square w-full ${away ? 'invisible' : ''}`}
       >
         {/* The record in the sleeve. Drawn before the print and therefore under
             it, so the only part of it anyone sees is the part in the opening —
@@ -687,7 +703,7 @@ export function Crate({
             <VinylDisc size={SLEEVE_RECORD} coverArtUrl={incoming.track.coverArtUrl} />
           </span>
         )}
-        <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900">
+        <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-md bg-shell-900">
           {face.covers.length >= 4 ? (
             // A playlist of Groovium's has no cover of its own: the first four
             // of its songs' make one, as a compilation's sleeve does.
@@ -731,14 +747,14 @@ export function Crate({
         )}
       </span>
       <span
-        className={`relative flex min-w-0 flex-col px-1.5 py-1 text-center transition-opacity duration-150 ${
+        className={`relative mt-1.5 flex min-w-0 flex-col transition-opacity duration-150 ${
           away ? 'opacity-0' : ''
         }`}
       >
-        <span className="truncate text-meta text-cream-100" title={face.name}>
+        <span className="truncate text-body font-medium text-cream-50" title={face.name}>
           {face.name}
         </span>
-        <span ref={countEl} className="truncate text-label text-cream-400">
+        <span ref={countEl} className="truncate text-meta text-cream-400">
           {t('spotify.trackCount', { count: face.trackCount })}
         </span>
       </span>

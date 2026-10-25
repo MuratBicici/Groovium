@@ -10,7 +10,7 @@ import {
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
 import { Shelf } from '@/components/spotify/Shelf';
 import { RecordCard, RECORD_SIZE } from '@/components/spotify/RecordCard';
-import { Crate, NewCrate, useCrateCarry, type CrateFace } from '@/components/spotify/SpotifyCrates';
+import { Crate, EmptySleeve, NewCrate, useCrateCarry, type CrateFace } from '@/components/spotify/SpotifyCrates';
 import { COVER_FAILURES, CrateLayer, type CrateSource } from '@/components/spotify/OpenCrate';
 import { CoverCrop, SheetPresence, SongDetailsSheet } from '@/components/spotify/CrateSheets';
 import { SearchSheet, opensSearch } from '@/components/spotify/SearchLayer';
@@ -268,13 +268,11 @@ export function GrooviumDrawer({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2">
-        <Shelf heading={t('library.onThisComputer', { count: copied.length })}>
+      <div className="groove-drawer-list flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-5">
+        <Shelf heading={t('library.onThisComputer')} count={copied.length}>
           <AddMusic onChoose={(which) => void choose(which)} />
           {library.length === 0 && (
-            <p className="max-w-[260px] self-center px-1 text-meta leading-relaxed text-cream-400/70">
-              {t('library.empty')}
-            </p>
+            <EmptyNote title={t('library.emptyTitle')}>{t('library.empty')}</EmptyNote>
           )}
           {copied.map(({ track, index }) => (
             <LocalRecord
@@ -288,7 +286,7 @@ export function GrooviumDrawer({
         </Shelf>
 
         {linked.length > 0 && (
-          <Shelf heading={t('library.linkedShelf', { count: linked.length })}>
+          <Shelf heading={t('library.linkedShelf')} count={linked.length} note={t('library.linkedShelfNote')}>
             {linked.map(({ track, index }) => (
               <LocalRecord
                 key={track.id}
@@ -310,9 +308,7 @@ export function GrooviumDrawer({
             }}
           />
           {playlists.length === 0 && (
-            <p className="max-w-[260px] self-center px-1 text-meta leading-relaxed text-cream-400/70">
-              {t('playlists.none')}
-            </p>
+            <EmptyNote title={t('playlists.noneTitle')}>{t('playlists.none')}</EmptyNote>
           )}
           {playlists.map((playlist) => (
             <Crate
@@ -497,31 +493,69 @@ function LocalRecord({
 }
 
 /** An empty sleeve at the start of the shelf, for bringing music in. */
+/**
+ * What an empty shelf says, beside the sleeve that starts it: what is missing,
+ * and in a line what to do about it. Level with the sleeve rather than loose
+ * in the row, and a heading rather than a paragraph run on at the size of a
+ * caption — it was the one thing on the shelf that read as left over.
+ */
+function EmptyNote({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex max-w-[300px] shrink-0 flex-col justify-center gap-0.5 pl-1" style={{ height: RECORD_SIZE }}>
+      <p className="text-body font-medium text-cream-100">{title}</p>
+      <p className="text-meta leading-snug text-cream-400">{children}</p>
+    </div>
+  );
+}
+
 function AddMusic({ onChoose }: { onChoose: (which: 'files' | 'folder') => void }) {
   const t = useT();
+  /** Pressed: the sleeve asks which, files or a folder, in its own square. */
+  const [asking, setAsking] = useState(false);
+  const pick = (which: 'files' | 'folder') => {
+    setAsking(false);
+    onChoose(which);
+  };
   return (
-    <div className="flex shrink-0 flex-col" style={{ width: RECORD_SIZE }}>
-      <div
-        className="flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-cream-400/40 px-1"
-        style={{ height: RECORD_SIZE }}
-      >
-        <button
-          type="button"
-          onClick={() => onChoose('files')}
-          className="w-full rounded-full bg-shell-700 px-1 py-0.5 text-label font-medium tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-brass-400"
+    <div
+      className="flex shrink-0 flex-col"
+      style={{ width: RECORD_SIZE }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setAsking(false);
+      }}
+    >
+      {asking ? (
+        <div
+          className="flex aspect-square w-full flex-col items-stretch justify-center gap-1 rounded-md bg-shell-900/60 px-1.5 ring-1 ring-brass-400 ring-inset"
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape') return;
+            // Taken, or the shell would close the whole drawer with it.
+            e.stopPropagation();
+            setAsking(false);
+          }}
         >
-          {t('library.files')}
-        </button>
-        <button
-          type="button"
-          onClick={() => onChoose('folder')}
-          className="w-full rounded-full bg-shell-700 px-1 py-0.5 text-label font-medium tracking-wide text-cream-200 uppercase transition-colors hover:bg-shell-600 hover:text-brass-400"
-        >
-          {t('library.folder')}
-        </button>
-      </div>
-      <span className="mt-1 truncate text-center text-meta text-cream-400">
-        {t('library.addMusic')}
+          <button
+            type="button"
+            autoFocus
+            onClick={() => pick('files')}
+            className="rounded-full bg-shell-700 px-1 py-0.5 text-meta font-medium text-cream-100 transition-colors hover:bg-shell-600 hover:text-brass-400"
+          >
+            {t('library.files')}
+          </button>
+          <button
+            type="button"
+            onClick={() => pick('folder')}
+            className="rounded-full bg-shell-700 px-1 py-0.5 text-meta font-medium text-cream-100 transition-colors hover:bg-shell-600 hover:text-brass-400"
+          >
+            {t('library.folder')}
+          </button>
+        </div>
+      ) : (
+        <EmptySleeve label={t('library.addMusic')} onPress={() => setAsking(true)} />
+      )}
+      <span className="mt-1.5 flex min-w-0 flex-col">
+        <span className="truncate text-body font-medium text-cream-50">{t('library.addMusic')}</span>
+        <span className="truncate text-meta text-cream-400">{t('library.addMusicHint')}</span>
       </span>
     </div>
   );

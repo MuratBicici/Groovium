@@ -314,15 +314,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
             word, and uppercasing under Turkish rules turned "Spotify" into
             "SPOTİFY". */}
         {switcher ? (
-          <span className="flex min-w-0 items-center gap-2">
-            {switcher}
-            {/* Whose Spotify it is, now that the brand is on the switch. */}
-            {stage === 'connected' && account && (
-              <span className="min-w-0 truncate text-label text-cream-400">
-                {account.displayName}
-              </span>
-            )}
-          </span>
+          <span className="flex min-w-0 items-center gap-2">{switcher}</span>
         ) : (
           <span
             lang="en"
@@ -342,14 +334,11 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
               onPress={() => setSearching('')}
             />
           )}
-          {online && stage === 'connected' && (
-            <button
-              type="button"
-              onClick={() => setAskingSignOut(true)}
-              className="text-label tracking-wide text-cream-400 uppercase transition-colors hover:text-brass-400"
-            >
-              {t('spotify.signOut')}
-            </button>
+          {/* Whose Spotify it is, and the way out of it, in one place. The name
+              was loose beside the switch and signing out was a word in capitals
+              among the icons; neither is something looked for often. */}
+          {online && stage === 'connected' && account && (
+            <AccountMenu name={account.displayName} onSignOut={() => setAskingSignOut(true)} />
           )}
           <button
             type="button"
@@ -412,7 +401,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
         )}
 
         {online && stage === 'connected' && (
-          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-2">
+          <div className="groove-drawer-list flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-5">
             {/* Three shelves, or the reason there are none. Nothing that
                 already worked is taken away to ask: search needs no scope at
                 all, and the old grant still plays music. Only the part that
@@ -516,6 +505,90 @@ function Offline() {
       </svg>
       <p className="text-body leading-relaxed text-cream-100">{t('spotify.offline')}</p>
       <p className="text-meta leading-relaxed text-cream-400">{t('spotify.offlineLocal')}</p>
+    </div>
+  );
+}
+
+/**
+ * Whose Spotify this is: the first letter of their name in a brass coin, and
+ * their name, and under it the way to sign out.
+ *
+ * A menu of one for now, which is still the right shape: the name says whose
+ * account the shelves are, and signing out is somewhere one goes to on
+ * purpose rather than a word sitting among the icons waiting to be pressed by
+ * accident — it asks first all the same.
+ */
+function AccountMenu({ name, onSignOut }: { name: string; onSignOut: () => void }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Taken, or the shell would close the whole drawer with it.
+      e.stopImmediatePropagation();
+      setOpen(false);
+    };
+    window.addEventListener('pointerdown', away, true);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      window.removeEventListener('pointerdown', away, true);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={t('spotify.account', { name })}
+        onClick={() => setOpen((was) => !was)}
+        className={`flex h-6 max-w-36 items-center gap-1.5 rounded-full py-0.5 pr-2 pl-0.5 text-meta text-cream-200 transition-colors ${
+          open ? 'bg-shell-600' : 'bg-shell-900/40 hover:bg-shell-600'
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brass-600 text-label font-semibold text-on-accent"
+        >
+          {name.trim().charAt(0).toLocaleUpperCase() || '♪'}
+        </span>
+        {/* Somebody's name, in whatever language it is in. */}
+        <span lang="" className="min-w-0 truncate">
+          {name}
+        </span>
+        <svg viewBox="0 0 10 10" className="h-2 w-2 shrink-0 text-cream-400" aria-hidden="true">
+          <path d="M2 3.5 5 6.5l3-3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-30 mt-1 min-w-36 rounded-md groove-surface p-1 ring-1 ring-[var(--color-edge)] shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onSignOut();
+            }}
+            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-cream-100 transition-colors hover:bg-shell-600"
+          >
+            <svg viewBox="0 0 12 12" className="h-3 w-3 text-cream-400" aria-hidden="true" fill="none">
+              <path d="M5 2H2.5v8H5M8 3.5 10.5 6 8 8.5M10.5 6H4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {t('spotify.signOut')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

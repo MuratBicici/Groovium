@@ -162,12 +162,15 @@ function Switcher({
           type="button"
           role="tab"
           aria-selected={tab === side.id}
-          // A brand, not a word: uppercased under Turkish rules "Spotify"
-          // would become "SPOTİFY". The local side is a word, and is left in
-          // the language it is written in.
+          // A brand, not a word: if anything ever uppercases it again, under
+          // Turkish rules "Spotify" would become "SPOTİFY". The local side is
+          // a word, and is left in the language it is written in.
           {...(side.brand && { lang: 'en' })}
           onClick={() => onChoose(side.id)}
-          className={`relative rounded-full px-3 py-0.5 text-center text-label font-medium tracking-[0.14em] uppercase transition-colors duration-200 ${
+          // As the words are written, not set in spaced capitals: the spaced
+          // capitals were the drawer's one typeface for everything that was
+          // not a song, and it is what made the header read as scaffolding.
+          className={`relative rounded-full px-3.5 py-1 text-center text-meta font-medium transition-colors duration-200 ${
             tab === side.id ? 'text-on-accent' : 'text-cream-400 hover:text-cream-100'
           }`}
         >

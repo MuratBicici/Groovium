@@ -166,8 +166,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'library.close': 'Kitaplığı kapat',
   'library.addFiles': 'Dosya Ekle',
   'library.addFolder': 'Klasör Ekle',
+  'library.emptyTitle': 'Henüz şarkı yok',
   'library.empty':
-    'Burada henüz bir şey yok. Başlamak için müzik ekleyin — şarkılar kopyalanarak alınır, böylece aslını taşısanız veya silseniz de çalmaya devam eder.',
+    'Başlamak için müzik ekleyin. Şarkılar kopyalanarak alınır; aslını taşısanız ya da silseniz de çalmaya devam eder.',
   'library.confirmImport': '{count} dosya ({size}) kitaplığınıza kopyalansın mı?',
   'library.duplicates': '{count} tanesi zaten ekli.',
   'library.link': 'Kopyalamadan ekle',
@@ -177,7 +178,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Kopyalamazsanız şarkılar bulundukları yerden çalar. Groovium kitaplığa eklenmemiş şarkılar için garanti vermez: dosya taşınır, adı değişir ya da silinirse çalmaz.',
   'library.allThere': 'Bunların hepsi ({count}) zaten ekli.',
   'library.droppedNothing': 'Bırakılanlarda ses dosyası yok.',
-  'library.linkedShelf': 'Bağlantılı · kitaplık dışında · {count}',
+  'library.linkedShelf': 'Bağlantılı şarkılar',
+  'library.linkedShelfNote': 'Kitaplığa kopyalanmadan, bulundukları yerden çalınıyorlar.',
   'library.missing': 'Dosya yok',
   'library.missingPlay': 'Bu şarkının dosyası artık yerinde değil: {path}',
   'library.copyMissing': 'Kopyalanamadı: dosya artık yerinde değil ({path}).',
@@ -193,9 +195,10 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'library.confirmRemove':
     'Bu şarkı kitaplığınızdan silinsin mi? Uygulamanın tuttuğu kopya kalıcı olarak kaldırılır.',
   'library.importing': '{total} şarkıdan {done}. ekleniyor',
-  'library.onThisComputer': 'Bu bilgisayarda · {count}',
+  'library.onThisComputer': 'Bu bilgisayarda',
   'library.lists': 'Groovium listeleri',
   'library.addMusic': 'Müzik ekle',
+  'library.addMusicHint': 'Dosya ya da klasör',
   'library.files': 'Dosya',
   'library.folder': 'Klasör',
   'library.sides': 'Kitaplık kaynağı',
@@ -205,6 +208,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'search.playlists': 'Çalma listeleri',
   'search.songs': 'Şarkılar',
   'search.more': '{count} sonuç daha var. Daraltmak için yazmaya devam edin.',
+  'search.open': 'Ara',
   'search.bestMatch': 'En iyi eşleşme',
   'search.albums': 'Albümler',
   'search.recent': 'Son aramalar',
@@ -237,7 +241,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'playlists.close': 'Çalma listelerini kapat',
   'playlists.emptyPlaylist':
     'Burada henüz bir şey yok. Kitaplığınızdan veya Spotify’dan şarkı ekleyin.',
-  'playlists.none': 'Henüz çalma listesi yok. Şarkıları bir arada tutmak için bir tane oluşturun.',
+  'playlists.noneTitle': 'Henüz listeniz yok',
+  'playlists.none': 'Şarkıları bir arada tutmak için bir liste oluşturun.',
   'playlists.newPlaceholder': 'Yeni çalma listesi',
   'playlists.unavailable': 'Bulunamadı',
   'playlists.removedFromLibrary': 'Kitaplıktan çıkarıldı',
@@ -259,6 +264,9 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
 
   'spotify.heading': 'Spotify · {name}',
   'spotify.signOut': 'Çıkış yap',
+  'spotify.playlistsShelf': 'Çalma listeleriniz',
+  'spotify.newPlaylistHint': 'Boş bir liste başlatın',
+  'spotify.account': 'Spotify hesabı: {name}',
   'spotify.signOutTitle': 'Spotify’dan çıkılsın mı?',
   'spotify.signOutBody':
     'Çalan Spotify şarkısı durur ve bu bilgisayarda tutulan çalma listesi kopyası silinir. Yeniden dinlemek için tekrar giriş yapmanız gerekir. Spotify’daki listeleriniz yerinde kalır.',
@@ -325,8 +333,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.writeFailed': 'Spotify bu değişikliği kaydetmedi. {reason}',
   'spotify.trackCount': '{count} şarkı',
 
-  'spotlight.recent': 'Son çalanlar',
-  'spotlight.top': 'En çok dinlediklerin',
+  'spotlight.recent': 'Son çalınanlar',
+  'spotlight.top': 'En çok dinledikleriniz',
   'spotlight.empty': 'Burada henüz bir şey yok. Bir şey çalın, burada görünür.',
   'spotlight.failed': 'Spotify’a ulaşılamadı. Yeniden denemek için basın.',
 

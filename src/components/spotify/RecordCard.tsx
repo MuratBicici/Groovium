@@ -8,20 +8,24 @@ import type { TrackMetadata } from '@/core/types';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { refuseUnplayable, UNPLAYABLE_LOOK, UnplayableTag } from './Unplayable';
 
-/** The record's diameter. The cell is this wide; the sleeve is square. */
-export const RECORD_SIZE = 70;
-const DISC_SIZE = RECORD_SIZE;
+/** The sleeve's side. The cell is this wide; the sleeve is square. */
+export const RECORD_SIZE = 78;
+/** The record in it, as a playlist's sleeve holds its own: `w-[92%]`. */
+const DISC_SIZE = Math.round(RECORD_SIZE * 0.92);
 
 /** How far the pointer travels before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 6;
 
 /**
- * One record on the shelf: sleeve, disc across it, and what it is underneath.
+ * One record on the shelf: its sleeve, the record in the sleeve's opening, and
+ * what it is underneath.
  *
- * The disc sits on the sleeve rather than in it. In a crate a record is
- * *inside* its cover and has to be pulled out, which is the crate's whole
- * gesture; there is no crate here, so there is nothing to pull it from and the
- * record simply lies on its sleeve the way one does on a shelf.
+ * The same sleeve a playlist is on. The record used to lie across the sleeve,
+ * which covered all of the cover but its corners, and a row of them read as a
+ * row of black circles; and the playlists beside them were a different card
+ * altogether. Now the cover is the whole sleeve, the record shows in the cut
+ * at its edge and slides out a little when the pointer comes, and every card
+ * in the drawer is the same object with its name under it.
  */
 export function RecordCard({
   track,
@@ -126,7 +130,7 @@ export function RecordCard({
     <button
       type="button"
       className="group relative shrink-0 text-left"
-      style={{ width: DISC_SIZE }}
+      style={{ width: RECORD_SIZE }}
       title={refused ? whyUnplayable(refused) : `${track.title} — ${track.artist}`}
       aria-label={away ? t('spotify.onDeck') : `${track.title} — ${track.artist}`}
       aria-disabled={refused ? true : undefined}
@@ -147,43 +151,45 @@ export function RecordCard({
         deliver(track);
       }}
     >
-      {refused && (
-        <span className="absolute inset-x-0 top-0 block" style={{ height: DISC_SIZE }}>
-          <UnplayableTag />
-        </span>
-      )}
       <span
-        className={`relative block w-full overflow-hidden rounded-md bg-shell-900 ${refused ? UNPLAYABLE_LOOK : ''}`}
-        style={{ height: DISC_SIZE }}
-      >
-        {track.coverArtUrl && (
-          <img
-            src={track.coverArtUrl}
-            // Asked the way every cover is — see `Sleeve` in VinylDisc.
-            crossOrigin="anonymous"
-            alt=""
-            loading="lazy"
-            draggable={false}
-            className="h-full w-full object-cover"
-          />
-        )}
-        <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
-      </span>
-      {/* Outside the sleeve's clip, so the record has somewhere to go when it
-          is lifted. `data-disc` is what the flight picks up and scales. */}
-      <span
-        ref={disc}
-        data-disc
-        className={`absolute top-0 left-0 transition-transform ${away ? 'invisible' : ''} ${
+        className={`groove-sleeve-body relative block w-full transition-transform duration-200 ${
           refused ? UNPLAYABLE_LOOK : 'group-hover:-translate-y-0.5'
         }`}
-        style={{ width: DISC_SIZE, height: DISC_SIZE }}
+        style={{ height: RECORD_SIZE }}
       >
-        <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
+        {/* The record, behind the sleeve and flush with its opening edge, so
+            all anyone sees of it is the crescent in the cut — until the
+            pointer comes, when it slides out a little. `data-disc` is what the
+            flight picks up and scales. */}
+        <span
+          ref={disc}
+          data-disc
+          className={`absolute right-0 transition-transform duration-200 ${away ? 'invisible' : ''} ${
+            refused ? '' : 'group-hover:translate-x-3'
+          }`}
+          style={{ top: (RECORD_SIZE - DISC_SIZE) / 2, width: DISC_SIZE, height: DISC_SIZE }}
+        >
+          <VinylDisc size={DISC_SIZE} coverArtUrl={track.coverArtUrl} />
+        </span>
+        <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-md bg-shell-900">
+          {track.coverArtUrl && (
+            <img
+              src={track.coverArtUrl}
+              // Asked the way every cover is — see `Sleeve` in VinylDisc.
+              crossOrigin="anonymous"
+              alt=""
+              loading="lazy"
+              draggable={false}
+              className="h-full w-full object-cover"
+            />
+          )}
+          <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
+        </span>
+        {refused && <UnplayableTag />}
       </span>
-      <span className={`relative mt-1 flex min-w-0 flex-col text-center ${refused ? UNPLAYABLE_LOOK : ''}`}>
-        <span className="truncate text-meta text-cream-100">{track.title}</span>
-        <span className="truncate text-label text-cream-400">{track.artist}</span>
+      <span className={`relative mt-1.5 flex min-w-0 flex-col ${refused ? UNPLAYABLE_LOOK : ''}`}>
+        <span className="truncate text-body font-medium text-cream-50">{track.title}</span>
+        <span className="truncate text-meta text-cream-400">{track.artist}</span>
       </span>
     </button>
   );

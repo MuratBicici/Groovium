@@ -106,11 +106,12 @@ export function SearchBox({
 }
 
 /**
- * The magnifier in a drawer's header that opens its search.
+ * What opens a drawer's search: a box in the header that says what it is and
+ * how to get there from the keyboard.
  *
- * Lifted off the header while the search is open — the search is what it
- * became, grown out of where it was — and back when the search has gone into
- * it again.
+ * It was a lone magnifier, which said neither. It is lifted off the header
+ * while the search is open — the search is what it became, grown out of where
+ * it was — and back when the search has gone into it again.
  */
 export function SearchButton({
   label,
@@ -123,6 +124,7 @@ export function SearchButton({
   lifted?: boolean;
   ref?: React.Ref<HTMLButtonElement>;
 }) {
+  const t = useT();
   return (
     <button
       ref={ref}
@@ -131,14 +133,18 @@ export function SearchButton({
       title={label}
       onClick={onPress}
       tabIndex={lifted ? -1 : undefined}
-      className={`flex h-5 w-5 items-center justify-center rounded-full text-cream-400 transition-[opacity,color,background-color] duration-200 hover:bg-shell-600 hover:text-cream-50 ${
+      className={`flex h-6 w-36 items-center gap-1.5 rounded-full groove-inset px-2.5 text-left text-meta text-cream-400 ring-1 ring-[var(--color-edge)] transition-[opacity,color,box-shadow] duration-200 hover:text-cream-100 hover:ring-brass-500/60 ${
         lifted ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
     >
-      <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true" fill="none">
+      <svg viewBox="0 0 12 12" className="h-3 w-3 shrink-0 text-brass-400" aria-hidden="true" fill="none">
         <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="1.4" />
         <path d="M7.6 7.6 10.5 10.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
+      <span className="min-w-0 flex-1 truncate">{t('search.open')}</span>
+      <kbd className="shrink-0 rounded px-1 font-sans text-label text-cream-400/80 ring-1 ring-[var(--color-edge)]">
+        Ctrl F
+      </kbd>
     </button>
   );
 }
