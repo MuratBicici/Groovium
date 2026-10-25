@@ -1,7 +1,10 @@
 import type { TrackMetadata } from '@/core/types';
 import { account } from '@/core/security/spotifyAuth';
-import { artistCounts, firstArtist, heard, lastHeard, type Heard } from '@/core/listening/history';
-import { genresOf, likedTracks, topArtists, tracksInGenre, type FiledArtist } from './spotifyApi';
+import { artistCounts, heard, lastHeard, type Heard } from '@/core/listening/history';
+import { artistTags, hasApiKey, tagTracks, type SimilarTrack, type Tag } from '@/core/station/lastfm';
+import { artistKey, matchKey, trackKey } from '@/core/station';
+import { log } from '@/platform/log';
+import { likedTracks, searchTracks, topArtists } from './spotifyApi';
 import { played, type Played } from './spotifySpotlight';
 
 /**
@@ -12,12 +15,11 @@ import { played, type Played } from './spotifySpotlight';
  * Spotify's laid together. A shelf for each of the few genres somebody plays
  * most, made once a day. And the songs they liked.
  *
- * The genre shelves are the expensive ones, and are built to be cheap anyway:
- * the genres come from `/me/top/artists`, which is not a search, and from a
- * handful of searches for artists heard here that Spotify's top list does not
- * mention, each remembered for good. Then two searches a shelf, once a day.
- * About ten searches a day in all, against a quota that runs out in the
- * hundreds.
+ * The genre shelves are the expensive ones. The genres are Last.fm's tags,
+ * which cost Spotify nothing, and the songs are found on Spotify by name: a
+ * few dozen searches on the day a shelf is first made, fewer after, since a
+ * song found once is remembered. Once a day, against a quota that runs out in
+ * the hundreds.
  */
 
 // --- Lately ------------------------------------------------------------------
@@ -81,67 +83,94 @@ export async function recentShelf(): Promise<Recent[]> {
 export const GENRE_SHELVES = 3;
 
 /** How many songs on each. */
-export const GENRE_SHOWN = 20;
+export const GENRE_SHOWN = 12;
 
 /** No more than this many songs by one artist on a genre shelf. */
 const PER_ARTIST = 2;
 
-/** Artists heard here but missing from Spotify's top list, looked up per day at most. */
-const LOOKUPS_PER_DAY = 3;
-
-/** How far into a genre's results a day may start: eight pages of ten. */
-const PAGES = 8;
+/** How many artists' tags make up somebody's taste. */
+const ARTISTS_WEIGHED = 12;
 
 /**
- * The genres somebody plays most, best first.
+ * Spotify searches one shelf may spend finding its songs.
  *
- * Two voices. Spotify's top artists, each worth a little less the further
- * down the list it is. And the app's own log, where an artist counts for how
- * often they were heard against whoever was heard most — weighted double,
- * because it is this app's listening the shelves are meant to be about, and
- * Spotify's list is a few weeks of everywhere.
+ * A little over the shelf's length, for the songs Spotify does not have under
+ * the name Last.fm gives. Each answer is kept (see `FOUND_KEY`), so a second
+ * day under the same tag costs less than the first.
+ */
+const SEARCHES_PER_SHELF = 16;
+
+/** How many of a tag's pages a day may start on. Fifty songs to a page. */
+const PAGES = 4;
+
+/** A tag weaker than this on an artist says little about them. Last.fm weighs from 0 to 100. */
+const WEAKEST_TAG = 10;
+
+/**
+ * Tags that say how somebody feels about an artist, or where they are from,
+ * rather than what the music is. "Daha çok seen live" is not a shelf.
+ */
+const NOT_A_GENRE = new Set([
+  'seen live', 'favorites', 'favourites', 'favorite', 'favourite', 'love', 'loved', 'awesome',
+  'beautiful', 'amazing', 'best', 'cool', 'good', 'great', 'my favorite', 'albums i own',
+  'female vocalists', 'male vocalists', 'female vocalist', 'male vocalist', 'female', 'male',
+  'spotify', 'under 2000 listeners', 'all', 'music', 'british', 'american', 'english', 'uk',
+  'usa', 'canadian', 'australian', 'german', 'french', 'swedish', 'norwegian', 'japanese',
+  'korean', 'turkish', 'turkey', 'irish', 'scottish', 'italian', 'spanish', 'dutch',
+]);
+
+/** Whether a tag names a kind of music rather than an opinion, a place, or the artist. */
+export function isGenre(tag: string, artist: string): boolean {
+  const name = tag.trim().toLowerCase();
+  return name.length > 1 && !NOT_A_GENRE.has(name) && name !== artist.trim().toLowerCase();
+}
+
+/**
+ * Whose taste this is, as artists with a weight each, heaviest first.
+ *
+ * Two voices. The app's own log, where an artist counts for how often they
+ * were heard against whoever was heard most — weighted double, because it is
+ * this app's listening the shelves are meant to be about. And Spotify's top
+ * artists, each worth a little less the further down the list it is, which
+ * is a few weeks of listening everywhere.
+ */
+export function weighArtists(
+  top: readonly string[],
+  counts: ReadonlyMap<string, number>,
+  howMany = ARTISTS_WEIGHED,
+): [string, number][] {
+  const weight = new Map<string, number>();
+  const add = (name: string, by: number) => {
+    const key = name.trim().toLowerCase();
+    if (key) weight.set(key, (weight.get(key) ?? 0) + by);
+  };
+  const most = Math.max(0, ...counts.values());
+  for (const [name, count] of counts) add(name, (2 * count) / most);
+  top.forEach((name, rank) => add(name, 1 - rank / (top.length + 1)));
+  return [...weight].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, howMany);
+}
+
+/**
+ * The genres somebody plays most, best first: each artist's tags, by how
+ * strongly Last.fm's listeners file them there and how much the artist weighs.
  */
 export function pickGenres(
-  top: readonly FiledArtist[],
-  counts: ReadonlyMap<string, number>,
-  known: ReadonlyMap<string, readonly string[]>,
+  artists: readonly (readonly [string, number])[],
+  tags: ReadonlyMap<string, readonly Tag[]>,
   howMany = GENRE_SHELVES,
 ): string[] {
   const score = new Map<string, number>();
-  const add = (genres: readonly string[], weight: number) => {
-    for (const genre of genres) score.set(genre, (score.get(genre) ?? 0) + weight);
-  };
-
-  top.forEach((artist, rank) => add(artist.genres, 1 - rank / (top.length + 1)));
-
-  const most = Math.max(0, ...counts.values());
-  const fromTop = new Map(top.map((artist) => [artist.name.toLowerCase(), artist.genres]));
-  for (const [name, count] of counts) {
-    add(fromTop.get(name) ?? known.get(name) ?? [], (2 * count) / most);
+  for (const [artist, weight] of artists) {
+    for (const tag of tags.get(artist) ?? []) {
+      if (tag.count < WEAKEST_TAG || !isGenre(tag.name, artist)) continue;
+      const name = tag.name.trim().toLowerCase();
+      score.set(name, (score.get(name) ?? 0) + (weight * tag.count) / 100);
+    }
   }
-
   return [...score]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, howMany)
     .map(([genre]) => genre);
-}
-
-/**
- * The artists worth looking up: heard here, most heard first, with no genres
- * known for them yet from either the top list or an earlier lookup.
- */
-export function needLookup(
-  top: readonly FiledArtist[],
-  counts: ReadonlyMap<string, number>,
-  known: ReadonlyMap<string, readonly string[]>,
-  howMany = LOOKUPS_PER_DAY,
-): string[] {
-  const inTop = new Set(top.map((artist) => artist.name.toLowerCase()));
-  return [...counts]
-    .filter(([name]) => !inTop.has(name) && !known.has(name))
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, howMany)
-    .map(([name]) => name);
 }
 
 /**
@@ -155,37 +184,58 @@ export function dayOf(now: number): string {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+/** A number from a string, the same every time. */
+function seedOf(text: string): number {
+  let hash = 0;
+  for (const char of text) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return Math.abs(hash);
+}
+
 /**
- * Where in a genre's results today's shelf starts.
+ * Which page of a tag today's shelf is taken from.
  *
  * The same all day, and different from one day to the next, so the shelf is
  * new each morning without being new each time the drawer opens.
  */
-export function startFor(genre: string, day: string): number {
-  let hash = 0;
-  for (const char of `${genre}|${day}`) hash = (hash * 31 + char.charCodeAt(0)) | 0;
-  return (Math.abs(hash) % PAGES) * 10;
+export function pageFor(genre: string, day: string): number {
+  return (seedOf(`${genre}|${day}`) % PAGES) + 1;
+}
+
+/** The same list in an order that holds for the day and changes with it. */
+export function dayOrder<T>(items: readonly T[], seed: string): T[] {
+  let state = seedOf(seed) || 1;
+  const next = () => {
+    state = (Math.imul(state, 1103515245) + 12345) & 0x7fffffff;
+    return state / 0x80000000;
+  };
+  const out = [...items];
+  for (let at = out.length - 1; at > 0; at--) {
+    const other = Math.floor(next() * (at + 1));
+    [out[at], out[other]] = [out[other] as T, out[at] as T];
+  }
+  return out;
 }
 
 /**
- * A genre shelf from what the search found: nothing heard here already,
- * nothing already on another shelf, and no artist taking over.
+ * What to look for on Spotify, in order: nothing already heard here, nothing
+ * twice, and no artist more than twice.
  */
-export function fillShelf(
-  found: readonly TrackMetadata[],
-  skip: ReadonlySet<string>,
-  howMany = GENRE_SHOWN,
-): TrackMetadata[] {
+export function worthLooking(
+  candidates: readonly SimilarTrack[],
+  heardKeys: ReadonlySet<string>,
+): SimilarTrack[] {
   const perArtist = new Map<string, number>();
-  const kept: TrackMetadata[] = [];
-  for (const track of found) {
-    if (kept.length >= howMany) break;
-    if (skip.has(track.id) || kept.some((k) => k.id === track.id)) continue;
-    const artist = firstArtist(track.artist);
+  const seen = new Set<string>();
+  const kept: SimilarTrack[] = [];
+  for (const candidate of candidates) {
+    const key = matchKey(candidate.artist, candidate.title);
+    if (heardKeys.has(key) || seen.has(key)) continue;
+    const artist = artistKey(candidate.artist);
     const already = perArtist.get(artist) ?? 0;
     if (already >= PER_ARTIST) continue;
     perArtist.set(artist, already + 1);
-    kept.push(track);
+    seen.add(key);
+    kept.push(candidate);
   }
   return kept;
 }
@@ -195,6 +245,9 @@ export interface GenreShelf {
   tracks: TrackMetadata[];
 }
 
+/** Why there are no genre shelves, when there are none. */
+export type NoShelves = 'no-key' | 'nothing-yet' | null;
+
 interface Saved {
   account: string | null;
   day: string;
@@ -202,7 +255,15 @@ interface Saved {
 }
 
 const SHELVES_KEY = 'groovium.genreShelves';
-const GENRES_KEY = 'groovium.artistGenres';
+const TAGS_KEY = 'groovium.artistTags';
+const FOUND_KEY = 'groovium.foundOnSpotify';
+
+/** An artist's tags move over months; a month is plenty. */
+const TAGS_KEPT_FOR_MS = 30 * 24 * 60 * 60_000;
+/** A song Spotify did not have under a name may arrive; asked again after a week. */
+const MISSING_KEPT_FOR_MS = 7 * 24 * 60 * 60_000;
+/** Songs found by name, kept. Past this the oldest go. */
+const FOUND_KEPT = 400;
 
 function readJson(key: string): unknown {
   try {
@@ -231,75 +292,142 @@ function readSaved(): Saved | null {
   return { account: typeof value.account === 'string' ? value.account : null, day: value.day, shelves };
 }
 
-/** Genres learned for artists by looking them up, kept for good: an artist's genres barely move. */
-function readKnown(): Map<string, string[]> {
-  const value = readJson(GENRES_KEY);
-  if (!value || typeof value !== 'object') return new Map();
-  return new Map(
-    Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, string[]] =>
-      Array.isArray(entry[1]),
-    ),
-  );
+/** Answers kept between launches, each with when it was had. */
+type Kept<T> = Record<string, { at: number; value: T }>;
+
+function readKept<T>(key: string): Kept<T> {
+  const value = readJson(key);
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Kept<T>) : {};
 }
 
 /** Counted up by signing out, so an answer in the air for the last person is not kept. */
 let era = 0;
-let building: Promise<GenreShelf[]> | null = null;
+let building: Promise<GenreAnswer> | null = null;
+
+export interface GenreAnswer {
+  shelves: GenreShelf[];
+  none: NoShelves;
+}
 
 /**
  * Today's genre shelves: made once a day and kept, or made now.
  *
- * A shelf whose searches failed is left off rather than kept empty, and a day
- * on which any failed is not saved, so the next opening tries again rather
- * than the drawer being a shelf short until tomorrow.
+ * The genres are Last.fm's tags for the artists somebody plays most — Spotify
+ * still has a field for genres and leaves it empty for most artists — and the
+ * songs are the ones most listened to under each tag, found on Spotify by
+ * name. Without a Last.fm key there are none, and the answer says why.
+ *
+ * A day on which a search was refused is not saved, so the next opening tries
+ * again rather than the drawer being a shelf short until tomorrow.
  */
-export function genreShelves(now = Date.now()): Promise<GenreShelf[]> {
+export function genreShelves(now = Date.now()): Promise<GenreAnswer> {
   building ??= make(now, era).finally(() => {
     building = null;
   });
   return building;
 }
 
-async function make(now: number, asked: number): Promise<GenreShelf[]> {
+async function make(now: number, asked: number): Promise<GenreAnswer> {
   const who = await account()
     .then((found) => found?.id ?? null)
     .catch(() => null);
   const day = dayOf(now);
   const saved = readSaved();
-  if (saved && saved.day === day && saved.account === who && saved.shelves.length > 0) return saved.shelves;
+  if (saved && saved.day === day && saved.account === who && saved.shelves.length > 0) {
+    return { shelves: saved.shelves, none: null };
+  }
 
-  const log = heard();
-  const counts = artistCounts(log, 'spotify');
-  const top = await topArtists();
-  const known = readKnown();
-  for (const name of needLookup(top, counts, known)) {
+  const listened = heard();
+  const top = await topArtists()
+    .then((artists) => artists.map((artist) => artist.name))
+    // Spotify's half of the taste is a help, not a need.
+    .catch(() => [] as string[]);
+  const artists = weighArtists(top, artistCounts(listened, 'spotify'));
+  if (artists.length === 0) return { shelves: [], none: 'nothing-yet' };
+
+  // Each artist's tags, from what was kept or from Last.fm.
+  const keptTags = readKept<Tag[]>(TAGS_KEY);
+  const tags = new Map<string, Tag[]>();
+  for (const [artist] of artists) {
+    const kept = keptTags[artist];
+    if (kept && now - kept.at < TAGS_KEPT_FOR_MS) {
+      tags.set(artist, kept.value);
+      continue;
+    }
     try {
-      known.set(name, await genresOf(name));
-    } catch {
-      // Not known, and not remembered as having none: asked again tomorrow.
+      const found = await artistTags(artist);
+      tags.set(artist, found);
+      keptTags[artist] = { at: now, value: found };
+    } catch (err) {
+      // Without a key every artist fails the same way; asking the other
+      // eleven would only fail eleven more times.
+      if (!(await hasApiKey().catch(() => false))) return { shelves: [], none: 'no-key' };
+      log('warn', 'home', 'could not read an artist’s tags', err);
     }
   }
-  if (asked === era) writeJson(GENRES_KEY, Object.fromEntries(known));
+  if (asked === era) writeJson(TAGS_KEY, keptTags);
 
-  const skip = new Set(log.map((entry) => entry.track.id));
+  const genres = pickGenres(artists, tags);
+  log('info', 'home', `genres: ${genres.join(', ') || 'none'}, from ${artists.length} artists`);
+  if (genres.length === 0) return { shelves: [], none: 'nothing-yet' };
+
+  const found = readKept<TrackMetadata | null>(FOUND_KEY);
+  const taken = new Set(listened.map((entry) => trackKey(entry.track)));
   const shelves: GenreShelf[] = [];
   let whole = true;
-  for (const genre of pickGenres(top, counts, known)) {
-    const start = startFor(genre, day);
+  for (const genre of genres) {
+    let candidates: SimilarTrack[];
     try {
-      let found = [...(await tracksInGenre(genre, start)), ...(await tracksInGenre(genre, start + 10))];
-      // A small genre may not run to the page today starts on.
-      if (found.length === 0 && start > 0) found = await tracksInGenre(genre, 0);
-      const tracks = fillShelf(found, skip);
-      for (const track of tracks) skip.add(track.id);
-      if (tracks.length > 0) shelves.push({ genre, tracks });
-    } catch {
+      candidates = await tagTracks(genre, pageFor(genre, day));
+      // A small tag may not run to the page today starts on.
+      if (candidates.length === 0) candidates = await tagTracks(genre, 1);
+    } catch (err) {
+      log('warn', 'home', `could not read the songs under ${genre}`, err);
       whole = false;
+      continue;
     }
+
+    const tracks: TrackMetadata[] = [];
+    let searches = SEARCHES_PER_SHELF;
+    for (const candidate of worthLooking(dayOrder(candidates, `${genre}|${day}`), taken)) {
+      if (tracks.length >= GENRE_SHOWN) break;
+      const key = matchKey(candidate.artist, candidate.title);
+      const known = found[key];
+      let track: TrackMetadata | null;
+      if (known && (known.value !== null || now - known.at < MISSING_KEPT_FOR_MS)) {
+        track = known.value;
+      } else {
+        if (searches <= 0) continue;
+        searches -= 1;
+        try {
+          const results = await searchTracks(`track:${candidate.title} artist:${candidate.artist}`);
+          // Spotify's field search is fuzzy: only the song asked for will do.
+          track = results.find((result) => trackKey(result) === key && !result.unplayable) ?? null;
+        } catch (err) {
+          // Refused: no more searching today, and the day is not saved.
+          log('warn', 'home', 'a search was refused', err);
+          whole = false;
+          break;
+        }
+        found[key] = { at: now, value: track };
+      }
+      if (track) {
+        tracks.push(track);
+        taken.add(key);
+      }
+    }
+    if (tracks.length > 0) shelves.push({ genre, tracks });
+    if (!whole) break;
   }
 
-  if (asked === era && whole) writeJson(SHELVES_KEY, { account: who, day, shelves } satisfies Saved);
-  return shelves;
+  if (asked === era) {
+    const newest = Object.entries(found)
+      .sort((a, b) => b[1].at - a[1].at)
+      .slice(0, FOUND_KEPT);
+    writeJson(FOUND_KEY, Object.fromEntries(newest));
+    if (whole) writeJson(SHELVES_KEY, { account: who, day, shelves } satisfies Saved);
+  }
+  return { shelves, none: shelves.length === 0 ? 'nothing-yet' : null };
 }
 
 // --- Liked -------------------------------------------------------------------
@@ -337,7 +465,8 @@ export function forgetHome(): void {
     localStorage.removeItem(SHELVES_KEY);
     // The artists looked up as well. Genres are no secret, but which artists
     // were worth looking up says who was being listened to.
-    localStorage.removeItem(GENRES_KEY);
+    localStorage.removeItem(TAGS_KEY);
+    localStorage.removeItem(FOUND_KEY);
   } catch {
     // Nothing to remove, or nowhere to remove it from.
   }

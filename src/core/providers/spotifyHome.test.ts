@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackMetadata } from '@/core/types';
 import type { Heard } from '@/core/listening/history';
-import { blendRecent, dayOf, fillShelf, needLookup, pickGenres, startFor } from './spotifyHome';
+import { matchKey } from '@/core/station';
+import { blendRecent, dayOf, dayOrder, isGenre, pageFor, pickGenres, weighArtists, worthLooking } from './spotifyHome';
 
 /**
  * The front page's shelves made from listening: how the two logs become one
@@ -58,68 +59,74 @@ describe('the recent shelf', () => {
 });
 
 describe('choosing the genres', () => {
-  const top = [
-    { name: 'Harbor Lights', genres: ['indie pop', 'dream pop'] },
-    { name: 'Cold Cartography', genres: ['shoegaze'] },
-    { name: 'Otis Fernwood', genres: ['folk'] },
-  ];
+  const tags = new Map([
+    ['harbor lights', [{ name: 'Indie Pop', count: 100 }, { name: 'seen live', count: 90 }, { name: 'dream pop', count: 60 }]],
+    ['cold cartography', [{ name: 'shoegaze', count: 100 }, { name: 'british', count: 80 }]],
+    ['otis fernwood', [{ name: 'folk', count: 100 }, { name: 'Otis Fernwood', count: 70 }, { name: 'rare', count: 5 }]],
+  ]);
 
-  it("follows Spotify's top artists when nothing was heard here", () => {
-    expect(pickGenres(top, new Map(), new Map(), 2)).toEqual(['dream pop', 'indie pop']);
+  it('weighs what was heard here double, and Spotify’s top list less down the list', () => {
+    const weighed = weighArtists(['Harbor Lights', 'Cold Cartography'], new Map([['otis fernwood', 4]]));
+    expect(weighed.map(([name]) => name)).toEqual(['otis fernwood', 'harbor lights', 'cold cartography']);
+    expect(weighed[0]?.[1]).toBe(2);
   });
 
-  it('leans towards what was heard here', () => {
-    const counts = new Map([['otis fernwood', 10]]);
-    expect(pickGenres(top, counts, new Map(), 1)).toEqual(['folk']);
+  it('adds both voices for an artist in both', () => {
+    const [[, weight] = ['', 0]] = weighArtists(['Harbor Lights'], new Map([['harbor lights', 1]]));
+    expect(weight).toBeCloseTo(3);
   });
 
-  it('uses genres looked up for artists Spotify did not mention', () => {
-    const counts = new Map([['sable harbour', 4]]);
-    const known = new Map([['sable harbour', ['post-rock']]]);
-    expect(pickGenres(top, counts, known, 1)).toEqual(['post-rock']);
+  it('takes the strongest tags of the heaviest artists', () => {
+    const artists: [string, number][] = [
+      ['harbor lights', 2],
+      ['cold cartography', 1],
+      ['otis fernwood', 0.5],
+    ];
+    expect(pickGenres(artists, tags)).toEqual(['indie pop', 'dream pop', 'shoegaze']);
   });
 
-  it('is nothing when nothing is filed under a genre', () => {
-    expect(pickGenres([{ name: 'X', genres: [] }], new Map([['y', 3]]), new Map())).toEqual([]);
+  it('leaves out opinions, places, the artist’s own name and weak tags', () => {
+    const genres = pickGenres([['otis fernwood', 1], ['harbor lights', 1], ['cold cartography', 1]], tags, 10);
+    expect(genres).not.toContain('seen live');
+    expect(genres).not.toContain('british');
+    expect(genres).not.toContain('otis fernwood');
+    expect(genres).not.toContain('rare');
+    expect(isGenre('Turkish Rock', 'x')).toBe(true);
+    expect(isGenre('turkish', 'x')).toBe(false);
   });
 
-  it('looks up only the most heard artists it knows nothing about, a few at a time', () => {
-    const counts = new Map([
-      ['harbor lights', 9],
-      ['sable harbour', 4],
-      ['lumen choir', 7],
-      ['june parade', 2],
-      ['known one', 8],
-    ]);
-    const known = new Map([['known one', ['folk']]]);
-    expect(needLookup(top, counts, known, 2)).toEqual(['lumen choir', 'sable harbour']);
+  it('is nothing when nobody is tagged', () => {
+    expect(pickGenres([['someone', 1]], new Map())).toEqual([]);
   });
 });
 
 describe('a genre shelf', () => {
-  it('starts somewhere new each day and stays put through it', () => {
+  it('starts on a new page each day and stays on it through the day', () => {
     const today = dayOf(new Date(2026, 9, 25, 9).getTime());
     const later = dayOf(new Date(2026, 9, 25, 23).getTime());
     const tomorrow = dayOf(new Date(2026, 9, 26, 9).getTime());
     expect(later).toBe(today);
     expect(tomorrow).not.toBe(today);
-    const starts = ['indie pop', 'shoegaze', 'folk'].map((genre) => startFor(genre, today));
-    for (const start of starts) {
-      expect(start % 10).toBe(0);
-      expect(start).toBeGreaterThanOrEqual(0);
-      expect(start).toBeLessThan(80);
+    for (const genre of ['indie pop', 'shoegaze', 'folk']) {
+      const page = pageFor(genre, today);
+      expect(page).toBeGreaterThanOrEqual(1);
+      expect(page).toBeLessThanOrEqual(4);
     }
   });
 
-  it('skips what was heard, repeats, and more than two by one artist', () => {
-    const found = [
-      song('1', 'A'),
-      song('2', 'A'),
-      song('3', 'A, B'),
-      song('heard', 'C'),
-      song('2', 'A'),
-      song('4', 'D'),
-    ];
-    expect(fillShelf(found, new Set(['heard'])).map((t) => t.id)).toEqual(['1', '2', '4']);
+  it('shuffles the same way all day and another way tomorrow', () => {
+    const items = Array.from({ length: 30 }, (_, at) => at);
+    expect(dayOrder(items, 'folk|2026-10-25')).toEqual(dayOrder(items, 'folk|2026-10-25'));
+    expect(dayOrder(items, 'folk|2026-10-25')).not.toEqual(dayOrder(items, 'folk|2026-10-26'));
+    expect([...dayOrder(items, 'x')].sort((a, b) => a - b)).toEqual(items);
+  });
+
+  it('looks for nothing heard, nothing twice, and no artist more than twice', () => {
+    const named = (title: string, artist: string) => ({ title, artist, matchScore: 1 });
+    const found = worthLooking(
+      [named('One', 'A'), named('Two', 'A'), named('Three', 'A'), named('Heard', 'B'), named('One', 'A'), named('Four', 'C')],
+      new Set([matchKey('B', 'Heard')]),
+    );
+    expect(found.map((c) => c.title)).toEqual(['One', 'Two', 'Four']);
   });
 });

@@ -1,11 +1,11 @@
 import { core } from '@tauri-apps/api';
 import type { InvokeArgs, InvokeOptions } from '@tauri-apps/api/core';
 import { APP_VERSION } from '@/core/version';
-import { localTracks } from './catalogue';
+import { localTracks, tracks } from './catalogue';
 import { demoLyrics, lyricsFor } from './lyrics';
 import type { LyricsCandidate, LyricsLookup, LyricsResult } from '@/core/lyrics/api';
 import type { LyricsTiming } from '@/core/lyrics/timing';
-import { DEMO_USER } from './spotifyApi';
+import { DEMO_USER, GENRES, genresOf } from './spotifyApi';
 
 /**
  * `@tauri-apps/api/core`, as the demo sees it.
@@ -236,6 +236,18 @@ const HANDLERS: Record<string, Handler> = {
   spotify_pick_cover_image: () => null,
 
   lastfm_has_api_key: () => false,
+  // Enough of Last.fm for the front page's genre shelves, without a key: the
+  // demo's artists' tags, and the collection's songs under each.
+  lastfm_artist_tags: (args) =>
+    genresOf(
+      Object.keys(GENRES).find((name) => name.toLowerCase() === String(args.artist ?? '').toLowerCase()) ?? '',
+    ).map((name, at) => ({ name, count: 100 - at * 30 })),
+  lastfm_tag_tracks: (args) =>
+    Number(args.page ?? 1) > 1
+      ? []
+      : tracks()
+          .filter((track) => track.source === 'spotify' && genresOf(track.artist).includes(String(args.tag ?? '')))
+          .map((track) => ({ title: track.title, artist: track.artist, matchScore: 1 })),
 
   // As in the app: a song from the library has what it was matched with, or
   // nothing; it is never looked for.

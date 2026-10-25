@@ -714,8 +714,8 @@ const filed = (artist: ApiArtist): FiledArtist => ({ name: artist.name, genres: 
  * The artists somebody has listened to most over the last few weeks, most first.
  *
  * Not a search, so not the quota that runs out: `/me/top` answered while
- * `/search` was refusing. It is the cheapest place there is to learn genres
- * from — fifty artists, each with Spotify's own labels, in one request.
+ * `/search` was refusing. The genres come along, though for most artists
+ * Spotify leaves them empty now — the front page asks Last.fm instead.
  */
 export async function topArtists(): Promise<FiledArtist[]> {
   const data = await request<{ items?: (ApiArtist | null)[] }>(
@@ -723,43 +723,6 @@ export async function topArtists(): Promise<FiledArtist[]> {
     { cache: 'no-store' },
   );
   return (data?.items ?? []).filter((a): a is ApiArtist => a !== null && !!a.id).map(filed);
-}
-
-/**
- * The genres of one artist, found by name.
- *
- * A search, and so spent sparingly by whoever calls it. Only an exact match
- * of the name is believed: the first result for a name nobody else has is that
- * artist, and the first result for one somebody else has as well is a guess.
- */
-export async function genresOf(name: string): Promise<string[]> {
-  const trimmed = name.trim();
-  if (!trimmed) return [];
-  const [found] = await searchArtists(`artist:"${trimmed.replace(/"/g, '')}"`, 1);
-  if (!found || found.name.toLowerCase() !== trimmed.toLowerCase()) return [];
-  return found.genres ?? [];
-}
-
-/**
- * Songs Spotify files under a genre, a page at a time.
- *
- * The genre filter matches artists' genres, which is what the shelf built on
- * it is about. Playable ones only: a shelf of what somebody might like is no
- * place for a song that will not start.
- */
-export async function tracksInGenre(genre: string, offset: number): Promise<TrackMetadata[]> {
-  const params = new URLSearchParams({
-    q: `genre:"${genre.replace(/"/g, '')}"`,
-    type: 'track',
-    limit: String(SEARCH_LIMIT),
-    offset: String(offset),
-    market: HERE,
-  });
-  const data = await request<SearchResponse>(`/search?${params}`);
-  return (data?.tracks?.items ?? [])
-    .filter((track): track is ApiTrack => track !== null && !!track.uri)
-    .map(toTrackMetadata)
-    .filter((track) => !track.unplayable);
 }
 
 /** The scope that reading somebody's liked songs needs. Asked for on its own; see `SpotifyDrawer`. */

@@ -471,6 +471,129 @@ pub async fn lastfm_artist_candidates(
     Ok(candidates)
 }
 
+// --- Tags --------------------------------------------------------------------
+
+/// How many of an artist's tags are worth having. Past ten they are noise.
+const ARTIST_TAG_LIMIT: usize = 10;
+
+/// How many songs one page of a tag holds.
+const TAG_TRACK_LIMIT: u32 = 50;
+
+/// One of the words Last.fm's listeners file an artist under, and how much.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Tag {
+    pub name: String,
+    /// Last.fm's weight for it on this artist, 0..100, the strongest at 100.
+    pub count: f64,
+}
+
+#[derive(Deserialize)]
+struct ArtistTagsResponse {
+    #[serde(rename = "toptags")]
+    top_tags: Option<ArtistTags>,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ArtistTags {
+    #[serde(default)]
+    tag: Vec<RawTag>,
+}
+
+#[derive(Deserialize)]
+struct RawTag {
+    name: String,
+    count: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct TagTracksResponse {
+    tracks: Option<TagTracks>,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TagTracks {
+    #[serde(default)]
+    track: Vec<RawTrack>,
+}
+
+/// What Last.fm's listeners call this artist's music, strongest first.
+///
+/// What the front page's genre shelves are made from. Spotify still has a
+/// field for genres and leaves it empty for most artists; Last.fm's tags are
+/// written by the people listening, and nearly every artist has some.
+#[tauri::command(async)]
+pub async fn lastfm_artist_tags(app: AppHandle, artist: String) -> Result<Vec<Tag>, String> {
+    let key = api_key(&app).ok_or_else(|| "No Last.fm API key configured.".to_string())?;
+    let name = artist.trim();
+    if name.is_empty() {
+        return Ok(Vec::new());
+    }
+    let url = endpoint(
+        &key,
+        &[("method", "artist.gettoptags"), ("artist", name), ("autocorrect", "1")],
+    )?;
+    parse_artist_tags(&fetch(url).await?)
+}
+
+fn parse_artist_tags(body: &str) -> Result<Vec<Tag>, String> {
+    let parsed: ArtistTagsResponse =
+        serde_json::from_str(body).map_err(|e| format!("Unexpected response from Last.fm: {e}"))?;
+    if let Some(message) = parsed.message {
+        return Err(format!("Last.fm: {message}"));
+    }
+    Ok(parsed
+        .top_tags
+        .map(|t| t.tag)
+        .unwrap_or_default()
+        .into_iter()
+        .take(ARTIST_TAG_LIMIT)
+        .map(|t| Tag { name: t.name, count: score_of(&t.count) })
+        .collect())
+}
+
+/// The songs most listened to under a tag, a page at a time.
+///
+/// Names only, in the same shape the station's lookups answer in, so finding
+/// them on Spotify is the station's own work done again.
+#[tauri::command(async)]
+pub async fn lastfm_tag_tracks(app: AppHandle, tag: String, page: u32) -> Result<Vec<SimilarTrack>, String> {
+    let key = api_key(&app).ok_or_else(|| "No Last.fm API key configured.".to_string())?;
+    let name = tag.trim();
+    if name.is_empty() {
+        return Ok(Vec::new());
+    }
+    let url = endpoint(
+        &key,
+        &[
+            ("method", "tag.gettoptracks"),
+            ("tag", name),
+            ("limit", &TAG_TRACK_LIMIT.to_string()),
+            ("page", &page.max(1).to_string()),
+        ],
+    )?;
+    parse_tag_tracks(&fetch(url).await?)
+}
+
+fn parse_tag_tracks(body: &str) -> Result<Vec<SimilarTrack>, String> {
+    let parsed: TagTracksResponse =
+        serde_json::from_str(body).map_err(|e| format!("Unexpected response from Last.fm: {e}"))?;
+    if let Some(message) = parsed.message {
+        return Err(format!("Last.fm: {message}"));
+    }
+    Ok(parsed
+        .tracks
+        .map(|t| t.track)
+        .unwrap_or_default()
+        .into_iter()
+        // A tag's list is a ranking, not a similarity: every song on it is
+        // equally a song of that tag.
+        .map(|t| SimilarTrack { title: t.name, artist: t.artist.name, match_score: 1.0 })
+        .collect())
+}
+
 /// How much of an artist's score a track keeps, given its rank among their top.
 fn rank_factor(rank: usize) -> f64 {
     (1.0 - RANK_PENALTY * rank as f64).max(0.1)
@@ -553,6 +676,46 @@ mod tests {
         assert_eq!(artists[0].name, "Neu!");
         assert_eq!(score_of(&artists[0].match_score), 1.0);
         assert_eq!(score_of(&artists[1].match_score), 0.83);
+    }
+
+    #[test]
+    fn parses_an_artist_tags_response() {
+        let body = r#"{"toptags":{"tag":[
+            {"name":"krautrock","count":100},
+            {"name":"electronic","count":"64"},
+            {"name":"seen live"}
+        ]}}"#;
+        let tags = parse_artist_tags(body).expect("parses");
+        assert_eq!(tags.len(), 3);
+        assert_eq!(tags[0], Tag { name: "krautrock".into(), count: 100.0 });
+        assert_eq!(tags[1].count, 64.0);
+        assert_eq!(tags[2].count, 0.0);
+    }
+
+    #[test]
+    fn keeps_only_an_artists_strongest_tags() {
+        let many: Vec<String> = (0..25).map(|i| format!(r#"{{"name":"t{i}","count":{}}}"#, 100 - i)).collect();
+        let body = format!(r#"{{"toptags":{{"tag":[{}]}}}}"#, many.join(","));
+        assert_eq!(parse_artist_tags(&body).expect("parses").len(), ARTIST_TAG_LIMIT);
+    }
+
+    #[test]
+    fn parses_a_tag_tracks_response() {
+        let body = r#"{"tracks":{"track":[
+            {"name":"Hallogallo","artist":{"name":"Neu!"}},
+            {"name":"Autobahn","artist":{"name":"Kraftwerk"}}
+        ]}}"#;
+        let tracks = parse_tag_tracks(body).expect("parses");
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[1].artist, "Kraftwerk");
+        assert_eq!(tracks[1].match_score, 1.0);
+    }
+
+    #[test]
+    fn a_tag_error_is_recognised() {
+        let body = r#"{"error":6,"message":"Tag not found"}"#;
+        assert!(parse_tag_tracks(body).is_err());
+        assert!(parse_artist_tags(r#"{"error":6,"message":"The artist you supplied could not be found"}"#).is_err());
     }
 
     #[test]

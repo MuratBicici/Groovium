@@ -168,6 +168,8 @@ fn main() {
             lastfm::lastfm_open_account,
             lastfm::lastfm_similar_tracks,
             lastfm::lastfm_artist_candidates,
+            lastfm::lastfm_artist_tags,
+            lastfm::lastfm_tag_tracks,
             lyrics::get_lyrics,
             lyrics::manual::search_lyrics,
             lyrics::manual::lyrics_candidate,

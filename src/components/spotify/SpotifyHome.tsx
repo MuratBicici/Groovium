@@ -4,7 +4,7 @@ import {
   genreShelves,
   likedShelf,
   recentShelf,
-  type GenreShelf,
+  type GenreAnswer,
   type Recent,
 } from '@/core/providers/spotifyHome';
 import { usePlayerStore } from '@/core/store';
@@ -92,22 +92,32 @@ const opening = (genre: string) => genre.charAt(0).toLocaleUpperCase('en') + gen
  * A shelf for each of the genres somebody plays most, new every day.
  *
  * Nothing at all while there is nothing to say: no listening to go on yet, or
- * Spotify filing none of it under a genre. A front page with an empty shelf
+ * none of it tagged on Last.fm. A front page with an empty shelf
  * on it apologising for itself is worse than one shelf fewer.
  */
 export function GenreShelves() {
   const t = useT();
   const playSingle = usePlayerStore((s) => s.playSingle);
-  const { shown } = useAnswer<GenreShelf[]>(genreShelves);
+  const { shown } = useAnswer<GenreAnswer>(genreShelves);
 
   // Not even a waiting shelf: what it would be called, and whether there
   // will be one, is what is being waited for. Made once a day and kept, so
   // this is a moment once a morning.
   if (shown === undefined || failed(shown)) return null;
 
+  // The one reason worth saying: the rest of the page cannot hint that a key
+  // would bring these, and nobody would go looking for shelves they never saw.
+  if (shown.value.none === 'no-key') {
+    return (
+      <Shelf heading={t('home.genresHeading')}>
+        <p className="max-w-[420px] py-2 pl-0.5 text-meta leading-snug text-cream-400">{t('home.genresNeedKey')}</p>
+      </Shelf>
+    );
+  }
+
   return (
     <>
-      {shown.value.map(({ genre, tracks }, at) => (
+      {shown.value.shelves.map(({ genre, tracks }, at) => (
         <Shelf
           key={genre}
           heading={t(GENRE_HEADINGS[at % GENRE_HEADINGS.length] ?? 'home.genre0', {

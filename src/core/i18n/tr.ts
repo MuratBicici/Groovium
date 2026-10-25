@@ -343,6 +343,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'home.genre0': 'Daha çok {genre}',
   'home.genre1': '{Genre} sevenlere',
   'home.genre2': 'Bugün için {genre}',
+  'home.genresHeading': 'Sizin için seçilenler',
+  'home.genresNeedKey': 'En çok dinlediğiniz türlerin rafları Last.fm’den gelir. Burada görmek için Ayarlar › Bağlantılar’dan bir Last.fm API anahtarı ekleyin.',
   'home.genreNote': 'Dinlediklerinize göre seçilir, her gün yenilenir.',
   'home.liked': 'Beğendiğiniz şarkılar',
   'home.likedEmpty': 'Spotify’da beğendiğiniz şarkılar burada görünür.',

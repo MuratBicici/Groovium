@@ -74,10 +74,11 @@ function apiAlbum(album: ReturnType<typeof albums>[number]) {
 }
 
 /**
- * The genres Spotify would file the demo's artists under, so the front page's
- * genre shelves have something to be made of. Invented, like the artists.
+ * What the demo's artists are filed under — by Last.fm's listeners, for the
+ * front page's genre shelves (see `tauriCore`), and as Spotify's genres on
+ * the top artists. Invented, like the artists.
  */
-const GENRES: Record<string, string[]> = {
+export const GENRES: Record<string, string[]> = {
   'Harbor Lights': ['indie pop', 'dream pop'],
   'The Velvet Almanac': ['dream pop', 'shoegaze'],
   'Mira Solenne': ['indie pop', 'art pop'],
@@ -92,7 +93,7 @@ const GENRES: Record<string, string[]> = {
   'Sable Harbour': ['post-rock', 'shoegaze'],
 };
 
-const genresOf = (artist: string) => GENRES[artist] ?? [];
+export const genresOf = (artist: string) => GENRES[artist] ?? [];
 
 /** An artist as the Web API spells it, genres and all. */
 function apiArtist(name: string) {
@@ -196,16 +197,6 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   if (path === '/search') {
     const q = url.searchParams.get('q') ?? '';
     const types = (url.searchParams.get('type') ?? 'track').split(',');
-    const genre = /^genre:"([^"]*)"$/.exec(q)?.[1];
-    if (genre !== undefined) {
-      const filed = tracks().filter((track) => track.source === 'spotify' && genresOf(track.artist).includes(genre));
-      return json({ tracks: page(filed.map((track) => apiTrack(track, market)), url) });
-    }
-    const named = /^artist:"([^"]*)"$/.exec(q)?.[1];
-    if (named !== undefined && types.includes('artist')) {
-      const found = Object.keys(GENRES).filter((name) => name.toLowerCase() === named.toLowerCase());
-      return json({ artists: { items: found.map(apiArtist) } });
-    }
     const words = q
       .toLowerCase()
       .replace(/\b(track|artist|album):/g, ' ')

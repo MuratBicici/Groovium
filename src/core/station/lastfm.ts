@@ -58,3 +58,21 @@ export async function artistCandidates(artist: string): Promise<SimilarTrack[]> 
   if (!isTauri()) return [];
   return invoke<SimilarTrack[]>('lastfm_artist_candidates', { artist });
 }
+
+/** A word Last.fm's listeners file an artist under, and how strongly (0..100). */
+export interface Tag {
+  name: string;
+  count: number;
+}
+
+/** What Last.fm's listeners call this artist's music, strongest first. */
+export async function artistTags(artist: string): Promise<Tag[]> {
+  if (!isTauri()) return [];
+  return invoke<Tag[]>('lastfm_artist_tags', { artist });
+}
+
+/** The songs most listened to under a tag, fifty to a page. */
+export async function tagTracks(tag: string, page: number): Promise<SimilarTrack[]> {
+  if (!isTauri()) return [];
+  return invoke<SimilarTrack[]>('lastfm_tag_tracks', { tag, page });
+}
