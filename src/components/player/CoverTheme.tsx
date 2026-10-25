@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { knownPalette, readCover, tryAgainIn } from '@/core/theme/readCover';
 import { preloadCovers } from '@/core/theme/coverStore';
 import type { CoverPalette } from '@/core/theme/fromCover';
@@ -30,7 +30,26 @@ import { usePendingLanding, useShaking } from './DiscFlight';
  */
 export function CoverTheme() {
   const on = useSettingsStore((s) => s.themeFromCover);
-  const setCoverPalette = useSettingsStore((s) => s.setCoverPalette);
+  const setPalette = useSettingsStore((s) => s.setCoverPalette);
+  /**
+   * The record's colours put on the window slowly, as the listener asked: over
+   * `RECORD_FADE_MS` rather than the quarter second a theme chosen by hand
+   * fades in. The slower fade is the stylesheet's, under `data-palette`, and
+   * is taken off again once this one has run, so a theme picked straight
+   * afterwards is quick again.
+   */
+  const slowly = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const setCoverPalette = useCallback(
+    (palette: CoverPalette | null) => {
+      const root = document.documentElement;
+      root.dataset.palette = 'record';
+      clearTimeout(slowly.current);
+      slowly.current = setTimeout(() => delete root.dataset.palette, RECORD_FADE_MS + 100);
+      setPalette(palette);
+    },
+    [setPalette],
+  );
+  useEffect(() => () => clearTimeout(slowly.current), []);
   // What is on the deck, which with nothing playing is what is arriving on it:
   // the same record `DiskPlatter` draws, so the colours arrive with the picture.
   const onDeckTrack = usePlayerStore((s) => s.currentTrack ?? s.starting);
@@ -125,7 +144,12 @@ export function CoverTheme() {
     // Switched off, nothing with a sleeve on the deck, or the record that was
     // on it is in somebody's hand. In each case the palette that was chosen is
     // the one that should be showing.
-    if (!on || !cover || inHand) {
+    // Turned off by hand: the chosen theme back at the quick fade a choice gets.
+    if (!on) {
+      setPalette(null);
+      return;
+    }
+    if (!cover || inHand) {
       setCoverPalette(null);
       return;
     }
@@ -179,13 +203,16 @@ export function CoverTheme() {
       alive = false;
       clearTimeout(soon);
     };
-  }, [on, cover, onDeck, inHand, flying, attempt, setCoverPalette]);
+  }, [on, cover, onDeck, inHand, flying, attempt, setCoverPalette, setPalette]);
 
   return null;
 }
 
 /** A cover slower than this to be ready is worth a line in the log. */
 const SLOW_MS = 1000;
+
+/** How long a record's colours take to come over the window: `data-palette='record'` in styles.css. */
+const RECORD_FADE_MS = 1500;
 
 /**
  * Say which colours a record got.
