@@ -16,6 +16,8 @@ import { SearchButton } from './SearchParts';
 import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
+import { GenreShelves, LikedShelf, RecentShelf } from './SpotifyHome';
+import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
 import { RemoveSheet, SheetPresence } from './CrateSheets';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
@@ -76,6 +78,12 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
    * more say so, where they would otherwise be.
    */
   const [missing, setMissing] = useState<string[]>([]);
+  /**
+   * The ones whose absence empties the page. Liked songs are not among them:
+   * that shelf asks in its own place, so a grant from before it arrived costs
+   * one shelf and not the drawer.
+   */
+  const blocking = missing.filter((scope) => scope !== LIKED_SCOPE);
 
   const openId = useSpotifyPlaylistsStore((s) => s.openId);
   const openOrigin = useSpotifyPlaylistsStore((s) => s.openOrigin);
@@ -402,28 +410,30 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
 
         {online && stage === 'connected' && (
           <div className="groove-drawer-list flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-5">
-            {/* Three shelves, or the reason there are none. Nothing that
+            {/* The shelves, or the reason there are none. Nothing that
                 already worked is taken away to ask: search needs no scope at
                 all, and the old grant still plays music. Only the part that
                 cannot be built without permission says that it needs some.
 
-                All three are rows of the same shape, which is the whole of the
-                change. Two of them used to be one row with a switch on it, and
-                the third was a wall of sleeves that took whatever height was
-                left — so the drawer read as a shelf sitting on top of a
-                cupboard. Now it reads as a shelf of records three rows high.
-
-                It scrolls, though the three are sized not to need it. What
-                needs it is the row of reasons that appears above them when
-                something has gone wrong.
+                Every one is a row of the same shape. What was heard lately
+                comes first, then what it suggests, then what somebody chose to
+                keep — liked songs, the most played, their own playlists. The
+                front page is a scroll now, as a record shop's front is a wall:
+                the rows somebody reaches for most are at eye level.
 
                 Search is not here any more. It was `flex-1` beside the crates,
                 which split the drawer's height evenly between a shelf somebody
                 is looking at and a box somebody is not — see `SearchLayer`. */}
-            {missing.length === 0 && <SpotlightStrip which="top" />}
-            {missing.length === 0 && <SpotlightStrip which="recent" />}
-            {missing.length === 0 && <SpotifyCrates />}
-            {missing.length > 0 && (
+            {blocking.length === 0 && (
+              <>
+                <RecentShelf />
+                <GenreShelves />
+                <LikedShelf allowed={!missing.includes(LIKED_SCOPE)} onAllow={() => void connect()} />
+                <SpotlightStrip which="top" />
+                <SpotifyCrates />
+              </>
+            )}
+            {blocking.length > 0 && (
               <div className="shrink-0 space-y-1.5 rounded-md bg-shell-900/50 p-2">
                 <p className="text-body text-cream-200">{t('spotify.reauthLead')}</p>
                 <p className="text-meta leading-snug text-cream-400">{t('spotify.reauthRest')}</p>

@@ -9,12 +9,9 @@ import type { TrackMetadata } from '@/core/types';
 /**
  * A shelf of what somebody has been listening to.
  *
- * One row per instance, and the drawer puts two of them up: what has been
- * listened to most lately and what was played last. They used to be one row with the heading as a
- * switch between them, which was the right answer while the crates below were
- * a wall — the drawer's height was the scarce thing and a second row cost the
- * crates a whole line of sleeves. The crates are a shelf themselves now, so
- * there is room for both, and both being up means neither has to be looked for.
+ * One row per instance. The drawer puts up the one of what has been listened
+ * to most lately; what was played last is the front page's recent shelf now,
+ * which lays this app's own listening alongside Spotify's — see `SpotifyHome`.
  *
  * The card is the crate's card, smaller. A bare disc is not a picture of
  * anything — a row of black circles is one drawing repeated — so the cover is
@@ -65,16 +62,12 @@ export function SpotlightStrip({ which }: { which: Lit }) {
     <Shelf heading={heading}>
       {shown === undefined && <Waiting />}
       {shown?.failed === true && (
-        <button
-          type="button"
-          onClick={() => {
+        <Retry
+          onPress={() => {
             setShown(undefined);
             setAttempt((n) => n + 1);
           }}
-          className="px-0.5 py-3 text-left text-meta text-cream-400/70 transition-colors hover:text-cream-200"
-        >
-          {t('spotlight.failed')}
-        </button>
+        />
       )}
       {shown !== undefined && !shown.failed && shown.tracks.length === 0 && (
         <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('spotlight.empty')}</p>
@@ -86,8 +79,22 @@ export function SpotlightStrip({ which }: { which: Lit }) {
   );
 }
 
+/** Said where a row could not be fetched, and pressed to fetch it again. */
+export function Retry({ onPress }: { onPress: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      className="px-0.5 py-3 text-left text-meta text-cream-400/70 transition-colors hover:text-cream-200"
+    >
+      {t('spotlight.failed')}
+    </button>
+  );
+}
+
 /** Empty cells while the row is being fetched, so nothing jumps when it lands. */
-function Waiting() {
+export function Waiting() {
   return (
     <>
       {Array.from({ length: 8 }, (_, at) => (

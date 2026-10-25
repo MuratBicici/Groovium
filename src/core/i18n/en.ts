@@ -352,6 +352,17 @@ export const en = {
   'spotlight.top': 'Your top tracks lately',
   'spotlight.empty': 'Nothing here yet. Play something and it will show up.',
   'spotlight.failed': 'Could not reach Spotify. Press to try again.',
+  'home.recent': 'Recently played',
+  'home.heardHere': 'Played in Groovium',
+  'home.heardElsewhere': 'Played on another device',
+  'home.genre0': 'More {genre}',
+  'home.genre1': '{Genre} for you',
+  'home.genre2': 'Today’s {genre}',
+  'home.genreNote': 'Picked from what you play, and new every day.',
+  'home.liked': 'Liked songs',
+  'home.likedEmpty': 'Songs you like on Spotify show up here.',
+  'home.likedAsk': 'To show your liked songs here, Groovium needs one more permission from Spotify.',
+  'home.likedAllow': 'Allow',
 
   // The arrows on a shelf, for hands without a sideways wheel under them.
   'shelf.left': 'Back along the shelf',

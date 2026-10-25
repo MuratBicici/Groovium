@@ -22,6 +22,8 @@ import {
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
 import { forgetSpotlight } from '@/core/providers/spotifySpotlight';
+import { forgetHome } from '@/core/providers/spotifyHome';
+import { forgetHeard } from '@/core/listening/history';
 import { usePlayerStore } from '@/core/store';
 import { account, onAccountChange } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
@@ -687,6 +689,10 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       // and the spotlight is the part of it that is most plainly about a person.
       forgetCrates();
       forgetSpotlight();
+      // And this app's own log of what that account played, with the shelves
+      // made from it. The songs played from this computer are nobody's account.
+      forgetHome();
+      forgetHeard('spotify');
       clearCache();
       set({
         playlists: [],

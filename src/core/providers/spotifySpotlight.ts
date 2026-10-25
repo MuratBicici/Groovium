@@ -59,9 +59,22 @@ const PATHS: Record<Lit, (limit: number) => string> = {
   top: (limit) => `/me/top/tracks?limit=${limit}&time_range=short_term`,
 };
 
-/** Recently-played wraps each track in an entry; top tracks do not. */
+/** Recently-played wraps each track in an entry, with when it was played; top tracks do not. */
 interface ApiEntry {
   track?: ApiTrack | null;
+  played_at?: string | null;
+}
+
+/**
+ * One record on a row, and when Spotify says it was played.
+ *
+ * The time only comes with the recent row, and it is what lets that row be
+ * laid alongside the app's own listening — see `spotifyHome`.
+ */
+export interface Played {
+  track: TrackMetadata;
+  /** Milliseconds, or null for a row that does not say. */
+  at: number | null;
 }
 
 interface ApiRow {
@@ -108,8 +121,15 @@ function trackIn(item: ApiTrack | ApiEntry | null): ApiTrack | null {
   return isTrack(inner) ? inner : null;
 }
 
+/** When an entry says it was played, if it says, as a time that reads. */
+function playedAt(item: ApiTrack | ApiEntry | null): number | null {
+  if (!item || !('played_at' in item) || typeof item.played_at !== 'string') return null;
+  const at = Date.parse(item.played_at);
+  return Number.isFinite(at) ? at : null;
+}
+
 /** Answers that have arrived, with when they did. */
-const lit = new Map<Lit, { at: number; tracks: TrackMetadata[] }>();
+const lit = new Map<Lit, { at: number; rows: Played[] }>();
 
 /**
  * Answers still in the air.
@@ -123,7 +143,7 @@ const lit = new Map<Lit, { at: number; tracks: TrackMetadata[] }>();
  * So a request in flight is the answer to anyone who asks for that row while it
  * is flying.
  */
-const asking = new Map<Lit, Promise<TrackMetadata[]>>();
+const asking = new Map<Lit, Promise<Played[]>>();
 
 /**
  * Which account these belong to, counted rather than named.
@@ -142,8 +162,13 @@ let era = 0;
  * account with nothing to show comes back empty and is remembered as empty.
  */
 export function spotlight(which: Lit): Promise<TrackMetadata[]> {
+  return played(which).then((rows) => rows.map((row) => row.track));
+}
+
+/** The same row, with when each record on it was played where Spotify says. */
+export function played(which: Lit): Promise<Played[]> {
   const known = lit.get(which);
-  if (known && Date.now() - known.at < KEEPS_FOR[which]) return Promise.resolve(known.tracks);
+  if (known && Date.now() - known.at < KEEPS_FOR[which]) return Promise.resolve(known.rows);
 
   const already = asking.get(which);
   if (already) return already;
@@ -168,19 +193,21 @@ export function spotlight(which: Lit): Promise<TrackMetadata[]> {
  */
 const FRESH: RequestInit = { cache: 'no-store' };
 
-async function ask(which: Lit, when: number): Promise<TrackMetadata[]> {
+async function ask(which: Lit, when: number): Promise<Played[]> {
   const data = await request<ApiRow>(PATHS[which](ASK_FOR[which]), FRESH);
-  const tracks = oneEach(
-    (data?.items ?? [])
-      .map(trackIn)
-      .filter((track): track is ApiTrack => track !== null)
-      .map(toTrackMetadata),
-  );
+  const rows: Played[] = [];
+  for (const item of data?.items ?? []) {
+    const track = trackIn(item);
+    if (track) rows.push({ track: toTrackMetadata(track), at: playedAt(item) });
+  }
+  const kept = oneEach(rows.map((row) => row.track));
+  // The first sighting of each, which is the newest, with its time.
+  const once = kept.map((track) => rows.find((row) => row.track.id === track.id) ?? { track, at: null });
 
   // Kept only if it is still the same person's. Handed back either way — the
   // caller that asked has its own way of having gone.
-  if (when === era) lit.set(which, { at: Date.now(), tracks });
-  return tracks;
+  if (when === era) lit.set(which, { at: Date.now(), rows: once });
+  return once;
 }
 
 /**

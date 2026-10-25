@@ -36,6 +36,7 @@ import { QueueDrawer } from '@/components/queue/QueueDrawer';
 import { QueueButton } from '@/components/queue/QueueButton';
 import { useLyricsStore } from '@/core/lyrics/store';
 import { followPlayer } from '@/core/lyrics/playhead';
+import { keepListening } from '@/core/listening/listen';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -350,6 +351,8 @@ export default function App() {
     if (lyricsOn) wantLyrics(currentTrack);
   }, [lyricsOn, currentTrack, wantLyrics]);
   useEffect(() => (lyricsOn ? followPlayer() : undefined), [lyricsOn]);
+  // What is listened to, written down for the shelves built from it.
+  useEffect(() => keepListening(), []);
   /** Lyrics under the deck: on, not in the drawer, and a deck to be under. */
   const lyricsOnDeck = compactShown(layout) && !compact;
   // Not an `Overlay`: it is raised by the transport row rather than a panel

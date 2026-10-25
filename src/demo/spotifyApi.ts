@@ -5,7 +5,8 @@ import { crates, mostPlayed, recentlyPlayed, tracks } from './catalogue';
  * Spotify's Web API, answered from the demo's collection.
  *
  * Only what the drawer reads: the account's playlists, what is in each, the
- * two spotlight rows, search, and an album opened from it. Writes are agreed to and forgotten. Anything
+ * spotlight rows, liked songs, the top artists and their genres, search, and
+ * an album opened from it. Writes are agreed to and forgotten. Anything
  * else is a 404, which every caller already knows how to take.
  */
 
@@ -70,6 +71,40 @@ function apiAlbum(album: ReturnType<typeof albums>[number]) {
     release_date: '2021-05-14',
     total_tracks: album.tracks.length,
   };
+}
+
+/**
+ * The genres Spotify would file the demo's artists under, so the front page's
+ * genre shelves have something to be made of. Invented, like the artists.
+ */
+const GENRES: Record<string, string[]> = {
+  'Harbor Lights': ['indie pop', 'dream pop'],
+  'The Velvet Almanac': ['dream pop', 'shoegaze'],
+  'Mira Solenne': ['indie pop', 'art pop'],
+  'Cold Cartography': ['shoegaze', 'post-rock'],
+  'June Parade': ['indie pop'],
+  'Otis Fernwood': ['folk', 'indie folk'],
+  'Nova Delacroix': ['synthwave', 'dream pop'],
+  'The Quiet Arcade': ['shoegaze', 'dream pop'],
+  'Lumen Choir': ['indie folk', 'art pop'],
+  'Del Mar Social Club': ['indie pop', 'synthwave'],
+  'Wren & the Weathervanes': ['indie folk', 'folk'],
+  'Sable Harbour': ['post-rock', 'shoegaze'],
+};
+
+const genresOf = (artist: string) => GENRES[artist] ?? [];
+
+/** An artist as the Web API spells it, genres and all. */
+function apiArtist(name: string) {
+  return { id: `artist-${name}`, name, genres: genresOf(name) };
+}
+
+/** The songs somebody "liked": most of the collection, newest first. */
+function liked(): TrackMetadata[] {
+  return tracks()
+    .filter((track) => track.source === 'spotify')
+    .filter((_, at) => at % 3 !== 1)
+    .reverse();
 }
 
 function json(body: unknown, status = 200): Response {
@@ -137,7 +172,21 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   }
 
   if (path === '/me/player/recently-played') {
-    return json({ items: recentlyPlayed().map((track) => ({ track: apiTrack(track) })) });
+    // Twenty minutes apart, going back from now, as if heard on a phone today.
+    const now = Date.now();
+    return json({
+      items: recentlyPlayed().map((track, at) => ({
+        track: apiTrack(track),
+        played_at: new Date(now - (at + 1) * 20 * 60_000).toISOString(),
+      })),
+    });
+  }
+  if (path === '/me/top/artists') {
+    const names = [...new Set(mostPlayed().map((track) => track.artist))];
+    return json({ items: names.map(apiArtist) });
+  }
+  if (path === '/me/tracks') {
+    return json(page(liked().map((track) => ({ track: apiTrack(track, market) })), url));
   }
   if (path === '/me/top/tracks') {
     // Asked without a country, as the real one has to be.
@@ -145,7 +194,19 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   }
 
   if (path === '/search') {
-    const words = (url.searchParams.get('q') ?? '')
+    const q = url.searchParams.get('q') ?? '';
+    const types = (url.searchParams.get('type') ?? 'track').split(',');
+    const genre = /^genre:"([^"]*)"$/.exec(q)?.[1];
+    if (genre !== undefined) {
+      const filed = tracks().filter((track) => track.source === 'spotify' && genresOf(track.artist).includes(genre));
+      return json({ tracks: page(filed.map((track) => apiTrack(track, market)), url) });
+    }
+    const named = /^artist:"([^"]*)"$/.exec(q)?.[1];
+    if (named !== undefined && types.includes('artist')) {
+      const found = Object.keys(GENRES).filter((name) => name.toLowerCase() === named.toLowerCase());
+      return json({ artists: { items: found.map(apiArtist) } });
+    }
+    const words = q
       .toLowerCase()
       .replace(/\b(track|artist|album):/g, ' ')
       .split(/\s+/)
@@ -154,7 +215,6 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
       const text = `${track.title} ${track.artist} ${track.album}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
-    const types = (url.searchParams.get('type') ?? 'track').split(',');
     const shelved = types.includes('album')
       ? albums().filter((album) => words.every((word) => `${album.name} ${album.artist}`.toLowerCase().includes(word)))
       : [];

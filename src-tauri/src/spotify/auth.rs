@@ -33,12 +33,14 @@ const PROFILE_ENDPOINT: &str = "https://api.spotify.com/v1/me";
 /// transport control. The rest arrived with the drawer: the playlist four to
 /// read and write someone's own playlists, the two personalisation scopes to
 /// fill the spotlight, and `ugc-image-upload` for a playlist's cover.
+/// `user-library-read` came with the front page's liked songs, and reads the
+/// library only — nothing here saves to it or takes from it.
 ///
 /// This list was deliberately short for a long time, and the test at the foot
 /// of this file said so. Widening it is a decision rather than a drift: every
 /// scope here is one somebody has to approve, and one more thing this app could
 /// do to an account if it were wrong.
-pub const SCOPES: &str = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-top-read user-read-recently-played ugc-image-upload";
+pub const SCOPES: &str = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public user-top-read user-read-recently-played ugc-image-upload user-library-read";
 
 /// Scopes granted to the token on disk, as Spotify last reported them.
 ///
@@ -468,12 +470,14 @@ mod tests {
             "user-read-recently-played",
             // A playlist's cover image.
             "ugc-image-upload",
+            // The liked songs shelf: reading the saved library, not writing it.
+            "user-library-read",
         ];
         assert_eq!(scopes, expected, "the scope list changed without being decided");
 
-        // Still nothing that reaches the saved library, follows anybody, or
+        // Still nothing that changes the saved library, follows anybody, or
         // touches an account beyond the playlists it was given.
-        assert!(!scopes.iter().any(|s| s.contains("library")));
+        assert!(!scopes.iter().any(|s| s.contains("library-modify")));
         assert!(!scopes.iter().any(|s| s.contains("follow")));
     }
 

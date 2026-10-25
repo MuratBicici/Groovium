@@ -24,6 +24,10 @@ import type { AddOutcome } from '@/core/spotify/store';
 import type { TrackMetadata } from '@/core/types';
 import { DRAWER_WIDTH } from '@/platform/window';
 import { useT } from '@/core/i18n';
+import { heard, lastHeard, onHeard } from '@/core/listening/history';
+
+/** How many records the recent shelf holds. */
+const RECENT_LOCAL = 20;
 
 /**
  * The library drawer's Groovium side: the music on this computer, and the
@@ -49,6 +53,9 @@ export function GrooviumDrawer({
 }) {
   const t = useT();
   const library = useLibrary();
+  /** The app's log of what was listened to, kept up to date while the drawer is open. */
+  const [log, setLog] = useState(heard);
+  useEffect(() => onHeard(() => setLog(heard())), []);
   const playlists = usePlaylists();
 
   const chooseFiles = usePlayerStore((s) => s.chooseFiles);
@@ -196,6 +203,13 @@ export function GrooviumDrawer({
   const shelved = library.map((track, index) => ({ track, index }));
   const copied = shelved.filter(({ track }) => !track.linked);
   const linked = shelved.filter(({ track }) => track.linked);
+  // What was heard lately from this computer, newest first, as far as it is
+  // still here: a song removed since is not offered back.
+  const byId = new Map(shelved.map((entry) => [`library:${entry.track.id}`, entry]));
+  const lately = lastHeard(log, 'local')
+    .map((entry) => byId.get(entry.track.id))
+    .filter((entry): entry is (typeof shelved)[number] => entry !== undefined)
+    .slice(0, RECENT_LOCAL);
   const play = (track: LibraryTrack, index: number) => {
     if (track.missing) {
       usePlayerStore.setState({ error: t('library.missingPlay', { path: track.sourcePath }) });
@@ -269,6 +283,23 @@ export function GrooviumDrawer({
       )}
 
       <div className="groove-drawer-list flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-5">
+        {/* First, as on the Spotify side, and only once there is something on
+            it: an empty shelf at the top of a new library is one more thing
+            between somebody and adding music. */}
+        {lately.length > 0 && (
+          <Shelf heading={t('home.recent')}>
+            {lately.map(({ track, index }) => (
+              <LocalRecord
+                key={track.id}
+                track={track}
+                onPlay={() => play(track, index)}
+                onRemove={() => setConfirmRemove(track.id)}
+                onEdit={() => setEditingSong(track.id)}
+              />
+            ))}
+          </Shelf>
+        )}
+
         <Shelf heading={t('library.onThisComputer')} count={copied.length}>
           <AddMusic onChoose={(which) => void choose(which)} />
           {library.length === 0 && (

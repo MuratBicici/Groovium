@@ -30,8 +30,11 @@ const DRAG_THRESHOLD = 6;
 export function RecordCard({
   track,
   onPlay,
+  heard,
 }: {
   track: TrackMetadata;
+  /** Where it was last heard, on a shelf of what was heard lately. */
+  heard?: 'here' | 'elsewhere';
   /**
    * What starting it means where it lies: one song on its own from a
    * spotlight row, or a place in the library that playing carries on through.
@@ -186,11 +189,43 @@ export function RecordCard({
           <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
         </span>
         {refused && <UnplayableTag />}
+        {heard && !refused && <HeardMark where={heard} />}
       </span>
       <span className={`relative mt-1.5 flex min-w-0 flex-col ${refused ? UNPLAYABLE_LOOK : ''}`}>
         <span className="truncate text-body font-medium text-cream-50">{track.title}</span>
         <span className="truncate text-meta text-cream-400">{track.artist}</span>
       </span>
     </button>
+  );
+}
+
+/**
+ * Where a song on the recent shelf was heard: a record for this app, a phone
+ * for anywhere else Spotify plays.
+ *
+ * In the sleeve's lower corner on the side away from the record, so it never
+ * sits on the part that slides out, and small: it answers a question somebody
+ * might have, and is not the thing they are looking at.
+ */
+function HeardMark({ where }: { where: 'here' | 'elsewhere' }) {
+  const t = useT();
+  const label = where === 'here' ? t('home.heardHere') : t('home.heardElsewhere');
+  return (
+    <span
+      title={label}
+      className="absolute bottom-1 left-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-shell-900/85 text-brass-400"
+    >
+      {where === 'here' ? (
+        <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor">
+          <circle cx="5" cy="5" r="4" strokeWidth="1.2" />
+          <circle cx="5" cy="5" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round">
+          <rect x="2.8" y="1" width="4.4" height="8" rx="1" />
+          <path d="M4.4 7.4h1.2" strokeLinecap="round" />
+        </svg>
+      )}
+    </span>
   );
 }

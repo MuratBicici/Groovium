@@ -30,9 +30,9 @@ export function Shelf({
 }: {
   heading: string;
   /** How many are on it, said beside the name rather than inside it. */
-  count?: number;
+  count?: number | undefined;
   /** A line under the name saying what the shelf is, where that is not obvious. */
-  note?: string;
+  note?: string | undefined;
   children: React.ReactNode;
 }) {
   const t = useT();
