@@ -361,6 +361,18 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
               : t('panel.spotify')}
           </span>
         )}
+        {/* What to do while arranging, beside the way out of it. Up here
+            rather than over the shelves: there, appearing pushed the whole
+            page down at the moment somebody reached for it. Always laid out
+            and only faded, so nothing in this row moves either. */}
+        <span
+          aria-hidden={!arranging}
+          className={`min-w-0 flex-1 truncate px-2 text-right text-meta text-cream-400 transition-opacity duration-200 ${
+            arranging ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          {t('home.arrangeHint')}
+        </span>
         <div className="flex shrink-0 items-center gap-2">
           {online && stage === 'connected' && blocking.length === 0 && (
             <ArrangeButton arranging={arranging} onPress={() => setArranging((on) => !on)} />
@@ -458,9 +470,6 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
                 Search is not here any more. It was `flex-1` beside the crates,
                 which split the drawer's height evenly between a shelf somebody
                 is looking at and a box somebody is not — see `SearchLayer`. */}
-            {blocking.length === 0 && arranging && (
-              <p className="-mb-1 px-0.5 text-meta text-cream-400">{t('home.arrangeHint')}</p>
-            )}
             {blocking.length === 0 && (
               <ArrangedShelves
                 arranging={arranging}
