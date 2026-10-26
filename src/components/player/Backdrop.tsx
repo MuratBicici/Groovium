@@ -26,6 +26,7 @@ import { usePlayerStore } from '@/core/store';
 import { useShown } from '@/platform/shown';
 import { useHeldTrack } from './DiscHold';
 import { DRAWER_WIDTH, PLAYER_WIDTH } from '@/platform/window';
+import { pacer } from '@/core/utils/pace';
 
 /**
  * The light behind everything: the cover's colours turning with the record,
@@ -235,19 +236,24 @@ export function Backdrop({
       return moved;
     };
 
-    // Every frame the screen draws while music plays, not at the spectrum's
-    // thirty a second: dust moving fast stepped visibly at thirty, a speck
-    // jumping a few pixels at a time. With nothing playing, thirty is plenty
+    // Sixty a second while music plays, not at the spectrum's thirty: dust
+    // moving fast stepped visibly at thirty, a speck jumping a few pixels at a
+    // time. Not every frame the screen draws either, which on a 240 Hz panel
+    // kept the GPU two thirds busy for dust nobody could see move faster. With nothing playing, thirty is plenty
     // for dust drifting at its slowest — but not while the drawer moves: the
     // shell moved every frame and the light only every other, so with a song
     // paused or no record on, the light slid and caught up behind it.
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
+      const moved = measure();
+      // No more than sixty a second however fast the screen is — see `pace`.
+      // Except while the window or the record moves: then every frame the
+      // screen draws, or the light trails behind the shell as it did at thirty.
+      if (!moved && !due(now)) return;
       // Capped, so a window that was hidden for a while does not come back to
       // all of that motion resolved in one step.
       owed += Math.min(0.1, (now - last) / 1000);
       last = now;
-      const moved = measure();
       if (!playingRef.current && !moved && owed < 1 / 30) return;
       const seconds = owed;
       owed = 0;
@@ -317,6 +323,7 @@ export function Backdrop({
       paintDust(ac, specks, centre, width, height, room, kick * breathe, light);
     };
 
+    const due = pacer();
     measure();
     frame = requestAnimationFrame(draw);
     return () => {

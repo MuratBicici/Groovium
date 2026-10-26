@@ -16,6 +16,7 @@ import {
 import { envelopeOf, soundKey } from '@/core/lyrics/waveform';
 import { useLanguage } from '@/core/settings/store';
 import { usePlayerStore } from '@/core/store';
+import { pacer } from '@/core/utils/pace';
 
 /**
  * The song as a strip, its lines as marks along it, for the listener to move.
@@ -185,13 +186,16 @@ export function TimingStrip({ compact = false }: { compact?: boolean }) {
   // The playhead, on the strip and the overview, every frame, without a render.
   useEffect(() => {
     let frame = 0;
-    const tick = () => {
+    // Sixty a second at most, whatever the screen does — see `pace`.
+    const due = pacer();
+    const tick = (now: number) => {
+      frame = requestAnimationFrame(tick);
+      if (!due(now)) return;
       const ms = playheadMs();
       if (head.current) head.current.style.left = `${((ms - viewStart) / viewSpan) * 100}%`;
       if (overviewHead.current) overviewHead.current.style.left = `${(ms / span) * 100}%`;
-      frame = requestAnimationFrame(tick);
     };
-    tick();
+    tick(performance.now());
     return () => cancelAnimationFrame(frame);
   }, [span, viewStart, viewSpan]);
 

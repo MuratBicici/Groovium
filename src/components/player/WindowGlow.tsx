@@ -7,6 +7,7 @@ import type { GlowListens } from '@/core/settings';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
+import { pacer } from '@/core/utils/pace';
 
 /**
  * An aura along the window's edges, with lights rising through it.
@@ -368,10 +369,10 @@ export function WindowGlow({
      * first observe something — and the first measurement then happens before
      * layout, at zero, with nothing to correct it.
      */
-    const measure = () => {
+    const measure = (): boolean => {
       const dpr = window.devicePixelRatio || 1;
       const h = Math.max(1, near.clientHeight);
-      if (h === height && near.width === Math.round(BAND * dpr)) return;
+      if (h === height && near.width === Math.round(BAND * dpr)) return false;
       height = h;
       for (const edge of edges) {
         const el = edge.at < 0 ? near : far;
@@ -381,6 +382,7 @@ export function WindowGlow({
         // not once at the start.
         edge.context.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
+      return true;
     };
 
     // A theme change rewrites the custom properties on the root and changes no
@@ -434,13 +436,17 @@ export function WindowGlow({
       context.fillRect(at < 0 ? 0 : BAND - reach, 0, reach, height);
     };
 
+    // Sixty a second at most, whatever the screen does — see `pace`. A resize
+    // has emptied the canvases, so that frame is drawn whatever the clock says.
+    const due = pacer();
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
+      const resized = measure();
+      if (!resized && !due(now)) return;
       // Capped, so a window that was hidden for a second does not come back to
       // a minute of motion resolved in one step.
       const seconds = Math.min(0.05, (now - last) / 1000);
       last = now;
-      measure();
 
       const { strength, sensitivity, speed, flash, flare, listens } = tuning.current;
       const felt_ms = GLOW.flare(flare);

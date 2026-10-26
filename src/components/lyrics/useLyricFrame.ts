@@ -4,6 +4,7 @@ import { playheadMs } from '@/core/lyrics/playhead';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { turnsTo } from './arc';
+import { pacer } from '@/core/utils/pace';
 
 /** The line being sung, and whether the move to it was a jump rather than a step. */
 export interface Place {
@@ -65,7 +66,14 @@ export function useLyricFrame(
     /** What each word was last told, so a frame that moves nothing writes nothing. */
     let told: number[] = [];
 
-    const tick = () => {
+    // Sixty a second at most, whatever the screen does — see `pace`. Each tick
+    // can restyle a word, and a restyled word is a frame for the whole window.
+    const due = pacer();
+    const tick = (now: number) => {
+      if (!due(now)) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       const ms = playheadMs();
       const index = activeLine(lines, ms);
       if (index !== shown) {

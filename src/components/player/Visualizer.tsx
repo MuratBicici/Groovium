@@ -28,6 +28,7 @@ import { SQUEEZE, uncovered } from './squeeze';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
+import { pacer } from '@/core/utils/pace';
 
 /**
  * Bars behind the deck, moving to whatever the speakers are playing — or, in
@@ -529,11 +530,19 @@ export function Visualizer({
       context.globalCompositeOperation = 'source-over';
     };
 
+    // Sixty a second at most, whatever the screen does — see `pace`. A resize
+    // draws at once, so the grooves keep up with a window that is moving.
+    const due = pacer();
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
       measure();
-      if (look === 'blocks') drawBlocks();
-      else drawGrooves(now);
+      if (!resized && !due(now)) return;
+      if (look === 'blocks') {
+        // The blocks have no use for it, and left standing it would draw
+        // every frame the screen does from the first resize on.
+        resized = false;
+        drawBlocks();
+      } else drawGrooves(now);
     };
 
     // With motion turned down the bars are drawn once, unlit, and left alone.

@@ -7,6 +7,7 @@ import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
 import { whilePaletteMoves } from '@/core/theme/palette';
 import { HALO_ALPHA, HALO_WIDTH, RIM_ALPHA, orbitMargin, orbitRadius, streak } from './orbit';
+import { pacer } from '@/core/utils/pace';
 
 /**
  * The window's edge lighting, gone round the record.
@@ -155,8 +156,11 @@ export function DiscOrbit({
       context.stroke();
     };
 
+    // Sixty a second at most, whatever the screen does — see `pace`.
+    const due = pacer();
     const draw = (now: number) => {
       frame = requestAnimationFrame(draw);
+      if (!due(now)) return;
       const seconds = Math.min(0.05, (now - last) / 1000);
       last = now;
 
