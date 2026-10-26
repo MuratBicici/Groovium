@@ -19,7 +19,7 @@ import {
 import { levelFrom, watchBars } from '@/core/visualizer';
 import { listen, NO_BEAT, type Beat } from '@/core/visualizer/onset';
 import { readCover } from '@/core/theme/readCover';
-import { whilePaletteMoves } from '@/core/theme/palette';
+import { paletteFace, whilePaletteMoves } from '@/core/theme/palette';
 import { mixOklab, oklabToRgb, parseCssColour, parseHex, rgbToOklab, type Rgb } from '@/core/utils/colour';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { usePlayerStore } from '@/core/store';
@@ -135,10 +135,12 @@ export function Backdrop({
     if (!sc || !ac) return;
 
     const root = document.documentElement;
-    let theme = themeColours(root);
+    // Read off the window's background, which has every step of a fade; the
+    // root already has where the fade is going. See `paletteFace`.
+    let theme = themeColours(paletteFace());
     let light = root.dataset.ground === 'light';
     const reread = () => {
-      theme = themeColours(root);
+      theme = themeColours(paletteFace());
       light = root.dataset.ground === 'light';
     };
     const themed = new MutationObserver(reread);

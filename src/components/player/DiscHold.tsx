@@ -877,11 +877,17 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     // opened crate or the search covers it, and a covered crate must not take
     // a record through the thing covering it. The hand's own layer ignores the
     // pointer, so it is never what is found.
+    //
+    // The rectangles first, and the hit test only once one of them holds the
+    // pointer: asking the document what is under the pointer is a walk of the
+    // whole window, and it was being asked on every move of every carry,
+    // whether or not the record was anywhere near a crate.
     let over: Receiver | null = null;
-    const top = document.elementFromPoint(x, y);
+    let top: Element | null | undefined;
     for (const receiver of receivers.current) {
       const box = receiver.el.getBoundingClientRect();
       if (x < box.left || x > box.right || y < box.top || y > box.bottom) continue;
+      if (top === undefined) top = document.elementFromPoint(x, y);
       if (!top || !(receiver.el.contains(top) || top.contains(receiver.el))) continue;
       over = receiver;
       break;

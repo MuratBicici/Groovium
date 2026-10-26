@@ -515,6 +515,23 @@ body {
 }
 
 /*
+ * A shelf the drawer has scrolled out of sight is not worked on at all: not
+ * styled, laid out or painted until it comes back near the window.
+ *
+ * The Spotify drawer is two thousand elements and two hundred and fifty covers
+ * across seven shelves, of which two or three can be seen at a time, and all of
+ * it was redone on every step of a colour fade and laid into layers on every
+ * frame — measured in the user's own window, the frames that ran long the
+ * whole time a record was in the hand. A shelf clips what it holds already, so
+ * containing it changes nothing anybody can see. `auto` for the height keeps
+ * the one it last had, so the scrollbar does not jump as shelves come and go.
+ */
+.groove-shelf {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 150px;
+}
+
+/*
  * Arranging the front page: the shelves have come loose.
  *
  * Each shelf wobbles barely, and each record on it a good deal more, on beats

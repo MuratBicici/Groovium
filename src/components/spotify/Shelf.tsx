@@ -113,7 +113,7 @@ export function Shelf({
   }, [go, subscribeCarry]);
 
   return (
-    <section className="flex shrink-0 flex-col" aria-label={heading}>
+    <section className="groove-shelf flex shrink-0 flex-col" aria-label={heading}>
       {/* The name as it is written, a size up from the songs under it, and the
           count beside it rather than run into it with a dot. It was the same
           small spaced capitals as every other word in the drawer that was not

@@ -5,7 +5,7 @@ import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
 import { useSettingsStore } from '@/core/settings/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
-import { whilePaletteMoves } from '@/core/theme/palette';
+import { paletteFace, whilePaletteMoves } from '@/core/theme/palette';
 import { HALO_ALPHA, HALO_WIDTH, RIM_ALPHA, orbitMargin, orbitRadius, streak } from './orbit';
 import { pacer } from '@/core/utils/pace';
 
@@ -90,9 +90,9 @@ export function DiscOrbit({
     const context = el.getContext('2d');
     if (!context) return;
 
-    let colours = accents(document.documentElement);
+    let colours = accents(paletteFace());
     const reread = () => {
-      colours = accents(document.documentElement);
+      colours = accents(paletteFace());
     };
     const themed = new MutationObserver(reread);
     themed.observe(document.documentElement, {

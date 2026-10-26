@@ -27,7 +27,7 @@ import type { DrawerSide, VisualizerLook } from '@/core/settings';
 import { SQUEEZE, uncovered } from './squeeze';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
-import { whilePaletteMoves } from '@/core/theme/palette';
+import { paletteFace, whilePaletteMoves } from '@/core/theme/palette';
 import { pacer } from '@/core/utils/pace';
 
 /**
@@ -269,7 +269,7 @@ export function Visualizer({
     const context = el.getContext('2d');
     if (!context) return;
 
-    let colours = palette(document.documentElement);
+    let colours = palette(paletteFace());
     let deep: Rgb = rgbOf(colours.low, [162, 116, 63]);
     let bright: Rgb = rgbOf(colours.high, [224, 176, 113]);
     const recolour = () => {
@@ -309,14 +309,14 @@ export function Visualizer({
       // Writing either of those resets the context, so the scale goes back on
       // afterwards and not once at the start.
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      colours = palette(document.documentElement);
+      colours = palette(paletteFace());
       recolour();
     };
     // A theme change rewrites the custom properties on the root and changes no
     // size at all, so nothing watching the element for its size would hear
     // about it.
     const reread = () => {
-      colours = palette(document.documentElement);
+      colours = palette(paletteFace());
       recolour();
       afresh = true;
     };

@@ -34,6 +34,7 @@ export function WindowChrome() {
 
   return (
     <header
+      data-palette-fast
       data-tauri-drag-region
       // Raised over the lyrics record, which carries on up under the bar; still
       // under a record in the air (`z-10`).

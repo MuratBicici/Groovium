@@ -509,10 +509,21 @@ export default function App() {
       // window and the player is painted hard against the wrong edge of it, for
       // one frame, on every launch. A transparent window showing nothing for
       // that frame is the honest version of not knowing yet.
-      className={`relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] bg-gradient-to-b from-shell-700 to-shell-900 ${
+      className={`relative isolate flex h-full flex-col overflow-hidden rounded-[var(--radius-widget)] ${
         settingsReady ? '' : 'invisible'
       } ${drawerSide === 'left' ? 'ml-auto' : ''}`}
     >
+      {/* The shell's own background, on a layer of its own rather than on the
+          shell: a colour fade walks this across step by step (see
+          `fadePalette`), and on the shell every step restyled the drawer
+          inside it as well. Also where the canvases read the palette as it
+          looks this moment — `data-palette-face`. */}
+      <div
+        aria-hidden="true"
+        data-palette-fast
+        data-palette-face
+        className="pointer-events-none absolute inset-0 -z-20 bg-gradient-to-b from-shell-700 to-shell-900"
+      />
       <SheetHost.Provider value={shellEl}>
       <PlaylistPickerProvider>
       <LyricsMatchProvider>
@@ -562,6 +573,7 @@ export default function App() {
           than that on every frame the shell was still opening. Height comes
           from the row's own stretch, which needs nothing said about it. */}
       <main
+        data-palette-fast
         style={{ width: `${PLAYER_WIDTH}px` }}
         className="flex min-h-0 shrink-0 flex-col gap-3 pb-3"
       >
@@ -853,7 +865,9 @@ function DrawerSlot({
   const { present, ref } = usePresence(lyrics);
   const { present: queuePresent, ref: queueRef } = usePresence(showQueue);
   return (
-    <div className="relative flex shrink-0">
+    // Slow in a colour fade: the drawers are most of the window, and take the
+    // fade's steps four times a second rather than thirty — see `fadePalette`.
+    <div data-palette-slow className="relative flex shrink-0">
       <div
         inert={lyrics}
         className="flex transition-opacity duration-300 ease-out"

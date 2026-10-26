@@ -6,7 +6,7 @@ import { NO_BASS, bassPeak, meterBass, type BassMeter } from '@/core/visualizer/
 import type { GlowListens } from '@/core/settings';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useShown } from '@/platform/shown';
-import { whilePaletteMoves } from '@/core/theme/palette';
+import { paletteFace, whilePaletteMoves } from '@/core/theme/palette';
 import { pacer } from '@/core/utils/pace';
 
 /**
@@ -352,7 +352,7 @@ export function WindowGlow({
       { context: farContext, at: 1, facing: 1 },
     ];
 
-    let colours = palette(document.documentElement);
+    let colours = palette(paletteFace());
     // Deep and bright, one of each per edge.
     let bolts = {
       low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
@@ -388,7 +388,7 @@ export function WindowGlow({
     // A theme change rewrites the custom properties on the root and changes no
     // size at all, so nothing watching the element would hear about it.
     const reread = () => {
-      colours = palette(document.documentElement);
+      colours = palette(paletteFace());
       bolts = {
         low: [bolt(colours.low, -1), bolt(colours.low, 1)] as const,
         high: [bolt(colours.high, -1), bolt(colours.high, 1)] as const,
