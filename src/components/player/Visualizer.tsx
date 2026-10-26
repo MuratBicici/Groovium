@@ -144,23 +144,34 @@ function trace(
   context: CanvasRenderingContext2D,
   points: [number, number][],
   joined = false,
+  /**
+   * Walked from the far end and lowered by `drop`: the underside of a ribbon,
+   * traced off the line itself. It used to be a copy of the line built for
+   * each ribbon, every frame — some two thousand little arrays a frame across
+   * the grooves, and the collector stopping the window for thirty milliseconds
+   * at a time to sweep them up.
+   */
+  under?: { drop: number },
 ): void {
+  const n = points.length;
   const first = points[0];
   if (!first) return;
-  if (joined) context.lineTo(first[0], first[1]);
-  else context.moveTo(first[0], first[1]);
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[Math.max(0, i - 1)] ?? first;
-    const b = points[i] ?? first;
-    const c = points[i + 1] ?? b;
-    const d = points[Math.min(points.length - 1, i + 2)] ?? c;
+  const back = under !== undefined;
+  const dy = under?.drop ?? 0;
+  const x = (i: number) => (points[back ? n - 1 - i : i] ?? first)[0];
+  const y = (i: number) => (points[back ? n - 1 - i : i] ?? first)[1] + dy;
+  if (joined) context.lineTo(x(0), y(0));
+  else context.moveTo(x(0), y(0));
+  for (let i = 0; i < n - 1; i++) {
+    const a = Math.max(0, i - 1);
+    const d = Math.min(n - 1, i + 2);
     context.bezierCurveTo(
-      b[0] + (c[0] - a[0]) / 6,
-      b[1] + (c[1] - a[1]) / 6,
-      c[0] - (d[0] - b[0]) / 6,
-      c[1] - (d[1] - b[1]) / 6,
-      c[0],
-      c[1],
+      x(i) + (x(i + 1) - x(a)) / 6,
+      y(i) + (y(i + 1) - y(a)) / 6,
+      x(i + 1) - (x(d) - x(i)) / 6,
+      y(i + 1) - (y(d) - y(i)) / 6,
+      x(i + 1),
+      y(i + 1),
     );
   }
 }
@@ -485,17 +496,12 @@ export function Visualizer({
         context.fillStyle = rgba(deep, 1);
         context.globalAlpha = Math.min(1, strength);
         for (let ribbon = 1; ribbon <= RIBBONS; ribbon++) {
+          // Not held to the canvas: past its foot is simply not drawn, and
+          // holding it there piled every ribbon up along the bottom edge.
           const drop = (depth * ribbon) / RIBBONS;
-          const below: [number, number][] = [];
-          for (let at = points.length - 1; at >= 0; at--) {
-            const [x, y] = points[at] ?? [0, 0];
-            // Not held to the canvas: past its foot is simply not drawn, and
-            // holding it there piled every ribbon up along the bottom edge.
-            below.push([x, y + drop]);
-          }
           context.beginPath();
           trace(context, points);
-          trace(context, below, true);
+          trace(context, points, true, { drop });
           context.closePath();
           context.fill();
         }

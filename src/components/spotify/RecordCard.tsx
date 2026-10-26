@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useDiscFlight } from '@/components/player/DiscFlight';
-import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { useDiscHold, useIsCarried } from '@/components/player/DiscHold';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
@@ -45,14 +45,14 @@ export function RecordCard({
   const { flyToPlatter, platterEl } = useDiscFlight();
   const { grab, moveTo, release, cancel } = useDiscHold();
   const onDeck = usePlayerStore((s) => s.currentTrack?.id);
-  const carried = useCarriedTrack();
+  const inHand = useIsCarried(track.id);
 
   const disc = useRef<HTMLSpanElement | null>(null);
   /** Whether the press that is ending turned into a drag. */
   const dragged = useRef(false);
 
   /** The record is not on the shelf: it is on the deck or in somebody's hand. */
-  const away = onDeck === track.id || carried === track.id;
+  const away = onDeck === track.id || inHand;
   /** Why Spotify will not play it here, if it will not: it stays, greyed, and says so when pressed. */
   const refused = useUnplayable(track);
 

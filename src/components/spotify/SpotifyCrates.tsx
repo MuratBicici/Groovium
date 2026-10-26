@@ -3,7 +3,7 @@ import { useSpotifyPlaylistsStore, type AddOutcome } from '@/core/spotify/store'
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
 import { useDiscFlight } from '@/components/player/DiscFlight';
-import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
+import { useDiscHold, useIsCarried } from '@/components/player/DiscHold';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import type { Vector } from '@/components/player/discPhysics';
 import { Shelf } from './Shelf';
@@ -220,7 +220,6 @@ export function SpotifyCrates() {
   const arrived = useCallback(() => setJustMade(null), []);
   const playError = useSpotifyPlaylistsStore((s) => s.playError);
 
-  const inHand = useCarriedTrack();
   const playWhole = useCallback((face: CrateFace) => void playCrate(face.id), [playCrate]);
   const carry = useCrateCarry(playWhole);
 
@@ -305,7 +304,6 @@ export function SpotifyCrates() {
               arriving={justMade === playlist.id}
               onArrived={arrived}
               starting={starting === playlist.id}
-              away={inHand === `crate:${playlist.id}`}
               onCarry={carry}
               // Measured at the press. By the time the layer renders, the
               // records need somewhere to have come *from*, and that is a
@@ -442,7 +440,6 @@ export function Crate({
   arriving,
   onArrived,
   starting,
-  away,
   onCarry,
   onOpen,
 }: {
@@ -456,8 +453,6 @@ export function Crate({
   onArrived: () => void;
   /** This crate's records are being fetched so the whole thing can play. */
   starting: boolean;
-  /** It is in somebody's hand, so its place on the shelf is empty. */
-  away: boolean;
   onCarry: (
     face: CrateFace,
     down: React.PointerEvent,
@@ -468,6 +463,8 @@ export function Crate({
 }) {
   const t = useT();
   const art = useRef<HTMLSpanElement | null>(null);
+  /** It is in somebody's hand, so its place on the shelf is empty. */
+  const away = useIsCarried(`crate:${face.id}`);
   const card = useRef<HTMLButtonElement | null>(null);
   /** Whether the press being finished turned into a lift. */
   const lifted = useRef(false);

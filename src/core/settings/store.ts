@@ -22,7 +22,7 @@ import {
 } from '@/core/settings/themes';
 import { NOTCHES } from '@/core/visualizer';
 import type { CoverPalette } from '@/core/theme/fromCover';
-import { palettePeek } from '@/core/theme/palette';
+import { fadePalette, palettePeek } from '@/core/theme/palette';
 import { APP_VERSION } from '@/core/version';
 import { parseCssColour, toHex, type Rgb } from '@/core/utils/colour';
 import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/utils/contrast';
@@ -110,8 +110,16 @@ function systemLanguage(): Language {
  * other case rule that comes with a language, without a single special case in
  * the components.
  */
+/**
+ * Put the settings on the document, fading the colours there — see
+ * `fadePalette`, which does the fading on the window's own clock.
+ */
 function applyToDocument(settings: Settings, cover: CoverPalette | null = null): void {
   if (typeof document === 'undefined') return;
+  fadePalette(document.documentElement, () => applyNow(settings, cover));
+}
+
+function applyNow(settings: Settings, cover: CoverPalette | null): void {
 
   const root = document.documentElement;
   root.lang = settings.language ?? 'en';
@@ -135,8 +143,14 @@ function applyToDocument(settings: Settings, cover: CoverPalette | null = null):
    * them was a theme behind, the hairline between the player and the drawer
    * most visibly of all.
    */
-  const arriving =
-    wanted === (root.dataset.theme ?? null)
+  // Read only on the road that uses it — a hand-written theme's. A cover's
+  // colours and a custom pair are built here and need nothing read back, and
+  // each read is the whole window's styles worked out again: done on every
+  // record picked up, it was a third of the frame that ran long.
+  const builtIn = !(settings.themeFromCover && cover) && settings.theme !== CUSTOM_THEME;
+  const arriving = !builtIn
+    ? null
+    : wanted === (root.dataset.theme ?? null)
       ? readPalette(root)
       : palettePeek(root, wanted, wear, () => readPalette(root));
 

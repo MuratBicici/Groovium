@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { easeInOutCubic, prefersReducedMotion } from '@/core/utils/motion';
@@ -369,6 +378,40 @@ export function useHeldTrack(): string | null {
 
 export function useCarriedTrack(): string | null {
   return useContext(CarriedContext);
+}
+
+/**
+ * The record in the hand, for something that only needs to know whether it
+ * is its own.
+ *
+ * The context above re-renders everything that reads it whenever the hand
+ * changes, and every card on every shelf read it: picking a record up
+ * re-rendered both drawers whole, a hundred-odd cards, in the one frame the
+ * hand had to answer in — thirty milliseconds of it, measured, in the frame
+ * that ran long every time. Asked this way, only the card that is now in the
+ * hand, or no longer, renders again.
+ */
+const carried = { id: null as string | null, listeners: new Set<() => void>() };
+
+function carryNow(id: string | null): void {
+  if (carried.id === id) return;
+  carried.id = id;
+  for (const listener of carried.listeners) listener();
+}
+
+function hearCarry(listener: () => void): () => void {
+  carried.listeners.add(listener);
+  return () => {
+    carried.listeners.delete(listener);
+  };
+}
+
+export function useIsCarried(id: string): boolean {
+  return useSyncExternalStore(
+    hearCarry,
+    () => carried.id === id,
+    () => false,
+  );
 }
 
 type Phase = 'pickup' | 'carry' | 'seat' | 'throw';
@@ -1063,6 +1106,9 @@ export function DiscHoldProvider({ children }: { children: React.ReactNode }) {
     }),
     [grab, moveTo, release, cancel, eject, didJustThrow, didJustSeat, registerReceiver, subscribeCarry],
   );
+
+  const carriedId = held?.track.id ?? null;
+  useLayoutEffect(() => carryNow(carriedId), [carriedId]);
 
   return (
     <ActionsContext.Provider value={actions}>

@@ -324,21 +324,13 @@ body {
 @property --color-on-accent { syntax: '<color>'; inherits: true; initial-value: #16110d; }
 @property --color-edge { syntax: '<color>'; inherits: true; initial-value: #3d2f24; }
 
-:root {
-  transition:
-    --color-shell-900 var(--palette-ms) ease,
-    --color-shell-800 var(--palette-ms) ease,
-    --color-shell-700 var(--palette-ms) ease,
-    --color-shell-600 var(--palette-ms) ease,
-    --color-brass-400 var(--palette-ms) ease,
-    --color-brass-500 var(--palette-ms) ease,
-    --color-brass-600 var(--palette-ms) ease,
-    --color-cream-50 var(--palette-ms) ease,
-    --color-cream-200 var(--palette-ms) ease,
-    --color-cream-400 var(--palette-ms) ease,
-    --color-on-accent var(--palette-ms) ease,
-    --color-edge var(--palette-ms) ease;
-}
+/*
+ * No transition on them, though: the fade is `fadePalette`'s, which steps it
+ * on the window's own clock. As a transition it ran on every frame the screen
+ * made and restyled the whole window each time — on a 240 Hz panel, the
+ * stutter whenever a record was picked up. How long it takes is still said
+ * here, by `--palette-ms`.
+ */
 
 /*
  * Off while the colour picker is being dragged, and off for reduced motion.

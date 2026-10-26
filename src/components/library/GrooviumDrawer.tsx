@@ -19,7 +19,6 @@ import { LocalSearch } from './LocalSearch';
 import { useLyricsMatch } from '@/components/lyrics/LyricsMatch';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
-import { useCarriedTrack } from '@/components/player/DiscHold';
 import type { AddOutcome } from '@/core/spotify/store';
 import type { TrackMetadata } from '@/core/types';
 import { DRAWER_WIDTH } from '@/platform/window';
@@ -73,7 +72,6 @@ export function GrooviumDrawer({
   /** A playlist made a moment ago, which arrives on the shelf rather than just being there. */
   const [justMade, setJustMade] = useState<string | null>(null);
   const arrived = useCallback(() => setJustMade(null), []);
-  const inHand = useCarriedTrack();
   // Carried to the deck, a crate plays from its first song.
   const playWhole = useCallback(
     (face: CrateFace) => void playFrom(`playlist:${face.id}`, 0, true),
@@ -350,7 +348,6 @@ export function GrooviumDrawer({
               arriving={justMade === playlist.id}
               onArrived={arrived}
               starting={false}
-              away={inHand === `crate:${playlist.id}`}
               onCarry={carry}
               onOpen={(origin) => setOpen({ id: playlist.id, origin })}
             />
