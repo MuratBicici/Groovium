@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { pacer } from './pace';
+import { afterEach, describe, expect, it } from 'vitest';
+import { FRAME_RATE, pacer, rateFor, SAVING_RATE, setFrameRate } from './pace';
 
 /** How many times a gate says yes over one second of a screen at `hz`. */
 function drawnPerSecond(hz: number, rate = 60): number {
@@ -33,5 +33,27 @@ describe('the frame gate', () => {
     expect(gate(5000)).toBe(true);
     expect(gate(5004)).toBe(false);
     expect(gate(5017)).toBe(true);
+  });
+});
+
+describe('the window’s rate', () => {
+  afterEach(() => setFrameRate(FRAME_RATE));
+
+  it('is sixty in use and thirty otherwise', () => {
+    expect(rateFor(true, false)).toBe(60);
+    expect(rateFor(false, false)).toBe(30);
+    expect(rateFor(true, true)).toBe(30);
+  });
+
+  it('reaches a running gate on its next frame', () => {
+    const gate = pacer();
+    let drawn = 0;
+    for (let frame = 0; frame < 240; frame++) if (gate((frame * 1000) / 240)) drawn += 1;
+    expect(drawn).toBe(60);
+    setFrameRate(SAVING_RATE);
+    drawn = 0;
+    for (let frame = 240; frame < 480; frame++) if (gate((frame * 1000) / 240)) drawn += 1;
+    expect(drawn).toBeGreaterThanOrEqual(29);
+    expect(drawn).toBeLessThanOrEqual(31);
   });
 });

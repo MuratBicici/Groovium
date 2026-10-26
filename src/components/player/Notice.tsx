@@ -22,7 +22,20 @@ export function noticeMs(text: string): number {
  * along its foot running down to that, which waits while the pointer is on it.
  * Pressed, it goes at once.
  */
-export function Notice({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+export function Notice({
+  message,
+  onDismiss,
+  action,
+}: {
+  message: string | null;
+  onDismiss: () => void;
+  /**
+   * Something to do about it, as a word on the card's right — battery saver
+   * coming on, and turning it off. Beside the card's own button rather than
+   * inside it: a button cannot hold another.
+   */
+  action?: { label: string; onPress: () => void } | undefined;
+}) {
   const t = useT();
   const { present, shown } = useSheet(message !== null);
   /** What the card shows, which outlives `message` for the length of its way out. */
@@ -57,6 +70,8 @@ export function Notice({ message, onDismiss }: { message: string | null; onDismi
           <path d="M8 4.75v3.75M8 11.1v.15" />
         </svg>
         <span className="line-clamp-4 min-w-0 flex-1 text-meta leading-snug text-cream-100">{showing}</span>
+        {/* Room for the action, which sits over this corner from outside. */}
+        {action && <span aria-hidden="true" className="w-14 shrink-0" />}
         <svg
           viewBox="0 0 10 10"
           className="mt-0.5 h-2.5 w-2.5 shrink-0 text-cream-400"
@@ -77,6 +92,15 @@ export function Notice({ message, onDismiss }: { message: string | null; onDismi
           onAnimationEnd={message === null ? undefined : onDismiss}
         />
       </button>
+      {action && (
+        <button
+          type="button"
+          onClick={action.onPress}
+          className="absolute top-1.5 right-7 rounded-full bg-brass-600 px-2.5 py-0.5 text-meta font-medium text-on-accent transition-colors hover:bg-brass-500"
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }

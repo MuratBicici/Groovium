@@ -72,6 +72,8 @@ interface SettingsStore extends Settings {
   setGlowListens: (listens: GlowListens) => void;
   setVisualizerLook: (look: VisualizerLook) => void;
   setPickAnimation: (how: PickAnimation) => void;
+  setBatterySaver: (on: boolean) => void;
+  setBatterySaverOnBattery: (on: boolean) => void;
   setVisualizerBrightness: (notch: number) => void;
   setBackdrop: (on: boolean) => void;
   setBackdropKnob: (knob: BackdropKnob, notch: number) => void;
@@ -334,7 +336,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare, glowListens } = get();
-    const { visualizerLook, visualizerBrightness, pickAnimation } = get();
+    const { visualizerLook, visualizerBrightness, pickAnimation, batterySaver, batterySaverOnBattery } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -365,6 +367,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       glowListens,
       visualizerLook,
       pickAnimation,
+      batterySaver,
+      batterySaverOnBattery,
       visualizerBrightness,
       backdrop,
       backdropBrightness,
@@ -454,6 +458,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setGlowListens: (glowListens) => commit({ glowListens }),
     setVisualizerLook: (visualizerLook) => commit({ visualizerLook }),
     setPickAnimation: (pickAnimation) => commit({ pickAnimation }),
+    setBatterySaver: (batterySaver) => commit({ batterySaver }),
+    setBatterySaverOnBattery: (batterySaverOnBattery) => commit({ batterySaverOnBattery }),
     setVisualizerBrightness: (notch) =>
       commit({ visualizerBrightness: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setBackdrop: (backdrop) => commit({ backdrop }),

@@ -21,6 +21,10 @@ export function GeneralPage() {
   const pickAnimation = useSettingsStore((s) => s.pickAnimation);
   const setPickAnimation = useSettingsStore((s) => s.setPickAnimation);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
+  const batterySaver = useSettingsStore((s) => s.batterySaver);
+  const setBatterySaver = useSettingsStore((s) => s.setBatterySaver);
+  const batterySaverOnBattery = useSettingsStore((s) => s.batterySaverOnBattery);
+  const setBatterySaverOnBattery = useSettingsStore((s) => s.setBatterySaverOnBattery);
   const setSleepWhenHidden = useSettingsStore((s) => s.setSleepWhenHidden);
 
   return (
@@ -93,6 +97,20 @@ export function GeneralPage() {
           hint={t('settings.sleepWhenHiddenHint')}
           on={sleepWhenHidden}
           onChange={setSleepWhenHidden}
+        />
+        <CardDivider />
+        <Toggle
+          label={t('settings.batterySaver')}
+          hint={t('settings.batterySaverHint')}
+          on={batterySaver}
+          onChange={setBatterySaver}
+        />
+        <CardDivider />
+        <Toggle
+          label={t('settings.batterySaverOnBattery')}
+          hint={t('settings.batterySaverOnBatteryHint')}
+          on={batterySaverOnBattery}
+          onChange={setBatterySaverOnBattery}
         />
       </Group>
 

@@ -459,6 +459,14 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.windowGlowHint':
     'Pencerenin çerçevesi müzikle birlikte ışıklanır; ses yükseldikçe daha yukarı ve daha parlak çıkar.',
   'settings.scale': 'Pencere boyutu',
+  'settings.batterySaver': 'Pil dostu',
+  'settings.batterySaverHint':
+    'Işık, toz, plak çizgileri ve diğer efektler saniyede 60 yerine 30 kez çizilir. Dahili ekran kartını belirgin şekilde daha az yorar.',
+  'settings.batterySaverOnBattery': 'Pile geçince pil dostunu aç',
+  'settings.batterySaverOnBatteryHint':
+    'Bilgisayar fişten çekilince pil dostu kendiliğinden açılır ve size bildirilir; bildirimden kapatabilirsiniz.',
+  'power.savingOn': 'Pille çalışıyorsunuz, pil dostu mod açıldı: efektler daha seyrek çiziliyor.',
+  'power.turnOff': 'Kapat',
   'settings.sleepWhenHidden': 'Görünmezken dinlen',
   'settings.sleepWhenHiddenHint':
     'Pencere kaldırılmışken, simge durumundayken ya da tam ekran bir şeyin altında kalmışken hiçbir şey çizilmez. Kimse bakmıyorken de her şey dönsün istiyorsanız kapatın.',

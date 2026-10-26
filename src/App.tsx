@@ -37,6 +37,7 @@ import { QueueButton } from '@/components/queue/QueueButton';
 import { useLyricsStore } from '@/core/lyrics/store';
 import { followPlayer } from '@/core/lyrics/playhead';
 import { keepListening } from '@/core/listening/listen';
+import { declineSaving, dismissSavingNotice, usePower, usePowerAwareMotion } from '@/platform/power';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
 import { StationSetup } from '@/components/station/StationSetup';
@@ -139,6 +140,9 @@ export default function App() {
   const language = useLanguage();
   const error = usePlayerError();
   const clearError = usePlayerStore((s) => s.clearError);
+  // How hard the window works: sixty frames, thirty, or still — see `power`.
+  usePowerAwareMotion();
+  const savingTold = usePower((s) => s.told);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const compact = useSettingsStore((s) => s.compact);
@@ -635,7 +639,13 @@ export default function App() {
           />
           {/* Over the foot of the stage, just above the controls, whatever is
               on the stage: a notice takes no room from anything. */}
-          <Notice message={error} onDismiss={clearError} />
+          {/* Something gone wrong first; battery saver coming on only when
+              nothing has. */}
+          <Notice
+            message={error ?? (savingTold ? t('power.savingOn') : null)}
+            onDismiss={error ? clearError : dismissSavingNotice}
+            action={error || !savingTold ? undefined : { label: t('power.turnOff'), onPress: declineSaving }}
+          />
         </div>
 
         {/* Always reachable, including while an overlay is open — except under

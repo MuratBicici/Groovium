@@ -167,6 +167,16 @@ export interface Settings {
    */
   pickAnimation: PickAnimation;
   /**
+   * Battery saver, turned on by hand: everything that moves is drawn thirty
+   * times a second instead of sixty. See `pace`.
+   */
+  batterySaver: boolean;
+  /**
+   * Battery saver turned on by itself while the computer runs on its battery,
+   * with a notice saying so that can turn it back off until the next time.
+   */
+  batterySaverOnBattery: boolean;
+  /**
    * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
    * the quarter it has always been drawn at; see `visualizerOpacity`.
    */
@@ -283,6 +293,8 @@ export const DEFAULT_SETTINGS: Settings = {
   glowListens: 'all',
   visualizerLook: 'grooves',
   pickAnimation: 'meteor',
+  batterySaver: false,
+  batterySaverOnBattery: true,
   visualizerBrightness: 0,
   backdrop: true,
   backdropBrightness: 0,

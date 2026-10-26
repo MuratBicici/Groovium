@@ -511,6 +511,18 @@ body {
 }
 
 /*
+ * Put away — minimised or in the tray — nothing the stylesheet animates goes on
+ * moving: the record's turning above all, which kept the GPU a tenth busy in a
+ * window nobody could see. Paused rather than taken off, so the record picks
+ * up at the angle it stopped at. See `power.ts`.
+ */
+:root[data-asleep] *,
+:root[data-asleep] *::before,
+:root[data-asleep] *::after {
+  animation-play-state: paused !important;
+}
+
+/*
  * Arranging the front page: the shelves have come loose.
  *
  * Each shelf wobbles barely, and each record on it a good deal more, on beats
@@ -1392,7 +1404,12 @@ body {
  */
 .groove-platter,
 .groove-spin {
-  animation: groove-spin 4.5s linear infinite;
+  /* In steps, as many a second as everything else is drawn — sixty, or thirty
+     when the window is not in use or saving the battery (`--spin-steps`, set by
+     `power.ts`). Turning smoothly, it was the one thing still asking the screen
+     for every frame it could make: on a 240 Hz panel, a tenth of the GPU for a
+     record that looks no different at sixty. */
+  animation: groove-spin 4.5s steps(var(--spin-steps, 270)) infinite;
 }
 .groove-platter[data-spinning='false'],
 .groove-spin[data-spinning='false'] {

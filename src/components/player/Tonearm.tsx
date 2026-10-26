@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useIsPlaying, useProgressFraction } from '@/core/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import {
@@ -60,6 +60,12 @@ import {
  * can collapse, while a lifted record just means there is nothing to track, and
  * the arm returns to its rest the way it does between songs.
  */
+/** How far the arm moves at a time while it tracks, in degrees. */
+const TRACK_STEP = 0.25;
+
+/** A move larger than this is eased; anything smaller is a tracking step. */
+const EASED_FROM = 1;
+
 export function Tonearm({
   stowed = false,
   lifted = false,
@@ -78,7 +84,20 @@ export function Tonearm({
   const radius = tracking
     ? OUTER_GROOVE + (INNER_GROOVE - OUTER_GROOVE) * progress
     : PARK_RADIUS;
-  const angle = angleForRadius(radius);
+  // Tracking moves in quarter degrees, a little under half a pixel at the
+  // stylus. It used to follow every progress report with a 300 ms ease, and the
+  // reports come every quarter of a second — so the ease never finished, and a
+  // filtered arm was being redrawn on every frame the screen made, the whole
+  // time a song played: what kept the GPU busy with the effects held to sixty.
+  const angle = tracking ? Math.round(angleForRadius(radius) / TRACK_STEP) * TRACK_STEP : angleForRadius(radius);
+  // Eased only for a move worth seeing — onto the record, off it, a seek — and
+  // set straight down for a tracking step, which is one repaint and no more.
+  const [held, setHeld] = useState(angle);
+  const [eased, setEased] = useState(true);
+  if (angle !== held) {
+    setEased(Math.abs(angle - held) > EASED_FROM);
+    setHeld(angle);
+  }
 
   // The pivot in viewport coordinates. Everything below is drawn relative to
   // it, so the shapes stay written in the well's frame.
@@ -123,11 +142,9 @@ export function Tonearm({
           // pivot rather than the raw one.
           transform: `rotate(${angle.toFixed(2)}deg)`,
           transformBox: 'view-box',
-          // One duration for two very different moves. Cueing on and off the
-          // record is ~22 degrees and reads as a deliberate drop; tracking is a
-          // fifth of a degree every 250ms and just needs smoothing. A slower
-          // transition would spend its life chasing the progress ticks.
-          transition: prefersReducedMotion() ? 'none' : 'transform 300ms ease-out',
+          // Cueing on and off the record is ~22 degrees and reads as a
+          // deliberate drop, so it is eased. Tracking is not: see `TRACK_STEP`.
+          transition: prefersReducedMotion() || !eased ? 'none' : 'transform 300ms ease-out',
           transformOrigin: `${px}px ${py}px`,
           // Lifted while parked: the shadow falls further from the arm.
           filter: tracking

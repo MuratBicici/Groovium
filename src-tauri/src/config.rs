@@ -161,6 +161,14 @@ pub struct Settings {
     /// written before there was a choice, reads as the meteor on the way in.
     #[serde(default = "meteor")]
     pub pick_animation: String,
+    /// Battery saver, turned on by hand: everything that moves drawn thirty
+    /// times a second instead of sixty. Off unless turned on.
+    #[serde(default)]
+    pub battery_saver: bool,
+    /// Battery saver turned on by itself on battery power. On unless turned
+    /// off, including in a config from before it existed.
+    #[serde(default = "on_unless_turned_off")]
+    pub battery_saver_on_battery: bool,
     /// How brightly the visualiser shows through: a notch from -4 to 4, nought
     /// being the quarter it has always been drawn at.
     #[serde(default, deserialize_with = "notch")]
@@ -240,6 +248,8 @@ impl Default for Settings {
             glow_listens: all_of_it(),
             visualizer_look: grooves(),
             pick_animation: meteor(),
+            battery_saver: false,
+            battery_saver_on_battery: on_unless_turned_off(),
             visualizer_brightness: 0,
             backdrop: on_unless_turned_off(),
             backdrop_brightness: 0,
@@ -448,6 +458,8 @@ mod tests {
             glow_listens: "bass".into(),
             visualizer_look: "blocks".into(),
             pick_animation: "arc".into(),
+            battery_saver: true,
+            battery_saver_on_battery: false,
             visualizer_brightness: 2,
             backdrop: false,
             backdrop_brightness: 1,
@@ -495,6 +507,21 @@ mod tests {
             serde_json::from_str(r#"{"settings":{"backdrop":false,"backdropDust":-9}}"#).expect("parses");
         assert!(!chosen.settings.backdrop);
         assert_eq!(chosen.settings.backdrop_dust, -4);
+    }
+
+    #[test]
+    fn a_config_from_before_battery_saver_saves_only_on_battery() {
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert!(!config.settings.battery_saver);
+        assert!(config.settings.battery_saver_on_battery);
+        let chosen: AppConfig = serde_json::from_str(
+            r#"{"settings":{"batterySaver":true,"batterySaverOnBattery":false}}"#,
+        )
+        .expect("parses");
+        assert!(chosen.settings.battery_saver);
+        assert!(!chosen.settings.battery_saver_on_battery);
+        let written = serde_json::to_string(&chosen).expect("writes");
+        assert!(written.contains(r#""batterySaverOnBattery":false"#));
     }
 
     #[test]

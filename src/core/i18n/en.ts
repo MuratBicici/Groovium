@@ -478,6 +478,14 @@ export const en = {
   'settings.windowGlowHint':
     'The window’s border lights up with the music, climbing higher and brighter the louder it gets.',
   'settings.scale': 'Window size',
+  'settings.batterySaver': 'Battery saver',
+  'settings.batterySaverHint':
+    'The light, the dust, the grooves and the other effects are drawn 30 times a second instead of 60, noticeably less work for built-in graphics.',
+  'settings.batterySaverOnBattery': 'Battery saver on battery',
+  'settings.batterySaverOnBatteryHint':
+    'Unplugged, battery saver turns on by itself and tells you so; you can turn it off from the notice.',
+  'power.savingOn': 'On battery, so battery saver is on: the effects are drawn less often.',
+  'power.turnOff': 'Turn off',
   'settings.sleepWhenHidden': 'Rest out of sight',
   'settings.sleepWhenHiddenHint':
     'Nothing is drawn while the window is put away, minimised, or buried under something full-screen. Turn it off to keep everything moving whether or not anyone is looking.',
