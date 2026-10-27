@@ -342,16 +342,6 @@ body {
 :root {
   --palette-ms: 220ms;
 }
-/*
- * Slower when the colours are a record's: the window turning to a new song's
- * colours over a second and a half once the record is on the deck, where a
- * quarter of a second had it change all at once. A theme chosen by hand keeps
- * the quick fade — somebody choosing is waiting to see it. Set by
- * `CoverTheme` for as long as the fade lasts.
- */
-:root[data-palette='record'] {
-  --palette-ms: 1500ms;
-}
 :root[data-picking='live'],
 :root[data-motion='off'] {
   --palette-ms: 0ms;
