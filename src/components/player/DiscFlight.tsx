@@ -137,9 +137,6 @@ const JUST_LANDED_MS = 400;
  */
 const PendingContext = createContext<string | null>(null);
 
-/** Whether a meteor's shock is still going through the window; see `useShaking`. */
-const ShakingContext = createContext(false);
-
 export function useDiscFlight(): DiscFlightActions {
   return useContext(ActionsContext);
 }
@@ -147,15 +144,6 @@ export function useDiscFlight(): DiscFlightActions {
 /** The track whose disc is still in the air, so the platter can stay empty. */
 export function usePendingLanding(): string | null {
   return useContext(PendingContext);
-}
-
-/**
- * Whether the shock of a meteor striking the deck is still running through the
- * window, so what would repaint all of it — the colours turning to a new
- * record's — can wait for it to pass.
- */
-export function useShaking(): boolean {
-  return useContext(ShakingContext);
 }
 
 export function DiscFlightProvider({ children }: { children: React.ReactNode }) {
@@ -271,7 +259,6 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
   return (
     <ActionsContext.Provider value={actions}>
       <PendingContext.Provider value={pendingTrackId}>
-        <ShakingContext.Provider value={impacts.length > 0}>
         {children}
 
         {/* z-10 — the disc-motion layer, above the stage and below the panels
@@ -326,7 +313,6 @@ export function DiscFlightProvider({ children }: { children: React.ReactNode }) 
               />
             ))}
         </div>
-        </ShakingContext.Provider>
       </PendingContext.Provider>
     </ActionsContext.Provider>
   );

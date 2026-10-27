@@ -6,7 +6,6 @@ import { log } from '@/platform/log';
 import { useSettingsStore } from '@/core/settings/store';
 import { upcomingCovers, usePlayerStore } from '@/core/store';
 import { useHeldTrack } from './DiscHold';
-import { usePendingLanding, useShaking } from './DiscFlight';
 
 /**
  * The palette, taken from whatever is on the deck.
@@ -53,20 +52,11 @@ export function CoverTheme() {
    */
   const onDeck = onDeckTrack?.id;
   const inHand = useHeldTrack() !== null;
-  /**
-   * Still in the air on its way to the deck, and not yet on it.
-   *
-   * The colours change when it lands. Changing as it flew, the whole window
-   * repainted every frame of the fade, under a record that was meant to be the
-   * one thing moving — and on a quick screen that cost a dozen or more frames
-   * of every flight to a new song.
-   */
-  const landing = usePendingLanding();
-  // And until the shock of its landing has gone through the window, which
-  // moves everything in it: the two at once were the heaviest second of a
-  // song change.
-  const shaking = useShaking();
-  const flying = (landing !== null && landing === onDeck) || shaking;
+  // The colours change the moment a song is pressed, not when its record
+  // lands: the listener wants the window to answer the press. Held back for
+  // the landing for a while, because the fade restyled the whole window on
+  // every frame under a record in flight; it is a quick fade on its own clock
+  // now (`fadePalette`), and the wait read as the window being slow.
   /** The covers that could be on the deck next — see `upcomingCovers`. */
   const upcoming = usePlayerStore(upcomingCovers);
 
@@ -141,9 +131,6 @@ export function CoverTheme() {
       return;
     }
 
-    // The window keeps the colours it has until the record is down.
-    if (flying) return;
-
     const already = knownPalette(cover);
     if (already !== undefined) {
       setCoverPalette(already);
@@ -190,7 +177,7 @@ export function CoverTheme() {
       alive = false;
       clearTimeout(soon);
     };
-  }, [on, cover, onDeck, inHand, flying, attempt, setCoverPalette]);
+  }, [on, cover, onDeck, inHand, attempt, setCoverPalette]);
 
   return null;
 }
