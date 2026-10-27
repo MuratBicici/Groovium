@@ -4,6 +4,108 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.3.1 — 2026-10-27
+
+A front page made from what you play.
+
+The Spotify drawer opens on what you heard lately, in Groovium and on your
+other devices, with a mark for where; on shelves of the genres you play most,
+new every day; and on the songs you liked. Press Edit and the shelves come
+loose: carry them into the order you like. The genres come from Last.fm, so
+they need its key, which Settings, Connections takes.
+
+Search opens in a window of its own over the player, grown out of the
+magnifier. The best match sits on one side and Enter plays it; on Spotify
+albums come up too, and open and play inside the search. An empty search
+offers the last ones you made.
+
+A song pressed falls onto the deck like a meteor, and strikes it hard enough
+to shake the window; Settings, General, Motion has the old throw if you prefer
+it. Behind the turntable a light turns in the cover's colours with dust
+drifting through it, breathing with the music, tuned in Settings, Lights. An
+empty deck is brushed metal in the theme's colours.
+
+And Groovium asks much less of your computer. Effects are drawn at most sixty
+times a second, thirty while you work in another window or on battery saver,
+and not at all when it is minimised or in the tray. Battery saver comes on by
+itself on battery, and says so.
+
+HIGHLIGHTS
+· A Spotify front page: recently played, genre shelves and liked songs, in an
+  order you choose.
+· A new search window, with albums on Spotify and your recent searches.
+· Songs fall onto the deck like meteors.
+· A light behind the turntable in the cover's colours, with dust.
+· Far less work for the graphics: a frame cap, rest when put away, and battery
+  saver.
+
+ALL CHANGES
+
+Spotify front page
+· Recently played lays Groovium's own log of what you heard over Spotify's,
+  newest first. A small record marks a song heard in Groovium, a phone one
+  heard elsewhere. Music on this computer gets its own Recently played shelf
+  on the Local side.
+· Three genre shelves, from the Last.fm tags of the artists you play most,
+  with opinions and places left out. Each holds songs listened to most under
+  its tag that you have not heard here, found on Spotify, and changes once a
+  day. Without a Last.fm key the page says where to add one.
+· Liked songs, with how many. It needs one more permission from Spotify, asked
+  for on the shelf itself; the rest of the page works without it.
+· Edit, beside the search, loosens the shelves: they wobble, and one picked up
+  anywhere moves while the others make room. The arrow keys move one too.
+  Done or Escape fixes them, and the order is kept.
+
+Search
+· Opens in a floating window over the whole player, out of the search button,
+  and goes back into it when closed. Ctrl+F, or typing at the drawer, opens it.
+· A best match with its record and Play, Enter to play it, and songs and
+  playlists beside it. On Spotify, albums as well, which open inside the search
+  and play whole or a song at a time.
+· With nothing typed, your recent searches on that side, each with a button to
+  forget it.
+· Results slide in and out, and typing quickly no longer leaves them invisible.
+
+The deck
+· A song pressed anywhere falls onto the deck like a meteor, its light trailing
+  behind, and the strike pushes the window's parts outward for a moment.
+  Settings, General, Motion, Song pick animation brings the old throw back.
+· The window takes a record's colours the moment its song is pressed.
+· Picking a record up no longer stutters while the window's colours change.
+· An empty deck is brushed metal in the theme's colours; the strobe dots are
+  gone.
+
+Background light
+· Behind the deck the cover's colours turn with the record, and dust drifts in
+  the light, surging with each hit. Brightness, spread, turning speed, breath
+  and dust are in Settings, Lights, with a switch to turn it off.
+· It stays still while the drawer opens and shuts.
+
+Drawer
+· One card for songs and playlists alike: the cover as a sleeve with the record
+  in its opening, the name beneath. Shelf names written plainly with their
+  count, rows that fade at the end that runs on, and arrows on shelves that
+  scroll.
+· Your account and signing out are in one menu beside the search.
+
+Performance
+· Moving pictures are drawn at most sixty times a second, however fast the
+  screen. On a 240 Hz panel the graphics were two thirds busy with a song
+  playing and the drawer open; a third of that now.
+· Minimised or in the tray, nothing moves, the record included. With another
+  window in use, effects are drawn thirty times a second.
+· Battery saver, in Settings, General, Motion, draws effects thirty times a
+  second. It turns on by itself on battery and says so, with a button to turn
+  it off until the next time.
+· The tonearm no longer redraws the window as it tracks, and the record turns
+  in steps the window can afford.
+· Shelves scrolled out of sight are not drawn, and a colour change restyles
+  only what has to be seen changing.
+
+Fixes
+· Forgetting Spotify or the Last.fm key in Settings, Connections asks first.
+· A record's sleeve shows once it has arrived, however it got there.
+
 ## 1.3.0 — 2026-10-22
 
 Lyrics you can put right yourself.

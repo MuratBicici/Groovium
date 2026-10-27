@@ -13,6 +13,33 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.3.1 — 2026-10-27
+
+Dinlediklerinizden bir ön sayfa.
+
+Spotify çekmecesi artık son dinledikleriniz ile açılıyor. Groovium'da ve
+diğer cihazlarınızda çaldıklarınız bir arada durur, küçük bir işaret nerede
+çalındığını gösterir. Altında en çok dinlediğiniz türlerin rafları var, her
+gün yenilenir. Beğendiğiniz şarkılar da burada. Düzenle'ye basınca raflar
+gevşer, istediğiniz sıraya sürükleyin. Türler Last.fm'den gelir. Bunun için
+Ayarlar, Bağlantılar'dan bir Last.fm anahtarı eklemeniz gerekir.
+
+Arama artık oynatıcının üstünde kendi penceresinde açılıyor, büyüteçten
+büyüyerek. En iyi eşleşme bir yanda durur, Enter ile çalar. Spotify'da
+albümler de çıkar. Albümü aramanın içinde açıp çalabilirsiniz. Boş aramada son
+aramalarınız görünür.
+
+Bastığınız şarkı tablaya meteor gibi düşer ve pencereyi sarsacak kadar sert
+çarpar. Eski atışı isterseniz Ayarlar, Genel, Hareket'te bulursunuz. Pikabın
+arkasında artık kapağın renklerinde dönen bir ışık var, içinde müzikle nefes
+alan toz. Ayarlar, Işıklar'dan ayarlayabilirsiniz. Boş tabla temanın renginde
+fırçalanmış metal.
+
+Groovium bilgisayarınızı da çok daha az yoruyor. Efektler saniyede en fazla 60
+kez çizilir. Başka bir pencerede çalışırken ya da pil dostu açıkken 30 kez.
+Küçültülünce ya da tepsideyken hiç çizilmez. Pil dostu, pile geçince
+kendiliğinden açılır ve size söyler.
+
 ## 1.3.0 — 2026-10-22
 
 Sözleri artık siz düzeltebilirsiniz.
