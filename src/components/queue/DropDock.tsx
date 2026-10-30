@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { usePlayerStore } from '@/core/store';
+import { usePresence } from '@/components/lyrics/usePresence';
 import { useT } from '@/core/i18n';
 import { useCarriedTrack, useCarryKind } from '@/components/player/DiscHold';
 import { DropWell } from './DropWell';
@@ -29,22 +31,35 @@ export function DropDock({ deckHasSong }: { deckHasSong: boolean }) {
   const queueNext = usePlayerStore((s) => s.queueNext);
   const queueLast = usePlayerStore((s) => s.queueLast);
 
-  if (!carry?.visiting || inHand === null) return null;
-  const queueable = carry.look === 'record' && deckHasSong;
-  const linkable = linkOf(inHand) !== null;
-  if (!queueable && !linkable) return null;
+  const carrying = !!carry?.visiting && inHand !== null;
+  const queueable = carrying && carry?.look === 'record' && deckHasSong;
+  const linkable = carrying && linkOf(inHand) !== null;
+  const show = queueable || linkable;
+
+  // Which wells it had, kept while it goes: the hand is empty by then, and
+  // worked out afresh the dock would empty before it had left.
+  const [shown, setShown] = useState({ queueable, linkable });
+  if (show && (shown.queueable !== queueable || shown.linkable !== linkable)) setShown({ queueable, linkable });
+  // Down and out as it came up and in — see `usePresence`.
+  const { present, ref } = usePresence(show, 'translateY(70%)');
+  if (!present) return null;
 
   return (
-    // Centred under the drawer, as wide as its wells and no wider.
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center">
-      <div className="groove-dock flex items-center gap-1 rounded-2xl bg-shell-800/90 px-3 pt-2.5 pb-2 shadow-xl ring-1 ring-brass-400/25 backdrop-blur-sm">
-        {queueable && (
+    // Centred under the drawer, as wide as its wells and no wider. Under the
+    // hand's own layer (`z-10`, see App's layer table), so the record held over
+    // a well is seen over it, and over everything in the drawer.
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-[6] flex justify-center">
+      <div
+        ref={ref}
+        className="flex items-center gap-1 rounded-2xl bg-shell-800/90 px-3 pt-2.5 pb-2 shadow-xl ring-1 ring-brass-400/25 backdrop-blur-sm"
+      >
+        {shown.queueable && (
           <DropWell kind="next" label={t('queue.playNext')} accepts={isSong} onTake={queueNext} size={WELL_SIZE} />
         )}
-        {linkable && (
+        {shown.linkable && (
           <DropWell kind="link" label={t('queue.link')} accepts={hasLink} onTake={copyLink} size={WELL_SIZE} />
         )}
-        {queueable && (
+        {shown.queueable && (
           <DropWell kind="last" label={t('queue.addLast')} accepts={isSong} onTake={queueLast} size={WELL_SIZE} />
         )}
       </div>
