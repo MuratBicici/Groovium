@@ -1,16 +1,16 @@
-import type { TrackMetadata } from '@/core/types';
-import { usePlayerStore, useUpcoming } from '@/core/store';
+import { usePlayerStore } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { useCarriedTrack, useCarryKind } from '@/components/player/DiscHold';
 import { DropWell } from './DropWell';
 import { copyLink, hasLink, isSong, linkOf } from './share';
 
-/** How many of the songs to come are shown beside the wells. */
-const COMING_SHOWN = 5;
+/** The wells' rings on the dock: smaller than a record, as the dock is a row and not a mat. */
+const WELL_SIZE = 56;
 
 /**
- * Where a carried record can go, on a dock that rises at the foot of the
- * drawer while it is in the hand.
+ * Where a carried record can go, on a small dock that rises in the middle of
+ * the drawer's foot while it is in the hand. The queue itself is not shown on
+ * it: the listener wanted the places to go and nothing else.
  *
  * The other way to show the same places is the queue's round palette, which
  * opened over half the drawer for every record lifted: the listener found it
@@ -28,7 +28,6 @@ export function DropDock({ deckHasSong }: { deckHasSong: boolean }) {
   const inHand = useCarriedTrack();
   const queueNext = usePlayerStore((s) => s.queueNext);
   const queueLast = usePlayerStore((s) => s.queueLast);
-  const coming = useUpcoming(COMING_SHOWN);
 
   if (!carry?.visiting || inHand === null) return null;
   const queueable = carry.look === 'record' && deckHasSong;
@@ -36,37 +35,18 @@ export function DropDock({ deckHasSong }: { deckHasSong: boolean }) {
   if (!queueable && !linkable) return null;
 
   return (
-    <div className="groove-dock pointer-events-none absolute inset-x-4 bottom-4 z-20 flex items-center gap-5 rounded-2xl bg-shell-800/90 px-6 pt-3 pb-2.5 shadow-xl ring-1 ring-brass-400/25 backdrop-blur-sm">
-      {queueable && (
-        <DropWell kind="next" label={t('queue.playNext')} accepts={isSong} onTake={queueNext} />
-      )}
-      {linkable && <DropWell kind="link" label={t('queue.link')} accepts={hasLink} onTake={copyLink} />}
-      {queueable && (
-        <DropWell kind="last" label={t('queue.addLast')} accepts={isSong} onTake={queueLast} />
-      )}
-      {queueable && coming.length > 0 && <Coming tracks={coming.map((entry) => entry.track)} />}
-    </div>
-  );
-}
-
-/** What is to come, as a few small covers: where "next" and "at the end" are. */
-function Coming({ tracks }: { tracks: TrackMetadata[] }) {
-  const t = useT();
-  return (
-    <div className="ml-auto flex flex-col items-end gap-1.5">
-      <span className="text-label font-medium tracking-[0.18em] text-cream-400 uppercase">{t('queue.title')}</span>
-      <div className="flex gap-1">
-        {tracks.map((track) => (
-          <span
-            key={track.id}
-            className="block h-7 w-7 overflow-hidden rounded bg-shell-900 ring-1 ring-[var(--color-edge)]"
-            title={`${track.title} — ${track.artist}`}
-          >
-            {track.coverArtUrl && (
-              <img src={track.coverArtUrl} crossOrigin="anonymous" alt="" className="h-full w-full object-cover" />
-            )}
-          </span>
-        ))}
+    // Centred under the drawer, as wide as its wells and no wider.
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center">
+      <div className="groove-dock flex items-center gap-1 rounded-2xl bg-shell-800/90 px-3 pt-2.5 pb-2 shadow-xl ring-1 ring-brass-400/25 backdrop-blur-sm">
+        {queueable && (
+          <DropWell kind="next" label={t('queue.playNext')} accepts={isSong} onTake={queueNext} size={WELL_SIZE} />
+        )}
+        {linkable && (
+          <DropWell kind="link" label={t('queue.link')} accepts={hasLink} onTake={copyLink} size={WELL_SIZE} />
+        )}
+        {queueable && (
+          <DropWell kind="last" label={t('queue.addLast')} accepts={isSong} onTake={queueLast} size={WELL_SIZE} />
+        )}
       </div>
     </div>
   );

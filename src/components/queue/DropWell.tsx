@@ -23,6 +23,7 @@ export function DropWell({
   onTake,
   className = '',
   style,
+  size = RECORD_SIZE,
 }: {
   kind: WellKind;
   label: string;
@@ -32,6 +33,8 @@ export function DropWell({
   onTake: (track: TrackMetadata) => void;
   className?: string;
   style?: React.CSSProperties;
+  /** The ring's width: a record's on the palette, smaller on the dock. */
+  size?: number;
 }) {
   const el = useRef<HTMLDivElement | null>(null);
   const [offered, setOffered] = useState(false);
@@ -59,7 +62,7 @@ export function DropWell({
       className={`groove-queue-well pointer-events-none flex items-center gap-1.5 ${
         labelFirst ? 'flex-col-reverse' : 'flex-col'
       } ${className}`}
-      style={{ width: RECORD_SIZE + 40, ...style }}
+      style={{ width: size + 40, ...style }}
     >
       <div
         ref={el}
@@ -69,11 +72,11 @@ export function DropWell({
             ? 'groove-queue-offered border-transparent bg-brass-600/30 text-brass-300'
             : 'border-brass-400/55 bg-shell-900/55 text-brass-400/80'
         }`}
-        style={{ width: RECORD_SIZE, height: RECORD_SIZE }}
+        style={{ width: size, height: size }}
       >
         <svg
           viewBox="0 0 24 24"
-          className="h-6 w-6"
+          className={size < RECORD_SIZE ? 'h-5 w-5' : 'h-6 w-6'}
           fill="none"
           stroke="currentColor"
           strokeWidth="1.8"
