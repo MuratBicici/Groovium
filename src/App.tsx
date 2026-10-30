@@ -37,6 +37,8 @@ import { QueueButton } from '@/components/queue/QueueButton';
 import { useLyricsStore } from '@/core/lyrics/store';
 import { followPlayer } from '@/core/lyrics/playhead';
 import { keepListening } from '@/core/listening/listen';
+import { clearNotice, useNotice } from '@/core/notice';
+import { DropDock } from '@/components/queue/DropDock';
 import { declineSaving, dismissSavingNotice, usePower, usePowerAwareMotion } from '@/platform/power';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
@@ -143,6 +145,7 @@ export default function App() {
   // How hard the window works: sixty frames, thirty, or still — see `power`.
   usePowerAwareMotion();
   const savingTold = usePower((s) => s.told);
+  const notice = useNotice((s) => s.message);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const compact = useSettingsStore((s) => s.compact);
@@ -651,12 +654,12 @@ export default function App() {
           />
           {/* Over the foot of the stage, just above the controls, whatever is
               on the stage: a notice takes no room from anything. */}
-          {/* Something gone wrong first; battery saver coming on only when
-              nothing has. */}
+          {/* Something gone wrong first, then something done (a link
+              copied), then battery saver coming on. */}
           <Notice
-            message={error ?? (savingTold ? t('power.savingOn') : null)}
-            onDismiss={error ? clearError : dismissSavingNotice}
-            action={error || !savingTold ? undefined : { label: t('power.turnOff'), onPress: declineSaving }}
+            message={error ?? notice ?? (savingTold ? t('power.savingOn') : null)}
+            onDismiss={error ? clearError : notice ? clearNotice : dismissSavingNotice}
+            action={error || notice || !savingTold ? undefined : { label: t('power.turnOff'), onPress: declineSaving }}
           />
         </div>
 
@@ -861,7 +864,9 @@ function DrawerSlot({
    */
   const carry = useCarryKind();
   const carryingSong = carry !== null && carry.visiting && carry.look === 'record';
-  const showQueue = queue || (carryingSong && deckHasSong);
+  // With the dock chosen, a carry raises the dock instead of the palette.
+  const dock = useSettingsStore((s) => s.dropZone) === 'dock';
+  const showQueue = queue || (!dock && carryingSong && deckHasSong);
   const { present, ref } = usePresence(lyrics);
   const { present: queuePresent, ref: queueRef } = usePresence(showQueue);
   return (
@@ -892,6 +897,7 @@ function DrawerSlot({
           {queueView}
         </div>
       )}
+      {dock && !queue && <DropDock deckHasSong={deckHasSong} />}
     </div>
   );
 }

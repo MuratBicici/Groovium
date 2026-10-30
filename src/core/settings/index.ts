@@ -177,6 +177,11 @@ export interface Settings {
    */
   batterySaverOnBattery: boolean;
   /**
+   * Where the places to drop a carried record appear: a dock rising at the
+   * foot of the drawer, or the queue's round palette as it always was.
+   */
+  dropZone: DropZone;
+  /**
    * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
    * the quarter it has always been drawn at; see `visualizerOpacity`.
    */
@@ -243,6 +248,9 @@ export type GlowListens = 'all' | 'bass';
 /** How the visualiser is drawn; see `visualizerLook`. */
 export type VisualizerLook = 'grooves' | 'blocks';
 
+/** Where a carried record's places to go appear; see `dropZone`. */
+export type DropZone = 'dock' | 'mat';
+
 /** How a pressed song's record comes to the deck; see `pickAnimation`. */
 export type PickAnimation = 'arc' | 'meteor';
 
@@ -295,6 +303,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pickAnimation: 'meteor',
   batterySaver: false,
   batterySaverOnBattery: true,
+  dropZone: 'dock',
   visualizerBrightness: 0,
   backdrop: true,
   backdropBrightness: 0,
@@ -337,6 +346,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
+    if (settings.dropZone !== 'mat') settings.dropZone = 'dock';
     settings.lyricsOn = settings.lyricsOn === true;
     settings.backdrop = settings.backdrop !== false;
     settings.scale = nearestScale(Number(settings.scale));

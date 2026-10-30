@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import type { DrawerSide } from '@/core/settings';
 import { useCurrentTrack, usePlayerStore, useUpcoming, type Upcoming } from '@/core/store';
@@ -11,6 +11,8 @@ import { useTurn } from './useTurn';
 import { turnTransition } from '@/components/lyrics/LyricWheel';
 import { TURN_EASING, TURN_MS, turnIn } from '@/components/lyrics/motion';
 import { PaletteSurface } from './PaletteSurface';
+import { DropWell } from './DropWell';
+import { copyLink, hasLink, isSong, linkOf } from './share';
 import {
   CENTER_INSET,
   inReach,
@@ -333,8 +335,45 @@ export function QueueDrawer({
 
         {offering && (
           <>
-            <Well where="next" label={t('queue.playNext')} side={side} onTake={queueNext} />
-            <Well where="last" label={t('queue.addLast')} side={side} onTake={queueLast} />
+            {/* Its name on the side away from the other, so the two read apart
+                and the next song's own words can still be made out between
+                them. Up for sooner and down for later, as the queue runs. */}
+            <DropWell
+              kind="next"
+              label={t('queue.playNext')}
+              labelFirst
+              accepts={isSong}
+              onTake={queueNext}
+              className="absolute z-10"
+              style={{
+                bottom: `calc(50% + ${WELL_APART - RECORD_SIZE / 2}px)`,
+                [left ? 'left' : 'right']: CENTER_INSET + WELL_FROM_HUB - (RECORD_SIZE + 40) / 2,
+              }}
+            />
+            <DropWell
+              kind="last"
+              label={t('queue.addLast')}
+              accepts={isSong}
+              onTake={queueLast}
+              className="absolute z-10"
+              style={{
+                top: `calc(50% + ${WELL_APART - RECORD_SIZE / 2}px)`,
+                [left ? 'left' : 'right']: CENTER_INSET + WELL_FROM_HUB - (RECORD_SIZE + 40) / 2,
+              }}
+            />
+            {inHand !== null && linkOf(inHand) !== null && (
+              <DropWell
+                kind="link"
+                label={t('queue.link')}
+                accepts={hasLink}
+                onTake={copyLink}
+                className="absolute z-10"
+                style={{
+                  top: `calc(50% - ${RECORD_SIZE / 2}px)`,
+                  [left ? 'left' : 'right']: CENTER_INSET + WELL_FROM_HUB + LINK_INWARD - (RECORD_SIZE + 40) / 2,
+                }}
+              />
+            )}
           </>
         )}
 
@@ -569,91 +608,9 @@ function Chip({
 const WELL_FROM_HUB = 165;
 /** How far above and below the level they are. */
 const WELL_APART = 78;
-
 /**
- * A place on the felt to put a song carried from the drawer: the top one plays
- * it next, the bottom one puts it at the end. Up and down because that is the
- * way the queue runs round the rim — sooner above, later below — and the
- * arrows inside say the same.
- *
- * The record is set down in it, as one filed in a crate is, and goes back to
- * where it came from.
+ * How much further into the window the place for a link stands than the
+ * other two: level with the palette's centre, between and inside them, where
+ * it reads as a third choice rather than a third step of the queue.
  */
-function Well({
-  where,
-  label,
-  side,
-  onTake,
-}: {
-  where: 'next' | 'last';
-  label: string;
-  side: DrawerSide;
-  onTake: (track: TrackMetadata) => void;
-}) {
-  const left = side === 'left';
-  const el = useRef<HTMLDivElement | null>(null);
-  const [offered, setOffered] = useState(false);
-  const { registerReceiver } = useDiscHold();
-
-  useEffect(() => {
-    const node = el.current;
-    if (!node) return;
-    return registerReceiver({
-      el: node,
-      accepts: (track) => !track.id.startsWith('crate:'),
-      onHover: (state) => setOffered(state === 'accept'),
-      refuse: () => {},
-      approach: { x: 0, y: -30 },
-      handOverAt: 0,
-      takeIn: (track, _from, handBack) => {
-        onTake(track);
-        handBack({ x: 0, y: 0 });
-      },
-    });
-  }, [registerReceiver, onTake]);
-
-  return (
-    <div
-      // Its name on the side away from the other, so the two read apart and
-      // the next song's own words can still be made out between them.
-      className={`groove-queue-well pointer-events-none absolute z-10 flex items-center gap-1.5 ${
-        where === 'next' ? 'flex-col-reverse' : 'flex-col'
-      }`}
-      style={{
-        width: RECORD_SIZE + 40,
-        [where === 'next' ? 'bottom' : 'top']: `calc(50% + ${WELL_APART - RECORD_SIZE / 2}px)`,
-        [left ? 'left' : 'right']: CENTER_INSET + WELL_FROM_HUB - (RECORD_SIZE + 40) / 2,
-      }}
-    >
-      <div
-        ref={el}
-        aria-hidden="true"
-        className={`pointer-events-auto flex items-center justify-center rounded-full border-[1.5px] border-dashed transition-[transform,box-shadow,background-color,border-color] duration-150 ease-out ${
-          offered
-            ? 'groove-queue-offered border-transparent bg-brass-600/30 text-brass-300'
-            : 'border-brass-400/55 bg-shell-900/55 text-brass-400/80'
-        }`}
-        style={{ width: RECORD_SIZE, height: RECORD_SIZE }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-6 w-6"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {where === 'next' ? <path d="M6 4h12M12 20V8M7 13l5-5 5 5" /> : <path d="M6 20h12M12 4v12M7 11l5 5 5-5" />}
-        </svg>
-      </div>
-      <span
-        className={`text-label font-medium tracking-[0.18em] uppercase transition-colors ${
-          offered ? 'text-brass-300' : 'text-cream-200'
-        }`}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+const LINK_INWARD = 96;

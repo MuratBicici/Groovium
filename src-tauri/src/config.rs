@@ -169,6 +169,11 @@ pub struct Settings {
     /// off, including in a config from before it existed.
     #[serde(default = "on_unless_turned_off")]
     pub battery_saver_on_battery: bool,
+    /// Where a carried record's places to go appear: `"dock"`, rising at the
+    /// foot of the drawer, or `"mat"`, the queue's round palette. Anything
+    /// unrecognised, and a config from before the choice, reads as the dock.
+    #[serde(default = "dock")]
+    pub drop_zone: String,
     /// How brightly the visualiser shows through: a notch from -4 to 4, nought
     /// being the quarter it has always been drawn at.
     #[serde(default, deserialize_with = "notch")]
@@ -250,6 +255,7 @@ impl Default for Settings {
             pick_animation: meteor(),
             battery_saver: false,
             battery_saver_on_battery: on_unless_turned_off(),
+            drop_zone: dock(),
             visualizer_brightness: 0,
             backdrop: on_unless_turned_off(),
             backdrop_brightness: 0,
@@ -313,6 +319,10 @@ fn all_of_it() -> String {
 
 fn meteor() -> String {
     "meteor".into()
+}
+
+fn dock() -> String {
+    "dock".into()
 }
 
 fn grooves() -> String {
@@ -460,6 +470,7 @@ mod tests {
             pick_animation: "arc".into(),
             battery_saver: true,
             battery_saver_on_battery: false,
+            drop_zone: "mat".into(),
             visualizer_brightness: 2,
             backdrop: false,
             backdrop_brightness: 1,
@@ -507,6 +518,17 @@ mod tests {
             serde_json::from_str(r#"{"settings":{"backdrop":false,"backdropDust":-9}}"#).expect("parses");
         assert!(!chosen.settings.backdrop);
         assert_eq!(chosen.settings.backdrop_dust, -4);
+    }
+
+    #[test]
+    fn a_config_from_before_the_dock_drops_records_on_it() {
+        let config: AppConfig = serde_json::from_str(r#"{"settings":{}}"#).expect("parses");
+        assert_eq!(config.settings.drop_zone, "dock");
+        let chosen: AppConfig =
+            serde_json::from_str(r#"{"settings":{"dropZone":"mat"}}"#).expect("parses");
+        assert_eq!(chosen.settings.drop_zone, "mat");
+        let written = serde_json::to_string(&chosen).expect("writes");
+        assert!(written.contains(r#""dropZone":"mat""#));
     }
 
     #[test]

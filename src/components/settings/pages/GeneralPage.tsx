@@ -20,6 +20,8 @@ export function GeneralPage() {
   const setReduceMotion = useSettingsStore((s) => s.setReduceMotion);
   const pickAnimation = useSettingsStore((s) => s.pickAnimation);
   const setPickAnimation = useSettingsStore((s) => s.setPickAnimation);
+  const dropZone = useSettingsStore((s) => s.dropZone);
+  const setDropZone = useSettingsStore((s) => s.setDropZone);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const batterySaver = useSettingsStore((s) => s.batterySaver);
   const setBatterySaver = useSettingsStore((s) => s.setBatterySaver);
@@ -87,6 +89,17 @@ export function GeneralPage() {
             </Choice>
             <Choice active={pickAnimation === 'meteor'} onClick={() => setPickAnimation('meteor')}>
               {t('settings.pickAnimationMeteor')}
+            </Choice>
+          </div>
+        </Field>
+        <CardDivider />
+        <Field label={t('settings.dropZone')} hint={t('settings.dropZoneHint')}>
+          <div className="flex gap-1.5">
+            <Choice active={dropZone === 'dock'} onClick={() => setDropZone('dock')}>
+              {t('settings.dropZoneDock')}
+            </Choice>
+            <Choice active={dropZone === 'mat'} onClick={() => setDropZone('mat')}>
+              {t('settings.dropZoneMat')}
             </Choice>
           </div>
         </Field>
