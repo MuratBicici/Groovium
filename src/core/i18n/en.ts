@@ -371,7 +371,6 @@ export const en = {
   'home.genre2': 'Today’s {genre}',
   'home.genresHeading': 'Picked for you',
   'home.genresNeedKey': 'Shelves of the genres you play most come from Last.fm. Add a Last.fm API key in Settings › Connections to see them here.',
-  'home.genreNote': 'Picked from what you play, and new every day.',
   'home.liked': 'Liked songs',
   'home.likedEmpty': 'Songs you like on Spotify show up here.',
   'home.likedAsk': 'To show your liked songs here, Groovium needs one more permission from Spotify.',

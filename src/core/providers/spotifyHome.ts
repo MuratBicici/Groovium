@@ -248,7 +248,7 @@ export interface GenreShelf {
 /** Why there are no genre shelves, when there are none. */
 export type NoShelves = 'no-key' | 'nothing-yet' | null;
 
-interface Saved {
+export interface Saved {
   account: string | null;
   day: string;
   shelves: GenreShelf[];
@@ -293,20 +293,109 @@ function readSaved(): Saved | null {
 }
 
 /** Answers kept between launches, each with when it was had. */
-type Kept<T> = Record<string, { at: number; value: T }>;
+export type Kept<T> = Record<string, { at: number; value: T }>;
 
 function readKept<T>(key: string): Kept<T> {
   const value = readJson(key);
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Kept<T>) : {};
 }
 
+/**
+ * Whether the shelves saved earlier are the ones to show now.
+ *
+ * Saved today, whatever is on them: a day is only saved once it has been made
+ * whole, so an empty one has been tried and trying again would find the same.
+ *
+ * An account nobody could name counts as the same one. Signing out removes the
+ * saved shelves, so what is here is this person's; and read as a different
+ * account, one failed look at who is signed in spent the day's searches again.
+ */
+export function stillGood(saved: Saved, day: string, who: string | null): boolean {
+  return saved.day === day && (who === null || saved.account === null || saved.account === who);
+}
+
+/** How many Last.fm or Spotify questions go out together while shelves are being made. */
+const ASKED_AT_ONCE = 4;
+
+/**
+ * The songs of one shelf, in the order given: from what was kept, or searched
+ * for on Spotify a few at a time.
+ *
+ * A batch is never longer than the songs the shelf still needs, so nothing is
+ * searched for that one at a time would not have been, and the quota it costs
+ * is what it was. What is found goes into `found`. A refusal ends it with what
+ * it has, and says the shelf is not whole.
+ */
+export async function fillShelf(
+  candidates: readonly SimilarTrack[],
+  found: Kept<TrackMetadata | null>,
+  now: number,
+  search: (candidate: SimilarTrack, key: string) => Promise<TrackMetadata | null>,
+): Promise<{ tracks: TrackMetadata[]; whole: boolean }> {
+  const tracks: TrackMetadata[] = [];
+  let searches = SEARCHES_PER_SHELF;
+  let next = 0;
+  while (tracks.length < GENRE_SHOWN && next < candidates.length) {
+    const batch: { key: string; answer: Promise<TrackMetadata | null>; searched: boolean }[] = [];
+    let asking = 0;
+    while (next < candidates.length && batch.length < GENRE_SHOWN - tracks.length && asking < ASKED_AT_ONCE) {
+      const candidate = candidates[next++] as SimilarTrack;
+      const key = matchKey(candidate.artist, candidate.title);
+      const known = found[key];
+      if (known && (known.value !== null || now - known.at < MISSING_KEPT_FOR_MS)) {
+        batch.push({ key, answer: Promise.resolve(known.value), searched: false });
+      } else if (searches > 0) {
+        searches -= 1;
+        asking += 1;
+        batch.push({ key, answer: search(candidate, key), searched: true });
+      }
+    }
+
+    let whole = true;
+    const answers = await Promise.allSettled(batch.map((entry) => entry.answer));
+    for (const [place, answer] of answers.entries()) {
+      const entry = batch[place] as (typeof batch)[number];
+      if (answer.status === 'rejected') {
+        log('warn', 'home', 'a search was refused', answer.reason);
+        whole = false;
+        continue;
+      }
+      if (entry.searched) found[entry.key] = { at: now, value: answer.value };
+      if (answer.value) tracks.push(answer.value);
+    }
+    if (!whole) return { tracks, whole };
+  }
+  return { tracks, whole: true };
+}
+
+/** A song on Spotify by name. Its field search is fuzzy: only the song asked for will do. */
+async function findOnSpotify(candidate: SimilarTrack, key: string): Promise<TrackMetadata | null> {
+  const results = await searchTracks(`track:${candidate.title} artist:${candidate.artist}`);
+  return results.find((result) => trackKey(result) === key && !result.unplayable) ?? null;
+}
+
 /** Counted up by signing out, so an answer in the air for the last person is not kept. */
 let era = 0;
 let building: Promise<GenreAnswer> | null = null;
+/** Last answered that there are no shelves, this run of the app: nothing to wait for on the next opening. */
+let answeredNone = false;
 
 export interface GenreAnswer {
   shelves: GenreShelf[];
   none: NoShelves;
+}
+
+/**
+ * Whether the drawer should show shelves being made.
+ *
+ * Not for today's, which are kept and arrive at once: empty sleeves for the
+ * moment that takes would be a flicker on every opening. Not after being told
+ * there are none, for the same reason.
+ */
+export function shelvesAreComing(now = Date.now()): boolean {
+  if (answeredNone) return false;
+  const saved = readSaved();
+  return !saved || saved.day !== dayOf(now);
 }
 
 /**
@@ -321,9 +410,15 @@ export interface GenreAnswer {
  * again rather than the drawer being a shelf short until tomorrow.
  */
 export function genreShelves(now = Date.now()): Promise<GenreAnswer> {
-  building ??= make(now, era).finally(() => {
-    building = null;
-  });
+  const asked = era;
+  building ??= make(now, asked)
+    .then((answer) => {
+      if (asked === era) answeredNone = answer.none !== null;
+      return answer;
+    })
+    .finally(() => {
+      building = null;
+    });
   return building;
 }
 
@@ -333,8 +428,8 @@ async function make(now: number, asked: number): Promise<GenreAnswer> {
     .catch(() => null);
   const day = dayOf(now);
   const saved = readSaved();
-  if (saved && saved.day === day && saved.account === who && saved.shelves.length > 0) {
-    return { shelves: saved.shelves, none: null };
+  if (saved && stillGood(saved, day, who)) {
+    return { shelves: saved.shelves, none: saved.shelves.length === 0 ? 'nothing-yet' : null };
   }
 
   const listened = heard();
@@ -348,21 +443,26 @@ async function make(now: number, asked: number): Promise<GenreAnswer> {
   // Each artist's tags, from what was kept or from Last.fm.
   const keptTags = readKept<Tag[]>(TAGS_KEY);
   const tags = new Map<string, Tag[]>();
+  const unknown: string[] = [];
   for (const [artist] of artists) {
     const kept = keptTags[artist];
-    if (kept && now - kept.at < TAGS_KEPT_FOR_MS) {
-      tags.set(artist, kept.value);
-      continue;
-    }
-    try {
-      const found = await artistTags(artist);
-      tags.set(artist, found);
-      keptTags[artist] = { at: now, value: found };
-    } catch (err) {
-      // Without a key every artist fails the same way; asking the other
-      // eleven would only fail eleven more times.
+    if (kept && now - kept.at < TAGS_KEPT_FOR_MS) tags.set(artist, kept.value);
+    else unknown.push(artist);
+  }
+  for (let at = 0; at < unknown.length; at += ASKED_AT_ONCE) {
+    const batch = unknown.slice(at, at + ASKED_AT_ONCE);
+    const answers = await Promise.allSettled(batch.map((artist) => artistTags(artist)));
+    for (const [place, answer] of answers.entries()) {
+      const artist = batch[place] as string;
+      if (answer.status === 'fulfilled') {
+        tags.set(artist, answer.value);
+        keptTags[artist] = { at: now, value: answer.value };
+        continue;
+      }
+      // Without a key every artist fails the same way; asking the rest would
+      // only fail that many more times.
       if (!(await hasApiKey().catch(() => false))) return { shelves: [], none: 'no-key' };
-      log('warn', 'home', 'could not read an artist’s tags', err);
+      log('warn', 'home', 'could not read an artist’s tags', answer.reason);
     }
   }
   if (asked === era) writeJson(TAGS_KEY, keptTags);
@@ -387,37 +487,14 @@ async function make(now: number, asked: number): Promise<GenreAnswer> {
       continue;
     }
 
-    const tracks: TrackMetadata[] = [];
-    let searches = SEARCHES_PER_SHELF;
-    for (const candidate of worthLooking(dayOrder(candidates, `${genre}|${day}`), taken)) {
-      if (tracks.length >= GENRE_SHOWN) break;
-      const key = matchKey(candidate.artist, candidate.title);
-      const known = found[key];
-      let track: TrackMetadata | null;
-      if (known && (known.value !== null || now - known.at < MISSING_KEPT_FOR_MS)) {
-        track = known.value;
-      } else {
-        if (searches <= 0) continue;
-        searches -= 1;
-        try {
-          const results = await searchTracks(`track:${candidate.title} artist:${candidate.artist}`);
-          // Spotify's field search is fuzzy: only the song asked for will do.
-          track = results.find((result) => trackKey(result) === key && !result.unplayable) ?? null;
-        } catch (err) {
-          // Refused: no more searching today, and the day is not saved.
-          log('warn', 'home', 'a search was refused', err);
-          whole = false;
-          break;
-        }
-        found[key] = { at: now, value: track };
-      }
-      if (track) {
-        tracks.push(track);
-        taken.add(key);
-      }
+    const filled = await fillShelf(worthLooking(dayOrder(candidates, `${genre}|${day}`), taken), found, now, findOnSpotify);
+    for (const track of filled.tracks) taken.add(trackKey(track));
+    if (filled.tracks.length > 0) shelves.push({ genre, tracks: filled.tracks });
+    if (!filled.whole) {
+      // Refused: no more searching today, and the day is not saved.
+      whole = false;
+      break;
     }
-    if (tracks.length > 0) shelves.push({ genre, tracks });
-    if (!whole) break;
   }
 
   if (asked === era) {
@@ -459,6 +536,7 @@ export function likedShelf(): Promise<{ tracks: TrackMetadata[]; total: number }
 export function forgetHome(): void {
   era += 1;
   building = null;
+  answeredNone = false;
   liked = null;
   liking = null;
   try {

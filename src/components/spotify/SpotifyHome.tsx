@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { onHeard } from '@/core/listening/history';
 import {
+  GENRE_SHELVES,
   genreShelves,
   likedShelf,
   recentShelf,
+  shelvesAreComing,
   type GenreAnswer,
   type Recent,
 } from '@/core/providers/spotifyHome';
@@ -11,7 +13,7 @@ import { usePlayerStore } from '@/core/store';
 import { useT, type TranslationKey } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
 import { Shelf } from './Shelf';
-import { RecordCard } from './RecordCard';
+import { RECORD_SIZE, RecordCard } from './RecordCard';
 import { Retry, Waiting } from './SpotlightStrip';
 
 /**
@@ -89,9 +91,48 @@ const GENRE_HEADINGS: TranslationKey[] = ['home.genre0', 'home.genre1', 'home.ge
 const opening = (genre: string) => genre.charAt(0).toLocaleUpperCase('en') + genre.slice(1);
 
 /**
+ * The genre shelves while they are being made: empty sleeves with a light going
+ * over them, and a bar where a name will be, since what each is called is part
+ * of what is being waited for.
+ */
+function ShelvesWaiting() {
+  return (
+    <>
+      {Array.from({ length: GENRE_SHELVES }, (_, shelf) => (
+        <section key={shelf} className="groove-shelf flex shrink-0 flex-col" aria-hidden="true">
+          {/* The unseen lines hold the height of the words to come, so nothing
+              below moves when the records arrive. */}
+          <div className="flex items-center px-0.5 pb-1.5">
+            <span className="groove-inset h-3 w-36 rounded-sm" />
+            <span className="invisible w-0 text-heading font-semibold">&nbsp;</span>
+          </div>
+          <div className="flex w-max gap-3.5 pt-0.5 pb-0.5">
+            {Array.from({ length: 8 }, (_, at) => (
+              <div key={at} className="shrink-0" style={{ width: RECORD_SIZE }}>
+                <div
+                  className="groove-inset groove-waiting rounded-md"
+                  style={{ height: RECORD_SIZE, '--at': at } as React.CSSProperties}
+                />
+                <div className="invisible mt-1.5 flex flex-col">
+                  <span className="text-body font-medium">&nbsp;</span>
+                  <span className="text-meta">&nbsp;</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </>
+  );
+}
+
+/** How many records along a shelf the arrival is staggered, and past that they come together. */
+const ARRIVAL_STAGGERED = 8;
+
+/**
  * A shelf for each of the genres somebody plays most, new every day.
  *
- * Nothing at all while there is nothing to say: no listening to go on yet, or
+ * Nothing at all once there is nothing to say: no listening to go on yet, or
  * none of it tagged on Last.fm. A front page with an empty shelf
  * on it apologising for itself is worse than one shelf fewer.
  */
@@ -99,11 +140,11 @@ export function GenreShelves() {
   const t = useT();
   const playSingle = usePlayerStore((s) => s.playSingle);
   const { shown } = useAnswer<GenreAnswer>(genreShelves);
+  // Asked once, as it opens: only shelves that were waited for arrive.
+  const [waited] = useState(() => shelvesAreComing());
 
-  // Not even a waiting shelf: what it would be called, and whether there
-  // will be one, is what is being waited for. Made once a day and kept, so
-  // this is a moment once a morning.
-  if (shown === undefined || failed(shown)) return null;
+  if (shown === undefined) return waited ? <ShelvesWaiting /> : null;
+  if (failed(shown)) return null;
 
   // The one reason worth saying: the rest of the page cannot hint that a key
   // would bring these, and nobody would go looking for shelves they never saw.
@@ -124,12 +165,20 @@ export function GenreShelves() {
             genre,
             Genre: opening(genre),
           })}
-          // Said once, under the first: three shelves repeating it is a notice board.
-          note={at === 0 ? t('home.genreNote') : undefined}
         >
-          {tracks.map((track: TrackMetadata) => (
-            <RecordCard key={track.id} track={track} onPlay={playSingle} />
-          ))}
+          {tracks.map((track: TrackMetadata, place) =>
+            waited ? (
+              <div
+                key={track.id}
+                className="groove-arrive shrink-0"
+                style={{ '--at': at * 4 + Math.min(place, ARRIVAL_STAGGERED) } as React.CSSProperties}
+              >
+                <RecordCard track={track} onPlay={playSingle} />
+              </div>
+            ) : (
+              <RecordCard key={track.id} track={track} onPlay={playSingle} />
+            ),
+          )}
         </Shelf>
       ))}
     </>

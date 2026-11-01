@@ -522,6 +522,42 @@ body {
 }
 
 /*
+ * Genre shelves being made: a soft light going along the empty sleeves, and the
+ * records coming in together when they are ready. Only opacity and a transform,
+ * and only for as long as the wait, so a wait is not a cost as well.
+ */
+@keyframes groove-waiting-light {
+  0%, 100% { opacity: 0; }
+  45% { opacity: 0.08; }
+}
+.groove-waiting {
+  position: relative;
+  overflow: hidden;
+}
+.groove-waiting::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-cream-50);
+  opacity: 0;
+  animation: groove-waiting-light 1.8s ease-in-out infinite;
+  animation-delay: calc(var(--at) * 90ms);
+}
+@keyframes groove-arrive {
+  from { opacity: 0; transform: translateY(5px); }
+}
+.groove-arrive {
+  animation: groove-arrive 350ms ease-out backwards;
+  animation-delay: calc(var(--at) * 40ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-waiting::after,
+  .groove-arrive {
+    animation: none;
+  }
+}
+
+/*
  * Arranging the front page: the shelves have come loose.
  *
  * Each shelf wobbles barely, and each record on it a good deal more, on beats
