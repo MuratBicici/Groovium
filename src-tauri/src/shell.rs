@@ -275,15 +275,25 @@ pub fn undress(window: &Window) {
 /// mouse and they land on whatever is behind. `GetCursorPos` is a call into the
 /// window manager with no allocation and no round trip, thirty times a second,
 /// and only while the drawer is shut on the left.
-/// A rectangle in physical pixels, measured from the window's own corner.
-type Part = (i32, i32, i32, i32);
+///
+/// A rectangle in logical pixels, measured from the window's own corner.
+///
+/// Logical, and turned into physical ones at each look, because a window has no
+/// one physical size: Windows rescales it on the way to a monitor with another
+/// scale, and nothing names the part again, since in the page's own pixels it
+/// has not changed. Held in physical pixels it stayed where it had been named.
+/// From 100% to 150% that left the player dead and the stretch beside it taking
+/// the clicks; from 150% to 100% it lay wholly past the window's right edge.
+/// Either way nothing could be clicked, not even to drag the window back, until
+/// the app was restarted.
+type Part = (f64, f64, f64, f64);
 
 /// The part of the window that takes clicks, or `None` for all of it.
 type Named = Arc<Mutex<Option<Part>>>;
 
 #[derive(Default)]
 pub struct ClickArea {
-    /// The part that takes clicks, in physical pixels from the window's corner.
+    /// The part that takes clicks, in logical pixels from the window's corner.
     /// `None` is the whole window. Shared, because the watcher reads it from a
     /// thread of its own for as long as the app is running.
     part: Named,
@@ -317,13 +327,10 @@ pub fn set_click_area(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    let scale = window.scale_factor().map_err(|e| e.to_string())?;
-    let px = |v: f64| (v * scale).round() as i32;
-
     let part = if width < 0.0 || height < 0.0 {
         None
     } else {
-        Some((px(x), px(y), px(width), px(height)))
+        Some((x, y, width, height))
     };
 
     if let Ok(mut held) = area.part.lock() {
@@ -421,6 +428,7 @@ fn over(window: &Window, rect: Part) -> bool {
     use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
     let Ok(at) = window.outer_position() else { return true };
+    let Ok(scale) = window.scale_factor() else { return true };
     let mut cursor = POINT::default();
     // Safety: an out parameter this call fills in, and nothing else.
     if unsafe { GetCursorPos(&mut cursor) }.is_err() {
@@ -429,9 +437,17 @@ fn over(window: &Window, rect: Part) -> bool {
         return true;
     }
 
+    inside((cursor.x, cursor.y), (at.x, at.y), rect, scale)
+}
+
+/// Whether a cursor is inside `rect`, for a window at `at` drawn at `scale`.
+/// The cursor and the window's corner are in physical pixels.
+#[cfg(any(windows, test))]
+fn inside(cursor: (i32, i32), at: (i32, i32), rect: Part, scale: f64) -> bool {
+    let px = |v: f64| (v * scale).round() as i32;
     let (x, y, width, height) = rect;
-    let inside_x = cursor.x >= at.x + x && cursor.x < at.x + x + width;
-    let inside_y = cursor.y >= at.y + y && cursor.y < at.y + y + height;
+    let inside_x = cursor.0 >= at.0 + px(x) && cursor.0 < at.0 + px(x) + px(width);
+    let inside_y = cursor.1 >= at.1 + px(y) && cursor.1 < at.1 + px(y) + px(height);
     inside_x && inside_y
 }
 
@@ -467,6 +483,30 @@ mod tests {
             "the window was changed meanwhile, so it is told again"
         );
         assert_eq!(watch.look(true, 3), None);
+    }
+
+    #[test]
+    fn the_part_that_takes_clicks_follows_the_window_to_another_scale() {
+        // The player beside a shut drawer on the left, in a window that is
+        // 1020 wide at 100% and 1530 at 150%. Measured on the demo window on
+        // two real monitors: named at one scale and read at the other, the
+        // player took no clicks at all.
+        let player = (680.0, 0.0, 340.0, 480.0);
+        let at = (100, 100);
+
+        assert!(inside((100 + 850, 300), at, player, 1.0), "over the player at 100%");
+        assert!(!inside((100 + 500, 300), at, player, 1.0), "beside it at 100%");
+
+        assert!(inside((100 + 1275, 300), at, player, 1.5), "over the player at 150%");
+        assert!(!inside((100 + 850, 300), at, player, 1.5), "beside it at 150%");
+    }
+
+    #[test]
+    fn a_part_of_no_size_takes_no_clicks_at_any_scale() {
+        // What the window is given while it travels between the drawer's sides.
+        let nothing = (0.0, 0.0, 0.0, 0.0);
+        assert!(!inside((100, 100), (100, 100), nothing, 1.0));
+        assert!(!inside((100, 100), (100, 100), nothing, 1.5));
     }
 
     #[test]
