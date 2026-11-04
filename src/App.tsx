@@ -699,7 +699,22 @@ export default function App() {
             compact ? 'h-0 overflow-hidden opacity-0' : 'opacity-100'
           }`}
         >
-          <VolumeKnob />
+          {/* With the volume, as the other thing here that changes how it sounds. */}
+          <div className="flex items-center gap-2">
+            <VolumeKnob />
+            <PanelButton
+              panel="equaliser"
+              open={equaliserShown}
+              controls={EQUALISER_ID}
+              onToggle={() => {
+                const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
+                setEqualiser(next.view);
+                setQueue(queueHidden);
+                if (next.drawerOpen === drawerOpen) return;
+                setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
+              }}
+            />
+          </div>
           <div className="flex items-center gap-1.5">
             {/* The library: this computer's music, Groovium's playlists and
                 Spotify, in the drawer beside the player. One button for what
@@ -744,18 +759,6 @@ export default function App() {
                 const next = pressQueue(queueShown ? queue : queueHidden, drawerOpen);
                 setQueue(next.view);
                 setEqualiser(queueHidden);
-                if (next.drawerOpen === drawerOpen) return;
-                setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
-              }}
-            />
-            <PanelButton
-              panel="equaliser"
-              open={equaliserShown}
-              controls={EQUALISER_ID}
-              onToggle={() => {
-                const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
-                setEqualiser(next.view);
-                setQueue(queueHidden);
                 if (next.drawerOpen === drawerOpen) return;
                 setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
               }}
