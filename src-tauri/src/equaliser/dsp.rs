@@ -38,6 +38,20 @@ const GUARD_HOLD: u32 = (0.2 * RATE) as u32;
 /// of a percent, which is far too little to hear as pitch.
 const MOST_NUDGE: f64 = 0.002;
 
+/// How slowly the buffer's level is read for that, in frames: about a second.
+///
+/// The capture arrives ten milliseconds at a time, so the level itself is a
+/// sawtooth. Read directly, the speed followed it a hundred times a second.
+const FILL_SMOOTHING: f64 = RATE;
+
+/// Frames on each side of the point being read.
+const HALF_TAPS: usize = 8;
+const TAPS: usize = HALF_TAPS * 2;
+/// Positions between two frames that a kernel is worked out for.
+const PHASES: usize = 128;
+/// The Kaiser window's shape: enough to keep the ringing far below hearing.
+const KAISER_BETA: f64 = 8.0;
+
 /// A setting of the equaliser.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Curve {
@@ -222,18 +236,71 @@ impl Gate {
     }
 }
 
+/// The modified Bessel function the Kaiser window is built from.
+fn bessel_i0(x: f64) -> f64 {
+    let mut sum = 1.0;
+    let mut term = 1.0;
+    let quarter = x * x / 4.0;
+    for k in 1..32 {
+        term *= quarter / f64::from(k * k);
+        sum += term;
+        if term < sum * 1e-12 {
+            break;
+        }
+    }
+    sum
+}
+
+/// What each of the frames around a point counts for, at every point between
+/// two frames: a windowed sinc, each row adding up to exactly one.
+fn kernels() -> Vec<[f32; TAPS]> {
+    let edge = HALF_TAPS as f64;
+    let window_top = bessel_i0(KAISER_BETA);
+    (0..=PHASES)
+        .map(|phase| {
+            let t = phase as f64 / PHASES as f64;
+            let mut row = [0.0_f64; TAPS];
+            for (tap, slot) in row.iter_mut().enumerate() {
+                let x = tap as f64 - (edge - 1.0) - t;
+                let sinc = if x.abs() < 1e-9 {
+                    1.0
+                } else {
+                    (std::f64::consts::PI * x).sin() / (std::f64::consts::PI * x)
+                };
+                let along = (x / edge).clamp(-1.0, 1.0);
+                *slot = sinc * bessel_i0(KAISER_BETA * (1.0 - along * along).sqrt()) / window_top;
+            }
+            let total: f64 = row.iter().sum();
+            let mut held = [0.0_f32; TAPS];
+            for (slot, value) in held.iter_mut().zip(row) {
+                *slot = (value / total) as f32;
+            }
+            held
+        })
+        .collect()
+}
+
 /// Reading from the captured sound at the speed the sound card takes it.
 ///
 /// The capture and the sound card each keep their own time, and two clocks are
 /// never the same. Left alone the buffer between them runs dry or grows without
 /// end, so playback is nudged a hair faster or slower to hold it where it should
 /// be. Far too little to hear, and no sample is thrown away for it.
+///
+/// Nudged, it reads between frames, and how it does that is audible. It used to
+/// draw a straight line between the two: at the halfway point that is six
+/// decibels down at 16 kHz and eight at 18, drifting in and out as the two clocks
+/// wandered. Whatever the equaliser was set to, the music had a filter on it. A
+/// windowed sinc over sixteen frames is flat to well past that.
 pub struct Pacer {
     target: usize,
-    /// How far between the two frames below the reading is.
+    /// How far between the two middle frames of the history the reading is.
     at: f64,
-    before: [f32; 2],
-    after: [f32; 2],
+    /// The last frames read, oldest first.
+    history: [[f32; 2]; TAPS],
+    kernels: Vec<[f32; TAPS]>,
+    /// The buffer's level, read slowly; see `FILL_SMOOTHING`.
+    fill: f64,
     /// Waiting for the buffer to fill before reading from it, as at the start.
     filling: bool,
     pub underruns: u64,
@@ -242,7 +309,31 @@ pub struct Pacer {
 
 impl Pacer {
     pub fn new(target_frames: usize) -> Self {
-        Pacer { target: target_frames, at: 0.0, before: [0.0; 2], after: [0.0; 2], filling: true, underruns: 0, dropped: 0 }
+        Pacer {
+            target: target_frames,
+            at: 0.0,
+            history: [[0.0; 2]; TAPS],
+            kernels: kernels(),
+            fill: target_frames as f64,
+            filling: true,
+            underruns: 0,
+            dropped: 0,
+        }
+    }
+
+    /// One frame from the history, at the point `at` has got to.
+    fn interpolated(&self) -> [f32; 2] {
+        let place = self.at * PHASES as f64;
+        let row = (place as usize).min(PHASES - 1);
+        let mix = (place - row as f64) as f32;
+        let (near, far) = (&self.kernels[row], &self.kernels[row + 1]);
+        let mut out = [0.0_f32; 2];
+        for (tap, frame) in self.history.iter().enumerate() {
+            let weight = near[tap] + (far[tap] - near[tap]) * mix;
+            out[0] += frame[0] * weight;
+            out[1] += frame[1] * weight;
+        }
+        out
     }
 
     /// Hand `count` frames to `out` from the buffer.
@@ -259,9 +350,11 @@ impl Pacer {
                     continue;
                 }
                 self.filling = false;
+                self.fill = ring.len() as f64;
             }
-            let error = (ring.len() as f64 - self.target as f64) / self.target.max(1) as f64;
-            let speed = 1.0 + (error * MOST_NUDGE).clamp(-MOST_NUDGE, MOST_NUDGE);
+            self.fill += (ring.len() as f64 - self.fill) / FILL_SMOOTHING;
+            let error = (self.fill - self.target as f64) / self.target.max(1) as f64;
+            let speed = 1.0 + (error * MOST_NUDGE * 4.0).clamp(-MOST_NUDGE, MOST_NUDGE);
             self.at += speed;
             let mut ran_dry = false;
             while self.at >= 1.0 {
@@ -270,8 +363,8 @@ impl Pacer {
                     ran_dry = true;
                     break;
                 };
-                self.before = self.after;
-                self.after = next;
+                self.history.copy_within(1.., 0);
+                self.history[TAPS - 1] = next;
             }
             if ran_dry {
                 self.underruns += 1;
@@ -280,11 +373,7 @@ impl Pacer {
                 out([0.0; 2]);
                 continue;
             }
-            let t = self.at as f32;
-            out([
-                self.before[0] + (self.after[0] - self.before[0]) * t,
-                self.before[1] + (self.after[1] - self.before[1]) * t,
-            ]);
+            out(self.interpolated());
         }
     }
 }
@@ -459,6 +548,46 @@ mod tests {
             assert!((480..=4_800).contains(&left), "{fed}: {left} left");
             assert_eq!(pacer.dropped, 0, "{fed}");
             assert_eq!(pacer.underruns, 0, "{fed}");
+        }
+    }
+
+    /// A sine through the pacer with the clocks this far apart: its level at the
+    /// worst moment and the best, in decibels, once it has settled.
+    fn through_pacer(freq: f64, clocks: f64) -> (f64, f64) {
+        let mut pacer = Pacer::new(1_920);
+        let mut ring = VecDeque::new();
+        let mut n = 0_u64;
+        let mut owed = 2_000.0;
+        let mut levels = vec![];
+        for block in 0..4_000 {
+            owed += 480.0 * clocks;
+            while owed >= 1.0 {
+                let x = (std::f64::consts::TAU * freq * n as f64 / RATE).sin() as f32;
+                ring.push_back([x, x]);
+                n += 1;
+                owed -= 1.0;
+            }
+            let mut sum = 0.0;
+            pacer.read(&mut ring, 480, |frame| sum += f64::from(frame[0]).powi(2));
+            if block > 1_000 {
+                levels.push(20.0 * ((sum / 480.0).sqrt() * 2_f64.sqrt()).log10());
+            }
+        }
+        let worst = levels.iter().copied().fold(f64::MAX, f64::min);
+        let best = levels.iter().copied().fold(f64::MIN, f64::max);
+        (worst, best)
+    }
+
+    #[test]
+    fn the_highs_come_through_whatever_the_clocks_are_doing() {
+        // A listener heard this before anything measured it: a filter on the music
+        // at every setting. Reading between frames with a straight line took six
+        // decibels off 16 kHz at the worst moment, and it came and went.
+        for clocks in [1.0, 1.0002, 0.9998, 1.001] {
+            for freq in [100.0, 1_000.0, 5_000.0, 10_000.0, 14_000.0, 16_000.0, 18_000.0] {
+                let (worst, best) = through_pacer(freq, clocks);
+                assert!(worst > -0.2 && best < 0.2, "{freq} Hz at {clocks}: {worst} to {best} dB");
+            }
         }
     }
 
