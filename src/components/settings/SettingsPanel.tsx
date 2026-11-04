@@ -238,6 +238,18 @@ export function SettingsPanel({
     }
   }
 
+  const list = useRef<HTMLElement | null>(null);
+  const pageList = useRef<HTMLElement | null>(null);
+  const topFade = useRef<HTMLDivElement | null>(null);
+  const showTopFade = (from: HTMLElement) => {
+    if (topFade.current) topFade.current.style.opacity = from.scrollTop > 1 ? '1' : '0';
+  };
+  // A different list has come to the front, scrolled wherever it was left.
+  useEffect(() => {
+    const showing = page === null ? list.current : pageList.current;
+    if (showing) showTopFade(showing);
+  }, [page]);
+
   return (
     <div
       id={id}
@@ -247,11 +259,11 @@ export function SettingsPanel({
       // `transition-all`, so it holds `visible` for the length of the way out
       // and flips at once on the way in.
       //
-      // It fades and does not slide. Its surface goes on behind the controls
-      // (`.groove-dock-foot`), and sliding up from below ran the two over each
-      // other for the length of the opening, as a band above the progress bar.
+      // Its surface goes on behind the controls (`.groove-dock-foot`), which
+      // slides by the same distance over the same time, so the two rise as one
+      // piece and do not run over each other above the progress bar.
       className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg transition-all duration-200 ease-out ${
-        open ? 'opacity-100' : 'invisible opacity-0'
+        open ? 'translate-y-0 opacity-100' : 'invisible translate-y-3 opacity-0'
       }`}
     >
       <div className="flex h-9 shrink-0 items-center justify-between px-3">
@@ -287,6 +299,8 @@ export function SettingsPanel({
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {/* The list, stepping back and fading under a page laid over it. */}
         <nav
+          ref={list}
+          onScroll={(scrolled) => showTopFade(scrolled.currentTarget)}
           inert={page !== null}
           aria-label={t('panel.settings')}
           className={`groove-settings-layer absolute inset-0 space-y-1 overflow-y-auto px-3 pt-1 pb-3 groove-scroll-fade ${
@@ -310,6 +324,8 @@ export function SettingsPanel({
         {/* The page, in from the right. Drawn for the page last opened, so it
             is still there while it slides back out. */}
         <section
+          ref={pageList}
+          onScroll={(scrolled) => showTopFade(scrolled.currentTarget)}
           inert={page === null}
           aria-label={t(CATEGORY_NAME[lastPage])}
           className={`groove-settings-layer absolute inset-0 space-y-3 overflow-y-auto px-3 pt-1 pb-3 groove-scroll-fade ${
@@ -318,6 +334,13 @@ export function SettingsPanel({
         >
           {pageFor(lastPage)}
         </section>
+        {/* The same at the head, while there is something above to go out. At the
+            top of a list it would only dim the first row. */}
+        <div
+          ref={topFade}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-shell-800 to-transparent opacity-0 transition-opacity duration-150"
+        />
         {/* Words going off the foot of the list go out softly, rather than being
             cut in a line just above the progress bar. Over the list rather than
             a mask on it, so a list at its end has only its own padding here. */}

@@ -679,8 +679,8 @@ export default function App() {
               however that edge was softened it still read as a cut. */}
           <div
             aria-hidden="true"
-            className={`groove-dock-foot pointer-events-none absolute inset-x-0 -top-3 -bottom-3 transition-opacity duration-200 ease-out ${
-              shown === 'settings' ? 'opacity-100' : 'opacity-0'
+            className={`groove-dock-foot pointer-events-none absolute inset-x-0 -top-3 -bottom-3 transition-all duration-200 ease-out ${
+              shown === 'settings' ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
             }`}
           />
           {/* Positioned, so the controls stay over the surface above. */}
