@@ -95,6 +95,13 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
   const flashes = useRef<(SVGCircleElement | null)[]>([]);
 
   const shown = on ? bands : EQ_FLAT;
+  /**
+   * Whether the next change crosses the curve. Said by whoever makes it, and not
+   * worked out from whether a dot is held: the last small change of a drag can
+   * arrive just after the release, and taken for a setting chosen, the dot went
+   * back to where it had been, waited its turn in the wave, and flashed.
+   */
+  const crossing = useRef(false);
   /** Where the dots are this frame, how lit each is, and when each may start. */
   const motion = useRef({
     now: [...shown],
@@ -102,6 +109,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     flash: EQ_BANDS.map(() => 0),
     startAt: EQ_BANDS.map(() => 0),
     pending: EQ_BANDS.map(() => false),
+    /** The band the pointer has hold of. */
     grabbed: null as number | null,
     frame: 0,
     last: 0,
@@ -138,7 +146,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
               state.pending[at] = false;
               state.flash[at] = 1;
             }
-            const close = 1 - Math.exp(-seconds * (state.grabbed === at ? SETTLE_RATE * 3 : SETTLE_RATE));
+            const close = 1 - Math.exp(-seconds * SETTLE_RATE);
             const next = db + (goal - db) * close;
             state.now[at] = Math.abs(goal - next) < 0.02 ? goal : next;
           }
@@ -163,30 +171,37 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     };
   }, []);
 
-  // A new goal. From a dot being dragged it goes straight there; from anything
-  // else it crosses the curve, and only the dots with somewhere to go light up.
+  // A new goal. A setting chosen crosses the curve, and only the dots with
+  // somewhere to go light up. Anything else is a hand on a dot, which goes
+  // exactly where it is put: no easing, no wait and no flash.
   const shownKey = shown.join();
   useEffect(() => {
     const state = motion.current;
     const next = shownKey.split(',').map(Number);
     const time = performance.now();
-    const still = prefersReducedMotion();
+    const wave = crossing.current && !prefersReducedMotion();
+    crossing.current = false;
     next.forEach((db, at) => {
-      const changed = state.goal[at] !== db;
+      if (state.goal[at] === db) return;
       state.goal[at] = db;
-      if (!changed) return;
-      if (still) {
-        state.now[at] = db;
-      } else if (state.grabbed === null) {
+      if (wave) {
         state.startAt[at] = time + at * WAVE_STEP_MS;
         state.pending[at] = true;
       } else {
+        state.now[at] = db;
         state.startAt[at] = 0;
+        state.pending[at] = false;
       }
     });
-    if (still) paint();
-    else start();
+    if (wave) start();
+    else paint();
   }, [shownKey, paint, start]);
+
+  /** Choose a whole setting, which crosses the curve. */
+  const choose = (next: readonly number[]) => {
+    crossing.current = !sameBands(next, bands);
+    setBands([...next]);
+  };
 
   useEffect(paint, [paint]);
 
@@ -196,6 +211,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     if (!box) return;
     const db = heldDb(dbAt(((clientY - box.top) / box.height) * TALL));
     const current = useSettingsStore.getState().equaliserBands;
+    crossing.current = false;
     if (current[at] === db) return;
     setBands(current.map((value, band) => (band === at ? db : value)));
   };
@@ -208,12 +224,9 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     const at = Math.max(0, Math.min(EQ_BANDS.length - 1, Math.floor((across - LEFT) / COLUMN)));
     down.preventDefault();
     down.currentTarget.setPointerCapture(down.pointerId);
-    const state = motion.current;
-    state.grabbed = at;
-    state.flash[at] = 1;
+    motion.current.grabbed = at;
     setGrabbed(at);
     moveBand(at, down.clientY);
-    start();
   };
 
   const drop = () => {
@@ -224,6 +237,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
   const pressKey = (at: number, key: string) => {
     const by = key === 'ArrowUp' ? 1 : key === 'ArrowDown' ? -1 : 0;
     if (by === 0 || !on) return;
+    crossing.current = false;
     setBands(bands.map((value, band) => (band === at ? heldDb(value + by) : value)));
   };
 
@@ -246,7 +260,10 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
           aria-checked={on}
           aria-label={t('equaliser.onOff')}
           title={`${t('equaliser.onOff')}. ${t('equaliser.note')}`}
-          onClick={() => setOn(!on)}
+          onClick={() => {
+            crossing.current = true;
+            setOn(!on);
+          }}
           className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${on ? 'bg-brass-500' : 'groove-inset'}`}
         >
           <span
@@ -364,7 +381,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
                   key={presetId}
                   type="button"
                   disabled={!on}
-                  onClick={() => setBands([...presetBands])}
+                  onClick={() => choose(presetBands)}
                   className={`rounded-full px-3 py-1 text-meta transition-colors ${
                     preset === presetId ? 'bg-brass-500 text-on-accent' : 'text-cream-200 enabled:hover:text-cream-50'
                   }`}
@@ -373,7 +390,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
                 </button>
               ))}
             </div>
-            <OwnSettings on={on} bands={bands} saved={saved} isPreset={preset !== null} />
+            <OwnSettings on={on} bands={bands} saved={saved} isPreset={preset !== null} onChoose={choose} />
           </div>
           <InputKnob db={preamp} on={on} onChange={setPreamp} />
         </div>
@@ -388,14 +405,15 @@ function OwnSettings({
   bands,
   saved,
   isPreset,
+  onChoose,
 }: {
   on: boolean;
   bands: readonly number[];
   saved: readonly { name: string; bands: number[] }[];
   isPreset: boolean;
+  onChoose: (bands: readonly number[]) => void;
 }) {
   const t = useT();
-  const setBands = useSettingsStore((s) => s.setEqualiserBands);
   const keep = useSettingsStore((s) => s.saveEqualiserCurve);
   const forget = useSettingsStore((s) => s.removeEqualiserCurve);
   /** What is being typed, or null while nobody is naming anything. */
@@ -427,7 +445,7 @@ function OwnSettings({
             <button
               type="button"
               disabled={!on}
-              onClick={() => setBands([...own.bands])}
+              onClick={() => onChoose(own.bands)}
               className={`rounded-full py-1 pr-5 pl-3 text-meta transition-colors ${
                 active ? 'bg-brass-500 text-on-accent' : 'groove-inset text-cream-200 enabled:hover:text-cream-50'
               }`}
