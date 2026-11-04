@@ -205,6 +205,20 @@ export default function App() {
     setLyricsBroughtDrawer(false);
     setLyricsLayout(closeDrawer(layout));
   };
+  /** The lyrics button, and the big lyrics' own close: away as they found the drawer. */
+  const pressLyricsButton = () => {
+    setQueue(queueHidden);
+    const next = pressLyrics(layout);
+    if (fullShown(next)) {
+      // Into the drawer, over the equaliser if it is there, and whoever brought
+      // the drawer out has now handed it on.
+      setEqualiser(queueHidden);
+      setLyricsBroughtDrawer(equaliserShown && equaliser.openedDrawer);
+    }
+    const goingAway = fullShown(layout) && !fullShown(next) && !equaliserShown;
+    if (goingAway) setLyricsBroughtDrawer(false);
+    setLyricsLayout(goingAway && lyricsBroughtDrawer ? closeDrawer(next) : next);
+  };
   /** The equaliser's button, and its own close: away as it found the drawer. */
   const pressEqualiser = () => {
     const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
@@ -758,19 +772,7 @@ export default function App() {
               <PanelButton
                 panel="lyrics"
                 open={lyricsOn}
-                onToggle={() => {
-                  setQueue(queueHidden);
-                  const next = pressLyrics(layout);
-                  if (fullShown(next)) {
-                    // Into the drawer, over the equaliser if it is there, and
-                    // whoever brought the drawer out has now handed it on.
-                    setEqualiser(queueHidden);
-                    setLyricsBroughtDrawer(equaliserShown && equaliser.openedDrawer);
-                  }
-                  const goingAway = fullShown(layout) && !fullShown(next) && !equaliserShown;
-                  if (goingAway) setLyricsBroughtDrawer(false);
-                  setLyricsLayout(goingAway && lyricsBroughtDrawer ? closeDrawer(next) : next);
-                }}
+                onToggle={pressLyricsButton}
                 controls={LYRICS_ID}
               />
             )}
@@ -814,7 +816,7 @@ export default function App() {
             <LyricsDrawer
               id={LYRICS_ID}
               side={drawerSide}
-              onClose={shutDrawer}
+              onClose={pressLyricsButton}
               onCompact={() => {
                 setLyricsBroughtDrawer(false);
                 setLyricsLayout(lyricsBroughtDrawer ? closeDrawer(layout) : toCompact(layout));
