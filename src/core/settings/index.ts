@@ -1,4 +1,4 @@
-import { heldBands, heldDb } from '@/core/equaliser';
+import { heldBands, heldDb, heldSaved, type EqSaved } from '@/core/equaliser';
 import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
 import { log } from '@/platform/log';
@@ -188,8 +188,8 @@ export interface Settings {
   equaliserPreamp: number;
   /** Each band, in decibels, one for each of `EQ_BANDS`. */
   equaliserBands: number[];
-  /** The listener's own setting of the bands, once they have kept one. */
-  equaliserSaved: number[] | null;
+  /** The settings the listener has kept, each with its name; three at most. */
+  equaliserSaved: EqSaved[];
   /**
    * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
    * the quarter it has always been drawn at; see `visualizerOpacity`.
@@ -316,7 +316,7 @@ export const DEFAULT_SETTINGS: Settings = {
   equaliserOn: false,
   equaliserPreamp: 0,
   equaliserBands: heldBands(null),
-  equaliserSaved: null,
+  equaliserSaved: [],
   visualizerBrightness: 0,
   backdrop: true,
   backdropBrightness: 0,
@@ -363,7 +363,7 @@ export async function loadSettings(): Promise<Settings> {
     settings.equaliserOn = settings.equaliserOn === true;
     settings.equaliserPreamp = heldDb(settings.equaliserPreamp);
     settings.equaliserBands = heldBands(settings.equaliserBands);
-    settings.equaliserSaved = settings.equaliserSaved ? heldBands(settings.equaliserSaved) : null;
+    settings.equaliserSaved = heldSaved(settings.equaliserSaved);
     settings.lyricsOn = settings.lyricsOn === true;
     settings.backdrop = settings.backdrop !== false;
     settings.scale = nearestScale(Number(settings.scale));

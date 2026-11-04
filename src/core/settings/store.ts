@@ -1,4 +1,4 @@
-import { heldBands, heldDb } from '@/core/equaliser';
+import { heldBands, heldDb, withSaved, withoutSaved } from '@/core/equaliser';
 import { create } from 'zustand';
 import {
   DEFAULT_SETTINGS,
@@ -80,7 +80,8 @@ interface SettingsStore extends Settings {
   setEqualiserOn: (on: boolean) => void;
   setEqualiserPreamp: (db: number) => void;
   setEqualiserBands: (bands: readonly number[]) => void;
-  saveEqualiserBands: (bands: readonly number[]) => void;
+  saveEqualiserCurve: (name: string, bands: readonly number[]) => void;
+  removeEqualiserCurve: (name: string) => void;
   setVisualizerBrightness: (notch: number) => void;
   setBackdrop: (on: boolean) => void;
   setBackdropKnob: (knob: BackdropKnob, notch: number) => void;
@@ -491,7 +492,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setEqualiserOn: (equaliserOn) => commit({ equaliserOn }),
     setEqualiserPreamp: (db) => commit({ equaliserPreamp: heldDb(db) }),
     setEqualiserBands: (bands) => commit({ equaliserBands: heldBands(bands) }),
-    saveEqualiserBands: (bands) => commit({ equaliserSaved: heldBands(bands) }),
+    saveEqualiserCurve: (name, bands) =>
+      commit({ equaliserSaved: withSaved(get().equaliserSaved, name, bands) }),
+    removeEqualiserCurve: (name) => commit({ equaliserSaved: withoutSaved(get().equaliserSaved, name) }),
     setVisualizerBrightness: (notch) =>
       commit({ visualizerBrightness: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setBackdrop: (backdrop) => commit({ backdrop }),

@@ -183,9 +183,11 @@ pub struct Settings {
     /// Each band, in decibels. Empty until somebody has moved one.
     #[serde(default)]
     pub equaliser_bands: Vec<f32>,
-    /// The listener's own setting of the bands, once they have kept one.
+    /// The settings the listener has kept, each `{ name, bands }`. Kept as it
+    /// came: their shape is the frontend's to check, as it does on loading, and
+    /// a list that had changed shape should not lose the rest of the file.
     #[serde(default)]
-    pub equaliser_saved: Option<Vec<f32>>,
+    pub equaliser_saved: serde_json::Value,
     /// How brightly the visualiser shows through: a notch from -4 to 4, nought
     /// being the quarter it has always been drawn at.
     #[serde(default, deserialize_with = "notch")]
@@ -271,7 +273,7 @@ impl Default for Settings {
             equaliser_on: false,
             equaliser_preamp: 0.0,
             equaliser_bands: Vec::new(),
-            equaliser_saved: None,
+            equaliser_saved: serde_json::Value::Null,
             visualizer_brightness: 0,
             backdrop: on_unless_turned_off(),
             backdrop_brightness: 0,
@@ -490,7 +492,7 @@ mod tests {
             equaliser_on: true,
             equaliser_preamp: -2.0,
             equaliser_bands: vec![8.0, 7.0],
-            equaliser_saved: Some(vec![1.0]),
+            equaliser_saved: serde_json::json!([{ "name": "Gece", "bands": [1.0] }]),
             visualizer_brightness: 2,
             backdrop: false,
             backdrop_brightness: 1,
@@ -552,15 +554,16 @@ mod tests {
 
         // The equaliser's, the same way: off in an older config, and kept.
         assert!(!config.settings.equaliser_on);
-        assert!(config.settings.equaliser_saved.is_none());
+        assert!(config.settings.equaliser_saved.is_null());
         let tuned: AppConfig = serde_json::from_str(
-            r#"{"settings":{"equaliserOn":true,"equaliserPreamp":-2,"equaliserBands":[8,7],"equaliserSaved":[1]}}"#,
+            r#"{"settings":{"equaliserOn":true,"equaliserPreamp":-2,"equaliserBands":[8,7],"equaliserSaved":[{"name":"Gece","bands":[1]}]}}"#,
         )
         .expect("parses");
         assert!(tuned.settings.equaliser_on);
         assert_eq!(tuned.settings.equaliser_bands, vec![8.0, 7.0]);
         let written = serde_json::to_string(&tuned).expect("writes");
         assert!(written.contains(r#""equaliserPreamp":-2"#));
+        assert!(written.contains(r#""name":"Gece""#));
     }
 
     #[test]
