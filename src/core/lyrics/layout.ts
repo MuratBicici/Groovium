@@ -22,21 +22,20 @@ export interface LyricsLayout {
   lyricsPlace: LyricsPlace;
 }
 
-/**
- * Whether the Spotify button is lit.
- *
- * It says the drawer is out, not what is in it. Lyrics taking the drawer over
- * do not put the drawer away, and a light that went out for them would be
- * saying they had — with the drawer still there, wider than the player, in
- * plain sight.
- */
-export function drawerOut(s: LyricsLayout): boolean {
-  return s.drawerOpen;
-}
-
 /** The drawer is showing lyrics rather than Spotify. */
 export function fullShown(s: LyricsLayout): boolean {
   return s.drawerOpen && s.lyricsOn && s.lyricsPlace === 'full';
+}
+
+/**
+ * Whether the library button is lit: the library is what the drawer is showing.
+ *
+ * It used to say only that the drawer was out, so it was lit behind big lyrics
+ * and behind the equaliser. The drawer is a place other things can use, and the
+ * button is the library's. Anything else over the drawer is the caller's to add.
+ */
+export function libraryShown(s: LyricsLayout): boolean {
+  return s.drawerOpen && !fullShown(s);
 }
 
 /** Lyrics are in the player. Whether the player has room is the caller's to say. */
@@ -65,22 +64,16 @@ export function expand(s: LyricsLayout): LyricsLayout {
 }
 
 /**
- * The Spotify button: the drawer, out or away.
+ * The library button.
  *
- * Out — showing Spotify or showing lyrics — it puts the drawer away, and
- * lyrics that were in it carry on in the player. The same press for both,
- * because the light is on for both: a button that is lit and does nothing
- * recognisable to what is lighting it is the one thing a toggle must not be.
- *
- * Away, it brings the drawer out on Spotify, never on lyrics.
- *
- * Swapping the drawer's lyrics for Spotify without shutting it is still one
- * press — the lyrics view's own control for going back to the player, which is
- * where somebody looking at the lyrics is already looking.
+ * With the library showing, it puts the drawer away. With big lyrics in the
+ * drawer, it is asking for the library: the drawer stays, the library comes, and
+ * the lyrics carry on in the player. With the drawer away, it brings it out on
+ * the library, never on lyrics.
  */
 export function pressSpotify(s: LyricsLayout): LyricsLayout {
-  if (s.drawerOpen) return { ...s, drawerOpen: false, lyricsPlace: 'compact' };
-  return { ...s, drawerOpen: true, lyricsPlace: 'compact' };
+  if (fullShown(s)) return toCompact(s);
+  return { ...s, drawerOpen: !s.drawerOpen, lyricsPlace: 'compact' };
 }
 
 /** Anything that asks for Spotify outright — Settings' "set up Spotify". */

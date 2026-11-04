@@ -20,10 +20,10 @@ import { CompactLyrics } from '@/components/lyrics/CompactLyrics';
 import { usePresence } from '@/components/lyrics/usePresence';
 import {
   closeDrawer,
-  drawerOut,
   compactShown,
   expand,
   fullShown,
+  libraryShown,
   pressLyrics,
   pressSpotify,
   showSpotify,
@@ -193,11 +193,25 @@ export default function App() {
    */
   const [equaliser, setEqualiser] = useState(queueHidden);
   const equaliserShown = equaliser.shown && drawerOpen;
+  /**
+   * The drawer came out for the big lyrics, and goes away again with them, as it
+   * does for the equaliser. Not remembered between launches.
+   */
+  const [lyricsBroughtDrawer, setLyricsBroughtDrawer] = useState(false);
   /** The drawer's own close, from any of its faces. */
   const shutDrawer = () => {
     setQueue(queueHidden);
     setEqualiser(queueHidden);
+    setLyricsBroughtDrawer(false);
     setLyricsLayout(closeDrawer(layout));
+  };
+  /** The equaliser's button, and its own close: away as it found the drawer. */
+  const pressEqualiser = () => {
+    const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
+    setEqualiser(next.view);
+    setQueue(queueHidden);
+    if (next.drawerOpen === drawerOpen) return;
+    setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
   };
   const settingsReady = useSettingsStore((s) => s.ready);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
@@ -660,7 +674,11 @@ export default function App() {
             stageRef={stageRef}
             trackRef={trackRef}
             progressRef={progressRef}
-            onExpand={() => setLyricsLayout(expand(layout))}
+            onExpand={() => {
+              setEqualiser(queueHidden);
+              setLyricsBroughtDrawer(!drawerOpen);
+              setLyricsLayout(expand(layout));
+            }}
           />
           {/* Over the foot of the stage, just above the controls, whatever is
               on the stage: a notice takes no room from anything. */}
@@ -707,13 +725,7 @@ export default function App() {
                 panel="equaliser"
                 open={equaliserShown}
                 controls={EQUALISER_ID}
-                onToggle={() => {
-                  const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
-                  setEqualiser(next.view);
-                  setQueue(queueHidden);
-                  if (next.drawerOpen === drawerOpen) return;
-                  setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
-                }}
+                onToggle={pressEqualiser}
               />
             </div>
           </div>
@@ -722,18 +734,19 @@ export default function App() {
                 Spotify, in the drawer beside the player. One button for what
                 used to be three.
 
-                Lit while the drawer is out, whatever is in it: lyrics taking it
-                over do not put it away, and a light that went out for them
-                would be saying they had. */}
+                Lit only while the library is what is showing. Pressed with the
+                equaliser or big lyrics in the drawer, it is asking for the
+                library, and they make way for it. */}
             <PanelButton
               panel="library"
-              open={drawerOut(layout)}
+              open={libraryShown(layout) && !equaliserShown}
               onToggle={() => {
-                // The drawer, out or away. The queue lies over it and goes
-                // with it.
-                if (drawerOpen) {
-                  setQueue(queueHidden);
+                setLyricsBroughtDrawer(false);
+                if (drawerOpen) setQueue(queueHidden);
+                if (equaliserShown) {
                   setEqualiser(queueHidden);
+                  setLyricsLayout(showSpotify(layout));
+                  return;
                 }
                 setLyricsLayout(pressSpotify(layout));
               }}
@@ -747,8 +760,16 @@ export default function App() {
                 open={lyricsOn}
                 onToggle={() => {
                   setQueue(queueHidden);
-                  setEqualiser(queueHidden);
-                  setLyricsLayout(pressLyrics(layout));
+                  const next = pressLyrics(layout);
+                  if (fullShown(next)) {
+                    // Into the drawer, over the equaliser if it is there, and
+                    // whoever brought the drawer out has now handed it on.
+                    setEqualiser(queueHidden);
+                    setLyricsBroughtDrawer(equaliserShown && equaliser.openedDrawer);
+                  }
+                  const goingAway = fullShown(layout) && !fullShown(next) && !equaliserShown;
+                  if (goingAway) setLyricsBroughtDrawer(false);
+                  setLyricsLayout(goingAway && lyricsBroughtDrawer ? closeDrawer(next) : next);
                 }}
                 controls={LYRICS_ID}
               />
@@ -784,7 +805,7 @@ export default function App() {
           queue={queueShown}
           deckHasSong={deckHasSong}
           equaliser={equaliserShown}
-          equaliserView={<EqualiserDrawer id={EQUALISER_ID} onClose={shutDrawer} />}
+          equaliserView={<EqualiserDrawer id={EQUALISER_ID} onClose={pressEqualiser} />}
           queueView={<QueueDrawer id={QUEUE_ID} side={drawerSide} onClose={shutDrawer} />}
           spotify={
             <LibraryDrawer id={DRAWER_ID} onClose={shutDrawer} />
@@ -794,7 +815,10 @@ export default function App() {
               id={LYRICS_ID}
               side={drawerSide}
               onClose={shutDrawer}
-              onCompact={() => setLyricsLayout(toCompact(layout))}
+              onCompact={() => {
+                setLyricsBroughtDrawer(false);
+                setLyricsLayout(lyricsBroughtDrawer ? closeDrawer(layout) : toCompact(layout));
+              }}
             />
           }
         />
