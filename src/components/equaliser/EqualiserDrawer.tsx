@@ -40,7 +40,12 @@ const SCALE = [12, 6, 0, -6, -12];
 
 /** How long a change takes to cross from one band to the next. */
 const WAVE_STEP_MS = 38;
-/** How fast each dot closes on where it is going, per second. */
+/**
+ * How fast each dot closes on where it is going, per second: most of the way in
+ * about a fifth of a second, which is what the settings' sliders take to glide
+ * between their stops. The values go in whole decibels and the dot glides between
+ * them, for the same reason: without it a dot ticks along eleven pixels at a time.
+ */
 const SETTLE_RATE = 11;
 /** How fast a dot's flash goes out, per second. */
 const FLASH_FADE = 3.2;
@@ -105,6 +110,8 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
   /** The band the reading is of, kept after the release while it fades. */
   const [read, setRead] = useState(0);
   const reveal = useRef<SVGRectElement | null>(null);
+  const guide = useRef<SVGLineElement | null>(null);
+  const guideText = useRef<SVGTextElement | null>(null);
   const svg = useRef<SVGSVGElement | null>(null);
   const line = useRef<SVGPathElement | null>(null);
   const fill = useRef<SVGPathElement | null>(null);
@@ -133,13 +140,19 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     pending: EQ_BANDS.map(() => false),
     /** The band the pointer has hold of. */
     grabbed: null as number | null,
+    /** The band the reading is of, which rides with its dot. */
+    read: 0,
     frame: 0,
     last: 0,
   });
 
   const paint = useCallback(() => {
-    const { now, flash, lit, drawn } = motion.current;
+    const { now, flash, lit, drawn, read: reading } = motion.current;
     const path = curvePath(now);
+    const readY = yOf(now[reading] ?? 0);
+    guide.current?.setAttribute('y1', String(readY));
+    guide.current?.setAttribute('y2', String(readY));
+    guideText.current?.setAttribute('y', String(readY + 4));
     reveal.current?.setAttribute('width', String(drawn));
     line.current?.setAttribute('d', path);
     fill.current?.setAttribute('d', `${path} L${WIDE - RIGHT} ${ZERO} L${LEFT} ${ZERO} Z`);
@@ -164,7 +177,11 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     const step = (time: number) => {
       state.frame = 0;
       if (due(time)) {
-        const seconds = Math.min(0.05, (time - state.last) / 1000);
+        // Never below nought: a frame's time is when the frame began, which can be
+        // before the moment this loop was started. Taken as it came, the first frame
+        // of every movement ran backwards, the dot stepping the wrong way and a
+        // flash lighting from nothing.
+        const seconds = Math.max(0, Math.min(0.05, (time - state.last) / 1000));
         state.last = time;
         state.now.forEach((db, at) => {
           const goal = state.goal[at] ?? 0;
@@ -209,13 +226,15 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
   // A new goal, or the switch moved. A setting chosen crosses the curve and the
   // dots with somewhere to go light up; the drawer opening or the switch going
   // on lights them all in turn, and going off takes them down quietly. Anything
-  // else is a hand on a dot, which goes exactly where it is put.
+  // else is a hand on a dot, which glides there from wherever it is, at once and
+  // unlit: never back to where it was, to wait for a turn.
   const shownKey = shown.join();
   useEffect(() => {
     const state = motion.current;
     const next = shownKey.split(',').map(Number);
     const time = performance.now();
-    const how = prefersReducedMotion() ? null : crossing.current;
+    const still = prefersReducedMotion();
+    const how = still ? null : crossing.current;
     crossing.current = null;
     // Only the first of these is the drawer opening: nothing is lit before it.
     const arriving = how === 'all' && state.lit.every((lit) => lit === 0);
@@ -227,7 +246,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
       state.goal[at] = db;
       if (how === null) {
         if (changed) {
-          state.now[at] = db;
+          if (still) state.now[at] = db;
           state.startAt[at] = 0;
           state.pending[at] = false;
         }
@@ -269,6 +288,8 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     down.preventDefault();
     down.currentTarget.setPointerCapture(down.pointerId);
     motion.current.grabbed = at;
+    motion.current.read = at;
+    paint();
     setGrabbed(at);
     setRead(at);
     moveBand(at, down.clientY);
@@ -387,16 +408,15 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
             <g className={`pointer-events-none transition-opacity duration-150 ${reading ? 'opacity-100' : 'opacity-0'}`}>
               <line
                 x1={LEFT}
+                ref={guide}
                 x2={xOf(read)}
-                y1={yOf(readDb)}
-                y2={yOf(readDb)}
                 className="stroke-brass-400"
                 strokeOpacity="0.45"
                 strokeDasharray="2 3"
               />
               <text
+                ref={guideText}
                 x={LEFT - 7}
-                y={yOf(readDb) + 4}
                 textAnchor="end"
                 fontSize="12"
                 strokeWidth="5"
@@ -649,7 +669,7 @@ function InputKnob({ db, on, onChange }: { db: number; on: boolean; onChange: (d
       >
         <span
           aria-hidden="true"
-          className="absolute inset-0"
+          className="absolute inset-0 transition-transform duration-200 ease-out"
           style={{ transform: `rotate(${(db / EQ_MOST) * KNOB_TURN}deg)` }}
         >
           <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
