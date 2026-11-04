@@ -182,6 +182,11 @@ export interface Settings {
    * foot of the drawer, or the queue's round palette as it always was.
    */
   dropZone: DropZone;
+  /**
+   * How the volume moves: a knob, which is the one the app has always had, or a
+   * slider it opens out into under the hand.
+   */
+  volumeStyle: VolumeStyle;
   /** Whether the equaliser is on. Flat, it stands aside even so. */
   equaliserOn: boolean;
   /** The level going in, in decibels; see `@/core/equaliser`. */
@@ -260,6 +265,9 @@ export type VisualizerLook = 'grooves' | 'blocks';
 /** Where a carried record's places to go appear; see `dropZone`. */
 export type DropZone = 'dock' | 'mat';
 
+/** How the volume moves; see `volumeStyle`. */
+export type VolumeStyle = 'knob' | 'slider';
+
 /** How a pressed song's record comes to the deck; see `pickAnimation`. */
 export type PickAnimation = 'arc' | 'meteor';
 
@@ -313,6 +321,7 @@ export const DEFAULT_SETTINGS: Settings = {
   batterySaver: false,
   batterySaverOnBattery: true,
   dropZone: 'dock',
+  volumeStyle: 'knob',
   equaliserOn: false,
   equaliserPreamp: 0,
   equaliserBands: heldBands(null),
@@ -360,6 +369,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
     if (settings.dropZone !== 'mat') settings.dropZone = 'dock';
+    if (settings.volumeStyle !== 'slider') settings.volumeStyle = 'knob';
     settings.equaliserOn = settings.equaliserOn === true;
     settings.equaliserPreamp = heldDb(settings.equaliserPreamp);
     settings.equaliserBands = heldBands(settings.equaliserBands);

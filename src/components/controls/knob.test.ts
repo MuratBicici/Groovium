@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEAD_ZONE_PX,
+  DRAG_RUN_PX,
+  FACE_RADIUS_PX,
   PRESS_TRAVEL_PX,
+  SLIDER_RUN_PX,
   hasStartedTurning,
+  onTheFace,
+  pullsAcross,
+  volumeByDrag,
+  volumeBySlide,
   STOP_DEGREES,
   angleAt,
   grip,
@@ -159,5 +166,55 @@ describe('a press, and a turn', () => {
   it('counts a hand that has gone further as turning', () => {
     expect(hasStartedTurning(PRESS_TRAVEL_PX, 0)).toBe(true);
     expect(hasStartedTurning(-3, 3)).toBe(true);
+  });
+});
+
+describe('a hand on the face', () => {
+  it('is told from a hand on the ring by where it pressed', () => {
+    expect(onTheFace(0, 0)).toBe(true);
+    expect(onTheFace(FACE_RADIUS_PX - 1, 0)).toBe(true);
+    expect(onTheFace(FACE_RADIUS_PX, 0)).toBe(false);
+  });
+
+  it('turns it up pulling up or to the right, and down the other way', () => {
+    // What nobody could do before: straight out from the centre the angle does
+    // not change, so pressing the middle and pulling did nothing whatever.
+    expect(volumeByDrag(0.5, 0, -20)).toBeGreaterThan(0.5);
+    expect(volumeByDrag(0.5, 20, 0)).toBeGreaterThan(0.5);
+    expect(volumeByDrag(0.5, 0, 20)).toBeLessThan(0.5);
+    expect(volumeByDrag(0.5, -20, 0)).toBeLessThan(0.5);
+  });
+
+  it('goes by how far the hand has gone, within the ends', () => {
+    expect(volumeByDrag(0.5, 0, 0)).toBe(0.5);
+    expect(volumeByDrag(0, DRAG_RUN_PX, 0)).toBe(1);
+    expect(volumeByDrag(0.5, 0, 9999)).toBe(0);
+    expect(volumeByDrag(0.5, 9999, 0)).toBe(1);
+  });
+});
+
+describe('a hand on the slider', () => {
+  it('starts from the volume it found, wherever the hand is', () => {
+    expect(volumeBySlide(0.8, 0)).toBe(0.8);
+  });
+
+  it('runs the whole way along the slider, and stops at its ends', () => {
+    expect(volumeBySlide(0, SLIDER_RUN_PX)).toBe(1);
+    expect(volumeBySlide(1, -SLIDER_RUN_PX)).toBe(0);
+    expect(volumeBySlide(0.5, 9999)).toBe(1);
+    expect(volumeBySlide(0.5, -9999)).toBe(0);
+  });
+});
+
+describe('a hand on the ring', () => {
+  it('pulling straight out or in is taken for a pull and not a turn', () => {
+    expect(pullsAcross(0, -14, 0, -5)).toBe(true);
+    expect(pullsAcross(0, -14, 0, 5)).toBe(true);
+    expect(pullsAcross(14, 0, 5, 1)).toBe(true);
+  });
+
+  it('going round is a turn', () => {
+    expect(pullsAcross(0, -14, 5, 0)).toBe(false);
+    expect(pullsAcross(0, -14, 4, -1)).toBe(false);
   });
 });

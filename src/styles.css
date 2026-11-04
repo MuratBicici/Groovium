@@ -607,6 +607,10 @@ body {
 .groove-knob[data-out] ~ .groove-knob-neighbour {
   transform: translateX(26px);
 }
+/* The body opening out into a slider, with the same spring. */
+.groove-knob-body {
+  transition: width 240ms cubic-bezier(0.3, 1.25, 0.5, 1);
+}
 /* A level or a pointer moving by itself, as when the knob is pressed and mutes. */
 .groove-knob-carry {
   transition:
@@ -619,6 +623,7 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .groove-knob-figure,
+  .groove-knob-body,
   .groove-knob-neighbour,
   .groove-knob-carry {
     transition: none;

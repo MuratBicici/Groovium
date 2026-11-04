@@ -22,6 +22,8 @@ export function GeneralPage() {
   const setPickAnimation = useSettingsStore((s) => s.setPickAnimation);
   const dropZone = useSettingsStore((s) => s.dropZone);
   const setDropZone = useSettingsStore((s) => s.setDropZone);
+  const volumeStyle = useSettingsStore((s) => s.volumeStyle);
+  const setVolumeStyle = useSettingsStore((s) => s.setVolumeStyle);
   const sleepWhenHidden = useSettingsStore((s) => s.sleepWhenHidden);
   const batterySaver = useSettingsStore((s) => s.batterySaver);
   const setBatterySaver = useSettingsStore((s) => s.setBatterySaver);
@@ -100,6 +102,17 @@ export function GeneralPage() {
             </Choice>
             <Choice active={dropZone === 'mat'} onClick={() => setDropZone('mat')}>
               {t('settings.dropZoneMat')}
+            </Choice>
+          </div>
+        </Field>
+        <CardDivider />
+        <Field label={t('settings.volumeStyle')} hint={t('settings.volumeStyleHint')}>
+          <div className="flex gap-1.5">
+            <Choice active={volumeStyle === 'knob'} onClick={() => setVolumeStyle('knob')}>
+              {t('settings.volumeStyleKnob')}
+            </Choice>
+            <Choice active={volumeStyle === 'slider'} onClick={() => setVolumeStyle('slider')}>
+              {t('settings.volumeStyleSlider')}
             </Choice>
           </div>
         </Field>

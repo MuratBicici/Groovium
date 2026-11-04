@@ -11,6 +11,7 @@ import {
   type GlowListens,
   type PickAnimation,
   type DropZone,
+  type VolumeStyle,
   type VisualizerLook,
   type LibraryTab,
   type Language,
@@ -80,6 +81,7 @@ interface SettingsStore extends Settings {
   setBatterySaver: (on: boolean) => void;
   setBatterySaverOnBattery: (on: boolean) => void;
   setDropZone: (where: DropZone) => void;
+  setVolumeStyle: (style: VolumeStyle) => void;
   setEqualiserOn: (on: boolean) => void;
   setEqualiserPreamp: (db: number) => void;
   setEqualiserBands: (bands: readonly number[]) => void;
@@ -361,7 +363,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { customPrimary, customSecondary, boostContrast, windowBorder } = get();
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare, glowListens } = get();
-    const { visualizerLook, visualizerBrightness, pickAnimation, batterySaver, batterySaverOnBattery, dropZone } = get();
+    const { visualizerLook, visualizerBrightness, pickAnimation, batterySaver, batterySaverOnBattery, dropZone, volumeStyle } = get();
     const { equaliserOn, equaliserPreamp, equaliserBands, equaliserSaved } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
@@ -396,6 +398,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       batterySaver,
       batterySaverOnBattery,
       dropZone,
+      volumeStyle,
       equaliserOn,
       equaliserPreamp,
       equaliserBands,
@@ -508,6 +511,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setBatterySaver: (batterySaver) => commit({ batterySaver }),
     setBatterySaverOnBattery: (batterySaverOnBattery) => commit({ batterySaverOnBattery }),
     setDropZone: (dropZone) => commit({ dropZone }),
+    setVolumeStyle: (volumeStyle) => commit({ volumeStyle }),
     setEqualiserOn: (equaliserOn) => commitQuietly({ equaliserOn }),
     setEqualiserPreamp: (db) => commitQuietly({ equaliserPreamp: heldDb(db) }),
     setEqualiserBands: (bands) => commitQuietly({ equaliserBands: heldBands(bands) }),

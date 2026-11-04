@@ -19,6 +19,51 @@ export function hasStartedTurning(dx: number, dy: number): boolean {
   return Math.hypot(dx, dy) >= PRESS_TRAVEL_PX;
 }
 
+/** How far out from the centre a press is on the face and not the ring, in px. */
+export const FACE_RADIUS_PX = 12;
+
+/** Whether a press this far from the centre took the knob by its face. */
+export function onTheFace(dx: number, dy: number): boolean {
+  return Math.hypot(dx, dy) < FACE_RADIUS_PX;
+}
+
+/**
+ * Whether a hand that pressed on the ring set off straight out from the centre
+ * or in towards it, rather than round. No turn can read that, any more than one
+ * from the face: the angle does not change. Within about thirty degrees of the
+ * line through the centre.
+ */
+export function pullsAcross(fromX: number, fromY: number, dx: number, dy: number): boolean {
+  const along = Math.abs(fromX * dx + fromY * dy);
+  return along >= 0.85 * Math.hypot(fromX, fromY) * Math.hypot(dx, dy);
+}
+
+/** How far a hand on the face travels from silence to full, in px. */
+export const DRAG_RUN_PX = 200;
+
+/**
+ * The volume for a hand on the face: up or to the right for more.
+ *
+ * Both directions count together, so it does not matter which somebody reaches
+ * for, and either the wrong way takes it back. By how far the hand has gone and
+ * not where it is, so taking hold of it does not change anything.
+ */
+export function volumeByDrag(from: number, dx: number, dy: number): number {
+  return clamp(from + (dx - dy) / DRAG_RUN_PX, 0, 1);
+}
+
+/** How long the slider's run is, in px, when the knob opens out into one. */
+export const SLIDER_RUN_PX = 108;
+
+/**
+ * The volume for a hand on the slider. By how far it has gone, again: the knob is
+ * at the slider's near end, so where the hand is says nothing yet, and reading it
+ * would cut the sound to nothing the moment the hand started to move.
+ */
+export function volumeBySlide(from: number, dx: number): number {
+  return clamp(from + dx / SLIDER_RUN_PX, 0, 1);
+}
+
 /** Degrees of rotation between silence and full volume — seven o'clock to five. */
 export const SWEEP_DEGREES = 270;
 

@@ -174,6 +174,10 @@ pub struct Settings {
     /// unrecognised, and a config from before the choice, reads as the dock.
     #[serde(default = "dock")]
     pub drop_zone: String,
+    /// How the volume moves: `"knob"`, or `"slider"`, which it opens out into
+    /// under the hand. Anything unrecognised, and an older config, reads as the knob.
+    #[serde(default = "knob")]
+    pub volume_style: String,
     /// Whether the equaliser is on. Off by default, and flat it stands aside.
     #[serde(default)]
     pub equaliser_on: bool,
@@ -270,6 +274,7 @@ impl Default for Settings {
             battery_saver: false,
             battery_saver_on_battery: on_unless_turned_off(),
             drop_zone: dock(),
+            volume_style: knob(),
             equaliser_on: false,
             equaliser_preamp: 0.0,
             equaliser_bands: Vec::new(),
@@ -341,6 +346,10 @@ fn meteor() -> String {
 
 fn dock() -> String {
     "dock".into()
+}
+
+fn knob() -> String {
+    "knob".into()
 }
 
 fn grooves() -> String {
@@ -489,6 +498,7 @@ mod tests {
             battery_saver: true,
             battery_saver_on_battery: false,
             drop_zone: "mat".into(),
+            volume_style: "slider".into(),
             equaliser_on: true,
             equaliser_preamp: -2.0,
             equaliser_bands: vec![8.0, 7.0],
@@ -551,6 +561,12 @@ mod tests {
         assert_eq!(chosen.settings.drop_zone, "mat");
         let written = serde_json::to_string(&chosen).expect("writes");
         assert!(written.contains(r#""dropZone":"mat""#));
+
+        // The volume's style, the same way.
+        assert_eq!(config.settings.volume_style, "knob");
+        let slid: AppConfig =
+            serde_json::from_str(r#"{"settings":{"volumeStyle":"slider"}}"#).expect("parses");
+        assert_eq!(slid.settings.volume_style, "slider");
 
         // The equaliser's, the same way: off in an older config, and kept.
         assert!(!config.settings.equaliser_on);
