@@ -39,6 +39,9 @@ import { followPlayer } from '@/core/lyrics/playhead';
 import { keepListening } from '@/core/listening/listen';
 import { clearNotice, useNotice } from '@/core/notice';
 import { DropDock } from '@/components/queue/DropDock';
+import { EqualiserDrawer } from '@/components/equaliser/EqualiserDrawer';
+import { onEqualiserFailed, sendEqualiser } from '@/platform/equaliser';
+import { tellNotice } from '@/core/notice';
 import { declineSaving, dismissSavingNotice, usePower, usePowerAwareMotion } from '@/platform/power';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
@@ -62,7 +65,7 @@ import {
   useShellSize,
 } from '@/components/controls/useShellSize';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { useT } from '@/core/i18n';
+import { say, useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
@@ -84,6 +87,7 @@ const PANEL_IDS = {
 const DRAWER_ID = 'groovium-spotify';
 const LYRICS_ID = 'groovium-lyrics';
 const QUEUE_ID = 'groovium-queue';
+const EQUALISER_ID = 'groovium-equaliser';
 
 /** Only one overlay covers the stage at a time; two would stack unreadably. */
 type Overlay = 'none' | keyof typeof PANEL_IDS;
@@ -184,12 +188,44 @@ export default function App() {
   // come back by itself with whatever song is put on next.
   if (!deckHasSong && queue.shown) setQueue(queueHidden);
   const queueShown = queue.shown && drawerOpen && deckHasSong;
-  /** The drawer's own close, from any of its three faces. */
+  /**
+   * The equaliser, over whatever the drawer holds. It comes and goes as the
+   * queue does, bringing the drawer out if need be and taking it away again.
+   */
+  const [equaliser, setEqualiser] = useState(queueHidden);
+  const equaliserShown = equaliser.shown && drawerOpen;
+  /** The drawer's own close, from any of its faces. */
   const shutDrawer = () => {
     setQueue(queueHidden);
+    setEqualiser(queueHidden);
     setLyricsLayout(closeDrawer(layout));
   };
   const settingsReady = useSettingsStore((s) => s.ready);
+  const equaliserOn = useSettingsStore((s) => s.equaliserOn);
+  const equaliserPreamp = useSettingsStore((s) => s.equaliserPreamp);
+  const equaliserBands = useSettingsStore((s) => s.equaliserBands);
+  const setEqualiserOn = useSettingsStore((s) => s.setEqualiserOn);
+  // What the sound should be doing. Once the stored choice has arrived, so it
+  // starts with what was left on and not with a moment of something else.
+  useEffect(() => {
+    if (settingsReady) void sendEqualiser(equaliserOn, equaliserPreamp, equaliserBands);
+  }, [settingsReady, equaliserOn, equaliserPreamp, equaliserBands]);
+  // Rust gave up and has put the sound back. The switch should say so.
+  useEffect(() => {
+    let alive = true;
+    let stop = () => {};
+    void onEqualiserFailed(() => {
+      setEqualiserOn(false);
+      tellNotice(say('notice.equaliserFailed'));
+    }).then((unlisten) => {
+      if (alive) stop = unlisten;
+      else unlisten();
+    });
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [setEqualiserOn]);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const scale = useSettingsStore((s) => s.scale);
   // The whole window at the size somebody chose: the page zoomed, and the
@@ -692,7 +728,10 @@ export default function App() {
               onToggle={() => {
                 // The drawer, out or away. The queue lies over it and goes
                 // with it.
-                if (drawerOpen) setQueue(queueHidden);
+                if (drawerOpen) {
+                  setQueue(queueHidden);
+                  setEqualiser(queueHidden);
+                }
                 setLyricsLayout(pressSpotify(layout));
               }}
               controls={DRAWER_ID}
@@ -705,6 +744,7 @@ export default function App() {
                 open={lyricsOn}
                 onToggle={() => {
                   setQueue(queueHidden);
+                  setEqualiser(queueHidden);
                   setLyricsLayout(pressLyrics(layout));
                 }}
                 controls={LYRICS_ID}
@@ -717,6 +757,19 @@ export default function App() {
               onToggle={() => {
                 const next = pressQueue(queueShown ? queue : queueHidden, drawerOpen);
                 setQueue(next.view);
+                setEqualiser(queueHidden);
+                if (next.drawerOpen === drawerOpen) return;
+                setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
+              }}
+            />
+            <PanelButton
+              panel="equaliser"
+              open={equaliserShown}
+              controls={EQUALISER_ID}
+              onToggle={() => {
+                const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
+                setEqualiser(next.view);
+                setQueue(queueHidden);
                 if (next.drawerOpen === drawerOpen) return;
                 setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
               }}
@@ -737,6 +790,8 @@ export default function App() {
           lyrics={lyricsInDrawer}
           queue={queueShown}
           deckHasSong={deckHasSong}
+          equaliser={equaliserShown}
+          equaliserView={<EqualiserDrawer id={EQUALISER_ID} onClose={shutDrawer} />}
           queueView={<QueueDrawer id={QUEUE_ID} side={drawerSide} onClose={shutDrawer} />}
           spotify={
             <LibraryDrawer id={DRAWER_ID} onClose={shutDrawer} />
@@ -846,6 +901,8 @@ function DrawerSlot({
   queue,
   queueView,
   deckHasSong,
+  equaliser,
+  equaliserView,
 }: {
   lyrics: boolean;
   spotify: React.ReactNode;
@@ -854,6 +911,9 @@ function DrawerSlot({
   queue: boolean;
   queueView: React.ReactNode;
   deckHasSong: boolean;
+  /** The equaliser takes the whole drawer while it is out. */
+  equaliser: boolean;
+  equaliserView: React.ReactNode;
 }) {
   /**
    * A song carried out of the drawer brings the queue out beside it, so the
@@ -869,20 +929,28 @@ function DrawerSlot({
   const showQueue = queue || (!dock && carryingSong && deckHasSong);
   const { present, ref } = usePresence(lyrics);
   const { present: queuePresent, ref: queueRef } = usePresence(showQueue);
+  const { present: equaliserPresent, ref: equaliserRef } = usePresence(equaliser);
   return (
     // Slow in a colour fade: the drawers are most of the window, and take the
     // fade's steps four times a second rather than thirty — see `fadePalette`.
     <div data-palette-slow className="relative flex shrink-0">
       <div
-        inert={lyrics}
+        inert={lyrics || equaliser}
         className="flex transition-opacity duration-300 ease-out"
-        style={{ opacity: lyrics ? 0 : 1 }}
+        style={{ opacity: lyrics || equaliser ? 0 : 1 }}
       >
         {spotify}
       </div>
       {present && (
-        <div ref={ref} className="absolute inset-0 flex">
-          {lyricsView}
+        <div ref={ref} inert={equaliser} className="absolute inset-0 flex">
+          <div className="flex transition-opacity duration-300 ease-out" style={{ opacity: equaliser ? 0 : 1 }}>
+            {lyricsView}
+          </div>
+        </div>
+      )}
+      {equaliserPresent && (
+        <div ref={equaliserRef} className="absolute inset-0 flex">
+          {equaliserView}
         </div>
       )}
       {/* The queue lies over whatever the drawer shows, which stays in view
@@ -897,7 +965,7 @@ function DrawerSlot({
           {queueView}
         </div>
       )}
-      {dock && !queue && <DropDock deckHasSong={deckHasSong} />}
+      {dock && !queue && !equaliser && <DropDock deckHasSong={deckHasSong} />}
     </div>
   );
 }

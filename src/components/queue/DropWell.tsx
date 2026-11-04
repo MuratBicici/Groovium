@@ -69,7 +69,7 @@ export function DropWell({
         aria-hidden="true"
         className={`pointer-events-auto flex items-center justify-center rounded-full border-[1.5px] border-dashed transition-[transform,box-shadow,background-color,border-color] duration-150 ease-out ${
           offered
-            ? 'groove-queue-offered border-transparent bg-brass-600/30 text-brass-300'
+            ? 'groove-queue-offered border-transparent bg-brass-600/30 text-brass-400'
             : 'border-brass-400/55 bg-shell-900/55 text-brass-400/80'
         }`}
         style={{ width: size, height: size }}
@@ -95,7 +95,7 @@ export function DropWell({
       </div>
       <span
         className={`text-label font-medium tracking-[0.18em] uppercase transition-colors ${
-          offered ? 'text-brass-300' : 'text-cream-200'
+          offered ? 'text-brass-400' : 'text-cream-200'
         }`}
       >
         {label}

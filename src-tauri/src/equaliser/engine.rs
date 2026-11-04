@@ -169,8 +169,7 @@ pub fn give_back_what_was_left(shared: Arc<Shared>) {
 /// In this order and with these waits because getting it wrong hurts. The gain
 /// is shut first. The session goes down in steps rather than at once, so there
 /// is a dip and not a cut. Then a wait, for what was captured before it was
-/// quiet to have arrived, and the buffer is emptied of it. Only then does the
-/// gain open, gradually, and the gate is watching every frame even so.
+/// quiet to have arrived, and `open` does the rest.
 fn enter(shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>, pids: &[u32], prior: f32) {
     shared.gain.store(0_f32.to_bits(), SeqCst);
     set_capture_scale(1.0);
@@ -180,11 +179,46 @@ fn enter(shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>, pids: &[u32], prior:
     }
     set_level(pids, QUIET);
     std::thread::sleep(Duration::from_millis(200));
+    open(shared, ring, prior);
+}
+
+/// With the session known to be quiet: the buffer emptied of anything from
+/// before, and the gain opened, gradually, with the gate watching every frame.
+fn open(shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>, prior: f32) {
     if let Ok(mut held) = ring.lock() {
         held.clear();
     }
     set_capture_scale(1.0 / QUIET);
     shared.gain.store((prior / QUIET).to_bits(), SeqCst);
+}
+
+/// What to do about the sessions found, given whether the gain is open.
+#[derive(Debug, PartialEq, Eq)]
+enum Look {
+    /// All quiet and the gain open: nothing.
+    Carry,
+    /// Nobody to be sure of: a session appearing now would appear at full level
+    /// under an open gain, and the start of a song fading in would come through
+    /// the guard at full scale. So it stays shut until there is one to look at.
+    Shut,
+    /// All quiet, with the gain shut: open it.
+    Open,
+    /// One is not quiet: it has just appeared, or somebody moved the mixer.
+    TurnDown,
+}
+
+fn look(levels: &[f32], opened: bool) -> Look {
+    if levels.is_empty() {
+        return if opened { Look::Shut } else { Look::Carry };
+    }
+    if levels.iter().any(|level| !is_ours(*level)) {
+        return Look::TurnDown;
+    }
+    if opened {
+        Look::Carry
+    } else {
+        Look::Open
+    }
 }
 
 /// Back to the sound as it comes: the gain all the way down first, and only
@@ -257,21 +291,37 @@ pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
         })
     };
 
-    enter(shared, &ring, &pids, prior);
-
+    let mut opened = false;
+    let mut first = true;
     while shared.wanted.load(SeqCst) && !shared.failed.load(SeqCst) {
-        std::thread::sleep(LOOK_EVERY);
+        if !first {
+            std::thread::sleep(LOOK_EVERY);
+        }
+        first = false;
         pids = webview_tree(webview);
-        // A session not at the quiet level is one that has just appeared, or
-        // somebody moving the Windows mixer. Either way it is the level they
-        // are to hear, and the session goes quiet again to bring it through.
         let levels = levels_of(&pids);
-        if let Some(level) = levels.iter().copied().find(|level| !is_ours(*level)) {
-            prior = level;
-            if let Ok(mut held) = held_prior.lock() {
-                *held = level;
+        match look(&levels, opened) {
+            Look::Carry => {}
+            Look::Shut => {
+                shared.gain.store(0_f32.to_bits(), SeqCst);
+                set_capture_scale(1.0);
+                opened = false;
             }
-            enter(shared, &ring, &pids, prior);
+            Look::Open => {
+                open(shared, &ring, prior);
+                opened = true;
+            }
+            Look::TurnDown => {
+                // The level they are to hear, unless it is the one left behind.
+                if let Some(level) = levels.iter().copied().find(|level| !is_ours(*level)) {
+                    prior = level;
+                    if let Ok(mut held) = held_prior.lock() {
+                        *held = level;
+                    }
+                }
+                enter(shared, &ring, &pids, prior);
+                opened = true;
+            }
         }
     }
 
@@ -402,5 +452,38 @@ fn feed_one_device(shared: &Arc<Shared>, ring: &Arc<Mutex<VecDeque<[f32; 2]>>>) 
 
         let _ = client.Stop();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_gain_is_never_open_with_no_session_to_be_sure_of() {
+        // With nothing played yet there is no session. Open then, the first one
+        // to appear would come through ten thousand times too loud.
+        assert_eq!(look(&[], false), Look::Carry, "stays shut");
+        assert_eq!(look(&[], true), Look::Shut, "and shuts if they all go");
+    }
+
+    #[test]
+    fn a_session_appearing_at_full_level_is_turned_down_before_anything_opens() {
+        assert_eq!(look(&[1.0], false), Look::TurnDown);
+        assert_eq!(look(&[QUIET, 1.0], true), Look::TurnDown);
+    }
+
+    #[test]
+    fn a_session_already_quiet_needs_only_the_gain() {
+        assert_eq!(look(&[QUIET], false), Look::Open);
+        assert_eq!(look(&[QUIET], true), Look::Carry);
+    }
+
+    #[test]
+    fn only_the_level_this_holds_counts_as_its_own() {
+        assert!(is_ours(QUIET));
+        assert!(!is_ours(0.0), "somebody turning it right down is their choice");
+        assert!(!is_ours(0.01));
+        assert!(!is_ours(1.0));
     }
 }

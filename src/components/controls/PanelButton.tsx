@@ -8,7 +8,7 @@ import { useT } from '@/core/i18n';
  * point the icon lookup starts missing in Turkish and every button turns into
  * the library. The id is the id now; the label is looked up from it.
  */
-export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings' | 'lyrics' | 'queue';
+export type PanelId = 'library' | 'playlists' | 'spotify' | 'settings' | 'lyrics' | 'queue' | 'equaliser';
 
 const ICONS: Record<PanelId, React.ReactNode> = {
   library: <path d="M4 5v14M8 5v14M12 6l6 13" strokeLinecap="round" />,
@@ -41,6 +41,16 @@ const ICONS: Record<PanelId, React.ReactNode> = {
       <path d="M4 6h10M4 10h10M4 14h6" strokeLinecap="round" />
       <circle cx="17" cy="17" r="2" />
       <path d="M19 17V9l2 1" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  // Three sliders, each set somewhere else: what an equaliser has looked like
+  // on the front of everything for fifty years.
+  equaliser: (
+    <>
+      <path d="M6 4v16M12 4v16M18 4v16" strokeLinecap="round" />
+      <circle cx="6" cy="15" r="2" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="8" r="2" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="13" r="2" fill="currentColor" stroke="none" />
     </>
   ),
   // A gear. Worked out rather than drawn by hand: six teeth at even angles,

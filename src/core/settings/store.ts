@@ -1,3 +1,4 @@
+import { heldBands, heldDb } from '@/core/equaliser';
 import { create } from 'zustand';
 import {
   DEFAULT_SETTINGS,
@@ -76,6 +77,10 @@ interface SettingsStore extends Settings {
   setBatterySaver: (on: boolean) => void;
   setBatterySaverOnBattery: (on: boolean) => void;
   setDropZone: (where: DropZone) => void;
+  setEqualiserOn: (on: boolean) => void;
+  setEqualiserPreamp: (db: number) => void;
+  setEqualiserBands: (bands: readonly number[]) => void;
+  saveEqualiserBands: (bands: readonly number[]) => void;
   setVisualizerBrightness: (notch: number) => void;
   setBackdrop: (on: boolean) => void;
   setBackdropKnob: (knob: BackdropKnob, notch: number) => void;
@@ -353,6 +358,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { visualizer, windowGlow, sleepWhenHidden, scale, themeFromCover } = get();
     const { glowStrength, glowSensitivity, glowSpeed, glowFlash, glowFlare, glowListens } = get();
     const { visualizerLook, visualizerBrightness, pickAnimation, batterySaver, batterySaverOnBattery, dropZone } = get();
+    const { equaliserOn, equaliserPreamp, equaliserBands, equaliserSaved } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
@@ -386,6 +392,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       batterySaver,
       batterySaverOnBattery,
       dropZone,
+      equaliserOn,
+      equaliserPreamp,
+      equaliserBands,
+      equaliserSaved,
       visualizerBrightness,
       backdrop,
       backdropBrightness,
@@ -478,6 +488,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setBatterySaver: (batterySaver) => commit({ batterySaver }),
     setBatterySaverOnBattery: (batterySaverOnBattery) => commit({ batterySaverOnBattery }),
     setDropZone: (dropZone) => commit({ dropZone }),
+    setEqualiserOn: (equaliserOn) => commit({ equaliserOn }),
+    setEqualiserPreamp: (db) => commit({ equaliserPreamp: heldDb(db) }),
+    setEqualiserBands: (bands) => commit({ equaliserBands: heldBands(bands) }),
+    saveEqualiserBands: (bands) => commit({ equaliserSaved: heldBands(bands) }),
     setVisualizerBrightness: (notch) =>
       commit({ visualizerBrightness: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setBackdrop: (backdrop) => commit({ backdrop }),

@@ -1,3 +1,4 @@
+import { heldBands, heldDb } from '@/core/equaliser';
 import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
 import { log } from '@/platform/log';
@@ -181,6 +182,14 @@ export interface Settings {
    * foot of the drawer, or the queue's round palette as it always was.
    */
   dropZone: DropZone;
+  /** Whether the equaliser is on. Flat, it stands aside even so. */
+  equaliserOn: boolean;
+  /** The level going in, in decibels; see `@/core/equaliser`. */
+  equaliserPreamp: number;
+  /** Each band, in decibels, one for each of `EQ_BANDS`. */
+  equaliserBands: number[];
+  /** The listener's own setting of the bands, once they have kept one. */
+  equaliserSaved: number[] | null;
   /**
    * How brightly the visualiser shows through, a notch from -4 to 4. Nought is
    * the quarter it has always been drawn at; see `visualizerOpacity`.
@@ -304,6 +313,10 @@ export const DEFAULT_SETTINGS: Settings = {
   batterySaver: false,
   batterySaverOnBattery: true,
   dropZone: 'dock',
+  equaliserOn: false,
+  equaliserPreamp: 0,
+  equaliserBands: heldBands(null),
+  equaliserSaved: null,
   visualizerBrightness: 0,
   backdrop: true,
   backdropBrightness: 0,
@@ -347,6 +360,10 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
     if (settings.dropZone !== 'mat') settings.dropZone = 'dock';
+    settings.equaliserOn = settings.equaliserOn === true;
+    settings.equaliserPreamp = heldDb(settings.equaliserPreamp);
+    settings.equaliserBands = heldBands(settings.equaliserBands);
+    settings.equaliserSaved = settings.equaliserSaved ? heldBands(settings.equaliserSaved) : null;
     settings.lyricsOn = settings.lyricsOn === true;
     settings.backdrop = settings.backdrop !== false;
     settings.scale = nearestScale(Number(settings.scale));
