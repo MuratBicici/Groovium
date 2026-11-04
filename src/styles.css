@@ -412,12 +412,16 @@ body {
  * the listener could see where it was cut. So there is no edge to soften now: the
  * same colour goes on down to the foot of the window behind the controls. Its
  * lists fade to that colour too, rather than to the shell's.
+ *
+ * Solid, both. At 96% the light behind came through, blurred in one and not in
+ * the other, and the place they met showed.
  */
 .groove-surface.groove-dock {
   --fade-colour: var(--color-shell-800);
+  background: var(--color-shell-800);
 }
 .groove-dock-foot {
-  background: color-mix(in srgb, var(--color-shell-800) 96%, transparent);
+  background: var(--color-shell-800);
 }
 
 /*

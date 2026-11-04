@@ -242,15 +242,16 @@ export function SettingsPanel({
     <div
       id={id}
       inert={!open}
-      // `invisible` while closed, not only transparent. This carries a
-      // backdrop blur, and a blur is the most expensive thing per pixel a
-      // compositor does: three of these are mounted at all times over the
-      // whole stage, and one that is merely transparent can still be asked for
-      // it on every frame. Visibility is in `transition-all`, so it holds
-      // `visible` for the length of the way out and flips at once on the way
-      // in — the panel still slides and fades exactly as it did.
-      className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg backdrop-blur-sm transition-all duration-200 ease-out ${
-        open ? 'translate-y-0 opacity-100' : 'invisible translate-y-3 opacity-0'
+      // `invisible` while closed, not only transparent, so nothing over the
+      // whole stage is drawn for a panel nobody can see. Visibility is in
+      // `transition-all`, so it holds `visible` for the length of the way out
+      // and flips at once on the way in.
+      //
+      // It fades and does not slide. Its surface goes on behind the controls
+      // (`.groove-dock-foot`), and sliding up from below ran the two over each
+      // other for the length of the opening, as a band above the progress bar.
+      className={`absolute inset-0 z-20 groove-surface groove-dock flex flex-col rounded-t-lg transition-all duration-200 ease-out ${
+        open ? 'opacity-100' : 'invisible opacity-0'
       }`}
     >
       <div className="flex h-9 shrink-0 items-center justify-between px-3">
@@ -317,6 +318,13 @@ export function SettingsPanel({
         >
           {pageFor(lastPage)}
         </section>
+        {/* Words going off the foot of the list go out softly, rather than being
+            cut in a line just above the progress bar. Over the list rather than
+            a mask on it, so a list at its end has only its own padding here. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-shell-800 to-transparent"
+        />
       </div>
     </div>
   );
