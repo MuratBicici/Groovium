@@ -31,6 +31,9 @@ import { derivePalette, edgeFor, onAccentFor, strengthenText } from '@/core/util
 import type { LyricsLayout } from '@/core/lyrics/layout';
 import { log } from '@/platform/log';
 
+/** How long a setting has to hold still before it is written to the file. */
+const QUIET_SAVE_MS = 400;
+
 /**
  * Preferences, in their own store.
  *
@@ -421,6 +424,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     void saveSettings(settings);
   };
 
+  /**
+   * For what changes many times a second under a hand and has no bearing on how
+   * the page looks. `commit` rewrites the colours on the root, which restyles
+   * thousands of elements, and writes the file. A drag on the equaliser did both
+   * for every decibel, and could be felt. This writes the file once it stops.
+   */
+  let saveDue: ReturnType<typeof setTimeout> | null = null;
+  const commitQuietly = (patch: Partial<Settings>) => {
+    set(patch);
+    if (saveDue) clearTimeout(saveDue);
+    saveDue = setTimeout(() => {
+      saveDue = null;
+      void saveSettings(settingsNow());
+    }, QUIET_SAVE_MS);
+  };
+
   return {
     ...DEFAULT_SETTINGS,
     ready: false,
@@ -489,12 +508,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setBatterySaver: (batterySaver) => commit({ batterySaver }),
     setBatterySaverOnBattery: (batterySaverOnBattery) => commit({ batterySaverOnBattery }),
     setDropZone: (dropZone) => commit({ dropZone }),
-    setEqualiserOn: (equaliserOn) => commit({ equaliserOn }),
-    setEqualiserPreamp: (db) => commit({ equaliserPreamp: heldDb(db) }),
-    setEqualiserBands: (bands) => commit({ equaliserBands: heldBands(bands) }),
+    setEqualiserOn: (equaliserOn) => commitQuietly({ equaliserOn }),
+    setEqualiserPreamp: (db) => commitQuietly({ equaliserPreamp: heldDb(db) }),
+    setEqualiserBands: (bands) => commitQuietly({ equaliserBands: heldBands(bands) }),
     saveEqualiserCurve: (name, bands) =>
-      commit({ equaliserSaved: withSaved(get().equaliserSaved, name, bands) }),
-    removeEqualiserCurve: (name) => commit({ equaliserSaved: withoutSaved(get().equaliserSaved, name) }),
+      commitQuietly({ equaliserSaved: withSaved(get().equaliserSaved, name, bands) }),
+    removeEqualiserCurve: (name) => commitQuietly({ equaliserSaved: withoutSaved(get().equaliserSaved, name) }),
     setVisualizerBrightness: (notch) =>
       commit({ visualizerBrightness: Math.max(-NOTCHES, Math.min(NOTCHES, Math.round(notch))) }),
     setBackdrop: (backdrop) => commit({ backdrop }),

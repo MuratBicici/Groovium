@@ -271,3 +271,19 @@ describe('reading a config file somebody has edited', () => {
     expect(settings.glowSensitivity).toBe(0);
   });
 });
+
+describe('the equaliser moving', () => {
+  it('saves once it stops, and not for every decibel', async () => {
+    const { useSettingsStore } = await import('./store');
+    vi.useFakeTimers();
+    saved.mockClear();
+    const { setEqualiserBands } = useSettingsStore.getState();
+    for (let db = 1; db <= 5; db++) setEqualiserBands([db]);
+    expect(saved).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().equaliserBands[0]).toBe(5);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(saved).toHaveBeenCalledTimes(1);
+    expect(saved.mock.calls[0]?.[0].equaliserBands[0]).toBe(5);
+    vi.useRealTimers();
+  });
+});

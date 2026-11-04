@@ -40,8 +40,7 @@ import { keepListening } from '@/core/listening/listen';
 import { clearNotice, useNotice } from '@/core/notice';
 import { DropDock } from '@/components/queue/DropDock';
 import { EqualiserDrawer } from '@/components/equaliser/EqualiserDrawer';
-import { onEqualiserFailed, sendEqualiser } from '@/platform/equaliser';
-import { tellNotice } from '@/core/notice';
+import { EqualiserLink } from '@/components/equaliser/EqualiserLink';
 import { declineSaving, dismissSavingNotice, usePower, usePowerAwareMotion } from '@/platform/power';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
@@ -65,7 +64,7 @@ import {
   useShellSize,
 } from '@/components/controls/useShellSize';
 import { prefersReducedMotion } from '@/core/utils/motion';
-import { say, useT } from '@/core/i18n';
+import { useT } from '@/core/i18n';
 import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
@@ -201,31 +200,6 @@ export default function App() {
     setLyricsLayout(closeDrawer(layout));
   };
   const settingsReady = useSettingsStore((s) => s.ready);
-  const equaliserOn = useSettingsStore((s) => s.equaliserOn);
-  const equaliserPreamp = useSettingsStore((s) => s.equaliserPreamp);
-  const equaliserBands = useSettingsStore((s) => s.equaliserBands);
-  const setEqualiserOn = useSettingsStore((s) => s.setEqualiserOn);
-  // What the sound should be doing. Once the stored choice has arrived, so it
-  // starts with what was left on and not with a moment of something else.
-  useEffect(() => {
-    if (settingsReady) void sendEqualiser(equaliserOn, equaliserPreamp, equaliserBands);
-  }, [settingsReady, equaliserOn, equaliserPreamp, equaliserBands]);
-  // Rust gave up and has put the sound back. The switch should say so.
-  useEffect(() => {
-    let alive = true;
-    let stop = () => {};
-    void onEqualiserFailed(() => {
-      setEqualiserOn(false);
-      tellNotice(say('notice.equaliserFailed'));
-    }).then((unlisten) => {
-      if (alive) stop = unlisten;
-      else unlisten();
-    });
-    return () => {
-      alive = false;
-      stop();
-    };
-  }, [setEqualiserOn]);
   const windowBorder = useSettingsStore((s) => s.windowBorder);
   const scale = useSettingsStore((s) => s.scale);
   // The whole window at the size somebody chose: the page zoomed, and the
@@ -862,6 +836,7 @@ export default function App() {
           `pointer-events-none` means nothing has to be. */}
       {/* Under the edge and on the same layer, so the hairline stays crisp on
           top of the light rather than being drawn through it. */}
+      <EqualiserLink />
       <WindowGlow
         on={windowGlow}
         strength={glowStrength}

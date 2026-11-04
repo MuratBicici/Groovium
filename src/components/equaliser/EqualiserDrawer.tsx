@@ -47,6 +47,8 @@ const WAVE_STEP_MS = 38;
  * them, for the same reason: without it a dot ticks along eleven pixels at a time.
  */
 const SETTLE_RATE = 11;
+/** And the dot in somebody's hand, which should feel attached to it. */
+const HELD_RATE = 32;
 /** How fast a dot's flash goes out, per second. */
 const FLASH_FADE = 3.2;
 /** How wide a flash opens as it goes out, from just behind the dot. */
@@ -146,28 +148,46 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
     last: 0,
   });
 
+  /**
+   * Only what has changed. Each of these is a presentation attribute, so each
+   * write restyles its element, and every dot on every frame adds up for a
+   * picture in which one dot is moving.
+   */
+  const written = useRef(new Map<Element, Map<string, string>>());
+  const write = useCallback((el: Element | null | undefined, attr: string, value: string) => {
+    if (!el) return;
+    let attrs = written.current.get(el);
+    if (!attrs) written.current.set(el, (attrs = new Map()));
+    if (attrs.get(attr) === value) return;
+    attrs.set(attr, value);
+    el.setAttribute(attr, value);
+  }, []);
+
   const paint = useCallback(() => {
     const { now, flash, lit, drawn, read: reading } = motion.current;
     const path = curvePath(now);
     const readY = yOf(now[reading] ?? 0);
-    guide.current?.setAttribute('y1', String(readY));
-    guide.current?.setAttribute('y2', String(readY));
-    guideText.current?.setAttribute('y', String(readY + 4));
-    reveal.current?.setAttribute('width', String(drawn));
-    line.current?.setAttribute('d', path);
-    fill.current?.setAttribute('d', `${path} L${WIDE - RIGHT} ${ZERO} L${LEFT} ${ZERO} Z`);
+    write(guide.current, 'y1', String(readY));
+    write(guide.current, 'y2', String(readY));
+    write(guideText.current, 'y', String(readY + 4));
+    write(reveal.current, 'width', String(drawn));
+    write(line.current, 'd', path);
+    write(fill.current, 'd', `${path} L${WIDE - RIGHT} ${ZERO} L${LEFT} ${ZERO} Z`);
     now.forEach((db, at) => {
       const y = String(yOf(db));
       const dot = dots.current[at];
-      dot?.setAttribute('cy', y);
-      dot?.setAttribute('opacity', String(lit[at] ?? 1));
+      write(dot, 'cy', y);
+      write(dot, 'opacity', String(lit[at] ?? 1));
       const halo = flashes.current[at];
       const glow = flash[at] ?? 0;
-      halo?.setAttribute('cy', y);
-      halo?.setAttribute('r', String(FLASH_FROM + (1 - glow) * FLASH_OPENS));
-      halo?.setAttribute('opacity', String(glow * 0.5));
+      write(halo, 'opacity', String(glow * 0.5));
+      // Unlit, it needs nothing else: nobody can see where it is.
+      if (glow > 0) {
+        write(halo, 'cy', y);
+        write(halo, 'r', String(FLASH_FROM + (1 - glow) * FLASH_OPENS));
+      }
     });
-  }, []);
+  }, [write]);
 
   const start = useCallback(() => {
     const state = motion.current;
@@ -191,7 +211,7 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
               state.flash[at] = 1;
             }
             state.lit[at] = Math.min(1, (state.lit[at] ?? 1) + seconds * LIGHT_RATE);
-            const close = 1 - Math.exp(-seconds * SETTLE_RATE);
+            const close = 1 - Math.exp(-seconds * (state.grabbed === at ? HELD_RATE : SETTLE_RATE));
             const next = db + (goal - db) * close;
             state.now[at] = Math.abs(goal - next) < 0.02 ? goal : next;
           }
