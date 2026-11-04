@@ -27,7 +27,7 @@
 
 mod bands;
 #[cfg(windows)]
-mod capture;
+pub(crate) mod capture;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -190,8 +190,15 @@ fn run(app: &AppHandle, turn: &AtomicU64, mine: u64) -> Result<(), String> {
             // Mixed to mono as it arrives. Two bars for two ears is not what
             // this draws, and a stereo spectrum is twice the work for a
             // difference nobody could see at this size.
+            //
+            // At the level it is played rather than the level it arrives: with
+            // the equaliser on the session is turned right down. Held to full
+            // scale, since the two change a moment apart and the bars should
+            // not leap for it.
+            let scale = crate::equaliser::capture_scale();
             for frame in samples.chunks(capture::CHANNELS as usize) {
-                ring.push(frame.iter().sum::<f32>() / frame.len().max(1) as f32);
+                let mono = frame.iter().sum::<f32>() / frame.len().max(1) as f32;
+                ring.push((mono * scale).clamp(-1.0, 1.0));
             }
         },
     );

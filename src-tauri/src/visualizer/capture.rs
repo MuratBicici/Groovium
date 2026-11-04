@@ -45,7 +45,7 @@ const FLOAT_SAMPLES: u16 = 3;
 /// What the capture is asked to produce. A process loopback client has no mix
 /// format of its own to inherit — there is no device behind it — so one has to
 /// be named, and Windows converts into it.
-const RATE: u32 = 48_000;
+pub const RATE: u32 = 48_000;
 pub const CHANNELS: u16 = 2;
 
 /// Somewhere for the completion handler to leave its answer.
@@ -75,7 +75,7 @@ impl IActivateAudioInterfaceCompletionHandler_Impl for Handler_Impl {
 }
 
 /// Every process on the machine, as id, parent and name.
-fn processes() -> Result<Vec<(u32, u32, String)>, String> {
+pub fn processes() -> Result<Vec<(u32, u32, String)>, String> {
     unsafe {
         let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
             .map_err(|e| format!("could not list processes: {e}"))?;

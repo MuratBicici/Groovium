@@ -4,6 +4,7 @@
 
 mod audio;
 mod config;
+mod equaliser;
 mod keyring;
 mod lastfm;
 mod library;
@@ -70,6 +71,7 @@ fn main() {
         .manage(spotify::tokens::AccessTokenCache::default())
         .manage(shell::ClickArea::default())
         .manage(shell::Placekeeper::default())
+        .manage(equaliser::Equaliser::default())
         .manage(visualizer::Running::default())
         .manage(lyrics::LyricsCache::default())
         .manage(lyrics::manual::Candidates::default())
@@ -82,6 +84,9 @@ fn main() {
             }
             log::info!("Groovium {} started", app.package_info().version);
             shell::forget_old_place(app.handle());
+            // Windows remembers a session's level, so a run that ended badly
+            // would otherwise leave this app silent from here on.
+            equaliser::start(&app.state::<equaliser::Equaliser>());
             // Nothing should be drawn for a window buried under something
             // else; the webview cannot see that from the inside.
             onscreen::watch(app.handle().clone());
@@ -186,7 +191,16 @@ fn main() {
             report::logs_open_folder,
             report::report_problem,
             network::network_internet,
+            equaliser::equaliser_set,
+            equaliser::equaliser_stats,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Groovium");
+        .build(tauri::generate_context!())
+        .expect("error while running Groovium")
+        .run(|app, event| {
+            // Whatever is closing it. The session's level is kept by Windows
+            // and this webview's name may be shared with other apps.
+            if let tauri::RunEvent::Exit = event {
+                equaliser::finish(&app.state::<equaliser::Equaliser>());
+            }
+        });
 }
