@@ -673,6 +673,18 @@ export default function App() {
           />
         </div>
 
+        <div className="relative">
+          {/* The settings' surface, carried on behind the controls to the foot
+              of the window, gaps included. It stopped at the transport row, and
+              however that edge was softened it still read as a cut. */}
+          <div
+            aria-hidden="true"
+            className={`groove-dock-foot pointer-events-none absolute inset-x-0 -top-3 -bottom-3 transition-opacity duration-200 ease-out ${
+              shown === 'settings' ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+          {/* Positioned, so the controls stay over the surface above. */}
+          <div className="relative flex flex-col gap-3">
         {/* Always reachable, including while an overlay is open — except under
             the lyrics' timing strip, which seeks as well and takes its place. */}
         <div ref={progressRef}>
@@ -755,6 +767,8 @@ export default function App() {
               controls={PANEL_IDS.settings}
               badge={updateWaiting ? t('update.waiting') : undefined}
             />
+          </div>
+        </div>
           </div>
         </div>
       </main>
@@ -928,13 +942,8 @@ function DrawerSlot({
           {equaliserView}
         </div>
       )}
-      {/* The queue lies over whatever the drawer shows, which stays in view
-          and in reach under a light shade, rather than being put away. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-shell-900 transition-opacity duration-300 ease-out"
-        style={{ opacity: showQueue ? 0.32 : 0 }}
-      />
+      {/* The queue lies over whatever the drawer shows, which stays as it was and
+          in reach, rather than being put away. */}
       {queuePresent && (
         <div ref={queueRef} className="pointer-events-none absolute inset-0 flex">
           {queueView}

@@ -47,7 +47,7 @@ interface Slot {
  * come standing on its rim, in the order they will play.
  *
  * Over the drawer, not instead of it. The library or the lyrics stay where they
- * are, a little shaded, and can still be used: the palette takes the outer half
+ * are, and can still be used: the palette takes the outer half
  * and nothing else, so a record can be carried from a shelf straight onto it.
  * Everything of the queue — the records, their names, its own small controls —
  * is on the palette.
