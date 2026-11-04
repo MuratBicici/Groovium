@@ -702,18 +702,20 @@ export default function App() {
           {/* With the volume, as the other thing here that changes how it sounds. */}
           <div className="flex items-center gap-2">
             <VolumeKnob />
-            <PanelButton
-              panel="equaliser"
-              open={equaliserShown}
-              controls={EQUALISER_ID}
-              onToggle={() => {
-                const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
-                setEqualiser(next.view);
-                setQueue(queueHidden);
-                if (next.drawerOpen === drawerOpen) return;
-                setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
-              }}
-            />
+            <div className="groove-knob-neighbour">
+              <PanelButton
+                panel="equaliser"
+                open={equaliserShown}
+                controls={EQUALISER_ID}
+                onToggle={() => {
+                  const next = pressQueue(equaliserShown ? equaliser : queueHidden, drawerOpen);
+                  setEqualiser(next.view);
+                  setQueue(queueHidden);
+                  if (next.drawerOpen === drawerOpen) return;
+                  setLyricsLayout(next.drawerOpen ? { ...layout, drawerOpen: true } : closeDrawer(layout));
+                }}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             {/* The library: this computer's music, Groovium's playlists and

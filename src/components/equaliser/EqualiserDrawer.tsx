@@ -17,6 +17,7 @@ import { useSettingsStore } from '@/core/settings/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { pacer } from '@/core/utils/pace';
 import { DRAWER_WIDTH } from '@/platform/window';
+import { KnobFace } from '@/components/controls/KnobFace';
 
 /** The screen's own coordinates, the width of the drawer inside its margins. */
 const WIDE = 640;
@@ -60,8 +61,7 @@ const ARRIVE_STEP_MS = 45;
 /** How fast a dot comes up from dark as it arrives, per second. */
 const LIGHT_RATE = 9;
 
-/** How far the input knob turns either way, and how far the pointer goes per decibel. */
-const KNOB_TURN = 135;
+/** How far the pointer goes per decibel on the input knob. */
 const KNOB_PX_PER_DB = 6;
 
 /** The line through the dots, carried level to both sides of the screen. */
@@ -634,7 +634,9 @@ function OwnSettings({
 
 /**
  * The level going in: the same knob as the volume beside the deck, dragged up
- * and down, turned with the wheel, or back to nought with a double click.
+ * and down, turned with the wheel, or back to nought with a double click. Its
+ * brass runs from the top either way, since nought is the middle of it, and its
+ * figure stays in: there is nothing for one to step out into here.
  */
 function InputKnob({ db, on, onChange }: { db: number; on: boolean; onChange: (db: number) => void }) {
   const t = useT();
@@ -643,10 +645,7 @@ function InputKnob({ db, on, onChange }: { db: number; on: boolean; onChange: (d
 
   return (
     <div className="flex shrink-0 items-center gap-2 pt-px">
-      <span className="flex flex-col items-end leading-tight">
-        <span className="text-meta text-cream-400">{t('equaliser.preamp')}</span>
-        <span className="text-meta text-cream-200 tabular-nums">{signed(db)} dB</span>
-      </span>
+      <span className="text-meta text-cream-400">{t('equaliser.preamp')}</span>
       <div
         role="slider"
         tabIndex={on ? 0 : -1}
@@ -683,16 +682,16 @@ function InputKnob({ db, on, onChange }: { db: number; on: boolean; onChange: (d
           if (on && key.key === 'ArrowUp') onChange(db + 1);
           if (on && key.key === 'ArrowDown') onChange(db - 1);
         }}
-        className={`relative h-8 w-8 touch-none rounded-full bg-gradient-to-b from-shell-600 to-shell-800 shadow-[0_2px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-shell-900 outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${
+        className={`relative h-9 w-9 touch-none rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.6)] outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${
           turning ? 'cursor-grabbing' : on ? 'cursor-grab' : ''
         }`}
       >
+        <KnobFace from={0.5} to={(db + EQ_MOST) / (EQ_MOST * 2)} gliding={!turning} />
         <span
           aria-hidden="true"
-          className="absolute inset-0 transition-transform duration-200 ease-out"
-          style={{ transform: `rotate(${(db / EQ_MOST) * KNOB_TURN}deg)` }}
+          className="pointer-events-none absolute inset-0 flex items-center justify-center text-meta leading-none font-medium text-cream-50 tabular-nums"
         >
-          <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
+          {signed(db)}
         </span>
       </div>
     </div>

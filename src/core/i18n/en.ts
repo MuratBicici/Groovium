@@ -164,6 +164,7 @@ export const en = {
   'transport.volume': 'Volume',
   'transport.mute': 'Mute',
   'transport.unmute': 'Unmute',
+  'transport.muted': 'Muted',
   'repeat.off': 'off',
   'repeat.one': 'one',
   'repeat.all': 'all',

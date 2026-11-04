@@ -159,6 +159,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',
   'transport.unmute': 'Sesi aç',
+  'transport.muted': 'Ses kapalı',
   'repeat.off': 'kapalı',
   'repeat.one': 'tek şarkı',
   'repeat.all': 'tümü',

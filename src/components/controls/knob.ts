@@ -8,6 +8,17 @@ import { clamp } from '@/core/utils/time';
  * can be checked without a pointer to drag.
  */
 
+/**
+ * How far a press can wander and still be a press rather than the start of a
+ * turn, in px. Pressing the knob mutes it, and a hand is never perfectly still.
+ */
+export const PRESS_TRAVEL_PX = 4;
+
+/** Whether a hand this far from where it pressed has started turning. */
+export function hasStartedTurning(dx: number, dy: number): boolean {
+  return Math.hypot(dx, dy) >= PRESS_TRAVEL_PX;
+}
+
 /** Degrees of rotation between silence and full volume — seven o'clock to five. */
 export const SWEEP_DEGREES = 270;
 

@@ -1,7 +1,12 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMuted, usePlayerStore, useVolume } from '@/core/store';
 import { useT } from '@/core/i18n';
-import { angleAt, grip, inDeadZone, rotationFor, turnTo, volumeFor, type Grip } from './knob';
+import { prefersReducedMotion } from '@/core/utils/motion';
+import { KnobFace } from './KnobFace';
+import { angleAt, grip, hasStartedTurning, inDeadZone, rotationFor, turnTo, volumeFor, type Grip } from './knob';
+
+/** How long the figure stays out after the last of a turn, so the value can be read. */
+const FIGURE_OUT_MS = 350;
 
 /**
  * Current volume read straight from the store rather than from a render
@@ -17,6 +22,8 @@ function liveVolume(): number {
 /** What one gesture needs to remember. */
 interface Turn {
   centre: { x: number; y: number };
+  /** Where it was pressed, until it has moved far enough to be a turn at all. */
+  pressedAt: { x: number; y: number } | null;
   /** Where the hand is on the knob; see `Grip`. */
   grip: Grip;
   /**
@@ -43,6 +50,11 @@ interface Turn {
  * snap it under the pointer.
  * Keyboard access goes through the standard slider role, so this is not
  * pointer-only, and the wheel still works.
+ *
+ * It says its own figure and has no speaker beside it: pressed, it mutes, as a
+ * knob on a hi-fi does. While it turns, the figure steps out to the side and
+ * whatever is next along makes room (`.groove-knob-neighbour`), so that the
+ * pointer on the face can be seen, and it goes back in once the hand lets go.
  */
 export function VolumeKnob() {
   const t = useT();
@@ -56,9 +68,33 @@ export function VolumeKnob() {
   // commit did. Same reason the scrubber keeps its drag flag in one.
   const turn = useRef<Turn | null>(null);
   const [turning, setTurning] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  /** The figure is out at the side, and the pointer is showing on the face. */
+  const [out, setOut] = useState(false);
+  const goesBack = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stepOut = useCallback(() => {
+    if (goesBack.current) clearTimeout(goesBack.current);
+    goesBack.current = null;
+    setOut(true);
+  }, []);
+  const comeBack = useCallback(() => {
+    if (goesBack.current) clearTimeout(goesBack.current);
+    goesBack.current = setTimeout(() => {
+      goesBack.current = null;
+      setOut(false);
+    }, FIGURE_OUT_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (goesBack.current) clearTimeout(goesBack.current);
+    },
+    [],
+  );
 
   const effectiveVolume = muted ? 0 : volume;
   const rotation = rotationFor(effectiveVolume);
+  const figure = Math.round(effectiveVolume * 100);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
@@ -67,15 +103,26 @@ export function VolumeKnob() {
     // Captured so the hand can leave the knob and keep turning it — which is
     // the point, since the further out it goes the finer the control gets.
     e.currentTarget.setPointerCapture(e.pointerId);
-    turn.current = { centre, grip: grip(), rotation: rotationFor(effectiveVolume) };
-    follow(e.clientX, e.clientY);
-    setTurning(true);
+    turn.current = {
+      centre,
+      pressedAt: { x: e.clientX, y: e.clientY },
+      grip: grip(),
+      rotation: rotationFor(effectiveVolume),
+    };
+    setPressed(true);
   }
 
   /** The hand at a point: the knob goes where it says, if it is holding it. */
   function follow(x: number, y: number) {
     const gesture = turn.current;
     if (!gesture) return;
+    if (gesture.pressedAt) {
+      if (!hasStartedTurning(x - gesture.pressedAt.x, y - gesture.pressedAt.y)) return;
+      gesture.pressedAt = null;
+      setPressed(false);
+      setTurning(true);
+      stepOut();
+    }
     const dx = x - gesture.centre.x;
     const dy = y - gesture.centre.y;
     const moved = turnTo(gesture.grip, gesture.rotation, inDeadZone(dx, dy) ? null : angleAt(dx, dy));
@@ -89,85 +136,77 @@ export function VolumeKnob() {
     follow(e.clientX, e.clientY);
   }
 
-  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+  function letGo(e: React.PointerEvent<HTMLDivElement>, press: 'counts' | 'cancelled') {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
+    const gesture = turn.current;
     turn.current = null;
+    setPressed(false);
     setTurning(false);
+    if (!gesture) return;
+    if (gesture.pressedAt) {
+      if (press === 'counts') void toggleMute();
+    } else {
+      comeBack();
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const step = e.shiftKey ? 0.01 : 0.05;
     if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
       e.preventDefault();
+      stepOut();
+      comeBack();
       void setVolume(liveVolume() + step);
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
       e.preventDefault();
+      stepOut();
+      comeBack();
       void setVolume(liveVolume() - step);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      void toggleMute();
     }
   }
 
+  const still = prefersReducedMotion();
+
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        aria-label={muted ? t('transport.unmute') : t('transport.mute')}
-        aria-pressed={muted}
-        onClick={() => void toggleMute()}
-        className={`transition-colors ${muted ? 'text-brass-400' : 'text-cream-400 hover:text-cream-200'}`}
+    <div
+      role="slider"
+      tabIndex={0}
+      aria-label={t('transport.volume')}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={figure}
+      aria-valuetext={muted ? t('transport.muted') : undefined}
+      title={muted ? t('transport.unmute') : t('transport.mute')}
+      data-out={out ? '' : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={(e) => letGo(e, 'counts')}
+      onPointerCancel={(e) => letGo(e, 'cancelled')}
+      onLostPointerCapture={(e) => letGo(e, 'cancelled')}
+      onKeyDown={onKeyDown}
+      onWheel={(e) => {
+        stepOut();
+        comeBack();
+        void setVolume(liveVolume() - Math.sign(e.deltaY) * 0.05);
+      }}
+      className={`groove-knob relative h-9 w-9 shrink-0 touch-none rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.6)] outline-none transition-transform duration-100 ease-out focus-visible:ring-2 focus-visible:ring-brass-400 ${
+        turning ? 'cursor-grabbing' : 'cursor-grab'
+      } ${pressed ? 'scale-[.93]' : ''}`}
+    >
+      <KnobFace to={effectiveVolume} dim={muted} needle={out ? rotation : null} gliding={!turning} />
+      <span
+        aria-hidden="true"
+        className={`groove-knob-figure pointer-events-none absolute top-1/2 left-1/2 text-meta font-medium tabular-nums ${
+          still ? 'groove-knob-still' : ''
+        } ${out ? 'text-brass-400' : muted ? 'text-cream-400' : 'text-cream-50'}`}
       >
-        <SpeakerIcon muted={muted} />
-      </button>
-
-      {/* The body does not turn. Its gradient is the light falling on it and
-          its shadow is the light it blocks, and neither of those follows a
-          knob round — the same reason `DiscLight` is the spinning record's
-          sibling rather than its child. Only the layer inside rotates. */}
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-label={t('transport.volume')}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(effectiveVolume * 100)}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onLostPointerCapture={onPointerUp}
-        onKeyDown={onKeyDown}
-        onWheel={(e) => void setVolume(liveVolume() - Math.sign(e.deltaY) * 0.05)}
-        className={`relative h-8 w-8 touch-none rounded-full bg-gradient-to-b from-shell-600 to-shell-800 shadow-[0_2px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-shell-900 outline-none focus-visible:ring-2 focus-visible:ring-brass-400 ${
-          turning ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className="absolute inset-0"
-          style={{ transform: `rotate(${rotation}deg)` }}
-        >
-          {/* Pointer line marking the knob's current angle. */}
-          <span className="absolute top-1 left-1/2 h-2.5 w-[2px] -translate-x-1/2 rounded-full bg-brass-400" />
-        </span>
-      </div>
-
-      <span className="w-7 text-meta tabular-nums text-cream-400">
-        {Math.round(effectiveVolume * 100)}
+        {figure}
       </span>
     </div>
-  );
-}
-
-function SpeakerIcon({ muted }: { muted: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
-      <path d="M4 9.5h3L11 6v12l-4-3.5H4z" strokeLinejoin="round" />
-      {muted ? (
-        <path d="M15.5 9.5l4 5M19.5 9.5l-4 5" strokeLinecap="round" />
-      ) : (
-        <path d="M14.5 9.5a3.5 3.5 0 010 5M17 7.5a6.5 6.5 0 010 9" strokeLinecap="round" />
-      )}
-    </svg>
   );
 }

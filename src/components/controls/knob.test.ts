@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEAD_ZONE_PX,
+  PRESS_TRAVEL_PX,
+  hasStartedTurning,
   STOP_DEGREES,
   angleAt,
   grip,
@@ -145,5 +147,17 @@ describe('where the indicator points', () => {
     }
     expect(volumeFor(STOP_DEGREES + 20)).toBe(1);
     expect(volumeFor(-STOP_DEGREES - 20)).toBe(0);
+  });
+});
+
+describe('a press, and a turn', () => {
+  it('counts a hand that stayed about where it pressed as a press', () => {
+    expect(hasStartedTurning(0, 0)).toBe(false);
+    expect(hasStartedTurning(2, -2)).toBe(false);
+  });
+
+  it('counts a hand that has gone further as turning', () => {
+    expect(hasStartedTurning(PRESS_TRAVEL_PX, 0)).toBe(true);
+    expect(hasStartedTurning(-3, 3)).toBe(true);
   });
 });
