@@ -4,15 +4,15 @@ import { useT } from '@/core/i18n';
 import { useSettingsStore } from '@/core/settings/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { KnobFace } from './KnobFace';
+import { KnobFlow } from './KnobFlow';
 import {
   KNOB_PX,
-  SLIDER_RUN_PX,
-  SLIDER_START_PX,
   angleAt,
   grip,
   hasStartedTurning,
   inDeadZone,
   onTheFace,
+  pressOnSliderKnob,
   pullsAcross,
   rotationFor,
   turnTo,
@@ -89,6 +89,9 @@ interface Turn {
  * Or, with the slider chosen in settings, it opens out into one when the pointer
  * comes to it, for those who would rather have a line than a dial. The knob stays
  * beside the line and only mutes; the line is pressed where the volume should go.
+ * The brass goes round the ring and out along the line as it opens, and back again
+ * as it closes (`KnobFlow`). With no sound there is nothing to show, so the line
+ * goes away and stays away for a pointer: it takes a press or the wheel to bring back.
  * Opening it on the press instead left the handle up to a hundred pixels from the
  * hand that was moving it, with no room to bring it closer: the knob is by the
  * window's edge. A finger cannot point first, so a finger still opens it by pressing.
@@ -126,13 +129,21 @@ export function VolumeKnob() {
     goesBack.current = null;
     setOut(true);
   }, []);
-  const comeBack = useCallback(() => {
-    if (pointedAt.current) return;
+  const comeBack = useCallback((whatever = false) => {
+    if (pointedAt.current && !whatever) return;
     if (goesBack.current) clearTimeout(goesBack.current);
     goesBack.current = setTimeout(() => {
       goesBack.current = null;
       setOut(false);
     }, FIGURE_OUT_MS);
+  }, []);
+  /** Away now, and not waiting for the pointer to go. */
+  const shut = useCallback(() => {
+    if (goesBack.current) clearTimeout(goesBack.current);
+    if (opens.current) clearTimeout(opens.current);
+    goesBack.current = null;
+    opens.current = null;
+    setOut(false);
   }, []);
   useEffect(
     () => () => {
@@ -145,12 +156,13 @@ export function VolumeKnob() {
   function onPointerEnter(e: React.PointerEvent<HTMLDivElement>) {
     if (!slider || e.pointerType !== 'mouse') return;
     pointedAt.current = true;
+    if (liveVolume() === 0) return;
     if (goesBack.current) clearTimeout(goesBack.current);
     goesBack.current = null;
     if (out || opens.current) return;
     opens.current = setTimeout(() => {
       opens.current = null;
-      stepOut();
+      if (liveVolume() > 0) stepOut();
     }, SLIDER_OPENS_AFTER_MS);
   }
 
@@ -261,22 +273,40 @@ export function VolumeKnob() {
     setMoving(false);
     if (!gesture) return;
     if (gesture.stillAPress) {
-      if (press === 'counts') void toggleMute();
+      if (press !== 'counts') return;
+      if (slider && e.pointerType === 'mouse') {
+        const { muted: isMuted } = usePlayerStore.getState();
+        const next = pressOnSliderKnob({ silent: liveVolume() === 0, muted: isMuted, open: out });
+        if (next.toggleMute) void toggleMute();
+        if (next.open) stepOut();
+        else shut();
+      } else {
+        void toggleMute();
+      }
     } else {
       // A hand let go of away from it was held there by the capture, and no word
       // of it leaving came until now, if at all.
       if (slider && e.pointerType === 'mouse') {
         pointedAt.current = e.currentTarget.contains(document.elementFromPoint(e.clientX, e.clientY));
       }
-      comeBack();
+      // Down to nothing it goes at once. Not while the hand still held it: that hand
+      // may be on its way back up.
+      if (slider && liveVolume() === 0) shut();
+      else comeBack();
     }
   }
 
   /** A nudge from the keyboard or the wheel, which shows itself as a hand does. */
   function nudge(by: number) {
+    const next = liveVolume() + by;
+    void setVolume(next);
+    if (slider && next <= 0) {
+      // Down to nothing the line goes, pointer or no pointer, once the wheel stops.
+      comeBack(true);
+      return;
+    }
     stepOut();
     comeBack();
-    void setVolume(liveVolume() + by);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -296,6 +326,8 @@ export function VolumeKnob() {
   const still = prefersReducedMotion();
   const open = slider && out;
   const stepped = !slider && out;
+  // The body stays open until the brass has come most of the way home.
+  const [bodyOpen, setBodyOpen] = useState(false);
 
   return (
     <div
@@ -324,35 +356,30 @@ export function VolumeKnob() {
       <div
         className={`groove-knob-body absolute top-0 left-0 h-9 overflow-hidden rounded-full bg-shell-900 shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-focus-visible:ring-2 group-focus-visible:ring-brass-400 ${
           still ? 'groove-knob-still' : ''
-        } ${open ? 'w-[160px]' : 'w-9'}`}
+        } ${slider && bodyOpen ? 'w-[160px]' : 'w-9'}`}
       >
         <div
           className={`absolute top-0 left-0 h-9 w-9 transition-transform duration-100 ${
             pressed && slider ? 'scale-[.93]' : ''
           }`}
         >
-          <KnobFace to={effectiveVolume} dim={muted} needle={stepped ? rotation : null} gliding={!moving} />
+          {/* The slider style's brass is `KnobFlow`'s, so that it can leave the ring. */}
+          <KnobFace
+            to={slider ? 0 : effectiveVolume}
+            dim={muted}
+            needle={stepped ? rotation : null}
+            gliding={!moving}
+          />
         </div>
-        {/* The slider, drawn only for the style that has one. A fixed width and
-            left where it is while the body opens over it, so it is uncovered
-            rather than stretched. */}
         {slider && (
-          <div
-            aria-hidden="true"
-            className={`groove-inset absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full transition-opacity duration-150 ${
-              open ? 'opacity-100 delay-75' : 'opacity-0'
-            }`}
-            style={{ left: SLIDER_START_PX, width: SLIDER_RUN_PX }}
-          >
-            <span
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-brass-600 to-brass-400"
-              style={{ width: `${effectiveVolume * 100}%` }}
-            />
-            <span
-              className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cream-50 shadow-[0_1px_3px_rgba(0,0,0,0.6)]"
-              style={{ left: `${effectiveVolume * 100}%` }}
-            />
-          </div>
+          <KnobFlow
+            volume={effectiveVolume}
+            open={open}
+            hand={moving}
+            dim={muted}
+            still={still}
+            onBodyOpen={setBodyOpen}
+          />
         )}
       </div>
       <span

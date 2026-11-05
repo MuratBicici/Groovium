@@ -8,6 +8,7 @@ import {
   SLIDER_START_PX,
   hasStartedTurning,
   onTheFace,
+  pressOnSliderKnob,
   pullsAcross,
   volumeByDrag,
   volumeAlongSlider,
@@ -231,5 +232,21 @@ describe('a point on the open slider', () => {
   it('stops at the ends, wherever the hand has gone', () => {
     expect(volumeAlongSlider(-500)).toBe(0);
     expect(volumeAlongSlider(5000)).toBe(1);
+  });
+});
+
+describe('a press on the slider style knob', () => {
+  it('mutes and puts the slider away while there is sound', () => {
+    expect(pressOnSliderKnob({ silent: false, muted: false, open: true })).toEqual({ toggleMute: true, open: false });
+    expect(pressOnSliderKnob({ silent: false, muted: false, open: false })).toEqual({ toggleMute: true, open: false });
+  });
+
+  it('brings the sound and the slider back when it was muted', () => {
+    expect(pressOnSliderKnob({ silent: true, muted: true, open: false })).toEqual({ toggleMute: true, open: true });
+  });
+
+  it('brings only the slider back when it was turned all the way down', () => {
+    expect(pressOnSliderKnob({ silent: true, muted: false, open: false })).toEqual({ toggleMute: false, open: true });
+    expect(pressOnSliderKnob({ silent: true, muted: false, open: true })).toEqual({ toggleMute: false, open: false });
   });
 });

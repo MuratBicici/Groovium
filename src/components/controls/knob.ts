@@ -76,6 +76,24 @@ export function volumeBySlide(from: number, dx: number): number {
   return clamp(from + dx / SLIDER_RUN_PX, 0, 1);
 }
 
+/**
+ * What a press on the slider style's knob does.
+ *
+ * With sound coming out it mutes, and the slider goes: there is nothing for it to
+ * show. With none, it brings the slider back, and the sound with it if it was only
+ * muted. Turned all the way down there is nothing to go back to, so the handle comes
+ * back at nought and the level is left for the hand to choose, rather than the music
+ * coming up by itself. A second press puts it away again.
+ */
+export function pressOnSliderKnob(seen: { silent: boolean; muted: boolean; open: boolean }): {
+  toggleMute: boolean;
+  open: boolean;
+} {
+  if (!seen.silent) return { toggleMute: true, open: false };
+  if (seen.muted) return { toggleMute: true, open: true };
+  return { toggleMute: false, open: !seen.open };
+}
+
 /** Degrees of rotation between silence and full volume — seven o'clock to five. */
 export const SWEEP_DEGREES = 270;
 
