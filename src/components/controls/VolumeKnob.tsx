@@ -5,7 +5,9 @@ import { useSettingsStore } from '@/core/settings/store';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { KnobFace } from './KnobFace';
 import {
+  KNOB_PX,
   SLIDER_RUN_PX,
+  SLIDER_START_PX,
   angleAt,
   grip,
   hasStartedTurning,
@@ -14,6 +16,7 @@ import {
   pullsAcross,
   rotationFor,
   turnTo,
+  volumeAlongSlider,
   volumeByDrag,
   volumeFor,
   volumeBySlide,
@@ -22,6 +25,13 @@ import {
 
 /** How long the figure stays out, or the slider open, after the last of a move. */
 const FIGURE_OUT_MS = 350;
+
+/**
+ * How long the pointer has to rest on the knob before the slider opens. Not at once:
+ * the slider opens over the equaliser's button, and the way to that button can be
+ * across the knob.
+ */
+const SLIDER_OPENS_AFTER_MS = 150;
 
 /**
  * Current volume read straight from the store rather than from a render
@@ -43,8 +53,13 @@ interface Turn {
   volume: number;
   /** Whether it is still only a press, and not yet a move at all. */
   stillAPress: boolean;
-  /** How this hand moves it, settled by the setting and by where it pressed. */
-  by: 'turning' | 'dragging' | 'sliding';
+  /** Where the knob's left edge is, for reading a point along the slider. */
+  left: number;
+  /**
+   * How this hand moves it, settled by the setting and by where it pressed.
+   * `pressing` is a mouse on the slider style's knob, which is a button and nothing else.
+   */
+  by: 'turning' | 'dragging' | 'sliding' | 'pointing' | 'pressing';
   /** Where the hand is on the knob; see `Grip`. */
   grip: Grip;
   /**
@@ -71,8 +86,12 @@ interface Turn {
  * did nothing at all. It was the commonest complaint about this control. A hand
  * that took the ring and set off straight out is doing the same, and gets the same.
  *
- * Or, with the slider chosen in settings, it opens out into one under the hand
- * and closes again after, for those who would rather have a line than a dial.
+ * Or, with the slider chosen in settings, it opens out into one when the pointer
+ * comes to it, for those who would rather have a line than a dial. The knob stays
+ * beside the line and only mutes; the line is pressed where the volume should go.
+ * Opening it on the press instead left the handle up to a hundred pixels from the
+ * hand that was moving it, with no room to bring it closer: the knob is by the
+ * window's edge. A finger cannot point first, so a finger still opens it by pressing.
  *
  * While it moves as a knob the figure steps out to the side and whatever is next
  * along makes room (\`.groove-knob-neighbour\`), so that the pointer on the face can
@@ -98,6 +117,9 @@ export function VolumeKnob() {
   /** Figure out and pointer showing, or the slider open, by the setting. */
   const [out, setOut] = useState(false);
   const goesBack = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const opens = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Whether the pointer is on it, which keeps the slider open whatever else ends. */
+  const pointedAt = useRef(false);
 
   const stepOut = useCallback(() => {
     if (goesBack.current) clearTimeout(goesBack.current);
@@ -105,6 +127,7 @@ export function VolumeKnob() {
     setOut(true);
   }, []);
   const comeBack = useCallback(() => {
+    if (pointedAt.current) return;
     if (goesBack.current) clearTimeout(goesBack.current);
     goesBack.current = setTimeout(() => {
       goesBack.current = null;
@@ -114,9 +137,30 @@ export function VolumeKnob() {
   useEffect(
     () => () => {
       if (goesBack.current) clearTimeout(goesBack.current);
+      if (opens.current) clearTimeout(opens.current);
     },
     [],
   );
+
+  function onPointerEnter(e: React.PointerEvent<HTMLDivElement>) {
+    if (!slider || e.pointerType !== 'mouse') return;
+    pointedAt.current = true;
+    if (goesBack.current) clearTimeout(goesBack.current);
+    goesBack.current = null;
+    if (out || opens.current) return;
+    opens.current = setTimeout(() => {
+      opens.current = null;
+      stepOut();
+    }, SLIDER_OPENS_AFTER_MS);
+  }
+
+  function onPointerLeave(e: React.PointerEvent<HTMLDivElement>) {
+    if (!slider || e.pointerType !== 'mouse') return;
+    pointedAt.current = false;
+    if (opens.current) clearTimeout(opens.current);
+    opens.current = null;
+    if (out && !turn.current) comeBack();
+  }
 
   const effectiveVolume = muted ? 0 : volume;
   const rotation = rotationFor(effectiveVolume);
@@ -135,16 +179,33 @@ export function VolumeKnob() {
     // Where the hand took hold, here and not once it has moved: taken late, the
     // first few degrees of a turn were lost, for good, on the way to being one.
     const held = turnTo(grip(), from, inDeadZone(dx, dy) ? null : angleAt(dx, dy));
+    const onTheLine = slider && out && e.clientX - box.left >= KNOB_PX;
     turn.current = {
       centre,
+      left: box.left,
       from: { x: e.clientX, y: e.clientY },
       volume: liveVolume(),
-      stillAPress: true,
-      by: slider ? 'sliding' : onTheFace(dx, dy) ? 'dragging' : 'turning',
+      stillAPress: !onTheLine,
+      by: onTheLine
+        ? 'pointing'
+        : slider
+          ? e.pointerType === 'mouse'
+            ? 'pressing'
+            : 'sliding'
+          : onTheFace(dx, dy)
+            ? 'dragging'
+            : 'turning',
       grip: held.grip,
       rotation: held.rotation,
     };
-    setPressed(true);
+    if (onTheLine) {
+      // The handle comes to where the line was pressed, and goes on from there.
+      setMoving(true);
+      stepOut();
+      void setVolume(volumeAlongSlider(e.clientX - box.left));
+    } else {
+      setPressed(true);
+    }
   }
 
   /** The hand at a point: the volume goes where it says, if it is holding it. */
@@ -163,6 +224,11 @@ export function VolumeKnob() {
       setPressed(false);
       setMoving(true);
       stepOut();
+    }
+    if (gesture.by === 'pressing') return;
+    if (gesture.by === 'pointing') {
+      void setVolume(volumeAlongSlider(x - gesture.left));
+      return;
     }
     if (gesture.by === 'sliding') {
       void setVolume(volumeBySlide(gesture.volume, x - gesture.from.x));
@@ -197,6 +263,11 @@ export function VolumeKnob() {
     if (gesture.stillAPress) {
       if (press === 'counts') void toggleMute();
     } else {
+      // A hand let go of away from it was held there by the capture, and no word
+      // of it leaving came until now, if at all.
+      if (slider && e.pointerType === 'mouse') {
+        pointedAt.current = e.currentTarget.contains(document.elementFromPoint(e.clientX, e.clientY));
+      }
       comeBack();
     }
   }
@@ -235,8 +306,10 @@ export function VolumeKnob() {
       aria-valuemax={100}
       aria-valuenow={figure}
       aria-valuetext={muted ? t('transport.muted') : undefined}
-      title={muted ? t('transport.unmute') : t('transport.mute')}
+      title={open ? undefined : muted ? t('transport.unmute') : t('transport.mute')}
       data-out={stepped ? '' : undefined}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => letGo(e, 'counts')}
@@ -245,15 +318,19 @@ export function VolumeKnob() {
       onKeyDown={onKeyDown}
       onWheel={(e) => nudge(-Math.sign(e.deltaY) * 0.05)}
       className={`groove-knob group relative z-10 h-9 w-9 shrink-0 touch-none rounded-full outline-none transition-transform duration-100 ease-out ${
-        moving ? 'cursor-grabbing' : 'cursor-grab'
-      } ${pressed ? 'scale-[.93]' : ''}`}
+        moving ? 'cursor-grabbing' : slider ? 'cursor-pointer' : 'cursor-grab'
+      } ${pressed && !slider ? 'scale-[.93]' : ''}`}
     >
       <div
         className={`groove-knob-body absolute top-0 left-0 h-9 overflow-hidden rounded-full bg-shell-900 shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-focus-visible:ring-2 group-focus-visible:ring-brass-400 ${
           still ? 'groove-knob-still' : ''
         } ${open ? 'w-[160px]' : 'w-9'}`}
       >
-        <div className={`absolute top-0 left-0 h-9 w-9 transition-opacity duration-150 ${open ? 'opacity-0' : ''}`}>
+        <div
+          className={`absolute top-0 left-0 h-9 w-9 transition-transform duration-100 ${
+            pressed && slider ? 'scale-[.93]' : ''
+          }`}
+        >
           <KnobFace to={effectiveVolume} dim={muted} needle={stepped ? rotation : null} gliding={!moving} />
         </div>
         {/* The slider, drawn only for the style that has one. A fixed width and
@@ -262,10 +339,10 @@ export function VolumeKnob() {
         {slider && (
           <div
             aria-hidden="true"
-            className={`groove-inset absolute top-1/2 left-[38px] h-1.5 -translate-y-1/2 rounded-full transition-opacity duration-150 ${
+            className={`groove-inset absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full transition-opacity duration-150 ${
               open ? 'opacity-100 delay-75' : 'opacity-0'
             }`}
-            style={{ width: SLIDER_RUN_PX }}
+            style={{ left: SLIDER_START_PX, width: SLIDER_RUN_PX }}
           >
             <span
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-brass-600 to-brass-400"

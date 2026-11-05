@@ -67,7 +67,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'settings.dropZoneDock': 'Alttan şerit',
   'settings.dropZoneMat': 'Minder',
   'settings.volumeStyle': 'Ses düğmesi',
-  'settings.volumeStyleHint': 'Düğmeyi basılı tutup hareket ettirdiğinizde ne olacağı. Kısa basış sesi kapatır.',
+  'settings.volumeStyleHint': 'Düğmeyi basılı tutup çevirin ya da üstüne gelince bir sürgü açılsın. Düğmeye basmak sesi kapatır.',
   'settings.volumeStyleKnob': 'Döndürme',
   'settings.volumeStyleSlider': 'Sürgü',
   'queue.remove': 'Sıradan çıkar',

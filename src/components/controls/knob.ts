@@ -55,10 +55,22 @@ export function volumeByDrag(from: number, dx: number, dy: number): number {
 /** How long the slider's run is, in px, when the knob opens out into one. */
 export const SLIDER_RUN_PX = 108;
 
+/** Where the slider's run begins, in px from the knob's left edge. */
+export const SLIDER_START_PX = 38;
+
+/** How wide the knob is, and so where a press stops being on it and is on the slider. */
+export const KNOB_PX = 36;
+
+/** The volume at a point along the open slider, in px from the knob's left edge. */
+export function volumeAlongSlider(offset: number): number {
+  return clamp((offset - SLIDER_START_PX) / SLIDER_RUN_PX, 0, 1);
+}
+
 /**
- * The volume for a hand on the slider. By how far it has gone, again: the knob is
- * at the slider's near end, so where the hand is says nothing yet, and reading it
- * would cut the sound to nothing the moment the hand started to move.
+ * The volume for a finger on the knob, which has nothing to point with before it
+ * presses, so the slider opens under it. By how far it has gone: the knob is at the
+ * slider's near end, so where the finger is says nothing yet, and reading it would
+ * cut the sound to nothing the moment it started to move.
  */
 export function volumeBySlide(from: number, dx: number): number {
   return clamp(from + dx / SLIDER_RUN_PX, 0, 1);

@@ -67,7 +67,7 @@ export const en = {
   'settings.dropZoneDock': 'Dock',
   'settings.dropZoneMat': 'Mat',
   'settings.volumeStyle': 'Volume control',
-  'settings.volumeStyleHint': 'What the knob does when you hold it and move. A short press mutes.',
+  'settings.volumeStyleHint': 'Turn the knob by holding it, or have a slider open when you point at it. Pressing the knob mutes.',
   'settings.volumeStyleKnob': 'Knob',
   'settings.volumeStyleSlider': 'Slider',
   'queue.remove': 'Take out',

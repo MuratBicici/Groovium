@@ -5,10 +5,12 @@ import {
   FACE_RADIUS_PX,
   PRESS_TRAVEL_PX,
   SLIDER_RUN_PX,
+  SLIDER_START_PX,
   hasStartedTurning,
   onTheFace,
   pullsAcross,
   volumeByDrag,
+  volumeAlongSlider,
   volumeBySlide,
   STOP_DEGREES,
   angleAt,
@@ -216,5 +218,18 @@ describe('a hand on the ring', () => {
   it('going round is a turn', () => {
     expect(pullsAcross(0, -14, 5, 0)).toBe(false);
     expect(pullsAcross(0, -14, 4, -1)).toBe(false);
+  });
+});
+
+describe('a point on the open slider', () => {
+  it('is the volume at that point, so the handle comes to the hand', () => {
+    expect(volumeAlongSlider(SLIDER_START_PX)).toBe(0);
+    expect(volumeAlongSlider(SLIDER_START_PX + SLIDER_RUN_PX / 2)).toBe(0.5);
+    expect(volumeAlongSlider(SLIDER_START_PX + SLIDER_RUN_PX)).toBe(1);
+  });
+
+  it('stops at the ends, wherever the hand has gone', () => {
+    expect(volumeAlongSlider(-500)).toBe(0);
+    expect(volumeAlongSlider(5000)).toBe(1);
   });
 });
