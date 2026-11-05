@@ -23,7 +23,8 @@
         "shadow": false,
         "skipTaskbar": false,
         "alwaysOnTop": false,
-        "visible": true
+        "visible": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --auto-accept-this-tab-capture --auto-select-tab-capture-source-by-title=Groovium"
       }
     ],
     "macOSPrivateApi": true,
@@ -34,7 +35,7 @@
         "img-src": "'self' data: asset: http://asset.localhost https://*.scdn.co https://*.spotifycdn.com",
         "media-src": "'self' asset: http://asset.localhost",
         "style-src": "'self' 'unsafe-inline'",
-        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co",
+        "connect-src": "'self' ipc: http://ipc.localhost asset: http://asset.localhost https://api.spotify.com https://*.spotify.com wss://*.spotify.com https://*.scdn.co ws://127.0.0.1:*",
         "frame-src": "'self' https://sdk.scdn.co",
         "object-src": "'none'",
         "frame-ancestors": "'none'",

@@ -3,6 +3,10 @@ import { say } from '@/core/i18n';
 import { tellNotice } from '@/core/notice';
 import { useSettingsStore } from '@/core/settings/store';
 import { onEqualiserFailed, sendEqualiser } from '@/platform/equaliser';
+import { letGoOfTab, tapTab } from '@/platform/tabTap';
+
+/** How long Rust takes to fade what it is playing, before the tab has its sound back. */
+const TAB_FADE_MS = 150;
 
 /**
  * What the sound should be doing, told to Rust whenever it changes.
@@ -10,6 +14,9 @@ import { onEqualiserFailed, sendEqualiser } from '@/platform/equaliser';
  * A component of its own and drawing nothing, so that a band moving re-renders
  * this and not the app around it. In the app, every decibel of a drag drew the
  * whole window again, and a drag had the main thread busy most of the time.
+ *
+ * It also holds the capture of the tab, which is what sends the sound to Rust.
+ * Only while it would change something: off or flat, the tab is left alone.
  */
 export function EqualiserLink() {
   const ready = useSettingsStore((s) => s.ready);
@@ -24,11 +31,26 @@ export function EqualiserLink() {
     if (ready) void sendEqualiser(on, preamp, bands);
   }, [ready, on, preamp, bands]);
 
+  const running = ready && on && !(preamp === 0 && bands.every((db) => db === 0));
+  useEffect(() => {
+    if (!running) return;
+    tapTab(() => {
+      // The capture ended under us. The tab has its sound back by itself.
+      setOn(false);
+      tellNotice(say('notice.equaliserFailed'));
+    });
+    return () => {
+      // After Rust's fade, which the setting above has already asked for.
+      letGoOfTab(TAB_FADE_MS);
+    };
+  }, [running, setOn]);
+
   // Rust gave up and has put the sound back. The switch should say so.
   useEffect(() => {
     let alive = true;
     let stop = () => {};
     void onEqualiserFailed(() => {
+      letGoOfTab(0);
       setOn(false);
       tellNotice(say('notice.equaliserFailed'));
     }).then((unlisten) => {

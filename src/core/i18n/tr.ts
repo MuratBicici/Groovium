@@ -87,7 +87,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'equaliser.overwriteYes': 'Üzerine yaz',
   'equaliser.remove': '{name} ayarını sil',
   'equaliser.preamp': 'Giriş',
-  'equaliser.note': 'Açıkken ses yaklaşık 0,1 saniye geç gelir. Windows ses karıştırıcısında Groovium çok kısık görünebilir.',
+  'equaliser.note': 'Açıkken ses yaklaşık 0,15 saniye geç gelir.',
   'notice.equaliserFailed': 'Ekolayzer durdu, ses normal yoldan devam ediyor.',
   'lyrics.title': 'Şarkı sözleri',
   'lyrics.loading': 'Sözler aranıyor…',

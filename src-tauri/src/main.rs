@@ -192,6 +192,7 @@ fn main() {
             report::report_problem,
             network::network_internet,
             equaliser::equaliser_set,
+            equaliser::equaliser_feed,
             equaliser::equaliser_stats,
         ])
         .build(tauri::generate_context!())

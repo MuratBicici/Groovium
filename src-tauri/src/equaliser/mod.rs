@@ -1,17 +1,22 @@
 //! The equaliser, for everything this app plays, Spotify included.
 //!
 //! Spotify's Web Playback SDK is DRM-protected media: it cannot go through a Web
-//! Audio graph, and it has no equaliser of its own. So the sound is met on its
-//! way out instead. The webview's session is turned down until it cannot be
-//! heard, the per-process capture the visualiser uses is brought back up by the
-//! same amount, and what comes out of that is filtered and played from here.
-//! Local songs play in the same webview, so one equaliser does for both.
+//! Audio graph, and it has no equaliser of its own. But the webview can capture
+//! its own tab, DRM or not, and that capture is taken inside the browser, before
+//! Windows or a sound card's effects have touched it. It can also silence the
+//! tab's own output while it does. The webview sends that sound here over a
+//! socket on this machine, and it is filtered and played from here, through the
+//! sound card's effects once, as any other sound is. Local songs play in the same
+//! tab, so one equaliser does for both.
 //!
-//! All of it was measured before it was built. A muted session captures nothing;
-//! a session turned down captures exactly in proportion, down to a hundred
-//! thousandth of its level. The route adds about a hundred milliseconds, which
-//! is why it is off the road entirely while the equaliser is off or flat: the
-//! sound then goes the way it always went, and nothing here is running.
+//! It used to be taken from Windows after the fact, with the webview's session
+//! turned down. A sound card's effects had already been applied by then and were
+//! applied again on the way out: measured on a machine with Nahimic, a tone came
+//! out four decibels high from 500 Hz to 3 kHz at every setting. Over here, that
+//! is gone by construction.
+//!
+//! Off or flat, nothing here runs and the tab is not captured, and the sound goes
+//! the way it always went.
 //!
 //! What is captured is only ever in memory, in a buffer a fraction of a second
 //! long on its way to the sound card. It is never written anywhere.
@@ -30,22 +35,6 @@ use dsp::Curve;
 
 /// The event the webview hears when the equaliser has had to give up.
 const FAILED: &str = "equaliser:failed";
-
-/// What the capture has to be multiplied by to be at the level it is played.
-///
-/// One unless a run has the session turned down. The visualiser reads the same
-/// capture, and without this its bars would drop to nothing.
-static CAPTURE_SCALE: AtomicU32 = AtomicU32::new(0x3F80_0000);
-
-/// See `CAPTURE_SCALE`.
-pub fn capture_scale() -> f32 {
-    f32::from_bits(CAPTURE_SCALE.load(SeqCst))
-}
-
-#[cfg(windows)]
-fn set_capture_scale(scale: f32) {
-    CAPTURE_SCALE.store(scale.to_bits(), SeqCst);
-}
 
 /// Counted while it runs, and read by `equaliser_stats`.
 pub struct Stats {
@@ -74,9 +63,18 @@ impl Default for Stats {
     }
 }
 
+/// Where the webview is to send the sound, and the word it is to say.
+#[derive(Serialize, Clone)]
+pub struct Feed {
+    port: u16,
+    word: String,
+}
+
 /// What the threads of a run share with the commands.
 pub struct Shared {
     curve: Mutex<Curve>,
+    /// Where to send the sound, while a run is listening for it.
+    feed: Mutex<Option<Feed>>,
     /// Whether the sound should be coming through here.
     wanted: AtomicBool,
     /// Whether the threads of a run should keep going.
@@ -84,7 +82,8 @@ pub struct Shared {
     /// Whether somebody is already looking after a run.
     attended: AtomicBool,
     failed: AtomicBool,
-    /// The gain to bring the capture back up by, as the bits of a float.
+    /// The level to play what arrives at, as the bits of a float: nothing until
+    /// sound is arriving, and one after.
     gain: AtomicU32,
     /// Everything but the sound itself: for measuring with nothing to hear.
     dry: AtomicBool,
@@ -98,6 +97,7 @@ impl Default for Equaliser {
     fn default() -> Self {
         Equaliser(Arc::new(Shared {
             curve: Mutex::new(Curve::FLAT),
+            feed: Mutex::new(None),
             wanted: AtomicBool::new(false),
             running: AtomicBool::new(false),
             attended: AtomicBool::new(false),
@@ -167,6 +167,12 @@ fn attend(app: AppHandle, shared: Arc<Shared>) {
     });
 }
 
+/// Where to send the sound, once a run is listening. Nothing before that.
+#[tauri::command]
+pub fn equaliser_feed(equaliser: State<'_, Equaliser>) -> Option<Feed> {
+    equaliser.0.feed.lock().ok().and_then(|feed| feed.clone())
+}
+
 /// What `equaliser_stats` answers. For measuring; nothing in the page reads it.
 #[derive(Serialize)]
 pub struct StatsNow {
@@ -234,8 +240,4 @@ mod tests {
         assert!(!should_run(true, &Curve::FLAT), "on and flat is the sound as it was");
     }
 
-    #[test]
-    fn the_capture_is_at_its_own_level_unless_a_run_says_otherwise() {
-        assert_eq!(capture_scale(), 1.0);
-    }
 }

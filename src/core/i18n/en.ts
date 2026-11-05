@@ -87,7 +87,7 @@ export const en = {
   'equaliser.overwriteYes': 'Write over',
   'equaliser.remove': 'Delete {name}',
   'equaliser.preamp': 'Input',
-  'equaliser.note': 'While it is on, sound arrives about 0.1 seconds late. Groovium may look very quiet in the Windows volume mixer.',
+  'equaliser.note': 'While it is on, sound arrives about 0.15 seconds late.',
   'notice.equaliserFailed': 'The equaliser stopped. Sound carries on the usual way.',
   'lyrics.title': 'Lyrics',
   'lyrics.loading': 'Looking for the lyrics…',

@@ -40,6 +40,10 @@ tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 tiny_http = "0.12"
 sha2 = "0.11"
 getrandom = "0.4"
+# The webview sends the equaliser its sound over a socket on this machine. A
+# socket because a worker can use one, and the sound should not have to wait on
+# whatever the page's main thread is doing.
+tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
 
 # OS credential store: DPAPI on Windows, Keychain on macOS, Secret Service on
 # Linux. Default features pull in the native backend for each platform, which is

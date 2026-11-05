@@ -12,7 +12,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
  * because no linter was installed to read them.
  */
 export default tseslint.config(
-  { ignores: ['dist', 'src-tauri/target', 'node_modules'] },
+  { ignores: ['dist', 'public', 'src-tauri/target', 'node_modules'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

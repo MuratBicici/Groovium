@@ -1,12 +1,13 @@
-//! Taking this app's sound out of the webview, filtering it, and playing it.
+//! Taking in the sound the webview sends over, filtering it, and playing it.
 //!
-//! See the module's own notes for why. Three threads while it runs: one reads
-//! the capture, one feeds the sound card, and one holds the session quiet and
-//! notices when something has gone wrong. Everything that ends a run ends here,
-//! with the session given back its level, because the way this fails must be
-//! into the sound as it always was.
+//! See the module's own notes for why. Two threads while it runs: one takes the
+//! sound off a socket on this machine, and one feeds the sound card. The webview
+//! holds the capture and the switch that silences its own output, so everything
+//! that ends a run here also tells it to let go: the way this fails must be into
+//! the sound as it always was.
 
 use std::collections::VecDeque;
+use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -19,23 +20,23 @@ use windows::Win32::Media::Audio::{
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED};
 
-use super::dsp::{Chain, Gate, Pacer};
-use super::{set_capture_scale, Shared};
-use crate::visualizer::capture;
+use tungstenite::handshake::server::{ErrorResponse, Request, Response};
+use tungstenite::Message;
 
-/// How quiet the webview's session is held while the sound comes through here.
-///
-/// Eighty decibels down. It cannot be muted instead: that was measured, and a
-/// muted session captures nothing at all. Turned down, the capture comes back
-/// exactly in proportion, in floating point, so bringing it up again loses
-/// nothing, and what still reaches the sound card directly is too quiet to hear.
-pub const QUIET: f32 = 0.0001;
+use super::dsp::{Chain, Gate, Pacer};
+use super::Shared;
+use crate::visualizer::{self, capture};
+
+/// The level an earlier version held the webview's session at while the sound
+/// came through here, by turning it down and capturing it after the fact. That
+/// put a sound card's effects on the music twice, and is gone; but Windows keeps
+/// a session's level, so a machine may still have this one to be put right.
+const QUIET: f32 = 0.0001;
 
 /// How much is kept between the capture and the sound card.
 ///
-/// The capture arrives in packets of ten milliseconds and now and then two
-/// together, so less than a few of them runs dry. All of it is added to the
-/// delay of about eighty milliseconds that Windows's own route already has.
+/// The webview sends ten milliseconds at a time and now and then two together,
+/// so less than a few of them runs dry.
 const RING_MS: usize = 40;
 /// And how much is handed to the sound card ahead of time.
 const RENDER_MS: u32 = 20;
@@ -43,8 +44,8 @@ const RENDER_MS: u32 = 20;
 /// Frames per millisecond at the rate everything runs at.
 const PER_MS: usize = 48;
 
-/// How often the sessions and the running threads are looked at.
-const LOOK_EVERY: Duration = Duration::from_millis(250);
+/// How often the threads waiting on something look up to see if it is still wanted.
+const LOOK_EVERY: Duration = Duration::from_millis(100);
 /// How often the sound card in use is checked against the current default.
 const DEVICE_EVERY: Duration = Duration::from_secs(1);
 
@@ -167,118 +168,117 @@ pub fn give_back_what_was_left(shared: Arc<Shared>) {
     });
 }
 
-/// From the sound as it comes, down to the session quiet, and the gain open.
-///
-/// In this order and with these waits because getting it wrong hurts. The gain
-/// is shut first. The session goes down in steps rather than at once, so there
-/// is a dip and not a cut. Then a wait, for what was captured before it was
-/// quiet to have arrived, and `open` does the rest.
-fn enter(shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>, pids: &[u32], prior: f32) {
-    shared.gain.store(0_f32.to_bits(), SeqCst);
-    set_capture_scale(1.0);
-    for step in 1..=6 {
-        set_level(pids, prior * (1.0 - step as f32 / 6.0));
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    set_level(pids, QUIET);
-    std::thread::sleep(Duration::from_millis(200));
-    open(shared, ring, prior);
+/// Whether a handshake is the webview's: it says the word it was given, from a
+/// page of this app. Anything else on the machine can reach this port, and has no
+/// business playing through it.
+fn is_ours_to_hear(query: Option<&str>, origin: Option<&str>, word: &str) -> bool {
+    let said = query.is_some_and(|query| query.split('&').any(|pair| pair.strip_prefix("word=") == Some(word)));
+    let from_here = origin.is_some_and(|origin| {
+        origin == "http://tauri.localhost"
+            || origin == "https://tauri.localhost"
+            || origin == "tauri://localhost"
+            || origin.starts_with("http://localhost:")
+    });
+    said && from_here
 }
 
-/// With the session known to be quiet: the buffer emptied of anything from
-/// before, and the gain opened, gradually, with the gate watching every frame.
-fn open(shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>, prior: f32) {
+/// One connection's sound, into the ring, until it closes or is no longer wanted.
+// The refusal's size is tungstenite's, and it is only ever built once, to say no.
+#[allow(clippy::result_large_err)]
+fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>) -> Result<(), String> {
+    stream.set_nonblocking(false).map_err(|e| e.to_string())?;
+    stream.set_nodelay(true).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(LOOK_EVERY)).map_err(|e| e.to_string())?;
+    let mut socket = tungstenite::accept_hdr(stream, |request: &Request, response: Response| {
+        let origin = request.headers().get("origin").and_then(|value| value.to_str().ok());
+        if is_ours_to_hear(request.uri().query(), origin, word) {
+            Ok(response)
+        } else {
+            let mut refused = ErrorResponse::new(None);
+            *refused.status_mut() = tungstenite::http::StatusCode::FORBIDDEN;
+            Err(refused)
+        }
+    })
+    .map_err(|e| format!("handshake: {e}"))?;
+
     if let Ok(mut held) = ring.lock() {
         held.clear();
     }
-    set_capture_scale(1.0 / QUIET);
-    shared.gain.store((prior / QUIET).to_bits(), SeqCst);
-}
-
-/// What to do about the sessions found, given whether the gain is open.
-#[derive(Debug, PartialEq, Eq)]
-enum Look {
-    /// All quiet and the gain open: nothing.
-    Carry,
-    /// Nobody to be sure of: a session appearing now would appear at full level
-    /// under an open gain, and the start of a song fading in would come through
-    /// the guard at full scale. So it stays shut until there is one to look at.
-    Shut,
-    /// All quiet, with the gain shut: open it.
-    Open,
-    /// One is not quiet: it has just appeared, or somebody moved the mixer.
-    TurnDown,
-}
-
-fn look(levels: &[f32], opened: bool) -> Look {
-    if levels.is_empty() {
-        return if opened { Look::Shut } else { Look::Carry };
+    let mut opened = false;
+    while shared.running.load(SeqCst) {
+        match socket.read() {
+            Ok(Message::Binary(bytes)) => {
+                let Ok(mut held) = ring.lock() else { break };
+                for frame in bytes.chunks_exact(8) {
+                    let sample = |at: usize| f32::from_le_bytes([frame[at], frame[at + 1], frame[at + 2], frame[at + 3]]);
+                    held.push_back([sample(0), sample(4)]);
+                }
+                drop(held);
+                if !opened {
+                    opened = true;
+                    shared.gain.store(1_f32.to_bits(), SeqCst);
+                }
+            }
+            Ok(Message::Close(_)) => break,
+            Ok(_) => {}
+            Err(tungstenite::Error::Io(err))
+                if matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+            Err(_) => break,
+        }
     }
-    if levels.iter().any(|level| !is_ours(*level)) {
-        return Look::TurnDown;
-    }
-    if opened {
-        Look::Carry
-    } else {
-        Look::Open
-    }
-}
-
-/// Back to the sound as it comes: the gain all the way down first, and only
-/// then the session up. The other way round is what `enter` is careful about.
-fn leave(shared: &Shared, pids: &[u32], prior: f32) {
     shared.gain.store(0_f32.to_bits(), SeqCst);
-    set_capture_scale(1.0);
-    std::thread::sleep(Duration::from_millis(130));
-    for step in 1..=6 {
-        set_level(pids, prior * step as f32 / 6.0);
-        std::thread::sleep(Duration::from_millis(25));
-    }
+    Ok(())
 }
 
-/// Gives the session its level back however the run ends, panics included.
-struct GiveBack {
-    webview: u32,
-    prior: Arc<Mutex<f32>>,
+/// The socket: one listener for the run, one connection at a time.
+fn listen_for_sound(
+    listener: TcpListener,
+    word: String,
+    shared: &Arc<Shared>,
+    ring: &Arc<Mutex<VecDeque<[f32; 2]>>>,
+) -> Result<(), String> {
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    while shared.running.load(SeqCst) {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                if let Err(err) = hear(stream, &word, shared, ring) {
+                    log::warn!("[equaliser] {err}");
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(LOOK_EVERY),
+            Err(err) => return Err(err.to_string()),
+        }
+    }
+    Ok(())
 }
 
-impl Drop for GiveBack {
-    fn drop(&mut self) {
-        set_capture_scale(1.0);
-        let level = self.prior.lock().map_or(1.0, |held| *held);
-        set_level(&webview_tree(self.webview), level);
-    }
+/// A word nobody else could guess, for the webview to say.
+fn new_word() -> Result<String, String> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 /// One run: until it is no longer wanted, or something fails.
 pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
     com();
-    let webview = capture::webview_of(capture::me()).ok_or("no webview to listen to")?;
-    let mut pids = webview_tree(webview);
-
-    let found = levels_of(&pids);
-    // A level left behind is not one to go back to.
-    let mut prior = found.iter().copied().find(|level| !is_ours(*level)).unwrap_or(1.0);
-    let held_prior = Arc::new(Mutex::new(prior));
-    let give_back = GiveBack { webview, prior: held_prior.clone() };
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("no socket: {e}"))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let word = new_word()?;
+    if let Ok(mut feed) = shared.feed.lock() {
+        *feed = Some(super::Feed { port, word: word.clone() });
+    }
 
     let ring = Arc::new(Mutex::new(VecDeque::<[f32; 2]>::with_capacity(RATE_FRAMES)));
+    shared.gain.store(0_f32.to_bits(), SeqCst);
     shared.running.store(true, SeqCst);
     shared.failed.store(false, SeqCst);
 
     let reader = {
         let (shared, ring) = (shared.clone(), ring.clone());
         std::thread::spawn(move || {
-            let result = capture::listen(webview, &|| shared.running.load(SeqCst), &mut |samples| {
-                let Ok(mut held) = ring.lock() else { return };
-                for frame in samples.chunks(capture::CHANNELS as usize) {
-                    if let [left, right] = frame {
-                        held.push_back([*left, *right]);
-                    }
-                }
-            });
-            if let Err(err) = result {
-                log::warn!("[equaliser] the capture stopped: {err}");
+            if let Err(err) = listen_for_sound(listener, word, &shared, &ring) {
+                log::warn!("[equaliser] the socket stopped: {err}");
                 shared.failed.store(true, SeqCst);
             }
         })
@@ -294,45 +294,19 @@ pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
         })
     };
 
-    let mut opened = false;
-    let mut first = true;
     while shared.wanted.load(SeqCst) && !shared.failed.load(SeqCst) {
-        if !first {
-            std::thread::sleep(LOOK_EVERY);
-        }
-        first = false;
-        pids = webview_tree(webview);
-        let levels = levels_of(&pids);
-        match look(&levels, opened) {
-            Look::Carry => {}
-            Look::Shut => {
-                shared.gain.store(0_f32.to_bits(), SeqCst);
-                set_capture_scale(1.0);
-                opened = false;
-            }
-            Look::Open => {
-                open(shared, &ring, prior);
-                opened = true;
-            }
-            Look::TurnDown => {
-                // The level they are to hear, unless it is the one left behind.
-                if let Some(level) = levels.iter().copied().find(|level| !is_ours(*level)) {
-                    prior = level;
-                    if let Ok(mut held) = held_prior.lock() {
-                        *held = level;
-                    }
-                }
-                enter(shared, &ring, &pids, prior);
-                opened = true;
-            }
-        }
+        std::thread::sleep(LOOK_EVERY);
     }
 
-    leave(shared, &pids, prior);
+    // Down first and out after, so it goes rather than stops.
+    shared.gain.store(0_f32.to_bits(), SeqCst);
+    std::thread::sleep(Duration::from_millis(130));
     shared.running.store(false, SeqCst);
+    if let Ok(mut feed) = shared.feed.lock() {
+        *feed = None;
+    }
     let _ = reader.join();
     let _ = feeder.join();
-    drop(give_back);
 
     if shared.failed.load(SeqCst) {
         return Err("it stopped by itself".into());
@@ -394,6 +368,7 @@ fn feed_one_device(shared: &Arc<Shared>, ring: &Arc<Mutex<VecDeque<[f32; 2]>>>) 
         let mut chain = Chain::new(*shared.curve.lock().map_err(|_| "curve lock")?);
         let ahead = RENDER_MS * PER_MS as u32;
         let mut checked = Instant::now();
+        let mut heard = Vec::with_capacity(ahead as usize);
 
         while shared.running.load(SeqCst) {
             std::thread::sleep(Duration::from_millis(1));
@@ -428,6 +403,7 @@ fn feed_one_device(shared: &Arc<Shared>, ring: &Arc<Mutex<VecDeque<[f32; 2]>>>) 
             let stats = &shared.stats;
             let mut written = 0;
             let mut peak = f32::from_bits(stats.peak.load(SeqCst));
+            heard.clear();
             {
                 let mut held = ring.lock().map_err(|_| "ring lock")?;
                 let fill = held.len() as u64;
@@ -437,12 +413,17 @@ fn feed_one_device(shared: &Arc<Shared>, ring: &Arc<Mutex<VecDeque<[f32; 2]>>>) 
                     let opened = gate.run(target, frame);
                     let [left, right] = chain.run(opened);
                     peak = peak.max(left.abs()).max(right.abs());
+                    heard.push((left + right) / 2.0);
                     let keep = if silent { 0.0 } else { 1.0 };
                     out[written] = left * keep;
                     out[written + 1] = right * keep;
                     written += 2;
                 });
             }
+            // Nothing else can tell the visualiser: the webview's own output is
+            // silent while this runs, which is also what the player's check that
+            // sound is coming out goes by.
+            visualizer::hear(&heard);
             stats.peak.store(peak.to_bits(), SeqCst);
             stats.frames.fetch_add(wanted as u64, SeqCst);
             stats.underruns.fetch_add(std::mem::take(&mut pacer.underruns), SeqCst);
@@ -463,30 +444,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_gain_is_never_open_with_no_session_to_be_sure_of() {
-        // With nothing played yet there is no session. Open then, the first one
-        // to appear would come through ten thousand times too loud.
-        assert_eq!(look(&[], false), Look::Carry, "stays shut");
-        assert_eq!(look(&[], true), Look::Shut, "and shuts if they all go");
-    }
-
-    #[test]
-    fn a_session_appearing_at_full_level_is_turned_down_before_anything_opens() {
-        assert_eq!(look(&[1.0], false), Look::TurnDown);
-        assert_eq!(look(&[QUIET, 1.0], true), Look::TurnDown);
-    }
-
-    #[test]
-    fn a_session_already_quiet_needs_only_the_gain() {
-        assert_eq!(look(&[QUIET], false), Look::Open);
-        assert_eq!(look(&[QUIET], true), Look::Carry);
-    }
-
-    #[test]
-    fn only_the_level_this_holds_counts_as_its_own() {
+    fn only_the_level_an_earlier_version_held_counts_as_left_behind() {
         assert!(is_ours(QUIET));
         assert!(!is_ours(0.0), "somebody turning it right down is their choice");
         assert!(!is_ours(0.01));
         assert!(!is_ours(1.0));
+    }
+
+    #[test]
+    fn only_this_apps_page_with_the_right_word_is_heard() {
+        let page = Some("http://tauri.localhost");
+        assert!(is_ours_to_hear(Some("word=abc"), page, "abc"));
+        assert!(is_ours_to_hear(Some("x=1&word=abc"), Some("http://localhost:1420"), "abc"));
+        assert!(!is_ours_to_hear(Some("word=abd"), page, "abc"), "the wrong word");
+        assert!(!is_ours_to_hear(None, page, "abc"), "no word");
+        assert!(!is_ours_to_hear(Some("word=abc"), Some("https://example.com"), "abc"), "somebody else's page");
+        assert!(!is_ours_to_hear(Some("word=abc"), None, "abc"), "no page at all");
+    }
+
+    #[test]
+    fn a_word_is_new_each_time() {
+        let word = new_word().expect("a word");
+        assert_eq!(word.len(), 32);
+        assert_ne!(word, new_word().expect("another"));
     }
 }

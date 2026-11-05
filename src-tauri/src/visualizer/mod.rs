@@ -140,6 +140,20 @@ pub fn visualizer_stop(running: tauri::State<'_, Running>) {
     running.0.store(0, Ordering::SeqCst);
 }
 
+/// The ring a run is filling, for sound that does not come by the capture.
+static LISTENING: Mutex<Option<Arc<Mutex<Ring>>>> = Mutex::new(None);
+
+/// Sound from the equaliser, in mono. While it runs the webview's own output is
+/// silent, so the capture has nothing to hear and this is the sound there is.
+pub fn hear(samples: &[f32]) {
+    let Ok(listening) = LISTENING.lock() else { return };
+    let Some(ring) = listening.as_ref() else { return };
+    let Ok(mut ring) = ring.lock() else { return };
+    for sample in samples {
+        ring.push(*sample);
+    }
+}
+
 /// Where a run's number comes from. Only ever goes up.
 static NEXT_RUN: AtomicU64 = AtomicU64::new(0);
 
@@ -155,6 +169,9 @@ fn run(app: &AppHandle, turn: &AtomicU64, mine: u64) -> Result<(), String> {
         capture::webview_of(me).ok_or_else(|| format!("no webview under {me} to listen to"))?;
 
     let ring = Arc::new(Mutex::new(Ring::new()));
+    if let Ok(mut listening) = LISTENING.lock() {
+        *listening = Some(ring.clone());
+    }
 
     // The spectrum runs on its own thread rather than between buffers. The
     // capture loop is what keeps up with the audio engine, and an FFT in the
@@ -190,19 +207,15 @@ fn run(app: &AppHandle, turn: &AtomicU64, mine: u64) -> Result<(), String> {
             // Mixed to mono as it arrives. Two bars for two ears is not what
             // this draws, and a stereo spectrum is twice the work for a
             // difference nobody could see at this size.
-            //
-            // At the level it is played rather than the level it arrives: with
-            // the equaliser on the session is turned right down. Held to full
-            // scale, since the two change a moment apart and the bars should
-            // not leap for it.
-            let scale = crate::equaliser::capture_scale();
             for frame in samples.chunks(capture::CHANNELS as usize) {
-                let mono = frame.iter().sum::<f32>() / frame.len().max(1) as f32;
-                ring.push((mono * scale).clamp(-1.0, 1.0));
+                ring.push(frame.iter().sum::<f32>() / frame.len().max(1) as f32);
             }
         },
     );
 
+    if let Ok(mut listening) = LISTENING.lock() {
+        *listening = None;
+    }
     painting.store(false, Ordering::SeqCst);
     let _ = frames.join();
     result
