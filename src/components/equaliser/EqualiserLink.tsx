@@ -3,10 +3,7 @@ import { say } from '@/core/i18n';
 import { tellNotice } from '@/core/notice';
 import { useSettingsStore } from '@/core/settings/store';
 import { onEqualiserFailed, sendEqualiser } from '@/platform/equaliser';
-import { letGoOfTab, tapTab } from '@/platform/tabTap';
-
-/** How long Rust takes to fade what it is playing, before the tab has its sound back. */
-const TAB_FADE_MS = 150;
+import { dropTab, letGoOfTab, tapTab } from '@/platform/tabTap';
 
 /**
  * How long the curve has to stay flat before the sound goes back the ordinary way.
@@ -47,20 +44,17 @@ export function EqualiserLink() {
   // Once the stored choice has arrived, so it starts with what was left on and
   // not with a moment of something else.
   useEffect(() => {
-    if (ready) void sendEqualiser(running, preamp, bands);
-  }, [ready, running, preamp, bands]);
+    if (ready) void sendEqualiser(preamp, bands);
+  }, [ready, preamp, bands]);
 
   useEffect(() => {
     if (!running) return;
     tapTab(() => {
-      // The capture ended under us. The tab has its sound back by itself.
+      // The capture ended under us, and the sound is on its way back to the tab.
       setOn(false);
       tellNotice(say('notice.equaliserFailed'));
     });
-    return () => {
-      // After Rust's fade, which the setting above has already asked for.
-      letGoOfTab(TAB_FADE_MS);
-    };
+    return letGoOfTab;
   }, [running, setOn]);
 
   // Rust gave up and has put the sound back. The switch should say so.
@@ -68,7 +62,7 @@ export function EqualiserLink() {
     let alive = true;
     let stop = () => {};
     void onEqualiserFailed(() => {
-      letGoOfTab(0);
+      dropTab();
       setOn(false);
       tellNotice(say('notice.equaliserFailed'));
     }).then((unlisten) => {

@@ -27,9 +27,10 @@ const CEILING: f64 = 0.98;
 const LIMITER_RELEASE: f64 = 1.0 / (0.1 * RATE);
 
 /// How long the gain takes from nothing to full or back.
-const RAMP_FRAMES: f64 = 0.1 * RATE;
-/// Music brought back up cannot be much past full scale. Past this it is not
-/// music: the session is not quiet, and the gain would make it deafening.
+pub const RAMP_MS: u64 = 100;
+const RAMP_FRAMES: f64 = RAMP_MS as f64 / 1000.0 * RATE;
+/// Music cannot be much past full scale. Past this it is not music, and whatever
+/// it is should not reach anybody's ears.
 const GUARD: f64 = 1.25;
 /// How long nothing goes out once the guard has seen that.
 const GUARD_HOLD: u32 = (0.2 * RATE) as u32;

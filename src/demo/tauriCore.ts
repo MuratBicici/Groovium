@@ -236,7 +236,12 @@ const HANDLERS: Record<string, Handler> = {
   spotify_pick_cover_image: () => null,
 
   equaliser_set: () => null,
+  equaliser_run: () => null,
   equaliser_feed: () => null,
+  equaliser_take_over: () => null,
+  equaliser_release_tab: () => null,
+  equaliser_hold_tab: () => null,
+  equaliser_hand_back: () => null,
   lastfm_has_api_key: () => false,
   // Enough of Last.fm for the front page's genre shelves, without a key: the
   // demo's artists' tags, and the collection's songs under each.

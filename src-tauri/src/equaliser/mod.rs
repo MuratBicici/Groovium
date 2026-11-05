@@ -16,7 +16,9 @@
 //! is gone by construction.
 //!
 //! Off or flat, nothing here runs and the tab is not captured, and the sound goes
-//! the way it always went.
+//! the way it always went. Moving between the two is a crossfade, with this fading
+//! in as the webview's session fades out, so the music does not stop: see
+//! `src/platform/tabTap.ts` for the order of it.
 //!
 //! What is captured is only ever in memory, in a buffer a fraction of a second
 //! long on its way to the sound card. It is never written anywhere.
@@ -82,6 +84,12 @@ pub struct Shared {
     /// Whether somebody is already looking after a run.
     attended: AtomicBool,
     failed: AtomicBool,
+    /// Whether sound is arriving on the socket.
+    heard: AtomicBool,
+    /// Whether the sound has been taken over from the tab, so what arrives is played.
+    through: AtomicBool,
+    /// The level to give the webview's session back, while it is held down.
+    tab_level: Mutex<Option<f32>>,
     /// The level to play what arrives at, as the bits of a float: nothing until
     /// sound is arriving, and one after.
     gain: AtomicU32,
@@ -102,6 +110,9 @@ impl Default for Equaliser {
             running: AtomicBool::new(false),
             attended: AtomicBool::new(false),
             failed: AtomicBool::new(false),
+            heard: AtomicBool::new(false),
+            through: AtomicBool::new(false),
+            tab_level: Mutex::new(None),
             gain: AtomicU32::new(0),
             // Debug builds only, so a measurement can never go near anybody's
             // ears, and no release can be talked into playing nothing.
@@ -111,27 +122,69 @@ impl Default for Equaliser {
     }
 }
 
-/// Set the equaliser. `on` is whether the sound should come through here at all:
-/// the page says, since it holds the capture, and it leaves a curve that has only
-/// passed through flat running rather than stop for a moment.
+/// Set the curve, whether or not anything is coming through it.
 #[tauri::command]
-pub fn equaliser_set(
-    app: AppHandle,
-    equaliser: State<'_, Equaliser>,
-    on: bool,
-    preamp: f32,
-    bands: Vec<f32>,
-) -> Result<(), String> {
-    let curve = Curve::from_page(preamp, &bands);
-    let shared = &equaliser.0;
-    if let Ok(mut held) = shared.curve.lock() {
-        *held = curve;
+pub fn equaliser_set(equaliser: State<'_, Equaliser>, preamp: f32, bands: Vec<f32>) {
+    if let Ok(mut held) = equaliser.0.curve.lock() {
+        *held = Curve::from_page(preamp, &bands);
     }
+}
+
+/// Start or stop a run. The page says when, since it holds the captures, and a run
+/// plays nothing until it is told to take over.
+#[tauri::command]
+pub fn equaliser_run(app: AppHandle, equaliser: State<'_, Equaliser>, on: bool) {
+    let shared = &equaliser.0;
     shared.wanted.store(on, SeqCst);
     if on {
         attend(app, shared.clone());
     }
+}
+
+/// One step of moving the sound, off the main thread: they take time on purpose.
+async fn step(equaliser: State<'_, Equaliser>, work: fn(&Shared) -> Result<(), String>) -> Result<(), String> {
+    let shared = equaliser.0.clone();
+    tauri::async_runtime::spawn_blocking(move || work(&shared)).await.map_err(|e| e.to_string())?
+}
+
+#[cfg(windows)]
+use engine::{hand_back, hold_tab, release_tab, take_over};
+
+#[cfg(not(windows))]
+fn nothing_to_move(_: &Shared) -> Result<(), String> {
     Ok(())
+}
+#[cfg(not(windows))]
+use nothing_to_move as take_over;
+#[cfg(not(windows))]
+use nothing_to_move as release_tab;
+#[cfg(not(windows))]
+use nothing_to_move as hold_tab;
+#[cfg(not(windows))]
+use nothing_to_move as hand_back;
+
+/// Fade in here and the tab's session out, once the sound is arriving.
+#[tauri::command]
+pub async fn equaliser_take_over(equaliser: State<'_, Equaliser>) -> Result<(), String> {
+    step(equaliser, take_over).await
+}
+
+/// The capture is silencing the tab now, so its session can go back to its level.
+#[tauri::command]
+pub async fn equaliser_release_tab(equaliser: State<'_, Equaliser>) -> Result<(), String> {
+    step(equaliser, release_tab).await
+}
+
+/// Hold the tab's session down, ready for the capture to stop silencing it.
+#[tauri::command]
+pub async fn equaliser_hold_tab(equaliser: State<'_, Equaliser>) -> Result<(), String> {
+    step(equaliser, hold_tab).await
+}
+
+/// Fade out here and the tab's session back in.
+#[tauri::command]
+pub async fn equaliser_hand_back(equaliser: State<'_, Equaliser>) -> Result<(), String> {
+    step(equaliser, hand_back).await
 }
 
 /// See that a run is going, on a thread of its own: commands run on the main

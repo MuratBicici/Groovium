@@ -5,6 +5,9 @@
 //! holds the capture and the switch that silences its own output, so everything
 //! that ends a run here also tells it to let go: the way this fails must be into
 //! the sound as it always was.
+//!
+//! The webview's session level is only touched to move the sound over, for about
+//! a second, and a run ending for any reason gives it back.
 
 use std::collections::VecDeque;
 use std::net::{TcpListener, TcpStream};
@@ -23,14 +26,13 @@ use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFre
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tungstenite::Message;
 
-use super::dsp::{Chain, Gate, Pacer};
+use super::dsp::{Chain, Gate, Pacer, RAMP_MS};
 use super::Shared;
 use crate::visualizer::{self, capture};
 
-/// The level an earlier version held the webview's session at while the sound
-/// came through here, by turning it down and capturing it after the fact. That
-/// put a sound card's effects on the music twice, and is gone; but Windows keeps
-/// a session's level, so a machine may still have this one to be put right.
+/// The level the webview's session is held at while the sound moves over. Not
+/// nothing, so a level left behind can be told from somebody having turned it right
+/// down: Windows keeps a session's level, past a crash and past the app.
 const QUIET: f32 = 0.0001;
 
 /// How much is kept between the capture and the sound card.
@@ -43,6 +45,17 @@ const RENDER_MS: u32 = 20;
 
 /// Frames per millisecond at the rate everything runs at.
 const PER_MS: usize = 48;
+
+/// How long the tab's session takes to come back as this fades out.
+const CROSS: Duration = Duration::from_millis(RAMP_MS);
+/// And to go down as this fades in, which is longer: a change of level reaches the
+/// speakers sooner than what is played from here does. Measured, the same time both
+/// ways left the sound at about a third, for 50 ms, on every switch.
+const TAB_FADES_OUT: Duration = Duration::from_millis(RAMP_MS * 2);
+/// How long the ring is left to fill before anybody depends on it.
+const RING_SETTLES: Duration = Duration::from_millis(300);
+/// How long the sound gets to arrive before taking over is given up on.
+const SOUND_WITHIN: Duration = Duration::from_secs(3);
 
 /// How often the threads waiting on something look up to see if it is still wanted.
 const LOOK_EVERY: Duration = Duration::from_millis(100);
@@ -143,6 +156,103 @@ fn is_ours(level: f32) -> bool {
     (level - QUIET).abs() < QUIET / 4.0
 }
 
+/// The webview's sessions, to move together.
+fn tab_sessions() -> Vec<ISimpleAudioVolume> {
+    let Some(webview) = capture::webview_of(capture::me()) else { return vec![] };
+    let mut found = vec![];
+    let _ = each_session(&webview_tree(webview), |volume| found.push(volume.clone()));
+    found
+}
+
+/// What the sessions should come back to: where they are, unless that is where
+/// this module left them.
+fn level_to_return_to(sessions: &[ISimpleAudioVolume]) -> f32 {
+    let level = sessions
+        .iter()
+        .filter_map(|volume| unsafe { volume.GetMasterVolume() }.ok())
+        .fold(None, |top: Option<f32>, level| Some(top.map_or(level, |top| top.max(level))));
+    level.filter(|level| !is_ours(*level)).unwrap_or(1.0)
+}
+
+fn set_all(sessions: &[ISimpleAudioVolume], level: f32) {
+    for volume in sessions {
+        let _ = unsafe { volume.SetMasterVolume(level, std::ptr::null()) };
+    }
+}
+
+fn fade(sessions: &[ISimpleAudioVolume], from: f32, to: f32, over: Duration) {
+    let began = Instant::now();
+    loop {
+        let along = (began.elapsed().as_secs_f32() / over.as_secs_f32()).min(1.0);
+        set_all(sessions, from + (to - from) * along);
+        if along >= 1.0 {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Fade this in and the tab's session out, together, as soon as there is sound.
+pub fn take_over(shared: &Shared) -> Result<(), String> {
+    com();
+    let began = Instant::now();
+    while !shared.heard.load(SeqCst) {
+        if began.elapsed() >= SOUND_WITHIN {
+            return Err("no sound arrived".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // The ring settled at its level first. It costs nothing: the tab is still playing.
+    std::thread::sleep(RING_SETTLES);
+
+    let sessions = tab_sessions();
+    let level = level_to_return_to(&sessions);
+    if let Ok(mut held) = shared.tab_level.lock() {
+        *held = Some(level);
+    }
+    shared.through.store(true, SeqCst);
+    shared.gain.store(1_f32.to_bits(), SeqCst);
+    fade(&sessions, level, QUIET, TAB_FADES_OUT);
+    // The run may have ended while this was going, and given back what it knew of.
+    if !shared.running.load(SeqCst) {
+        release_tab(shared)?;
+    }
+    Ok(())
+}
+
+/// Give the tab's session its level back at once, if it is being held down.
+pub fn release_tab(shared: &Shared) -> Result<(), String> {
+    com();
+    let level = shared.tab_level.lock().map_err(|_| "level lock")?.take();
+    if let Some(level) = level {
+        set_all(&tab_sessions(), level);
+    }
+    Ok(())
+}
+
+/// Hold the tab's session down at once, while the tab is silenced and nobody hears it.
+pub fn hold_tab(shared: &Shared) -> Result<(), String> {
+    com();
+    let mut held = shared.tab_level.lock().map_err(|_| "level lock")?;
+    let sessions = tab_sessions();
+    if held.is_none() {
+        *held = Some(level_to_return_to(&sessions));
+    }
+    set_all(&sessions, QUIET);
+    Ok(())
+}
+
+/// Fade this out and the tab's session back in, together.
+pub fn hand_back(shared: &Shared) -> Result<(), String> {
+    com();
+    shared.through.store(false, SeqCst);
+    shared.gain.store(0_f32.to_bits(), SeqCst);
+    let sessions = tab_sessions();
+    let level = shared.tab_level.lock().map_err(|_| "level lock")?.take();
+    fade(&sessions, QUIET, level.unwrap_or_else(|| level_to_return_to(&sessions)), CROSS);
+    Ok(())
+}
+
 /// Put back a level this module left behind, the first time there is a session
 /// to look at. They only exist once something has played.
 pub fn give_back_what_was_left(shared: Arc<Shared>) {
@@ -220,7 +330,11 @@ fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f
                 drop(held);
                 if !opened {
                     opened = true;
-                    shared.gain.store(1_f32.to_bits(), SeqCst);
+                    shared.heard.store(true, SeqCst);
+                    // A socket come back while it was already taken over.
+                    if shared.through.load(SeqCst) {
+                        shared.gain.store(1_f32.to_bits(), SeqCst);
+                    }
                 }
             }
             Ok(Message::Close(_)) => break,
@@ -233,6 +347,7 @@ fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f
             }
         }
     }
+    shared.heard.store(false, SeqCst);
     shared.gain.store(0_f32.to_bits(), SeqCst);
     Ok(())
 }
@@ -278,6 +393,8 @@ pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
 
     let ring = Arc::new(Mutex::new(VecDeque::<[f32; 2]>::with_capacity(RATE_FRAMES)));
     shared.gain.store(0_f32.to_bits(), SeqCst);
+    shared.heard.store(false, SeqCst);
+    shared.through.store(false, SeqCst);
     shared.running.store(true, SeqCst);
     shared.failed.store(false, SeqCst);
 
@@ -311,10 +428,12 @@ pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
     }
     // Down first and out after, so it goes rather than stops.
     shared.gain.store(0_f32.to_bits(), SeqCst);
-    std::thread::sleep(Duration::from_millis(130));
+    std::thread::sleep(CROSS + Duration::from_millis(30));
     shared.running.store(false, SeqCst);
     let _ = reader.join();
     let _ = feeder.join();
+    // However it ended, the tab is not left turned down.
+    let _ = release_tab(shared);
 
     if shared.failed.load(SeqCst) {
         return Err("it stopped by itself".into());
