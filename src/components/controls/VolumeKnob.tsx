@@ -89,8 +89,8 @@ interface Turn {
  * Or, with the slider chosen in settings, it opens out into one when the pointer
  * comes to it, for those who would rather have a line than a dial. The knob stays
  * beside the line and only mutes; the line is pressed where the volume should go.
- * The brass goes round the ring and out along the line as it opens, and back again
- * as it closes (`KnobFlow`). With no sound there is nothing to show, so the line
+ * The brass opens off the ring into the line in one move, and back again as it
+ * closes (`KnobFlow`). With no sound there is nothing to show, so the line
  * goes away and stays away for a pointer: it takes a press or the wheel to bring back.
  * Opening it on the press instead left the handle up to a hundred pixels from the
  * hand that was moving it, with no room to bring it closer: the knob is by the
@@ -126,6 +126,10 @@ export function VolumeKnob() {
   const figureOnKnob = useRef<HTMLSpanElement>(null);
   const countFigure = useCallback((level: number) => {
     if (figureOnKnob.current) figureOnKnob.current.textContent = String(Math.round(level * 100));
+  }, []);
+  const body = useRef<HTMLDivElement>(null);
+  const sizeBody = useCallback((width: number | null) => {
+    if (body.current) body.current.style.width = width === null ? '' : `${width}px`;
   }, []);
 
   const stepOut = useCallback(() => {
@@ -330,8 +334,6 @@ export function VolumeKnob() {
   const still = prefersReducedMotion();
   const open = slider && out;
   const stepped = !slider && out;
-  // The body stays open until the brass has come most of the way home.
-  const [bodyOpen, setBodyOpen] = useState(false);
 
   return (
     <div
@@ -358,9 +360,10 @@ export function VolumeKnob() {
       } ${pressed && !slider ? 'scale-[.93]' : ''}`}
     >
       <div
+        ref={body}
         className={`groove-knob-body absolute top-0 left-0 h-9 overflow-hidden rounded-full bg-shell-900 shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-focus-visible:ring-2 group-focus-visible:ring-brass-400 ${
-          still ? 'groove-knob-still' : ''
-        } ${slider && bodyOpen ? 'w-[160px]' : 'w-9'}`}
+          still || slider ? 'groove-knob-still' : ''
+        } w-9`}
       >
         <div
           className={`absolute top-0 left-0 h-9 w-9 transition-transform duration-100 ${
@@ -383,7 +386,7 @@ export function VolumeKnob() {
             dim={muted}
             still={still}
             onLevel={countFigure}
-            onBodyOpen={setBodyOpen}
+            onBody={sizeBody}
           />
         )}
       </div>
