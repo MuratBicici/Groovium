@@ -24,7 +24,7 @@
         "skipTaskbar": false,
         "alwaysOnTop": false,
         "visible": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --auto-accept-this-tab-capture --auto-select-tab-capture-source-by-title=Groovium"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,GetDisplayMediaRequiresUserActivation --auto-accept-this-tab-capture --auto-select-tab-capture-source-by-title=Groovium"
       }
     ],
     "macOSPrivateApi": true,

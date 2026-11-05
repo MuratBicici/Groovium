@@ -13,10 +13,11 @@ import { log } from './log';
  * render would be a gap in the music. So a worklet takes it off the audio thread
  * and a worker sends it (`public/equaliser-tap-*.js`), and neither waits on this.
  *
- * Choosing the tab and allowing it are done by two browser arguments in
- * `tauri.conf.json`, so nobody is asked. What is still asked for is a press
- * somewhere first: the browser insists. With the equaliser left on, the sound
- * goes the ordinary way until the first one.
+ * Choosing the tab and allowing it are done by browser arguments in
+ * `tauri.conf.json`, so nobody is asked, and the same arguments lift the browser's
+ * rule that somebody has to have pressed something first: with the equaliser left
+ * on, it starts as the app does. Those are not promises anybody has made, so a
+ * browser that insists after all only delays it to the first press, below.
  */
 
 interface Tap {
@@ -83,7 +84,7 @@ async function begin(mine: number, onLost: () => void): Promise<void> {
       systemAudio: 'exclude',
     } as DisplayMediaStreamOptions);
   } catch (err) {
-    // No press yet, most likely. The sound carries on the ordinary way.
+    // A browser insisting on a press after all. The sound carries on the ordinary way.
     if (mine !== turn) return;
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
       const again = () => {
