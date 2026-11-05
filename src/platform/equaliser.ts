@@ -1,7 +1,7 @@
 import { isTauri } from '@/core/utils/env';
 import { log } from './log';
 
-/** Tell Rust what the equaliser should be doing. Off or flat, it stands aside. */
+/** Tell Rust what the equaliser should be doing, and whether the sound should come through it. */
 export async function sendEqualiser(on: boolean, preamp: number, bands: readonly number[]): Promise<void> {
   if (!isTauri()) return;
   try {

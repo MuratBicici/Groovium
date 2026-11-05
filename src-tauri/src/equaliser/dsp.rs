@@ -73,11 +73,6 @@ impl Curve {
         curve
     }
 
-    /// Whether it changes nothing, in which case the sound need not come here.
-    pub fn is_flat(&self) -> bool {
-        self.preamp == 0.0 && self.bands.iter().all(|db| *db == 0.0)
-    }
-
     /// The level the filters are fed at.
     ///
     /// Taken down by as much as the highest band lifts, so a boost has room and
@@ -447,8 +442,7 @@ mod tests {
         let curve = Curve::from_page(f32::NAN, &[99.0, -99.0, f32::INFINITY, 3.0]);
         assert_eq!(curve.preamp, 0.0);
         assert_eq!(&curve.bands[..4], &[MOST_DB, -MOST_DB, 0.0, 3.0]);
-        assert!(!curve.is_flat());
-        assert!(Curve::from_page(0.0, &[]).is_flat());
+        assert_eq!(Curve::from_page(0.0, &[]), Curve::FLAT);
     }
 
     #[test]

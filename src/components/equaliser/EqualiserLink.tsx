@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { say } from '@/core/i18n';
 import { tellNotice } from '@/core/notice';
 import { useSettingsStore } from '@/core/settings/store';
@@ -7,6 +7,13 @@ import { letGoOfTab, tapTab } from '@/platform/tabTap';
 
 /** How long Rust takes to fade what it is playing, before the tab has its sound back. */
 const TAB_FADE_MS = 150;
+
+/**
+ * How long the curve has to stay flat before the sound goes back the ordinary way.
+ * A dot dragged through nought, or one setting chosen after another, is flat for a
+ * moment, and taking the whole route down and up for that is a gap in the music.
+ */
+const FLAT_FOR_MS = 800;
 
 /**
  * What the sound should be doing, told to Rust whenever it changes.
@@ -25,13 +32,24 @@ export function EqualiserLink() {
   const bands = useSettingsStore((s) => s.equaliserBands);
   const setOn = useSettingsStore((s) => s.setEqualiserOn);
 
+  const flat = preamp === 0 && bands.every((db) => db === 0);
+  const [settledFlat, setSettledFlat] = useState(flat);
+  if (!flat && settledFlat) setSettledFlat(false);
+  useEffect(() => {
+    if (!flat) return;
+    const settled = setTimeout(() => setSettledFlat(true), FLAT_FOR_MS);
+    return () => clearTimeout(settled);
+  }, [flat]);
+
+  // Off, or flat for a while: nothing to do, so nothing runs.
+  const running = ready && on && !settledFlat;
+
   // Once the stored choice has arrived, so it starts with what was left on and
   // not with a moment of something else.
   useEffect(() => {
-    if (ready) void sendEqualiser(on, preamp, bands);
-  }, [ready, on, preamp, bands]);
+    if (ready) void sendEqualiser(running, preamp, bands);
+  }, [ready, running, preamp, bands]);
 
-  const running = ready && on && !(preamp === 0 && bands.every((db) => db === 0));
   useEffect(() => {
     if (!running) return;
     tapTab(() => {

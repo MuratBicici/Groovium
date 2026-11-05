@@ -46,6 +46,9 @@ const PER_MS: usize = 48;
 
 /// How often the threads waiting on something look up to see if it is still wanted.
 const LOOK_EVERY: Duration = Duration::from_millis(100);
+/// How long the page gets to say hello. Far longer than a read waits once the
+/// sound is coming: that page may be busy, and hanging up on it would stop the sound.
+const HELLO_WITHIN: Duration = Duration::from_secs(2);
 /// How often the sound card in use is checked against the current default.
 const DEVICE_EVERY: Duration = Duration::from_secs(1);
 
@@ -188,7 +191,7 @@ fn is_ours_to_hear(query: Option<&str>, origin: Option<&str>, word: &str) -> boo
 fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f32; 2]>>) -> Result<(), String> {
     stream.set_nonblocking(false).map_err(|e| e.to_string())?;
     stream.set_nodelay(true).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(LOOK_EVERY)).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(HELLO_WITHIN)).map_err(|e| e.to_string())?;
     let mut socket = tungstenite::accept_hdr(stream, |request: &Request, response: Response| {
         let origin = request.headers().get("origin").and_then(|value| value.to_str().ok());
         if is_ours_to_hear(request.uri().query(), origin, word) {
@@ -200,6 +203,7 @@ fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f
         }
     })
     .map_err(|e| format!("handshake: {e}"))?;
+    socket.get_ref().set_read_timeout(Some(LOOK_EVERY)).map_err(|e| e.to_string())?;
 
     if let Ok(mut held) = ring.lock() {
         held.clear();
@@ -223,7 +227,10 @@ fn hear(stream: TcpStream, word: &str, shared: &Shared, ring: &Mutex<VecDeque<[f
             Ok(_) => {}
             Err(tungstenite::Error::Io(err))
                 if matches!(err.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
-            Err(_) => break,
+            Err(err) => {
+                log::warn!("[equaliser] the socket broke: {err}");
+                break;
+            }
         }
     }
     shared.gain.store(0_f32.to_bits(), SeqCst);
@@ -298,13 +305,14 @@ pub fn run(shared: &Arc<Shared>) -> Result<(), String> {
         std::thread::sleep(LOOK_EVERY);
     }
 
+    // Nobody is to be sent here from now on: this socket is going.
+    if let Ok(mut feed) = shared.feed.lock() {
+        *feed = None;
+    }
     // Down first and out after, so it goes rather than stops.
     shared.gain.store(0_f32.to_bits(), SeqCst);
     std::thread::sleep(Duration::from_millis(130));
     shared.running.store(false, SeqCst);
-    if let Ok(mut feed) = shared.feed.lock() {
-        *feed = None;
-    }
     let _ = reader.join();
     let _ = feeder.join();
 
@@ -460,6 +468,36 @@ mod tests {
         assert!(!is_ours_to_hear(None, page, "abc"), "no word");
         assert!(!is_ours_to_hear(Some("word=abc"), Some("https://example.com"), "abc"), "somebody else's page");
         assert!(!is_ours_to_hear(Some("word=abc"), None, "abc"), "no page at all");
+    }
+
+    #[test]
+    fn a_page_slow_to_say_hello_is_still_heard() {
+        use std::io::{Read, Write};
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a port");
+        let port = listener.local_addr().expect("its address").port();
+        let page = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connected");
+            // Longer than a read waits for once the sound is coming.
+            std::thread::sleep(LOOK_EVERY * 3);
+            stream
+                .write_all(
+                    b"GET /?word=abc HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://tauri.localhost\r\n\
+                      Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n\
+                      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+                )
+                .expect("said");
+            let mut answer = [0_u8; 12];
+            stream.read_exact(&mut answer).expect("an answer");
+            answer
+        });
+
+        let (stream, _) = listener.accept().expect("the page");
+        let shared = super::super::Equaliser::default().0;
+        let ring = Mutex::new(VecDeque::new());
+        // Not running, so this returns as soon as the handshake is done with.
+        hear(stream, "abc", &shared, &ring).expect("heard");
+        assert_eq!(&page.join().expect("the page's thread"), b"HTTP/1.1 101");
     }
 
     #[test]

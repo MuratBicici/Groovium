@@ -29,6 +29,8 @@ interface Tap {
 /** How long to wait for Rust to be listening, and how often to look. */
 const FEED_TRIES = 30;
 const FEED_LOOK_MS = 100;
+/** How many times in a row the socket can close without opening, before giving up. */
+const MOST_CLOSES = 5;
 
 let tap: Tap | null = null;
 /** Counted up by each change of mind, so a slow start cannot overtake a stop. */
@@ -40,6 +42,8 @@ interface Feed {
   port: number;
   word: string;
 }
+
+const addressOf = (feed: Feed) => `ws://127.0.0.1:${feed.port}/?word=${feed.word}`;
 
 async function feedFromRust(): Promise<Feed | null> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -125,17 +129,39 @@ async function begin(mine: number, onLost: () => void): Promise<void> {
     return;
   }
 
-  const lost = () => {
+  const lost = (why: string) => {
     if (tap !== held) return;
     tap = null;
+    log('warn', 'equaliser', `lost the tab's sound: ${why}`);
     close(held);
     onLost();
   };
-  stream.getAudioTracks().forEach((track) => track.addEventListener('ended', lost));
-  worker.addEventListener('message', lost);
+  stream.getAudioTracks().forEach((track) => track.addEventListener('ended', () => lost('the capture ended')));
+
+  // A socket closing is Rust's run ending, and it has usually only gone round to
+  // start another: asked for again the moment the curve stops being flat. So this
+  // goes and finds the new one. It used to take any close as the end of it, and
+  // turned the equaliser off for moving a dot through nought.
+  let closes = 0;
+  worker.addEventListener('message', (event: MessageEvent<string>) => {
+    if (event.data === 'open') {
+      closes = 0;
+      return;
+    }
+    closes += 1;
+    if (closes > MOST_CLOSES) {
+      lost('the socket keeps closing');
+      return;
+    }
+    void feedFromRust().then((next) => {
+      if (tap !== held) return;
+      if (next) worker.postMessage({ url: addressOf(next) });
+      else lost('nobody is listening any more');
+    });
+  });
 
   const channel = new MessageChannel();
-  worker.postMessage({ url: `ws://127.0.0.1:${feed.port}/?word=${feed.word}`, port: channel.port1 }, [channel.port1]);
+  worker.postMessage({ url: addressOf(feed), port: channel.port1 }, [channel.port1]);
   const node = new AudioWorkletNode(context, 'equaliser-tap', {
     numberOfInputs: 1,
     numberOfOutputs: 1,

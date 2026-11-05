@@ -111,12 +111,9 @@ impl Default for Equaliser {
     }
 }
 
-/// Whether the sound needs to come through here at all.
-fn should_run(on: bool, curve: &Curve) -> bool {
-    on && !curve.is_flat()
-}
-
-/// Set the equaliser. Off, or on and flat, the sound goes the way it always went.
+/// Set the equaliser. `on` is whether the sound should come through here at all:
+/// the page says, since it holds the capture, and it leaves a curve that has only
+/// passed through flat running rather than stop for a moment.
 #[tauri::command]
 pub fn equaliser_set(
     app: AppHandle,
@@ -130,9 +127,8 @@ pub fn equaliser_set(
     if let Ok(mut held) = shared.curve.lock() {
         *held = curve;
     }
-    let run = should_run(on, &curve);
-    shared.wanted.store(run, SeqCst);
-    if run {
+    shared.wanted.store(on, SeqCst);
+    if on {
         attend(app, shared.clone());
     }
     Ok(())
@@ -225,19 +221,4 @@ pub fn finish(equaliser: &Equaliser) {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_sound_only_comes_through_here_when_it_would_change_something() {
-        let mut lifted = Curve::FLAT;
-        lifted.bands[0] = 3.0;
-        assert!(should_run(true, &lifted));
-        assert!(!should_run(false, &lifted), "off is off");
-        assert!(!should_run(true, &Curve::FLAT), "on and flat is the sound as it was");
-    }
-
 }
