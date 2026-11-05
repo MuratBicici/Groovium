@@ -144,12 +144,15 @@ fn is_ours(level: f32) -> bool {
 pub fn give_back_what_was_left(shared: Arc<Shared>) {
     std::thread::spawn(move || {
         com();
-        let Some(webview) = capture::webview_of(capture::me()) else { return };
         loop {
             std::thread::sleep(Duration::from_secs(2));
             if shared.wanted.load(SeqCst) {
                 return;
             }
+            // Looked for each time: this starts with the app, and the webview may
+            // not be there yet. Looked for once, it gave up without a word, and
+            // the app stayed silent with the level left behind.
+            let Some(webview) = capture::webview_of(capture::me()) else { continue };
             let pids = webview_tree(webview);
             let levels = levels_of(&pids);
             if levels.is_empty() {
