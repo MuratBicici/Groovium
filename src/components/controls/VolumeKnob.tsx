@@ -123,6 +123,10 @@ export function VolumeKnob() {
   const opens = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Whether the pointer is on it, which keeps the slider open whatever else ends. */
   const pointedAt = useRef(false);
+  const figureOnKnob = useRef<HTMLSpanElement>(null);
+  const countFigure = useCallback((level: number) => {
+    if (figureOnKnob.current) figureOnKnob.current.textContent = String(Math.round(level * 100));
+  }, []);
 
   const stepOut = useCallback(() => {
     if (goesBack.current) clearTimeout(goesBack.current);
@@ -378,11 +382,13 @@ export function VolumeKnob() {
             hand={moving}
             dim={muted}
             still={still}
+            onLevel={countFigure}
             onBodyOpen={setBodyOpen}
           />
         )}
       </div>
       <span
+        ref={figureOnKnob}
         aria-hidden="true"
         className={`groove-knob-figure pointer-events-none absolute top-1/2 left-1/2 text-meta font-medium tabular-nums ${
           still ? 'groove-knob-still' : ''

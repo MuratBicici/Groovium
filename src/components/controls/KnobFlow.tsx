@@ -1,12 +1,9 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { SLIDER_RUN_PX, SLIDER_START_PX } from './knob';
-import { BODY_CLOSES_AT, FLOW_MS, LINK_PATH, flowAt } from './brassFlow';
+import { LINK_PATH, bodyStaysOpen, flowAt, flowMs, glideMs, smooth } from './brassFlow';
 
 /** The same ring as `KnobFace`, so that the brass sits exactly in its groove. */
 const RING = 'M21.0 79.0 A41 41 0 1 1 79.0 79.0';
-
-/** How long a level not under a hand takes to get most of the way to a new one. */
-const LEVEL_GLIDE_MS = 70;
 
 /**
  * The slider style's brass, on the ring and on the line, as one thing.
@@ -25,6 +22,7 @@ export function KnobFlow({
   hand,
   dim,
   still,
+  onLevel,
   onBodyOpen,
 }: {
   volume: number;
@@ -34,6 +32,8 @@ export function KnobFlow({
   dim: boolean;
   /** Somebody who has asked for less movement: it goes straight there. */
   still: boolean;
+  /** Where the level is on its way, for the number on the knob to count along. */
+  onLevel: (level: number) => void;
   onBodyOpen: (open: boolean) => void;
 }) {
   const id = useId().replace(/:/g, '');
@@ -44,7 +44,14 @@ export function KnobFlow({
   const handle = useRef<HTMLSpanElement>(null);
   const [lineShown, setLineShown] = useState(open);
 
-  const now = useRef({ along: open ? 1 : 0, level: volume, frame: 0, at: 0, bodyOpen: open });
+  const now = useRef({
+    along: open ? 1 : 0,
+    level: volume,
+    frame: 0,
+    at: 0,
+    bodyOpen: open,
+    glide: { from: volume, to: volume, spent: 0, takes: 1 },
+  });
   const wanted = useRef({ volume, open, hand });
   const stepping = useRef<(at: number) => void>(() => {});
 
@@ -59,15 +66,16 @@ export function KnobFlow({
     );
     link.current?.setAttribute('stroke-dasharray', `0 ${flow.link[0]} ${flow.link[1] - flow.link[0]} 2`);
     if (fill.current) fill.current.style.width = `${flow.fill}px`;
+    onLevel(level);
     if (handle.current) {
       handle.current.style.left = `${flow.fill}px`;
       handle.current.style.transform = `translate(-50%, -50%) scale(${flow.handle})`;
     }
-  }, []);
+  }, [onLevel]);
 
   const tellBody = useCallback(() => {
     const state = now.current;
-    const bodyOpen = wanted.current.open || state.along > BODY_CLOSES_AT;
+    const bodyOpen = wanted.current.open || bodyStaysOpen(state.level, state.along);
     if (bodyOpen === state.bodyOpen) return;
     state.bodyOpen = bodyOpen;
     setLineShown(bodyOpen);
@@ -82,13 +90,15 @@ export function KnobFlow({
       state.at = at;
 
       const to = goal.open ? 1 : 0;
-      const moved = dt / FLOW_MS;
+      const moved = dt / flowMs(state.level);
       state.along = to > state.along ? Math.min(to, state.along + moved) : Math.max(to, state.along - moved);
 
       if (goal.hand) state.level = goal.volume;
       else {
-        state.level += (goal.volume - state.level) * Math.min(1, dt / LEVEL_GLIDE_MS);
-        if (Math.abs(goal.volume - state.level) < 0.002) state.level = goal.volume;
+        const glide = state.glide;
+        glide.spent += dt;
+        const done = glide.spent >= glide.takes;
+        state.level = done ? glide.to : glide.from + (glide.to - glide.from) * smooth(glide.spent / glide.takes);
       }
 
       paint();
@@ -105,6 +115,9 @@ export function KnobFlow({
   useLayoutEffect(() => {
     wanted.current = { volume, open, hand };
     const state = now.current;
+    if (state.glide.to !== volume) {
+      state.glide = { from: state.level, to: volume, spent: 0, takes: glideMs(state.level, volume) };
+    }
     const settled = state.along === (open ? 1 : 0);
     // At rest nothing is coming to draw this, so it is drawn here, or the first
     // paint of the app has no brass on its knob.
@@ -113,6 +126,7 @@ export function KnobFlow({
       state.frame = 0;
       state.along = open ? 1 : 0;
       state.level = volume;
+      state.glide = { from: volume, to: volume, spent: 0, takes: 1 };
       paint();
       tellBody();
       return;
