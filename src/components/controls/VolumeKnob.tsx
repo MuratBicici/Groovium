@@ -27,6 +27,13 @@ import {
 const FIGURE_OUT_MS = 350;
 
 /**
+ * How long the slider stays open once the pointer has gone from it. Only enough for a
+ * hand that slips off the line and straight back. It was the figure's time above,
+ * and people found themselves waiting for the slider to go.
+ */
+const SLIDER_LETS_GO_MS = 120;
+
+/**
  * How long the pointer has to rest on the knob before the slider opens. Not at once:
  * the slider opens over the equaliser's button, and the way to that button can be
  * across the knob.
@@ -137,13 +144,13 @@ export function VolumeKnob() {
     goesBack.current = null;
     setOut(true);
   }, []);
-  const comeBack = useCallback((whatever = false) => {
+  const comeBack = useCallback((whatever = false, after = FIGURE_OUT_MS) => {
     if (pointedAt.current && !whatever) return;
     if (goesBack.current) clearTimeout(goesBack.current);
     goesBack.current = setTimeout(() => {
       goesBack.current = null;
       setOut(false);
-    }, FIGURE_OUT_MS);
+    }, after);
   }, []);
   /** Away now, and not waiting for the pointer to go. */
   const shut = useCallback(() => {
@@ -179,7 +186,7 @@ export function VolumeKnob() {
     pointedAt.current = false;
     if (opens.current) clearTimeout(opens.current);
     opens.current = null;
-    if (out && !turn.current) comeBack();
+    if (out && !turn.current) comeBack(false, SLIDER_LETS_GO_MS);
   }
 
   const effectiveVolume = muted ? 0 : volume;
@@ -300,7 +307,7 @@ export function VolumeKnob() {
       // Down to nothing it goes at once. Not while the hand still held it: that hand
       // may be on its way back up.
       if (slider && liveVolume() === 0) shut();
-      else comeBack();
+      else comeBack(false, slider && e.pointerType === 'mouse' ? SLIDER_LETS_GO_MS : FIGURE_OUT_MS);
     }
   }
 
