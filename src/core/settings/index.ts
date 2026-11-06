@@ -183,8 +183,9 @@ export interface Settings {
    */
   dropZone: DropZone;
   /**
-   * How the volume moves: a knob, which is the one the app has always had, or a
-   * slider it opens out into under the hand.
+   * How the volume moves: a slider the knob opens out into when it is pointed at,
+   * which is the one people found easy, or the knob turned by hand, which is the one
+   * the app always had.
    */
   volumeStyle: VolumeStyle;
   /** Whether the equaliser is on. Flat, it stands aside even so. */
@@ -321,7 +322,7 @@ export const DEFAULT_SETTINGS: Settings = {
   batterySaver: false,
   batterySaverOnBattery: true,
   dropZone: 'dock',
-  volumeStyle: 'knob',
+  volumeStyle: 'slider',
   equaliserOn: false,
   equaliserPreamp: 0,
   equaliserBands: heldBands(null),
@@ -369,7 +370,7 @@ export async function loadSettings(): Promise<Settings> {
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
     if (settings.dropZone !== 'mat') settings.dropZone = 'dock';
-    if (settings.volumeStyle !== 'slider') settings.volumeStyle = 'knob';
+    if (settings.volumeStyle !== 'knob') settings.volumeStyle = 'slider';
     settings.equaliserOn = settings.equaliserOn === true;
     settings.equaliserPreamp = heldDb(settings.equaliserPreamp);
     settings.equaliserBands = heldBands(settings.equaliserBands);

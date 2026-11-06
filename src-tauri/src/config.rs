@@ -174,9 +174,10 @@ pub struct Settings {
     /// unrecognised, and a config from before the choice, reads as the dock.
     #[serde(default = "dock")]
     pub drop_zone: String,
-    /// How the volume moves: `"knob"`, or `"slider"`, which it opens out into
-    /// under the hand. Anything unrecognised, and an older config, reads as the knob.
-    #[serde(default = "knob")]
+    /// How the volume moves: "slider", a line the knob opens out into when pointed at,
+    /// or "knob", turned by hand. Anything unrecognised, and an older config, reads
+    /// as the slider.
+    #[serde(default = "slider")]
     pub volume_style: String,
     /// Whether the equaliser is on. Off by default, and flat it stands aside.
     #[serde(default)]
@@ -274,7 +275,7 @@ impl Default for Settings {
             battery_saver: false,
             battery_saver_on_battery: on_unless_turned_off(),
             drop_zone: dock(),
-            volume_style: knob(),
+            volume_style: slider(),
             equaliser_on: false,
             equaliser_preamp: 0.0,
             equaliser_bands: Vec::new(),
@@ -348,8 +349,8 @@ fn dock() -> String {
     "dock".into()
 }
 
-fn knob() -> String {
-    "knob".into()
+fn slider() -> String {
+    "slider".into()
 }
 
 fn grooves() -> String {
@@ -563,10 +564,10 @@ mod tests {
         assert!(written.contains(r#""dropZone":"mat""#));
 
         // The volume's style, the same way.
-        assert_eq!(config.settings.volume_style, "knob");
-        let slid: AppConfig =
-            serde_json::from_str(r#"{"settings":{"volumeStyle":"slider"}}"#).expect("parses");
-        assert_eq!(slid.settings.volume_style, "slider");
+        assert_eq!(config.settings.volume_style, "slider");
+        let turned: AppConfig =
+            serde_json::from_str(r#"{"settings":{"volumeStyle":"knob"}}"#).expect("parses");
+        assert_eq!(turned.settings.volume_style, "knob");
 
         // The equaliser's, the same way: off in an older config, and kept.
         assert!(!config.settings.equaliser_on);
