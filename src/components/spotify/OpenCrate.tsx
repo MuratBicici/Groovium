@@ -572,6 +572,10 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   // Opening. A layout effect so the first frame painted is already the start of
   // it, never the finished page followed by a jump back.
   useLayoutEffect(() => {
+    // Once. React runs this twice in development, and the second time everything is
+    // already sitting on the crate: measured there, the page and the cover were
+    // told to go from the crate to the crate, and only jumped into place at the end.
+    if (openedAt.current !== 0) return;
     openedAt.current = performance.now();
     const layer = layerRef.current;
     const page = pageRef.current;

@@ -6,9 +6,10 @@ const from = { left: 100, top: 40, width: 92, height: 92 };
 const to = { left: 8, top: 8, width: 664, height: 454 };
 
 describe('the page swelling out of its crate', () => {
-  it('starts exactly on the crate and unseen', () => {
+  it('starts exactly on the crate, solid, so that it covers it from the first frame', () => {
     const [first] = bubbleFrames(from, to);
-    expect(first).toMatchObject({ left: '100px', top: '40px', width: '92px', height: '92px', opacity: 0 });
+    expect(first).toMatchObject({ left: '100px', top: '40px', width: '92px', height: '92px' });
+    expect(first).not.toHaveProperty('opacity');
   });
 
   it('ends exactly on the page, with its round corners', () => {

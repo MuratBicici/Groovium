@@ -865,11 +865,12 @@ body {
   content-visibility: visible;
 }
 
-/* The wash of the cover's colour, coming up once the page has nearly arrived. */
+/* The wash of the cover's colour, once the page has arrived: earlier it showed
+   outside the shape still growing around it. */
 .groove-crate-tint {
   -webkit-mask-image: linear-gradient(to right, #000 62%, transparent);
   mask-image: linear-gradient(to right, #000 62%, transparent);
-  animation: groove-crate-tint 300ms 260ms ease-out backwards;
+  animation: groove-crate-tint 280ms 480ms ease-out backwards;
 }
 @keyframes groove-crate-tint {
   from {

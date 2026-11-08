@@ -33,9 +33,8 @@ const place = (box: Box, radius: number) => ({
 /** The page's ground swelling out of the crate on the shelf into its place. */
 export function bubbleFrames(from: Box, to: Box): Keyframe[] {
   return [
-    { ...place(from, SHELF_RADIUS_PX), opacity: 0, offset: 0 },
-    { ...place(from, SHELF_RADIUS_PX), opacity: 1, offset: 0.06 },
-    { ...place(to, PAGE_RADIUS_PX), opacity: 1, offset: 1 },
+    { ...place(from, SHELF_RADIUS_PX), offset: 0 },
+    { ...place(to, PAGE_RADIUS_PX), offset: 1 },
   ];
 }
 
