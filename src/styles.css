@@ -468,10 +468,35 @@ body {
  * square at the bottom edge looked like the last thing there was. Over the
  * last stretch only, which is the list's own padding when it is scrolled to
  * the end, so nothing at the end is ever faded.
+ *
+ * And the same at the top, under the drawer's heading, where they were cut in a
+ * line on their way past. Only once the list has moved, as the first thing in it
+ * would otherwise be dimmed at rest: the fade grows over the first of the scroll,
+ * read from the scroll itself, so no script runs for it.
  */
+@property --drawer-top-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
 .groove-drawer-list {
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  --drawer-mask: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--drawer-top-fade),
+    #000 calc(100% - 22px),
+    transparent
+  );
+  -webkit-mask-image: var(--drawer-mask);
+  mask-image: var(--drawer-mask);
+  animation: groove-drawer-top-fade linear both;
+  animation-timeline: scroll(self);
+  animation-range: 0 40px;
+}
+@keyframes groove-drawer-top-fade {
+  to {
+    --drawer-top-fade: 22px;
+  }
 }
 
 /*
