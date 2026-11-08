@@ -88,6 +88,37 @@ function captureTab(silenceIt: boolean): Promise<MediaStream> {
   } as DisplayMediaStreamOptions);
 }
 
+/** How many times to ask for a capture, and how long to leave between them. */
+const CAPTURE_TRIES = 4;
+const CAPTURE_AGAIN_MS = 500;
+
+/**
+ * Keep asking for a capture while the refusal is one that passes.
+ *
+ * The browser has said it could not start one (`NotReadableError`) with nothing
+ * wrong that lasted: seen once, moments after the sound card changed, and it turned
+ * the equaliser off for good with a notice. What caused it was never pinned down, so
+ * this does not depend on knowing. A refusal on principle is passed straight back.
+ * Null if it stopped being wanted in the meantime.
+ */
+export async function askUntilItWorks(
+  ask: () => Promise<MediaStream>,
+  stillWanted: () => boolean,
+  waitMs = CAPTURE_AGAIN_MS,
+): Promise<MediaStream | null> {
+  for (let tries = 1; ; tries++) {
+    try {
+      return await ask();
+    } catch (err) {
+      const passes = err instanceof DOMException && (err.name === 'NotReadableError' || err.name === 'AbortError');
+      if (!passes || tries >= CAPTURE_TRIES) throw err;
+      log('warn', 'equaliser', `the capture would not start (try ${tries}), asking again`, err);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      if (!stillWanted()) return null;
+    }
+  }
+}
+
 const stopTracks = (stream: MediaStream) => stream.getTracks().forEach((track) => track.stop());
 
 function close(held: Tap): void {
@@ -116,9 +147,9 @@ function nextPress(): Promise<void> {
 async function listenToTab(): Promise<MediaStream | null> {
   while (wanted) {
     try {
-      const stream = await captureTab(false);
+      const stream = await askUntilItWorks(() => captureTab(false), () => wanted);
       // It was only ever the sound that was wanted.
-      stream.getVideoTracks().forEach((track) => track.stop());
+      stream?.getVideoTracks().forEach((track) => track.stop());
       return stream;
     } catch (err) {
       // A browser insisting on a press after all. The sound carries on the ordinary way.
@@ -206,7 +237,8 @@ async function enter(): Promise<void> {
   await call('equaliser_take_over');
   if (!wanted || tap !== held) return;
 
-  const silencing = await captureTab(true);
+  const silencing = await askUntilItWorks(() => captureTab(true), () => wanted);
+  if (!silencing) return;
   silencing.getVideoTracks().forEach((track) => track.stop());
   // Kept even if it stopped being wanted meanwhile: going back takes it off in order.
   held.silencing = silencing;
