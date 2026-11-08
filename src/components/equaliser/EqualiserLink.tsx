@@ -52,7 +52,7 @@ export function EqualiserLink() {
     tapTab(() => {
       // The capture ended under us, and the sound is on its way back to the tab.
       setOn(false);
-      tellNotice(say('notice.equaliserFailed'));
+      tellNotice(say('notice.equaliserFailed'), 'problem');
     });
     return letGoOfTab;
   }, [running, setOn]);
@@ -64,7 +64,7 @@ export function EqualiserLink() {
     void onEqualiserFailed(() => {
       dropTab();
       setOn(false);
-      tellNotice(say('notice.equaliserFailed'));
+      tellNotice(say('notice.equaliserFailed'), 'problem');
     }).then((unlisten) => {
       if (alive) stop = unlisten;
       else unlisten();

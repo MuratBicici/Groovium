@@ -73,6 +73,9 @@ The window
 · The cross on the big lyrics does what the lyrics button does.
 · The settings run behind the controls as one surface, and fade softly at the
   top and bottom. The tint behind Up next is gone.
+· Messages come up from the progress bar as a small pill, with a tick for
+  something done and a warning for something wrong. Press one to put it away;
+  it waits while the pointer is on it.
 
 Spotify
 · Genre shelves show their sleeves while they are made, and are made sooner.

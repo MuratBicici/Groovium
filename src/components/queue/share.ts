@@ -23,6 +23,6 @@ export function copyLink(track: TrackMetadata): void {
   if (!link) return;
   navigator.clipboard.writeText(link).then(
     () => tellNotice(say('notice.linkCopied')),
-    () => tellNotice(say('notice.linkNotCopied')),
+    () => tellNotice(say('notice.linkNotCopied'), 'problem'),
   );
 }

@@ -1,17 +1,21 @@
 import { create } from 'zustand';
 
-/**
- * Something said on the notice card that is not a failure: a link copied.
- *
- * The card was only ever the player's errors, and the battery saver's word.
- * This is the plain third kind — a line that confirms something done — kept
- * apart from `error` so nothing that reads errors mistakes it for one.
- */
-export const useNotice = create<{ message: string | null }>(() => ({ message: null }));
+/** What a notice is about, which is what its mark says at a glance. */
+export type NoticeKind = 'done' | 'problem' | 'info';
 
-/** Say it on the card. */
-export function tellNotice(message: string): void {
-  useNotice.setState({ message });
+/**
+ * Something said on the notice that does not come from the player: a link copied,
+ * the equaliser having to stop. Kept apart from the player's `error` so nothing that
+ * reads errors mistakes one of these for one.
+ */
+export const useNotice = create<{ message: string | null; kind: NoticeKind }>(() => ({
+  message: null,
+  kind: 'done',
+}));
+
+/** Say it. Done unless told otherwise. */
+export function tellNotice(message: string, kind: NoticeKind = 'done'): void {
+  useNotice.setState({ message, kind });
 }
 
 /** Put the card away. */

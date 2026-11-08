@@ -149,6 +149,7 @@ export default function App() {
   usePowerAwareMotion();
   const savingTold = usePower((s) => s.told);
   const notice = useNotice((s) => s.message);
+  const noticeKind = useNotice((s) => s.kind);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const compact = useSettingsStore((s) => s.compact);
@@ -700,6 +701,7 @@ export default function App() {
               copied), then battery saver coming on. */}
           <Notice
             message={error ?? notice ?? (savingTold ? t('power.savingOn') : null)}
+            kind={error ? 'problem' : notice ? noticeKind : 'info'}
             onDismiss={error ? clearError : notice ? clearNotice : dismissSavingNotice}
             action={error || notice || !savingTold ? undefined : { label: t('power.turnOff'), onPress: declineSaving }}
           />
