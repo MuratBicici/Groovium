@@ -38,6 +38,17 @@ export function bubbleFrames(from: Box, to: Box): Keyframe[] {
   ];
 }
 
+/** How big a record in a row is, which is what a flight's corner is worked from. */
+const RECORD_PX = 36;
+
+/** Where a record leaves the cover: its right edge, half way up, by the record's corner. */
+export function mouthOf(cover: Box): Point {
+  return {
+    x: cover.left + cover.width * 1.02 - RECORD_PX / 2,
+    y: cover.top + cover.height / 2 - RECORD_PX / 2,
+  };
+}
+
 /** The size a record starts at beside the cover, against its size in the row. */
 const LEAVING_SCALE = 2.3;
 

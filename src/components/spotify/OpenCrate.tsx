@@ -21,7 +21,7 @@ import {
   RemoveSheet,
   SheetPresence,
 } from './CrateSheets';
-import { backwards, bubbleFrames, flightFrames, hoursAndMinutes, minutesOf, type Box } from './crateMotion';
+import { backwards, bubbleFrames, flightFrames, hoursAndMinutes, minutesOf, mouthOf, type Box } from './crateMotion';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
@@ -240,6 +240,22 @@ function flyRecord(
   const flight = copy.animate(frames, { fill: 'both', ...timing });
   const gone = () => copy.remove();
   flight.finished.then(gone, gone);
+}
+
+/**
+ * Where the cover belongs on the page, from the layout.
+ *
+ * Not from where it is on screen: for the first half second it is on its way from
+ * the crate, and records measured off that were dealt out from the shelf.
+ */
+function coverPlace(cover: HTMLElement): Box {
+  const column = cover.offsetParent as HTMLElement | null;
+  return {
+    left: cover.offsetLeft + (column?.offsetLeft ?? 0),
+    top: cover.offsetTop + (column?.offsetTop ?? 0),
+    width: cover.offsetWidth,
+    height: cover.offsetHeight,
+  };
 }
 
 /** Where a box is, measured from another's corner. */
@@ -483,8 +499,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     });
     const going = seen.slice(0, STAGGERED).reverse();
     const pageBox = page.getBoundingClientRect();
-    const coverBox = within(cover.getBoundingClientRect(), pageBox);
-    const mouth = { x: coverBox.left + coverBox.width * 1.02 - 18, y: coverBox.top + coverBox.height / 2 - 18 };
+    const mouth = mouthOf(coverPlace(cover));
 
     for (const el of seen.slice(STAGGERED)) {
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, fill: 'forwards' });
@@ -630,8 +645,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     const view = grid.getBoundingClientRect();
     const seen = rows.filter((el) => el.getBoundingClientRect().top < view.bottom);
     const pageBox = page.getBoundingClientRect();
-    const coverBox = within(cover.getBoundingClientRect(), pageBox);
-    const mouth = { x: coverBox.left + coverBox.width * 1.02 - 18, y: coverBox.top + coverBox.height / 2 - 18 };
+    const mouth = mouthOf(coverPlace(cover));
     // A playlist that took a while to arrive has no page to wait for.
     const waited = performance.now() - openedAt.current;
     const from = Math.max(0, FLIGHTS_FROM_MS - waited);

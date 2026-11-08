@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackMetadata } from '@/core/types';
-import { PAGE_RADIUS_PX, backwards, bubbleFrames, flightFrames, hoursAndMinutes, minutesOf } from './crateMotion';
+import {
+  PAGE_RADIUS_PX,
+  backwards,
+  bubbleFrames,
+  flightFrames,
+  hoursAndMinutes,
+  minutesOf,
+  mouthOf,
+} from './crateMotion';
 
 const from = { left: 100, top: 40, width: 92, height: 92 };
 const to = { left: 8, top: 8, width: 664, height: 454 };
@@ -20,6 +28,12 @@ describe('the page swelling out of its crate', () => {
       height: '454px',
       borderRadius: `${PAGE_RADIUS_PX}px`,
     });
+  });
+});
+
+describe('where records leave the cover', () => {
+  it('is its right edge, half way up', () => {
+    expect(mouthOf({ left: 22, top: 48, width: 152, height: 152 })).toEqual({ x: 22 + 155.04 - 18, y: 48 + 76 - 18 });
   });
 });
 
