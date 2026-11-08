@@ -4,6 +4,79 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.4.0 — 2026-11-08
+
+An equaliser, for Spotify as well.
+
+Everything Groovium plays can now be shaped, Spotify included. The button
+beside the volume opens ten bands on a curve in the drawer: drag the dots, pick
+a setting, and keep up to three of your own under names you choose. The sound
+is taken before Windows or your sound card has touched it, so their effects are
+applied once, as usual. Switching it on and off blends from one to the other
+without a gap. While it is on, sound arrives about 0.15 seconds late.
+
+The volume is easier to set. Point at the knob and a slider opens out of it,
+the brass pouring off the ring and along the line; press the line where you
+want it. The knob itself is a button now: press it to mute, press it again for
+the sound back. At no sound the slider goes away until you press the knob or
+turn the wheel. If you liked turning it, Settings, General, Motion has the
+knob.
+
+Lift a record and it can be dropped for its link, for a Spotify song or one of
+your playlists. The places to go rise on a small dock at the foot of the
+drawer, and the old palette is in Settings, General, Motion.
+
+HIGHLIGHTS
+· A ten-band equaliser for Spotify and songs on this computer, with presets
+  and three settings of your own.
+· A volume slider that opens when you point at the knob, now the default.
+· The knob mutes when pressed, and shows its level on a brass ring.
+· Copy a song's or playlist's Spotify link by dropping its record.
+· The window no longer stops responding when moved between monitors.
+
+ALL CHANGES
+
+Equaliser
+· Ten bands, an Input level, presets, and up to three named settings of your
+  own. Left flat, it stands aside and the sound goes the ordinary way.
+· It works on the tab's own sound, before Windows and any sound card effects,
+  so an enhancer such as Nahimic is applied once and not twice.
+· Turning it on takes a moment, during which the music carries on, and then
+  blends across. It starts by itself if you left it on.
+· A limiter and a fade on every change keep a mistake from reaching your ears
+  at full level. If it cannot carry on, the sound returns to the ordinary way
+  and a notice says so.
+· While it is on, sound arrives about 0.15 seconds late.
+
+Volume
+· The slider opens a moment after you point at the knob, and closes soon after
+  you leave. Press anywhere on the line, or drag the handle.
+· The level moves off the ring and along the line in one movement, and back.
+· Pressing the knob mutes, with the level draining away, and pressing again
+  brings it back. Turned all the way down, the slider goes until you press the
+  knob or turn the wheel.
+· The knob has a brass ring with the level on it and the number on its face.
+  In the Knob style, take it by the face and pull, or by the ring and turn.
+
+Records and links
+· Link is a third place to drop a lifted record: it copies the Spotify page of
+  a song or of one of your playlists, and says so. Songs on this computer have
+  no page and no link.
+· The places to go are on a small dock at the foot of the drawer. Settings,
+  General, Motion, While carrying a record brings the mat back.
+
+The window
+· Moving the window to a monitor of another scale no longer leaves it unable
+  to be clicked.
+· The library button is lit only when the library is showing. The equaliser
+  and the big lyrics borrow the drawer, and the button takes it back.
+· The cross on the big lyrics does what the lyrics button does.
+· The settings run behind the controls as one surface, and fade softly at the
+  top and bottom. The tint behind Up next is gone.
+
+Spotify
+· Genre shelves show their sleeves while they are made, and are made sooner.
+
 ## 1.3.1 — 2026-10-27
 
 A front page made from what you play.

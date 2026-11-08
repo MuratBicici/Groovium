@@ -13,6 +13,27 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.4.0 — 2026-11-08
+
+Bir ekolayzer, Spotify için de.
+
+Groovium'un çaldığı her şeyi artık şekillendirebilirsiniz, Spotify dahil. Ses
+düğmesinin yanındaki düğme, çekmecede on bantlı bir eğri açar. Noktaları
+sürükleyin, hazır bir ayar seçin, kendi ayarlarınızdan üçünü adlarıyla saklayın.
+Ses, Windows ve ses kartınız ona dokunmadan önce alınır. Bu yüzden onların
+efektleri her zamanki gibi bir kez uygulanır. Açıp kapatırken ses kesilmez, biri
+diğerine karışır. Açıkken ses yaklaşık 0,15 saniye geç gelir.
+
+Sesi ayarlamak artık daha kolay. Fareyle düğmenin üstüne gelin, içinden bir sürgü
+açılır. Pirinç halkadan çıkıp çizgiye akar. Çizgide istediğiniz yere basın. Düğme
+artık gerçekten bir düğme: basınca ses kapanır, tekrar basınca geri gelir. Ses
+sıfırken sürgü kapanır. Düğmeye basana ya da tekerleği çevirene kadar açılmaz.
+Çevirmeyi seviyorsanız düğmeyi Ayarlar, Genel, Hareket'te bulursunuz.
+
+Elinize aldığınız plağı bırakarak bağlantısını kopyalayabilirsiniz. Spotify
+şarkıları ve çalma listeleriniz için geçerli. Bırakılacak yerler çekmecenin altında
+küçük bir şeritte belirir. Eskisini Ayarlar, Genel, Hareket'te bulursunuz.
+
 ## 1.3.1 — 2026-10-27
 
 Dinlediklerinizden bir ön sayfa.
