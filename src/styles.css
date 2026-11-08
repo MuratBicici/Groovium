@@ -878,9 +878,11 @@ body {
   }
 }
 
-/* A row of an open playlist is far shorter than the cards this size was for. */
+/* A row of an open playlist is far shorter than the cards this size was for. The
+   size stands in for what is inside the padding, so it is the sleeve's 36px: a row
+   not drawn yet measured 10px too tall, and records flew to where rows were not. */
 .groove-record.groove-crate-row {
-  contain-intrinsic-size: auto 46px;
+  contain-intrinsic-size: auto 36px;
 }
 
 /* The little bars beside the song on the deck, while it is sounding. */

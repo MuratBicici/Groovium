@@ -62,9 +62,14 @@ const FLIGHTS_FROM_MS = 470;
 /** How long one record takes to reach its row, and the gap to the next. */
 const FLIGHT_MS = 440;
 const STAGGER_MS = 62;
-/** How far through its flight a record's row comes up to meet it, and how fast. */
-const ROW_AFTER_MS = 350;
-const ROW_MS = 230;
+/**
+ * How far through its flight a record's row comes up to meet it, and how fast.
+ *
+ * The two add up to the moment the record starts handing over: any later and the
+ * record was gone before the row had come.
+ */
+const ROW_AFTER_MS = 250;
+const ROW_MS = 170;
 
 /**
  * How many records fly, one after another, before the rest are simply there.
@@ -83,8 +88,6 @@ const STAGGERED = 9;
  */
 const RETURN_MS = 260;
 const RETURN_STAGGER_MS = 30;
-/** Into the crate: gathering speed rather than easing off, which is a drop. */
-const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
 /** How long the page takes to go back into its crate. */
 const SHRINK_MS = 300;
 /** How long before the last record is home the page starts to go. */
@@ -509,10 +512,11 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
       const sleeve = el.querySelector<HTMLElement>('[data-sleeve]');
       if (sleeve) {
         const box = within(sleeve.getBoundingClientRect(), pageBox);
+        // The flight out, slowing down, is gathering speed when it is run backwards.
         flyRecord(el, flying, backwards(flightFrames(mouth, { x: box.left, y: box.top })), {
           duration: RETURN_MS,
           delay,
-          easing: RETURN_EASING,
+          easing: 'linear',
         });
       }
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, delay, fill: 'forwards' });
@@ -658,14 +662,14 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
       flyRecord(el, flying, flightFrames(mouth, { x: box.left, y: box.top }), {
         duration: FLIGHT_MS,
         delay,
-        easing: EASING,
+        easing: 'linear',
       });
       el.animate(
         [
           { opacity: 0, transform: 'translateX(14px)' },
           { opacity: 1, transform: 'none' },
         ],
-        { duration: ROW_MS, delay: delay + ROW_AFTER_MS, easing: EASING, fill: 'backwards' },
+        { duration: ROW_MS, delay: delay + ROW_AFTER_MS, easing: 'ease-out', fill: 'backwards' },
       );
     }
     for (const el of seen.slice(STAGGERED)) {

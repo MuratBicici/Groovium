@@ -50,23 +50,42 @@ export function mouthOf(cover: Box): Point {
 }
 
 /** The size a record starts at beside the cover, against its size in the row. */
-const LEAVING_SCALE = 2.3;
+const LEAVING_SCALE = 2.6;
+/** How far inside the cover's edge a record starts, so that it comes out of it. */
+const INSIDE_COVER_PX = 30;
+/** How much of the way across a record is before it starts bending to its row. */
+const BEND_AT = 0.8;
+/** The share of a flight spent appearing, and spent handing over to the row. */
+const APPEARS_FOR = 0.12;
+const LEAVES_FOR = 0.06;
+/** How many steps the curve is drawn in, enough that no corner shows at this size. */
+const FLIGHT_STEPS = 28;
 
 /**
- * A record leaving the cover and going to its row, in an arc: up over the rows
- * between, and shrinking on the way, gone at the moment the row's own takes over.
- * Both are where its top left corner is, and it is drawn at the row's size.
+ * A record leaving the cover and going to its row, in one curve: out to the right,
+ * bending towards its row on the way, and never turning back on itself, whichever
+ * row that is. Slowing down all the way, shrinking as it goes, and gone at the
+ * moment the row's own takes over. Both are where its top left corner is, and it is
+ * drawn at the row's size.
+ *
+ * Played with linear timing, as the slowing down is in the frames. Easing laid over
+ * them would bunch the appearing and the handing over into a few milliseconds.
  */
 export function flightFrames(from: Point, to: Point): Keyframe[] {
-  const middle = { x: (from.x + to.x) / 2, y: Math.min(from.y, to.y) - 34 };
-  const at = (point: Point, scale: number) => `translate(${point.x}px, ${point.y}px) scale(${scale})`;
-  return [
-    { transform: at({ x: from.x - 30, y: from.y }, 2.6), opacity: 0, offset: 0 },
-    { transform: at(from, LEAVING_SCALE), opacity: 1, offset: 0.14 },
-    { transform: at(middle, 1.5), opacity: 1, offset: 0.56 },
-    { transform: at(to, 1), opacity: 1, offset: 0.97 },
-    { transform: at(to, 1), opacity: 0, offset: 1 },
-  ];
+  const start = { x: from.x - INSIDE_COVER_PX, y: from.y };
+  const bend = { x: start.x + (to.x - start.x) * BEND_AT, y: start.y };
+  return Array.from({ length: FLIGHT_STEPS + 1 }, (_, step) => {
+    const time = step / FLIGHT_STEPS;
+    const along = 1 - (1 - time) ** 3;
+    const x = (1 - along) ** 2 * start.x + 2 * (1 - along) * along * bend.x + along ** 2 * to.x;
+    const y = (1 - along) ** 2 * start.y + 2 * (1 - along) * along * bend.y + along ** 2 * to.y;
+    const scale = LEAVING_SCALE * (1 - along) + along;
+    return {
+      transform: `translate(${x}px, ${y}px) scale(${scale})`,
+      opacity: Math.min(1, time / APPEARS_FOR, (1 - time) / LEAVES_FOR),
+      offset: time,
+    };
+  });
 }
 
 /** The same keyframes the other way round, for going back the way it came. */
