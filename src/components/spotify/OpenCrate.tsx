@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TrackMetadata } from '@/core/types';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
-import { refuse, refuseUnplayable, UNPLAYABLE_LOOK, UnplayableTag } from './Unplayable';
+import { refuse, refuseUnplayable, UNPLAYABLE_LOOK } from './Unplayable';
 import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
 import { useDiscFlight } from '@/components/player/DiscFlight';
 import { useCarriedTrack, useDiscHold } from '@/components/player/DiscHold';
 import { VinylDisc } from '@/components/player/VinylDisc';
+import { readCover } from '@/core/theme/readCover';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { formatDuration } from '@/core/utils/time';
 import { useT } from '@/core/i18n';
 import { pickCoverImage, type CoverPickFailure } from '@/core/spotify/cover';
 import { isTauri } from '@/core/utils/env';
@@ -17,13 +19,9 @@ import {
   DetailsSheet,
   ListDetailsSheet,
   RemoveSheet,
-  SHEET_AWAY,
-  SHEET_IN_EASING,
-  SHEET_IN_MS,
-  SHEET_OUT_EASING,
-  SHEET_OUT_MS,
   SheetPresence,
 } from './CrateSheets';
+import { backwards, bubbleFrames, flightFrames, hoursAndMinutes, minutesOf, type Box } from './crateMotion';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
 
 /** What each reason a picture was refused is called on screen. */
@@ -34,61 +32,71 @@ export const COVER_FAILURES = {
 } as const satisfies Record<CoverPickFailure, string>;
 
 /**
- * A crate, opened: its records out of the sleeves and laid on the shelf.
+ * A crate, opened: its cover to one side and its records in a list beside it.
  *
  * Covers the drawer and nothing else. That is a requirement rather than a
  * preference — a record is meant to be draggable from here onto the deck, and
  * the deck has to be visible for there to be anywhere to drag it to.
  *
- * It opens and closes as one page, the way the sheets over it do: rising into
- * place while it fades in, and back down as it fades out. It grows from the
- * crate that was pressed, and the records come out of that crate one after
- * another into their places, so what you see is a crate emptying rather than
- * a grid appearing. Closing, they go back in the same way before the page
- * goes.
+ * The page swells out of the crate that was pressed, a rounded shape filling the
+ * drawer short of its edges, and the cover goes with it to its place on the left.
+ * The records then come out of that cover one after another, each in an arc to its
+ * own row, which appears as it lands, so what you see is a crate emptying rather
+ * than a list appearing. Closing, they go back the same way before the page does.
  */
 
-/** How long one record takes to reach its place. */
-const FLIGHT_MS = 340;
-/** The gap between one record leaving and the next. */
-const STAGGER_MS = 26;
+/** How long the page takes to swell into place, and its bounce on arriving. */
+const OPEN_MS = 560;
+const OPEN_EASING = 'cubic-bezier(.3,1.32,.5,1)';
+
+/** How long the backdrop takes to darken the shelves behind the page. */
+const DIM_MS = 360;
+
+/** The heading and the buttons, coming up once the page has nearly arrived. */
+const RISE_DELAY_MS = 300;
+const RISE_STAGGER_MS = 30;
+const RISE_MS = 300;
+
+/** When the first record leaves the cover, from the page starting to open. */
+const FLIGHTS_FROM_MS = 470;
+/** How long one record takes to reach its row, and the gap to the next. */
+const FLIGHT_MS = 440;
+const STAGGER_MS = 62;
+/** How far through its flight a record's row comes up to meet it, and how fast. */
+const ROW_AFTER_MS = 350;
+const ROW_MS = 230;
+
 /**
- * How many records are staggered before the rest arrive together.
+ * How many records fly, one after another, before the rest are simply there.
  *
- * A playlist of two hundred would otherwise take five seconds to finish
- * unpacking, and the last record would be a separate event from the first
- * rather than the end of the same one.
+ * About what the page shows at once. A playlist of two hundred would otherwise take
+ * twelve seconds to unpack, nearly all of it below the fold.
  */
-const STAGGERED = 14;
+const STAGGERED = 9;
 
 /**
  * Going back in is quicker than coming out, and from fewer of them.
  *
  * Unpacking is the thing worth watching; packing is what happens on the way to
  * somewhere else, and a close that takes as long as an open feels like the app
- * arguing about it. Ten staggered is still plainly a sequence.
+ * arguing about it.
  */
 const RETURN_MS = 260;
-const RETURN_STAGGER_MS = 18;
-const RETURN_STAGGERED = 10;
+const RETURN_STAGGER_MS = 30;
 /** Into the crate: gathering speed rather than easing off, which is a drop. */
 const RETURN_EASING = 'cubic-bezier(0.5, 0, 0.75, 0)';
+/** How long the page takes to go back into its crate. */
+const SHRINK_MS = 300;
+/** How long before the last record is home the page starts to go. */
+const SHRINK_OVERLAP_MS = 120;
 
 const EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
-
-/**
- * The narrowest a card may be, and so the smallest a record in the grid is.
- *
- * The record is as wide as its card, whatever the columns come to; see
- * `useCardWidth`.
- */
-const MIN_CARD = 132;
 
 /** How far the pointer travels before a press becomes a lift rather than a click. */
 const DRAG_THRESHOLD = 5;
 
-/** The gap between cards, which is `gap-3`. Measured grids need it as a number. */
-const GRID_GAP = 12;
+/** The gap between rows, which is `gap-0.5`. Measured lists need it as a number. */
+const ROW_GAP = 2;
 
 /** Records making room for one being moved, and settling after a removal. */
 const MAKE_ROOM_MS = 200;
@@ -100,6 +108,8 @@ const REMOVE_MS = 150;
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 10;
 
+/** How wide a record's row sets its parts: number, sleeve, words, length. */
+const ROW_COLUMNS = 'grid-cols-[22px_36px_minmax(0,1fr)_40px]';
 
 /** Where the crate was on screen, so the page can grow out of it. */
 type Origin = { x: number; y: number; width: number; height: number };
@@ -132,6 +142,8 @@ export interface CrateSource {
   move?: (from: number, to: number) => unknown;
   /** Play the record at `index`, the way this crate's records play. */
   play: (track: TrackMetadata, index: number) => Promise<unknown>;
+  /** Play the whole crate; shuffled, or as the deck is set to when not asked. */
+  playAll: (shuffled?: boolean) => unknown;
   writeError: string | null;
   clearWriteError: () => void;
   /** A Spotify playlist, for its details, its cover and its removal. */
@@ -177,6 +189,7 @@ function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
   const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
   const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
   const playSingle = usePlayerStore((s) => s.playSingle);
+  const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
   return {
     name: playlist.name,
     trackCount: playlist.trackCount,
@@ -193,6 +206,7 @@ function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
     move: (from, to) => moveInCrate(playlist.id, from, to),
     // One song at a time, as a record taken out of a sleeve is.
     play: (track) => playSingle(track),
+    playAll: (shuffled) => playCrate(playlist.id, shuffled),
     writeError,
     clearWriteError,
     spotify: playlist,
@@ -210,17 +224,27 @@ function ontoCrate(el: HTMLElement, origin: Origin): string | null {
   return `translate(${dx}px, ${dy}px) scale(${scale})`;
 }
 
-/**
- * Where on the layer the page grows from and shrinks back to: the middle of
- * the crate that was opened, kept inside the layer so a crate at the very edge
- * of the shelf still reads as the source rather than as a corner.
- */
-function growsFrom(layer: HTMLElement, origin: Origin): string {
-  const box = layer.getBoundingClientRect();
-  const clamp = (v: number, max: number) => Math.min(max, Math.max(0, v));
-  const x = clamp(origin.x + origin.width / 2 - box.left, box.width);
-  const y = clamp(origin.y + origin.height / 2 - box.top, box.height);
-  return `${x}px ${y}px`;
+/** Send a copy of a row's record along a path, over everything, and clear it up after. */
+function flyRecord(
+  row: HTMLElement,
+  over: HTMLElement,
+  frames: Keyframe[],
+  timing: KeyframeAnimationOptions,
+): void {
+  const disc = row.querySelector<HTMLElement>('[data-disc]');
+  if (!disc) return;
+  const copy = disc.cloneNode(true) as HTMLElement;
+  copy.removeAttribute('data-disc');
+  copy.className = 'absolute top-0 left-0';
+  over.appendChild(copy);
+  const flight = copy.animate(frames, { fill: 'both', ...timing });
+  const gone = () => copy.remove();
+  flight.finished.then(gone, gone);
+}
+
+/** Where a box is, measured from another's corner. */
+function within(box: DOMRect, outer: DOMRect): Box {
+  return { left: box.left - outer.left, top: box.top - outer.top, width: box.width, height: box.height };
 }
 
 /**
@@ -261,7 +285,19 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   const [coverImage, setCoverImage] = useState<string | null>(null);
   /** Why a picture could not be used, said in the details sheet. Nothing was sent. */
   const [coverNotice, setCoverNotice] = useState<string | null>(null);
-  /** The name as it is being typed in edit mode. */
+  /** A colour from the cover, for the wash behind it. */
+  const [tint, setTint] = useState<string | null>(null);
+  const tintFrom = source.coverUrl ?? spotify?.coverArtUrl ?? tracks[0]?.coverArtUrl;
+  useEffect(() => {
+    if (!tintFrom) return;
+    let alive = true;
+    void readCover(tintFrom).then((seen) => {
+      if (alive && seen.read && seen.palette) setTint(seen.palette.accent);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tintFrom]);
 
   /**
    * The order shown while a record is held, as indices into `tracks`.
@@ -275,7 +311,6 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   /** Where each record was laid out last time, by key, for the settling animation. */
   const laidOut = useRef(new Map<string, { x: number; y: number }>());
   const gridInnerRef = useRef<HTMLDivElement | null>(null);
-  const cardWidth = useCardWidth(gridInnerRef);
 
   const keys = useMemo(() => recordKeys(tracks.map((track) => track.id)), [tracks]);
   const copies = useMemo(() => {
@@ -291,6 +326,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
    * new object identity for the same song would do it for nothing.
    */
   const onDeck = usePlayerStore((s) => s.currentTrack?.id ?? null);
+  const sounding = usePlayerStore((s) => s.playbackState === 'PLAYING');
   const { flyToPlatter, platterEl } = useDiscFlight();
   /**
    * The deck's own carry gesture, borrowed.
@@ -388,7 +424,14 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   );
 
   const layerRef = useRef<HTMLDivElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const coverRef = useRef<HTMLDivElement | null>(null);
+  const flyingRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  /** When the page began to open, so records that arrive late still wait for it. */
+  const openedAt = useRef(0);
   /** Latched, so a second Escape or a double click cannot start a second close. */
   const shutting = useRef(false);
   /** How many records have already been played in; the rest are new. */
@@ -396,12 +439,12 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   const [closing, setClosing] = useState(false);
 
   /**
-   * Put the records back in the crate, then let the page go.
+   * Put the records back in the cover, then let the page go.
    *
-   * The records fly back one after another, and as the last of them reaches
-   * the crate the page goes down into it and fades. The state is only here to
-   * stop anything being pressed while it runs. It never blocks the close: with
-   * motion turned down the layer goes immediately.
+   * The records fly back one after another, last row first, and as the last of them
+   * gets there the page shrinks into the crate it came from and the cover goes with
+   * it. The state is only here to stop anything being pressed while it runs. It never
+   * blocks the close: with motion turned down the layer goes immediately.
    */
   const requestClose = useCallback((after?: () => void) => {
     if (shutting.current) return;
@@ -413,57 +456,66 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
 
     const grid = gridRef.current;
     const layer = layerRef.current;
-    if (!grid || !layer || prefersReducedMotion()) {
+    const page = pageRef.current;
+    const bubble = bubbleRef.current;
+    const backdrop = backdropRef.current;
+    const cover = coverRef.current;
+    const flying = flyingRef.current;
+    if (!grid || !layer || !page || !bubble || !backdrop || !cover || !flying || prefersReducedMotion()) {
       finish();
       return;
     }
 
+    // A close straight after opening turns the page round rather than letting its
+    // entrance finish on top of the exit.
+    for (const running of layer.getAnimations({ subtree: true })) {
+      if (!(running instanceof CSSAnimation) && !(running instanceof CSSTransition)) running.cancel();
+    }
+    flying.replaceChildren();
+    setClosing(true);
+
     // Only what can be seen. Below the fold a record may not have been laid out
-    // at all — `content-visibility` is allowed to skip it — and animating a
-    // hundred of them off screen is work nobody watches.
+    // at all, and animating a hundred of them off screen is work nobody watches.
     const view = grid.getBoundingClientRect();
-    const going = [...grid.querySelectorAll<HTMLElement>('[data-record]')].filter((el) => {
+    const seen = [...grid.querySelectorAll<HTMLElement>('[data-record]')].filter((el) => {
       const box = el.getBoundingClientRect();
       return box.bottom > view.top && box.top < view.bottom;
     });
+    const going = seen.slice(0, STAGGERED).reverse();
+    const pageBox = page.getBoundingClientRect();
+    const coverBox = within(cover.getBoundingClientRect(), pageBox);
+    const mouth = { x: coverBox.left + coverBox.width * 1.02 - 18, y: coverBox.top + coverBox.height / 2 - 18 };
 
-    setClosing(true);
-    // A close straight after opening turns the page round rather than letting
-    // its entrance finish on top of the exit.
-    for (const a of layer.getAnimations()) a.cancel();
+    for (const el of seen.slice(STAGGERED)) {
+      el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, fill: 'forwards' });
+    }
     for (const [i, el] of going.entries()) {
-      const to = ontoCrate(el, origin);
-      if (!to) continue;
-      el.animate(
-        [
-          { transform: 'none', opacity: 1 },
-          { transform: to, opacity: 0 },
-        ],
-        {
+      const delay = i * RETURN_STAGGER_MS;
+      const sleeve = el.querySelector<HTMLElement>('[data-sleeve]');
+      if (sleeve) {
+        const box = within(sleeve.getBoundingClientRect(), pageBox);
+        flyRecord(el, flying, backwards(flightFrames(mouth, { x: box.left, y: box.top })), {
           duration: RETURN_MS,
-          delay: Math.min(i, RETURN_STAGGERED) * RETURN_STAGGER_MS,
+          delay,
           easing: RETURN_EASING,
-          fill: 'forwards',
-        },
-      );
+        });
+      }
+      el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, delay, fill: 'forwards' });
+    }
+    for (const el of page.querySelectorAll<HTMLElement>('[data-crate-rise], [data-crate-tint]')) {
+      el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
     }
 
-    // The page waits for the last record and then goes. Going any earlier
-    // would take the flight with it, and the flight is the whole point.
-    const last = Math.min(going.length, RETURN_STAGGERED) * RETURN_STAGGER_MS + RETURN_MS;
-    layer.style.transformOrigin = growsFrom(layer, origin);
-    const out = layer.animate(
-      [
-        { opacity: 1, transform: 'none' },
-        { opacity: 0, transform: SHEET_AWAY },
-      ],
-      {
-        duration: SHEET_OUT_MS,
-        delay: Math.max(0, last - SHEET_OUT_MS),
-        easing: SHEET_OUT_EASING,
-        fill: 'forwards',
-      },
-    );
+    // The page waits for the last record and then goes. Going any earlier would
+    // take the flight with it, and the flight is the whole point.
+    const last = going.length * RETURN_STAGGER_MS + RETURN_MS;
+    const shrink = { duration: SHRINK_MS, delay: Math.max(0, last - SHRINK_OVERLAP_MS), easing: EASING, fill: 'forwards' } as const;
+    const layerBox = layer.getBoundingClientRect();
+    const crate = { left: origin.x - layerBox.left, top: origin.y - layerBox.top, width: origin.width, height: origin.height };
+    const to = ontoCrate(cover, origin);
+    if (to) cover.animate([{ transform: 'none' }, { transform: to }], shrink);
+    backdrop.animate([{ opacity: 1 }, { opacity: 0 }], shrink);
+    const out = bubble.animate(backwards(bubbleFrames(crate, within(bubble.getBoundingClientRect(), layerBox))), shrink);
     // Either way — finished or cancelled by an unmount — the crate closes.
     out.finished.then(finish, finish);
   }, [onClose, origin]);
@@ -517,59 +569,96 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [requestClose, surface, coverImage, editing, setEditing, hasDetails]);
 
-  // The unpacking. A layout effect so the first frame is never the finished
-  // grid — by the time anything is painted the records are already back at the
-  // crate, waiting to leave it. Before the page's own entrance below, so each
-  // record is measured where it really is and not part-way through that.
+  // Opening. A layout effect so the first frame painted is already the start of
+  // it, never the finished page followed by a jump back.
   useLayoutEffect(() => {
-    const grid = gridRef.current;
-    if (!grid || prefersReducedMotion() || shutting.current) return;
+    openedAt.current = performance.now();
+    const layer = layerRef.current;
+    const page = pageRef.current;
+    const bubble = bubbleRef.current;
+    const backdrop = backdropRef.current;
+    const cover = coverRef.current;
+    if (!layer || !page || !bubble || !backdrop || !cover || prefersReducedMotion()) return;
 
-    const discs = [...grid.querySelectorAll<HTMLElement>('[data-record]')];
-    // Only the ones that have just arrived. A second page appended to the grid
-    // must not send the first page back into the crate to come out again.
-    const arriving = discs.slice(unpacked.current);
-    unpacked.current = discs.length;
-    // Not while editing. Edit mode reads the rest of the crate at once, and up
-    // to three hundred records flying out of a sleeve together is not an
-    // unpacking, it is the window stopping.
-    if (editing) return;
-
-    for (const [i, el] of arriving.entries()) {
-      const from = ontoCrate(el, origin);
-      if (!from) continue;
+    const layerBox = layer.getBoundingClientRect();
+    const crate = { left: origin.x - layerBox.left, top: origin.y - layerBox.top, width: origin.width, height: origin.height };
+    bubble.animate(bubbleFrames(crate, within(bubble.getBoundingClientRect(), layerBox)), {
+      duration: OPEN_MS,
+      easing: OPEN_EASING,
+    });
+    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DIM_MS, easing: 'ease-out' });
+    const from = ontoCrate(cover, origin);
+    if (from) {
+      cover.animate([{ transform: from }, { transform: 'none' }], { duration: OPEN_MS, easing: OPEN_EASING });
+    }
+    for (const [i, el] of [...page.querySelectorAll<HTMLElement>('[data-crate-rise]')].entries()) {
       el.animate(
         [
-          { transform: from, opacity: 0 },
-          { transform: 'none', opacity: 1 },
+          { opacity: 0, transform: 'translateY(8px)' },
+          { opacity: 1, transform: 'none' },
         ],
-        {
-          duration: FLIGHT_MS,
-          delay: Math.min(i, STAGGERED) * STAGGER_MS,
-          easing: EASING,
-          fill: 'backwards',
-        },
+        { duration: RISE_MS, delay: RISE_DELAY_MS + i * RISE_STAGGER_MS, easing: EASING, fill: 'backwards' },
       );
     }
-  }, [tracks, origin, editing]);
-
-  // Opening. A layout effect so the first frame painted is already the start
-  // of it, never the finished page followed by a jump back.
-  useLayoutEffect(() => {
-    const layer = layerRef.current;
-    if (!layer || prefersReducedMotion()) return;
-    layer.style.transformOrigin = growsFrom(layer, origin);
-    layer.animate(
-      [
-        { opacity: 0, transform: SHEET_AWAY },
-        { opacity: 1, transform: 'none' },
-      ],
-      { duration: SHEET_IN_MS, easing: SHEET_IN_EASING },
-    );
-    // Once, for the page arriving. The crate it came from does not move while
-    // it is open, and a later page of records is not the page arriving.
+    // Once, for the page arriving. The crate it came from does not move while it
+    // is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The unpacking. A layout effect so the first frame is never the finished list:
+  // by the time anything is painted the rows are hidden, waiting for their records.
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    const page = pageRef.current;
+    const cover = coverRef.current;
+    const flying = flyingRef.current;
+    if (!grid || !page || !cover || !flying || prefersReducedMotion() || shutting.current) return;
+
+    const rows = [...grid.querySelectorAll<HTMLElement>('[data-record]')];
+    // Only ever the first lot to arrive. A second page appended to the list is
+    // below the fold, and must not send the first back into the crate.
+    const first = unpacked.current === 0;
+    unpacked.current = rows.length;
+    // Not while editing. Edit mode reads the rest of the crate at once, and up to
+    // three hundred records out of a sleeve together is the window stopping.
+    if (editing || !first || rows.length === 0) return;
+
+    const view = grid.getBoundingClientRect();
+    const seen = rows.filter((el) => el.getBoundingClientRect().top < view.bottom);
+    const pageBox = page.getBoundingClientRect();
+    const coverBox = within(cover.getBoundingClientRect(), pageBox);
+    const mouth = { x: coverBox.left + coverBox.width * 1.02 - 18, y: coverBox.top + coverBox.height / 2 - 18 };
+    // A playlist that took a while to arrive has no page to wait for.
+    const waited = performance.now() - openedAt.current;
+    const from = Math.max(0, FLIGHTS_FROM_MS - waited);
+
+    for (const [i, el] of seen.slice(0, STAGGERED).entries()) {
+      const sleeve = el.querySelector<HTMLElement>('[data-sleeve]');
+      if (!sleeve) continue;
+      const delay = from + i * STAGGER_MS;
+      const box = within(sleeve.getBoundingClientRect(), pageBox);
+      flyRecord(el, flying, flightFrames(mouth, { x: box.left, y: box.top }), {
+        duration: FLIGHT_MS,
+        delay,
+        easing: EASING,
+      });
+      el.animate(
+        [
+          { opacity: 0, transform: 'translateX(14px)' },
+          { opacity: 1, transform: 'none' },
+        ],
+        { duration: ROW_MS, delay: delay + ROW_AFTER_MS, easing: EASING, fill: 'backwards' },
+      );
+    }
+    for (const el of seen.slice(STAGGERED)) {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: ROW_MS,
+        delay: from + STAGGERED * STAGGER_MS,
+        easing: 'ease-out',
+        fill: 'backwards',
+      });
+    }
+  }, [tracks, editing]);
 
   /**
    * Records sliding to where they now are, in edit mode.
@@ -625,7 +714,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
       const geometry = gridGeometry(
         { width: card.offsetWidth, height: card.offsetHeight },
         inner.clientWidth,
-        GRID_GAP,
+        ROW_GAP,
       );
       let pointer = start;
       let dragging = false;
@@ -646,9 +735,8 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
           to = next;
           setOrder(previewOrder(count, from, to));
         }
-        const dx = inGrid.x - grabbedAt.x - card.offsetLeft;
         const dy = inGrid.y - grabbedAt.y - card.offsetTop;
-        card.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
+        card.style.transform = `translate(0px, ${dy}px) scale(1.02)`;
       };
 
       const move = (e: PointerEvent) => {
@@ -723,214 +811,266 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     return () => observer.disconnect();
   }, [cursor, moreTracks, closing]);
 
+  const coverUrl = source.coverUrl ?? spotify?.coverArtUrl ?? tracks[0]?.coverArtUrl;
+  const length = cursor === null && !loading && tracks.length > 0 ? minutesOf(tracks) : null;
+  const lengthWords =
+    length === null
+      ? null
+      : length >= 60
+        ? t('crate.hours', hoursAndMinutes(length))
+        : t('crate.minutes', { minutes: length });
+
   return (
     <div
       ref={layerRef}
       role="dialog"
       aria-label={source.name}
-      // The whole drawer, and only the drawer. `inset-0` is the drawer's box
-      // because this is rendered as its child — which is the point: an opened
-      // crate *is* the Spotify side of the window for as long as it is open,
-      // and the deck beside it stays visible and reachable, because a record
-      // is meant to be dragged from here onto it.
-      //
-      // Opaque, and the shell's own gradient rather than a flat panel or a
-      // blur. A blur leaves half-seen sleeves behind a grid of records, which
-      // is two shelves at once and the eye keeps trying to read the one it
-      // cannot; a flat fill makes this half of the window a different material
-      // from the deck beside it. Repeating the gradient keeps the drawer one
-      // piece of the window whether a crate is open in it or not — and it
-      // means the fade at the foot of the list, which the drawer sets to where
-      // this gradient ends, is still the right colour here.
-      // `z-10` inside the drawer's own stacking context, not the window's: over
-      // everything else in the drawer, under a record in the air.
-      className={`absolute inset-0 z-10 flex flex-col bg-gradient-to-b from-shell-700 to-shell-900 ${
-        closing ? 'pointer-events-none' : ''
-      }`}
+      // The whole drawer, and only the drawer: rendered as its child, which is the
+      // point. The deck beside it stays visible and reachable, because a record is
+      // meant to be dragged from here onto it. `z-10` inside the drawer's own stacking
+      // context: over everything else in the drawer, under a record in the air.
+      className={`absolute inset-0 z-10 ${closing ? 'pointer-events-none' : ''}`}
     >
-      <div className="relative flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-        {editing ? (
-          <>
-            <button
-              type="button"
-              aria-label={t('common.back')}
-              title={t('common.back')}
-              onClick={() => requestClose()}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-            >
-              <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-                <path
-                  d="M6.5 1L2.5 5l4 4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-                {source.name}
-              </span>
-              <span className="block truncate text-meta text-cream-400">
-                {t('spotify.editSongs')}
-              </span>
+      <div ref={backdropRef} aria-hidden="true" className="absolute inset-0 bg-shell-900/55" />
+      {/* The page's ground, on its own, as it is the part that swells. What is on it
+          stays where it will end up, and comes up once this has got there. */}
+      <div
+        ref={bubbleRef}
+        aria-hidden="true"
+        className="absolute inset-2 rounded-[24px] bg-gradient-to-b from-shell-700 to-shell-900 shadow-[0_10px_30px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.07)]"
+      />
+      <div ref={pageRef} className="absolute inset-2 flex overflow-hidden rounded-[24px]">
+        <div className="relative flex w-[232px] shrink-0 flex-col px-[22px] pt-3 pb-4">
+          {tint && (
+            // Wider than its column and fading out across it, so that it has no edge.
+            <div
+              aria-hidden="true"
+              data-crate-tint
+              className="groove-crate-tint pointer-events-none absolute inset-y-0 left-0 w-[340px]"
+              style={{ background: `linear-gradient(165deg, color-mix(in srgb, ${tint} 42%, transparent), transparent 72%)` }}
+            />
+          )}
+          <button
+            type="button"
+            data-crate-rise
+            aria-label={t('common.back')}
+            title={t('common.back')}
+            onClick={() => requestClose()}
+            className="relative -ml-1.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-cream-50/[.07] text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50"
+          >
+            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+              <path
+                d="M6.5 1L2.5 5l4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <div ref={coverRef} className="relative mt-2.5 h-[152px] w-[152px] shrink-0">
+            <span aria-hidden="true" className="absolute top-[4%] right-0 translate-x-[26%]">
+              <VinylDisc size={140} coverArtUrl={coverUrl} />
             </span>
-            <button
-              type="button"
-              onClick={() => void setEditing(false)}
-              className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
-            >
-              {t('spotify.done')}
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => requestClose()}
-              // The heading is the way back, not just the cross in the corner.
-              // This is a place you went into, so the way out is where you came in.
-              className="flex min-w-0 items-center gap-1.5 text-left transition-colors hover:text-cream-50"
-            >
-              <svg
-                viewBox="0 0 10 10"
-                className="h-2.5 w-2.5 shrink-0 text-cream-400"
-                aria-hidden="true"
-              >
-                <path
-                  d="M6.5 1L2.5 5l4 4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+            <span className="absolute inset-0 overflow-hidden rounded-md bg-shell-900 shadow-[0_3px_8px_rgba(0,0,0,.45)]">
+              {coverUrl && (
+                <img
+                  src={coverUrl}
+                  crossOrigin="anonymous"
+                  alt=""
+                  draggable={false}
+                  className="h-full w-full object-cover"
                 />
-              </svg>
-              <span className="min-w-0">
-                <span className="block truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-                  {source.name}
-                </span>
-                <span className="block truncate text-meta text-cream-400">
-                  {t('spotify.trackCount', { count: source.trackCount })}
-                </span>
-              </span>
-            </button>
-            <div className="flex shrink-0 items-center gap-1">
-              {hasDetails && (
-                <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
-                  {/* A pencil: the playlist itself — name, cover, description. */}
-                  <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
-                  <path d="M7.5 3l1.5 1.5" />
-                </HeaderIcon>
               )}
-              <HeaderIcon
-                label={t('spotify.editSongs')}
-                onPress={() => {
-                  clearWriteError();
-                  void setEditing(true);
-                }}
-              >
-                {/* A list with arrows: the songs in it, moved and taken out. */}
-                <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
-                <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
-              </HeaderIcon>
-              {deleteOwn && !hasDetails && (
-                <HeaderIcon label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
-                  {/* A bin: the playlist, not the songs in it. */}
-                  <path d="M2 3.5h8M4.5 3.5V2.3h3v1.2M3.2 3.5l.6 6.2h4.4l.6-6.2" />
-                </HeaderIcon>
-              )}
-              <button
-                type="button"
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                onClick={() => requestClose()}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-cream-400 transition-colors hover:bg-shell-600 hover:text-cream-50"
-              >
-                <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-                  <path
-                    d="M1 1l8 8M9 1l-8 8"
+            </span>
+          </div>
+          <div data-crate-rise className="relative mt-3.5 min-w-0">
+            <p className="text-label font-medium tracking-[0.16em] text-brass-400 uppercase">{t('crate.label')}</p>
+            <h2 className="mt-0.5 line-clamp-2 text-[22px] leading-[1.12] font-medium text-cream-50" title={source.name}>
+              {source.name}
+            </h2>
+            <p className="mt-1 truncate text-meta text-cream-400">
+              {[spotify?.ownerName, t('spotify.trackCount', { count: source.trackCount }), lengthWords]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+            {!editing && (
+              <div className="mt-2.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={t('transport.play')}
+                  title={t('transport.play')}
+                  disabled={tracks.length === 0}
+                  onClick={() => void source.playAll()}
+                  className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-brass-500 text-shell-900 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 16 16" className="ml-0.5 h-4 w-4" aria-hidden="true" fill="currentColor">
+                    <path d="M4 2.6v10.8c0 .5.5.8.9.5l8.4-5.4c.4-.2.4-.8 0-1L4.9 2.1c-.4-.3-.9 0-.9.5z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('transport.shuffle')}
+                  title={t('transport.shuffle')}
+                  disabled={tracks.length === 0}
+                  onClick={() => void source.playAll(true)}
+                  className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-shell-700 text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:opacity-50"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    className="h-3.5 w-3.5"
+                    aria-hidden="true"
+                    fill="none"
                     stroke="currentColor"
                     strokeWidth="1.4"
                     strokeLinecap="round"
-                  />
+                    strokeLinejoin="round"
+                  >
+                    <path d="M2 4.500h2.300c1 0 1.900.5 2.400 1.300l2.600 4.400c.5.800 1.400 1.300 2.400 1.300H14M2 11.500h2.300c1 0 1.900-.5 2.400-1.300M9.300 5.800c.5-.8 1.400-1.300 2.400-1.300H14M12.200 2.700L14 4.500l-1.800 1.800M12.200 9.700l1.8 1.8-1.8 1.8" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          <div data-crate-rise className="flex h-11 shrink-0 items-center justify-end gap-1 pr-3.5 pl-1">
+            {editing ? (
+              <>
+                <span className="min-w-0 flex-1 truncate text-meta text-cream-400">{t('spotify.editSongs')}</span>
+                <button
+                  type="button"
+                  onClick={() => void setEditing(false)}
+                  className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
+                >
+                  {t('spotify.done')}
+                </button>
+              </>
+            ) : (
+              <>
+                {hasDetails && (
+                  <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
+                    {/* A pencil: the playlist itself — name, cover, description. */}
+                    <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
+                    <path d="M7.5 3l1.5 1.5" />
+                  </HeaderIcon>
+                )}
+                <HeaderIcon
+                  label={t('spotify.editSongs')}
+                  onPress={() => {
+                    clearWriteError();
+                    void setEditing(true);
+                  }}
+                >
+                  {/* A list with arrows: the songs in it, moved and taken out. */}
+                  <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
+                  <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
+                </HeaderIcon>
+                {deleteOwn && !hasDetails && (
+                  <HeaderIcon label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
+                    {/* A bin: the playlist, not the songs in it. */}
+                    <path d="M2 3.5h8M4.5 3.5V2.3h3v1.2M3.2 3.5l.6 6.2h4.4l.6-6.2" />
+                  </HeaderIcon>
+                )}
+                <HeaderIcon label={t('common.close')} onPress={() => requestClose()}>
+                  <path d="M2 2l8 8M10 2l-8 8" />
+                </HeaderIcon>
+              </>
+            )}
+          </div>
+
+          {error && (
+            <p className="mr-3 mb-1 shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
+              {error}
+            </p>
+          )}
+          {/* Why the last change did not happen. It has already been undone on
+              screen; this says so, and goes when dismissed or when editing starts
+              again. */}
+          {writeError && (
+            <div className="mr-3 mb-1 flex shrink-0 items-start gap-2 rounded bg-red-950/70 px-2 py-1.5">
+              <p className="min-w-0 flex-1 text-meta leading-snug text-red-200">{writeError}</p>
+              <button
+                type="button"
+                aria-label={t('common.dismiss')}
+                onClick={clearWriteError}
+                className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
+              >
+                <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
+                  <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                 </svg>
               </button>
             </div>
-          </>
-        )}
-      </div>
+          )}
+          {editing && editCapped && (
+            <p className="mr-3 mb-1 shrink-0 text-meta leading-snug text-cream-400">{t('spotify.editCapped')}</p>
+          )}
 
-      {error && (
-        <p className="mx-3 shrink-0 rounded bg-red-950/70 px-2 py-1.5 text-meta leading-snug text-red-200">
-          {error}
-        </p>
-      )}
-      {/* Why the last change did not happen. It has already been undone on
-          screen; this says so, and goes when dismissed or when editing starts
-          again. */}
-      {writeError && (
-        <div className="mx-3 mb-1 flex shrink-0 items-start gap-2 rounded bg-red-950/70 px-2 py-1.5">
-          <p className="min-w-0 flex-1 text-meta leading-snug text-red-200">{writeError}</p>
-          <button
-            type="button"
-            aria-label={t('common.dismiss')}
-            onClick={clearWriteError}
-            className="shrink-0 text-red-200/70 transition-colors hover:text-red-100"
+          <div
+            data-crate-rise
+            className={`mr-3 grid shrink-0 ${ROW_COLUMNS} gap-2.5 border-b border-cream-50/[.08] pr-2 pb-1.5 pl-1.5 text-label text-cream-400`}
           >
-            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-      )}
-      {editing && editCapped && (
-        <p className="mx-3 mb-1 shrink-0 text-meta leading-snug text-cream-400">
-          {t('spotify.editCapped')}
-        </p>
-      )}
+            <span className="text-right">#</span>
+            <span />
+            <span>{t('crate.song')}</span>
+            <span className="text-right" title={t('crate.length')}>
+              <svg
+                viewBox="0 0 12 12"
+                role="img"
+                aria-label={t('crate.length')}
+                className="ml-auto h-3 w-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+              >
+                <circle cx="6" cy="6" r="4.5" />
+                <path d="M6 3.5V6l1.6 1" />
+              </svg>
+            </span>
+          </div>
 
-      <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 groove-scroll-fade">
-        <div
-          ref={gridInnerRef}
-          // Positioned, so each card's `offsetLeft` and `offsetTop` are measured
-          // from here — the grid's content, which scrolls with the cards.
-          className="relative grid gap-3 pt-0.5"
-          style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${MIN_CARD}px, 1fr))` }}
-        >
-          {(order ?? tracks.map((_, at) => at)).map((index) => {
-            const track = tracks[index];
-            const key = keys[index];
-            if (!track || !key) return null;
-            return (
-              <Record
-                key={key}
-                recordKey={key}
-                track={track}
-                editing={editing}
-                copies={copies.get(track.id) ?? 1}
-                onReorder={(down, card) => reorder(down, index, key, card)}
-                onTakeOut={(card) => void takeOut(track, index, card)}
-                discSize={cardWidth}
-                absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
-                onCarry={carry}
-                onPlay={(disc) => {
-                  flyToPlatter(disc, track);
-                  deliver(track);
-                }}
-              />
-            );
-          })}
+          <div ref={gridRef} className="groove-drawer-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto pt-1 pr-3 pb-5">
+            <div
+              ref={gridInnerRef}
+              // Positioned, so each row's `offsetLeft` and `offsetTop` are measured
+              // from here — the list's content, which scrolls with the rows.
+              className="relative flex flex-col gap-0.5"
+            >
+              {(order ?? tracks.map((_, at) => at)).map((index, place) => {
+                const track = tracks[index];
+                const key = keys[index];
+                if (!track || !key) return null;
+                return (
+                  <Record
+                    key={key}
+                    recordKey={key}
+                    track={track}
+                    number={place + 1}
+                    editing={editing}
+                    copies={copies.get(track.id) ?? 1}
+                    onReorder={(down, card) => reorder(down, index, key, card)}
+                    onTakeOut={(card) => void takeOut(track, index, card)}
+                    onDeck={track.id === onDeck}
+                    sounding={sounding}
+                    absent={track.id === onDeck || track.id === handedOver || track.id === inHand}
+                    onCarry={carry}
+                    onPlay={(disc) => {
+                      flyToPlatter(disc, track);
+                      deliver(track);
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div ref={sentinel} aria-hidden="true" className="h-px" />
+            {loading && (
+              <p className="py-2 text-center text-meta text-cream-400/70">{t('spotify.loadingPlaylists')}</p>
+            )}
+          </div>
         </div>
-        <div ref={sentinel} aria-hidden="true" className="h-px" />
-        {loading && (
-          <p className="py-2 text-center text-meta text-cream-400/70">
-            {t('spotify.loadingPlaylists')}
-          </p>
-        )}
-      </div>
 
       {/* Under the removal question too, so Cancel there comes back to it
           with nothing lost. */}
@@ -1016,6 +1156,8 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
           />
         )}
       </SheetPresence>
+      <div ref={flyingRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-20" />
+      </div>
     </div>
   );
 }
@@ -1055,62 +1197,42 @@ function HeaderIcon({
 }
 
 /**
- * How wide a card in the grid is, kept up to date as the drawer resizes.
+ * One song in the list: its place, its sleeve with the record showing at the side,
+ * what it is, and how long.
  *
- * Measured off the first card rather than worked out from the columns, so it
- * is what the browser actually laid out. The record is drawn at exactly that,
- * which is what lets it cover its sleeve the way it does on the shelves.
- */
-function useCardWidth(grid: React.RefObject<HTMLDivElement | null>): number {
-  const [width, setWidth] = useState(MIN_CARD);
-  useLayoutEffect(() => {
-    const el = grid.current;
-    if (!el) return;
-    const measure = () => {
-      const card = el.querySelector<HTMLElement>('[data-record]');
-      if (card) setWidth(Math.floor(card.offsetWidth));
-    };
-    measure();
-    const watch = new ResizeObserver(measure);
-    watch.observe(el);
-    return () => watch.disconnect();
-  }, [grid]);
-  return width;
-}
-
-/**
- * One record lying on its sleeve, with what it is written underneath.
- *
- * The same card as the spotlight shelves: the cover printed at full size as the
- * sleeve, and the record on top of it at the same size, so the cover shows in
- * the corners and on the label. A record in a sleeve had to be drawn out of the
- * mouth before anything could take it and slid back in when it came home, and
- * that in-and-out on every play was more motion than a list of songs wants.
- * Lying on top, it is simply lifted off and set back down.
+ * The whole row is what is pressed and carried. The record is behind the sleeve and
+ * comes further out when the pointer is on the row, and it is that record which is
+ * lifted to the deck, by the same code that takes one off the platter.
  */
 function Record({
   track,
   recordKey,
+  number,
   editing,
   copies,
   onReorder,
   onTakeOut,
-  discSize,
+  onDeck,
+  sounding,
   absent,
   onCarry,
   onPlay,
 }: {
   track: TrackMetadata;
-  /** Stable across moves, so the card is not remounted by one. */
+  /** Stable across moves, so the row is not remounted by one. */
   recordKey: string;
+  /** Its place in the list, from one. */
+  number: number;
   /** Edit mode: a press moves the record, and it can be taken out. */
   editing: boolean;
   /** How many times this song is in the playlist — all of which taking it out removes. */
   copies: number;
   onReorder: (down: React.PointerEvent, card: HTMLElement) => void;
   onTakeOut: (card: HTMLElement | null) => void;
-  /** The record's diameter: the card's width. */
-  discSize: number;
+  /** This is the song on the deck. */
+  onDeck: boolean;
+  /** Whether the deck is making a sound, so its bars can move. */
+  sounding: boolean;
   /** The record is not on its sleeve — on the deck, or in somebody's hand. */
   absent: boolean;
   onCarry: (track: TrackMetadata, down: React.PointerEvent, sleeve: Sleeve) => void;
@@ -1123,6 +1245,7 @@ function Record({
   const lifted = useRef(false);
   /** Why Spotify will not play it here, if it will not. It can still be moved and taken out. */
   const refused = useUnplayable(track);
+  const takeOutLabel = copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong');
 
   return (
     <button
@@ -1167,45 +1290,62 @@ function Record({
         if (editing || absent || refused || lifted.current) return;
         if (disc.current) onPlay(disc.current);
       }}
-      className={`groove-record groove-sleeve group relative flex flex-col rounded-md text-left ${
+      className={`groove-record groove-crate-row group relative grid w-full shrink-0 ${ROW_COLUMNS} items-center gap-2.5 rounded-lg py-[5px] pr-2 pl-1.5 text-left transition-colors hover:bg-shell-600/40 ${
         editing ? 'cursor-grab' : ''
       }`}
     >
-      {editing && (
-        // Its own control, and it keeps the press to itself: a press here that
-        // also started a move would take the record out from under the hand.
+      <span className="flex justify-end text-meta text-cream-400 tabular-nums">
+        {editing ? (
+          // Its own control, and it keeps the press to itself: a press here that
+          // also started a move would take the record out from under the hand.
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={takeOutLabel}
+            title={takeOutLabel}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTakeOut(button.current);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              onTakeOut(button.current);
+            }}
+            className="flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/85 text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:bg-red-800 hover:text-white"
+          >
+            <svg viewBox="0 0 10 10" className="h-2 w-2" aria-hidden="true">
+              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </span>
+        ) : onDeck ? (
+          <span
+            aria-hidden="true"
+            className={`groove-crate-bars inline-flex h-[11px] items-end gap-[1.5px] ${sounding ? 'is-sounding' : ''}`}
+          >
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : (
+          number
+        )}
+      </span>
+      <span data-sleeve className={`relative h-9 w-9 ${refused ? UNPLAYABLE_LOOK : ''}`}>
+        {/* Behind the sleeve, showing at its side. `data-disc` is what the flight to
+            the platter picks up and scales, so it is the disc alone. */}
         <span
-          role="button"
-          tabIndex={0}
-          aria-label={copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong')}
-          title={copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong')}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onTakeOut(button.current);
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            e.stopPropagation();
-            onTakeOut(button.current);
-          }}
-          className="absolute top-1.5 left-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/85 text-cream-200 shadow ring-1 ring-[var(--color-edge)] transition-colors hover:bg-red-800 hover:text-white"
+          ref={disc}
+          data-disc
+          className={`absolute top-0 left-0 h-9 w-9 translate-x-[26%] scale-[.92] transition-transform duration-200 motion-reduce:transition-none ${
+            absent ? 'groove-sleeve-empty' : ''
+          } ${refused ? '' : 'group-hover:translate-x-[46%]'}`}
         >
-          <svg viewBox="0 0 10 10" className="h-2 w-2" aria-hidden="true">
-            <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <VinylDisc size={36} coverArtUrl={track.coverArtUrl} />
         </span>
-      )}
-      <span className="relative aspect-square w-full">
-        {refused && <UnplayableTag />}
-        <span
-          className={`groove-sleeve-art absolute inset-0 overflow-hidden rounded-t-md bg-shell-900 ${
-            refused ? UNPLAYABLE_LOOK : ''
-          }`}
-          // No cut: nothing goes in or out of this sleeve.
-          style={{ ['--notch' as string]: '0px' }}
-        >
+        <span className="absolute inset-0 overflow-hidden rounded bg-shell-900 shadow-[0_2px_5px_rgba(0,0,0,.4)]">
           {track.coverArtUrl && (
             <img
               src={track.coverArtUrl}
@@ -1217,30 +1357,20 @@ function Record({
               className="h-full w-full object-cover"
             />
           )}
-          <span aria-hidden="true" className="groove-sleeve-face absolute inset-0" />
-        </span>
-        {/* On the sleeve, over it. `data-disc` is what the flight to the
-            platter picks up and scales, so it is the disc alone with nothing
-            around it. */}
-        <span
-          ref={disc}
-          data-disc
-          className={`absolute top-0 left-0 transition-transform duration-200 motion-reduce:transition-none ${
-            absent ? 'groove-sleeve-empty' : ''
-          } ${refused ? UNPLAYABLE_LOOK : 'group-hover:-translate-y-0.5'}`}
-          style={{ width: discSize, height: discSize }}
-        >
-          <VinylDisc size={discSize} coverArtUrl={track.coverArtUrl} />
         </span>
       </span>
-      <span
-        className={`relative flex min-w-0 flex-col px-1.5 py-1 text-center ${refused ? UNPLAYABLE_LOOK : ''}`}
-      >
-        <span className="truncate text-meta text-cream-100" title={track.title}>
+      <span className={`flex min-w-0 flex-col ${refused ? UNPLAYABLE_LOOK : ''}`}>
+        <span
+          className={`truncate text-[13px] leading-tight font-medium ${onDeck ? 'text-brass-400' : 'text-cream-50'}`}
+          title={track.title}
+        >
           {track.title}
         </span>
-        <span className="truncate text-label text-cream-400">{track.artist}</span>
+        <span className="truncate text-label text-cream-400">
+          {refused ? t('spotify.unplayable') : track.artist}
+        </span>
       </span>
+      <span className="text-right text-label text-cream-400 tabular-nums">{formatDuration(track.duration)}</span>
     </button>
   );
 }

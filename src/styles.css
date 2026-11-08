@@ -865,6 +865,49 @@ body {
   content-visibility: visible;
 }
 
+/* The wash of the cover's colour, coming up once the page has nearly arrived. */
+.groove-crate-tint {
+  -webkit-mask-image: linear-gradient(to right, #000 62%, transparent);
+  mask-image: linear-gradient(to right, #000 62%, transparent);
+  animation: groove-crate-tint 300ms 260ms ease-out backwards;
+}
+@keyframes groove-crate-tint {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A row of an open playlist is far shorter than the cards this size was for. */
+.groove-record.groove-crate-row {
+  contain-intrinsic-size: auto 46px;
+}
+
+/* The little bars beside the song on the deck, while it is sounding. */
+.groove-crate-bars i {
+  width: 2px;
+  height: 60%;
+  background: var(--color-brass-400);
+}
+.groove-crate-bars.is-sounding i {
+  animation: groove-crate-bar 0.9s ease-in-out infinite alternate;
+}
+.groove-crate-bars.is-sounding i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.groove-crate-bars.is-sounding i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes groove-crate-bar {
+  to {
+    height: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-crate-bars.is-sounding i {
+    animation: none;
+  }
+}
+
 /*
  * A record held in edit mode. Above the cards it passes over, lifted by a
  * shadow rather than a size change the grid would have to make room for, and

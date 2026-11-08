@@ -638,6 +638,7 @@ function GrooviumCrate({
   onClose: () => void;
 }) {
   const playFrom = usePlayerStore((s) => s.playFrom);
+  const playList = usePlayerStore((s) => s.playList);
   const removePlaylist = usePlayerStore((s) => s.removePlaylist);
   const removePlaylistItem = usePlayerStore((s) => s.removePlaylistItem);
   const movePlaylistItem = usePlayerStore((s) => s.movePlaylistItem);
@@ -679,6 +680,7 @@ function GrooviumCrate({
     // In the playlist's own order, so Next carries on through it: the index
     // among the songs that can play is the playlist's place in the queue.
     play: (_track, index) => playFrom(`playlist:${playlist.id}`, index),
+    playAll: (shuffled) => playList(`playlist:${playlist.id}`, entries.map((entry) => entry.track), shuffled),
     writeError: null,
     clearWriteError: () => {},
     deleteCrate: () => removePlaylist(playlist.id),

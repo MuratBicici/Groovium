@@ -77,6 +77,12 @@ The window
   something done and a warning for something wrong. Press one to put it away;
   it waits while the pointer is on it.
 
+Playlists
+· An open playlist swells out of its crate, with the cover and its buttons
+  held on the left and the songs in a list beside it. The records fly out of
+  the cover one by one to their rows, and back again when it closes.
+· Play and Shuffle for the whole playlist, each song's length and the total.
+
 Spotify
 · Genre shelves show their sleeves while they are made, and are made sooner.
 

@@ -373,6 +373,11 @@ export const en = {
   'spotify.editCapped': 'Only the first 300 songs can be edited here.',
   'spotify.tookTooLong': 'Spotify did not answer in time.',
   'spotify.writeFailed': 'Spotify did not save that change. {reason}',
+  'crate.label': 'Playlist',
+  'crate.song': 'Song',
+  'crate.length': 'Length',
+  'crate.minutes': '{minutes} min',
+  'crate.hours': '{hours} h {minutes} min',
   'spotify.trackCount': '{count} song',
   'spotify.trackCount_plural': '{count} songs',
 
