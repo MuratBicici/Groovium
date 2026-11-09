@@ -7,6 +7,7 @@ import { useT } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { refuseUnplayable, UNPLAYABLE_LOOK, UnplayableTag } from './Unplayable';
+import { openSongMenu } from '@/components/menu/songMenuStore';
 
 /** The sleeve's side. The cell is this wide; the sleeve is square. */
 export const RECORD_SIZE = 78;
@@ -138,6 +139,7 @@ export function RecordCard({
       aria-label={away ? t('spotify.onDeck') : `${track.title} — ${track.artist}`}
       aria-disabled={refused ? true : undefined}
       onPointerDown={refused ? undefined : carry}
+      onContextMenu={(e) => openSongMenu(e, track)}
       onClick={(e) => {
         if (refused) {
           refuseUnplayable(e.currentTarget, refused);

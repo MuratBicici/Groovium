@@ -6,6 +6,7 @@ import { Notice } from '@/components/player/Notice';
 import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
+import { SongMenu } from '@/components/menu/SongMenu';
 import { LyricsMatchProvider } from '@/components/lyrics/LyricsMatch';
 import { SheetHost } from '@/components/SheetHost';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
@@ -902,6 +903,8 @@ export default function App() {
       </DiscHoldProvider>
       </DiscFlightProvider>
       </LyricsMatchProvider>
+      {/* Inside the picker, which its "New playlist…" opens, and over the shell. */}
+      <SongMenu />
       </PlaylistPickerProvider>
       </SheetHost.Provider>
     </div>
