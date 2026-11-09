@@ -4,6 +4,7 @@ import {
   PAGE_RADIUS_PX,
   backwards,
   bubbleFrames,
+  coverDriftFrames,
   flightFrames,
   hoursAndMinutes,
   minutesOf,
@@ -34,6 +35,22 @@ describe('the page swelling out of its crate', () => {
 describe('where records leave the cover', () => {
   it('is its right edge, half way up', () => {
     expect(mouthOf({ left: 22, top: 48, width: 152, height: 152 })).toEqual({ x: 22 + 155.04 - 18, y: 48 + 76 - 18 });
+  });
+});
+
+describe('a record riding on the cover as it arrives', () => {
+  const crate = { left: 100, top: 444, width: 78, height: 78 };
+  const cover = { left: 22, top: 48, width: 152, height: 152 };
+
+  it('starts where the mouth of the cover is while on the crate', () => {
+    const drawn = coverDriftFrames(crate, cover)[0]?.transform;
+    const there = mouthOf(crate);
+    const here = mouthOf(cover);
+    expect(drawn).toBe(`translate(${there.x - here.x}px, ${there.y - here.y}px)`);
+  });
+
+  it('adds nothing once the cover has arrived', () => {
+    expect(coverDriftFrames(crate, cover).at(-1)?.transform).toBe('translate(0px, 0px)');
   });
 });
 

@@ -1038,11 +1038,51 @@ body {
   }
 }
 
+/* A playlist's name on its page: one line, or two, or two cut short — see
+   `fitTitle.ts`, which decides which. */
+.groove-crate-title[data-lines='1'] {
+  white-space: nowrap;
+}
+.groove-crate-title[data-lines='cut'] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 /* A row of an open playlist is far shorter than the cards this size was for. The
    size stands in for what is inside the padding, so it is the sleeve's 36px: a row
    not drawn yet measured 10px too tall, and records flew to where rows were not. */
 .groove-record.groove-crate-row {
   contain-intrinsic-size: auto 36px;
+}
+
+/*
+ * Pointed at, a row stays drawn exactly as it was: the same picture and the same
+ * words, a pixel for a pixel.
+ *
+ * At 125% they came out a pixel smaller each way and the words thinner — the row
+ * redrawn on a layer of its own. Two things put it there and neither is needed
+ * here. Dropping the containment, which is for a shelf card's record leaving the
+ * card; a row's record stays inside the row. And the record sliding out by a
+ * transform, which the browser hands to a layer; by `left` it is only laid out
+ * again, and looks the same.
+ */
+.groove-record.groove-crate-row:hover:not(.groove-held) {
+  content-visibility: auto;
+}
+.groove-crate-disc {
+  left: 26%;
+  transform: scale(0.92);
+  transition: left 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.group:hover .groove-crate-disc:not(.groove-crate-disc-still) {
+  left: 46%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-crate-disc {
+    transition: none;
+  }
 }
 
 /* The little bars beside the song on the deck, while it is sounding. */

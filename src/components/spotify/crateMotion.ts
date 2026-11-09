@@ -49,6 +49,18 @@ export function mouthOf(cover: Box): Point {
   };
 }
 
+/**
+ * What a record leaving early rides on: the cover's own journey from the crate.
+ *
+ * Laid under its flight, so that a record dealt while the cover is still arriving
+ * comes out of the cover where it is by then, and not out of where it is going to be.
+ */
+export function coverDriftFrames(crate: Box, cover: Box): Keyframe[] {
+  const there = mouthOf(crate);
+  const here = mouthOf(cover);
+  return [{ transform: `translate(${there.x - here.x}px, ${there.y - here.y}px)` }, { transform: 'translate(0px, 0px)' }];
+}
+
 /** The size a record starts at beside the cover, against its size in the row. */
 const LEAVING_SCALE = 2.6;
 /** How far inside the cover's edge a record starts, so that it comes out of it. */

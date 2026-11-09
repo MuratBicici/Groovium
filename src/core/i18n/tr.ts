@@ -370,7 +370,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'spotify.editCapped': 'Burada yalnızca ilk 300 şarkı düzenlenebilir.',
   'spotify.tookTooLong': 'Spotify zamanında yanıt vermedi.',
   'spotify.writeFailed': 'Spotify bu değişikliği kaydetmedi. {reason}',
-  'crate.label': 'Çalma listesi',
   'crate.song': 'Şarkı',
   'crate.length': 'Süre',
   'crate.minutes': '{minutes} dk',

@@ -21,8 +21,19 @@ import {
   RemoveSheet,
   SheetPresence,
 } from './CrateSheets';
-import { backwards, bubbleFrames, flightFrames, hoursAndMinutes, minutesOf, mouthOf, type Box } from './crateMotion';
+import {
+  backwards,
+  bubbleFrames,
+  coverDriftFrames,
+  flightFrames,
+  hoursAndMinutes,
+  minutesOf,
+  mouthOf,
+  type Box,
+} from './crateMotion';
 import { gridGeometry, previewOrder, recordKeys, slotAt } from './reorder';
+import { openSongMenu } from '@/components/menu/songMenuStore';
+import { TITLE_LEADING, TITLE_MAX_PX, TITLE_ROOM_PX, oneLineSize, twoLineSizes } from './fitTitle';
 
 /** What each reason a picture was refused is called on screen. */
 export const COVER_FAILURES = {
@@ -49,16 +60,18 @@ export const COVER_FAILURES = {
 const OPEN_MS = 560;
 const OPEN_EASING = 'cubic-bezier(.3,1.32,.5,1)';
 
-/** How long the backdrop takes to darken the shelves behind the page. */
-const DIM_MS = 360;
-
 /** The heading and the buttons, coming up once the page has nearly arrived. */
 const RISE_DELAY_MS = 300;
 const RISE_STAGGER_MS = 30;
 const RISE_MS = 300;
 
-/** When the first record leaves the cover, from the page starting to open. */
-const FLIGHTS_FROM_MS = 470;
+/**
+ * When the first record leaves the cover, from the page starting to open.
+ *
+ * Long before the page has arrived, so that the opening and the unpacking are one
+ * movement. The records ride on the cover until it has got there.
+ */
+const FLIGHTS_FROM_MS = 120;
 /** How long one record takes to reach its row, and the gap to the next. */
 const FLIGHT_MS = 440;
 const STAGGER_MS = 62;
@@ -111,8 +124,16 @@ const REMOVE_MS = 150;
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 10;
 
-/** How wide a record's row sets its parts: number, sleeve, words, length. */
-const ROW_COLUMNS = 'grid-cols-[22px_36px_minmax(0,1fr)_40px]';
+/**
+ * How wide a record's row sets its parts: number, sleeve, words, length.
+ *
+ * The sleeve is 36px and its column is wider, for the record to come out into when
+ * the pointer is on the row, short of the words. The number's is only as wide as
+ * this playlist's numbers are, or the highlight starts a long way left of them.
+ */
+const ROW_COLUMNS = 'grid-cols-[var(--crate-number)_44px_minmax(0,1fr)_40px]';
+/** How wide one digit of a row's number is. */
+const NUMBER_DIGIT_PX = 6;
 
 /** Where the crate was on screen, so the page can grow out of it. */
 type Origin = { x: number; y: number; width: number; height: number };
@@ -227,20 +248,28 @@ function ontoCrate(el: HTMLElement, origin: Origin): string | null {
   return `translate(${dx}px, ${dy}px) scale(${scale})`;
 }
 
-/** Send a copy of a row's record along a path, over everything, and clear it up after. */
+/**
+ * Send a copy of a row's record along a path, over everything, and clear it up after.
+ *
+ * `riding` is movement laid under the path, which the path is added on top of. The
+ * copy is unseen of itself because adding counts opacity too, on top of its own.
+ */
 function flyRecord(
   row: HTMLElement,
   over: HTMLElement,
   frames: Keyframe[],
   timing: KeyframeAnimationOptions,
+  riding?: { frames: Keyframe[]; timing: KeyframeAnimationOptions },
 ): void {
   const disc = row.querySelector<HTMLElement>('[data-disc]');
   if (!disc) return;
   const copy = disc.cloneNode(true) as HTMLElement;
   copy.removeAttribute('data-disc');
   copy.className = 'absolute top-0 left-0';
+  copy.style.opacity = '0';
   over.appendChild(copy);
-  const flight = copy.animate(frames, { fill: 'both', ...timing });
+  if (riding) copy.animate(riding.frames, { fill: 'both', ...riding.timing });
+  const flight = copy.animate(frames, { fill: 'both', composite: riding ? 'add' : 'replace', ...timing });
   const gone = () => copy.remove();
   flight.finished.then(gone, gone);
 }
@@ -332,11 +361,6 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   const gridInnerRef = useRef<HTMLDivElement | null>(null);
 
   const keys = useMemo(() => recordKeys(tracks.map((track) => track.id)), [tracks]);
-  const copies = useMemo(() => {
-    const counted = new Map<string, number>();
-    for (const track of tracks) counted.set(track.id, (counted.get(track.id) ?? 0) + 1);
-    return counted;
-  }, [tracks]);
 
   /**
    * What is on the deck, so its sleeve here can be empty.
@@ -443,14 +467,13 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   );
 
   const layerRef = useRef<HTMLDivElement | null>(null);
-  const backdropRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const coverRef = useRef<HTMLDivElement | null>(null);
   const flyingRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  /** When the page began to open, so records that arrive late still wait for it. */
-  const openedAt = useRef(0);
+  /** Whether the page has begun to open. */
+  const opened = useRef(false);
   /** Latched, so a second Escape or a double click cannot start a second close. */
   const shutting = useRef(false);
   /** How many records have already been played in; the rest are new. */
@@ -477,10 +500,9 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     const layer = layerRef.current;
     const page = pageRef.current;
     const bubble = bubbleRef.current;
-    const backdrop = backdropRef.current;
     const cover = coverRef.current;
     const flying = flyingRef.current;
-    if (!grid || !layer || !page || !bubble || !backdrop || !cover || !flying || prefersReducedMotion()) {
+    if (!grid || !layer || !page || !bubble || !cover || !flying || prefersReducedMotion()) {
       finish();
       return;
     }
@@ -533,7 +555,6 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     const crate = { left: origin.x - layerBox.left, top: origin.y - layerBox.top, width: origin.width, height: origin.height };
     const to = ontoCrate(cover, origin);
     if (to) cover.animate([{ transform: 'none' }, { transform: to }], shrink);
-    backdrop.animate([{ opacity: 1 }, { opacity: 0 }], shrink);
     const out = bubble.animate(backwards(bubbleFrames(crate, within(bubble.getBoundingClientRect(), layerBox))), shrink);
     // Either way — finished or cancelled by an unmount — the crate closes.
     out.finished.then(finish, finish);
@@ -588,20 +609,22 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [requestClose, surface, coverImage, editing, setEditing, hasDetails]);
 
+  const columnRef = useRef<HTMLDivElement | null>(null);
+  const coverInset = useCoverInset(columnRef, coverRef);
+
   // Opening. A layout effect so the first frame painted is already the start of
   // it, never the finished page followed by a jump back.
   useLayoutEffect(() => {
     // Once. React runs this twice in development, and the second time everything is
     // already sitting on the crate: measured there, the page and the cover were
     // told to go from the crate to the crate, and only jumped into place at the end.
-    if (openedAt.current !== 0) return;
-    openedAt.current = performance.now();
+    if (opened.current) return;
+    opened.current = true;
     const layer = layerRef.current;
     const page = pageRef.current;
     const bubble = bubbleRef.current;
-    const backdrop = backdropRef.current;
     const cover = coverRef.current;
-    if (!layer || !page || !bubble || !backdrop || !cover || prefersReducedMotion()) return;
+    if (!layer || !page || !bubble || !cover || prefersReducedMotion()) return;
 
     const layerBox = layer.getBoundingClientRect();
     const crate = { left: origin.x - layerBox.left, top: origin.y - layerBox.top, width: origin.width, height: origin.height };
@@ -609,7 +632,6 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
       duration: OPEN_MS,
       easing: OPEN_EASING,
     });
-    backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DIM_MS, easing: 'ease-out' });
     const from = ontoCrate(cover, origin);
     if (from) {
       cover.animate([{ transform: from }, { transform: 'none' }], { duration: OPEN_MS, easing: OPEN_EASING });
@@ -649,21 +671,30 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
     const view = grid.getBoundingClientRect();
     const seen = rows.filter((el) => el.getBoundingClientRect().top < view.bottom);
     const pageBox = page.getBoundingClientRect();
-    const mouth = mouthOf(coverPlace(cover));
-    // A playlist that took a while to arrive has no page to wait for.
-    const waited = performance.now() - openedAt.current;
-    const from = Math.max(0, FLIGHTS_FROM_MS - waited);
+    const place = coverPlace(cover);
+    const mouth = mouthOf(place);
+    // How far on the cover is, from its own animation, as that is what these keep
+    // step with. A playlist that took a while to arrive finds it already there.
+    const journey = cover.getAnimations()[0];
+    const elapsed = journey ? Number(journey.currentTime ?? 0) : Infinity;
+    const from = Math.max(0, FLIGHTS_FROM_MS - elapsed);
+    const crate = { left: origin.x - pageBox.left, top: origin.y - pageBox.top, width: origin.width, height: origin.height };
+    const riding = journey
+      ? { frames: coverDriftFrames(crate, place), timing: { duration: OPEN_MS, delay: -elapsed, easing: OPEN_EASING } }
+      : undefined;
 
     for (const [i, el] of seen.slice(0, STAGGERED).entries()) {
       const sleeve = el.querySelector<HTMLElement>('[data-sleeve]');
       if (!sleeve) continue;
       const delay = from + i * STAGGER_MS;
       const box = within(sleeve.getBoundingClientRect(), pageBox);
-      flyRecord(el, flying, flightFrames(mouth, { x: box.left, y: box.top }), {
-        duration: FLIGHT_MS,
-        delay,
-        easing: 'linear',
-      });
+      flyRecord(
+        el,
+        flying,
+        flightFrames(mouth, { x: box.left, y: box.top }),
+        { duration: FLIGHT_MS, delay, easing: 'linear' },
+        riding,
+      );
       el.animate(
         [
           { opacity: 0, transform: 'translateX(14px)' },
@@ -680,7 +711,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
         fill: 'backwards',
       });
     }
-  }, [tracks, editing]);
+  }, [tracks, editing, origin]);
 
   /**
    * Records sliding to where they now are, in edit mode.
@@ -853,16 +884,25 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
       // context: over everything else in the drawer, under a record in the air.
       className={`absolute inset-0 z-10 ${closing ? 'pointer-events-none' : ''}`}
     >
-      <div ref={backdropRef} aria-hidden="true" className="absolute inset-0 bg-shell-900/55" />
       {/* The page's ground, on its own, as it is the part that swells. What is on it
           stays where it will end up, and comes up once this has got there. */}
       <div
         ref={bubbleRef}
         aria-hidden="true"
-        className="absolute inset-2 rounded-[24px] bg-gradient-to-b from-shell-700 to-shell-900 shadow-[0_10px_30px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.07)]"
+        className="absolute inset-x-2 top-0 bottom-2 rounded-[24px] bg-gradient-to-b from-shell-700 to-shell-900 shadow-[0_10px_30px_rgba(0,0,0,.55),inset_0_1px_0_rgba(255,255,255,.07)]"
       />
-      <div ref={pageRef} className="absolute inset-2 flex overflow-hidden rounded-[24px]">
-        <div className="relative flex w-[232px] shrink-0 flex-col px-[22px] pt-3 pb-4">
+      <div ref={pageRef} className="absolute inset-x-2 top-0 bottom-2 flex overflow-hidden rounded-[24px]">
+        {/* The cover as far in from the card's left edge as it is from its top — see
+            `useCoverInset` — so the two corners sit one inside the other; on its
+            right, room for the record to show beside it. Everything under it is
+            centred on it. */}
+        <div
+          ref={columnRef}
+          className="relative flex shrink-0 flex-col items-center py-3 pr-[46px]"
+          // Centred, unless the window is too short for all of it: then from the
+          // top, so it is the foot that runs out of room and never the cover.
+          style={{ width: COVER_PX + RECORD_ROOM_PX + coverInset, paddingLeft: coverInset, justifyContent: 'safe center' }}
+        >
           {tint && (
             // Wider than its column and fading out across it, so that it has no edge.
             <div
@@ -872,28 +912,9 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
               style={{ background: `linear-gradient(165deg, color-mix(in srgb, ${tint} 42%, transparent), transparent 72%)` }}
             />
           )}
-          <button
-            type="button"
-            data-crate-rise
-            aria-label={t('common.back')}
-            title={t('common.back')}
-            onClick={() => requestClose()}
-            className="relative -ml-1.5 flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-cream-50/[.07] text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50"
-          >
-            <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
-              <path
-                d="M6.5 1L2.5 5l4 4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-          <div ref={coverRef} className="relative mt-2.5 h-[152px] w-[152px] shrink-0">
+          <div ref={coverRef} className="relative h-[190px] w-[190px] shrink-0">
             <span aria-hidden="true" className="absolute top-[4%] right-0 translate-x-[26%]">
-              <VinylDisc size={140} coverArtUrl={coverUrl} />
+              <VinylDisc size={175} coverArtUrl={coverUrl} />
             </span>
             <span className="absolute inset-0 overflow-hidden rounded-md bg-shell-900 shadow-[0_3px_8px_rgba(0,0,0,.45)]">
               {coverUrl && (
@@ -907,37 +928,36 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
               )}
             </span>
           </div>
-          <div data-crate-rise className="relative mt-3.5 min-w-0">
-            <p className="text-label font-medium tracking-[0.16em] text-brass-400 uppercase">{t('crate.label')}</p>
-            <h2 className="mt-0.5 line-clamp-2 text-[22px] leading-[1.12] font-medium text-cream-50" title={source.name}>
-              {source.name}
-            </h2>
-            <p className="mt-1 truncate text-meta text-cream-400">
-              {[spotify?.ownerName, t('spotify.trackCount', { count: source.trackCount }), lengthWords]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
-            {!editing && (
-              <div className="mt-2.5 flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label={t('transport.play')}
-                  title={t('transport.play')}
-                  disabled={tracks.length === 0}
-                  onClick={() => void source.playAll()}
-                  className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-brass-500 text-shell-900 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-                >
-                  <svg viewBox="0 0 16 16" className="ml-0.5 h-4 w-4" aria-hidden="true" fill="currentColor">
-                    <path d="M4 2.6v10.8c0 .5.5.8.9.5l8.4-5.4c.4-.2.4-.8 0-1L4.9 2.1c-.4-.3-.9 0-.9.5z" />
-                  </svg>
-                </button>
+          <div data-crate-rise className="relative mt-4 flex w-full min-w-0 flex-col items-center text-center">
+            <CrateTitle name={source.name} />
+            <div className="mt-2 w-full text-meta leading-normal text-cream-400">
+              {spotify?.ownerName && <p className="truncate">{spotify.ownerName}</p>}
+              <p className="truncate">
+                {[t('spotify.trackCount', { count: source.trackCount }), lengthWords].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            {/* Kept in place while editing, unseen, so that the block stays centred
+                where it was and the cover does not jump. */}
+            <div className={`mt-5 flex w-[132px] flex-col gap-3 ${editing ? 'invisible' : ''}`}>
+              <button
+                type="button"
+                disabled={tracks.length === 0}
+                onClick={() => void source.playAll()}
+                className="flex h-9 items-center justify-center gap-1.5 rounded-full bg-brass-500 text-[13px] font-medium text-shell-900 transition-transform hover:scale-[1.03] active:scale-[.98] disabled:opacity-50"
+              >
+                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true" fill="currentColor">
+                  <path d="M4 2.6v10.8c0 .5.5.8.9.5l8.4-5.4c.4-.2.4-.8 0-1L4.9 2.1c-.4-.3-.9 0-.9.5z" />
+                </svg>
+                {t('transport.play')}
+              </button>
+              <div className="flex items-center justify-center gap-3">
                 <button
                   type="button"
                   aria-label={t('transport.shuffle')}
                   title={t('transport.shuffle')}
                   disabled={tracks.length === 0}
                   onClick={() => void source.playAll(true)}
-                  className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-shell-700 text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:opacity-50"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-shell-700 text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50 disabled:opacity-50"
                 >
                   <svg
                     viewBox="0 0 16 16"
@@ -949,37 +969,17 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M2 4.500h2.300c1 0 1.900.5 2.400 1.300l2.600 4.400c.5.800 1.400 1.300 2.400 1.300H14M2 11.500h2.300c1 0 1.900-.5 2.400-1.300M9.300 5.800c.5-.8 1.400-1.300 2.400-1.300H14M12.200 2.700L14 4.500l-1.800 1.800M12.200 9.700l1.8 1.8-1.8 1.8" />
+                    <path d="M2 4.5h2.3c1 0 1.900.5 2.400 1.300l2.600 4.400c.5.800 1.400 1.300 2.400 1.300H14M2 11.500h2.300c1 0 1.900-.5 2.400-1.300M9.300 5.800c.5-.8 1.400-1.300 2.400-1.300H14M12.200 2.700L14 4.500l-1.800 1.800M12.200 9.700l1.800 1.800-1.800 1.800" />
                   </svg>
                 </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          <div data-crate-rise className="flex h-11 shrink-0 items-center justify-end gap-1 pr-3.5 pl-1">
-            {editing ? (
-              <>
-                <span className="min-w-0 flex-1 truncate text-meta text-cream-400">{t('spotify.editSongs')}</span>
-                <button
-                  type="button"
-                  onClick={() => void setEditing(false)}
-                  className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
-                >
-                  {t('spotify.done')}
-                </button>
-              </>
-            ) : (
-              <>
                 {hasDetails && (
-                  <HeaderIcon label={t('spotify.details')} onPress={() => setSurface('details')}>
+                  <SideTool label={t('spotify.details')} onPress={() => setSurface('details')}>
                     {/* A pencil: the playlist itself — name, cover, description. */}
                     <path d="M8.6 1.9l1.5 1.5-6 6-2 .5.5-2z" />
                     <path d="M7.5 3l1.5 1.5" />
-                  </HeaderIcon>
+                  </SideTool>
                 )}
-                <HeaderIcon
+                <SideTool
                   label={t('spotify.editSongs')}
                   onPress={() => {
                     clearWriteError();
@@ -989,17 +989,54 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
                   {/* A list with arrows: the songs in it, moved and taken out. */}
                   <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
                   <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
-                </HeaderIcon>
+                </SideTool>
                 {deleteOwn && !hasDetails && (
-                  <HeaderIcon label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
+                  <SideTool label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
                     {/* A bin: the playlist, not the songs in it. */}
                     <path d="M2 3.5h8M4.5 3.5V2.3h3v1.2M3.2 3.5l.6 6.2h4.4l.6-6.2" />
-                  </HeaderIcon>
+                  </SideTool>
                 )}
-                <HeaderIcon label={t('common.close')} onPress={() => requestClose()}>
-                  <path d="M2 2l8 8M10 2l-8 8" />
-                </HeaderIcon>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="relative flex min-w-0 flex-1 flex-col"
+          style={
+            {
+              // The same in every mode, so that nothing moves when editing starts.
+              '--crate-number': `${
+                Math.max(2, String(Math.max(source.trackCount, tracks.length)).length) * NUMBER_DIGIT_PX
+              }px`,
+            } as React.CSSProperties
+          }
+        >
+          <div data-crate-rise className="flex h-11 shrink-0 items-center justify-end gap-1 pr-3.5 pl-1">
+            {editing ? (
+              <>
+                {/* The note about a long playlist goes under the heading, in the room
+                    the header has anyway, rather than as a line pushing the rows down. */}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-meta text-cream-400">{t('spotify.editSongs')}</span>
+                  {editCapped && (
+                    <span className="truncate text-label text-cream-400/70" title={t('spotify.editCapped')}>
+                      {t('spotify.editCapped')}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void setEditing(false)}
+                  className="shrink-0 rounded-full bg-brass-600 px-3 py-1 text-label font-medium tracking-wide text-on-accent uppercase transition-colors hover:bg-brass-500"
+                >
+                  {t('spotify.done')}
+                </button>
               </>
+            ) : (
+              <HeaderIcon label={t('common.close')} onPress={() => requestClose()}>
+                <path d="M2 2l8 8M10 2l-8 8" />
+              </HeaderIcon>
             )}
           </div>
 
@@ -1026,13 +1063,12 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
               </button>
             </div>
           )}
-          {editing && editCapped && (
-            <p className="mr-3 mb-1 shrink-0 text-meta leading-snug text-cream-400">{t('spotify.editCapped')}</p>
-          )}
 
+          {/* Scrolling, with nothing to scroll, to leave room for a scrollbar as the
+              list below does: otherwise its columns are further right than the rows'. */}
+          <div data-crate-rise className="mr-1 ml-2 shrink-0 overflow-y-scroll">
           <div
-            data-crate-rise
-            className={`mr-3 grid shrink-0 ${ROW_COLUMNS} gap-2.5 border-b border-cream-50/[.08] pr-2 pb-1.5 pl-1.5 text-label text-cream-400`}
+            className={`grid ${ROW_COLUMNS} gap-2.5 border-b border-cream-50/[.08] pr-3 pb-1.5 pl-1.5 text-label text-cream-400`}
           >
             <span className="text-right">#</span>
             <span />
@@ -1053,8 +1089,9 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
               </svg>
             </span>
           </div>
+          </div>
 
-          <div ref={gridRef} className="groove-drawer-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto pt-1 pr-3 pb-5">
+          <div ref={gridRef} className="groove-drawer-list min-h-0 flex-1 overflow-x-hidden overflow-y-scroll pt-1 pr-1 pb-5 pl-2">
             <div
               ref={gridInnerRef}
               // Positioned, so each row's `offsetLeft` and `offsetTop` are measured
@@ -1072,7 +1109,6 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
                     track={track}
                     number={place + 1}
                     editing={editing}
-                    copies={copies.get(track.id) ?? 1}
                     onReorder={(down, card) => reorder(down, index, key, card)}
                     onTakeOut={(card) => void takeOut(track, index, card)}
                     onDeck={track.id === onDeck}
@@ -1184,6 +1220,135 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
   );
 }
 
+/** The cover on the page, and the room beside it for its record to show. */
+const COVER_PX = 190;
+const RECORD_ROOM_PX = 46;
+/** How far in from the card's left edge the cover may go, at the least and the most. */
+const COVER_INSET_MIN_PX = 10;
+const COVER_INSET_MAX_PX = 24;
+
+/**
+ * How far the cover sits in from the card's left edge: as far as it sits down from
+ * its top, so that its corner and the card's are one inside the other.
+ *
+ * The block under the cover is centred in the height, so how far down that is
+ * depends on the window; it is measured, and again when the page changes height.
+ * From the layout, which the cover's entrance does not move. Within bounds: a
+ * cover against the edge, or a long way from it in a tall window, is not aligned
+ * with anything.
+ */
+function useCoverInset(
+  columnRef: React.RefObject<HTMLDivElement | null>,
+  coverRef: React.RefObject<HTMLDivElement | null>,
+): number {
+  const [inset, setInset] = useState(COVER_INSET_MAX_PX);
+  useLayoutEffect(() => {
+    const column = columnRef.current;
+    const cover = coverRef.current;
+    if (!column || !cover) return;
+    const measure = () => {
+      const down = cover.offsetTop;
+      setInset(Math.round(Math.min(COVER_INSET_MAX_PX, Math.max(COVER_INSET_MIN_PX, down))));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(column);
+    return () => watch.disconnect();
+  }, [columnRef, coverRef]);
+  return inset;
+}
+
+/**
+ * The playlist's name, as large as it can be and still fit — see `fitTitle.ts`.
+ *
+ * Measured before it is painted, so it never shows at a size it does not keep,
+ * and again if its column changes width or the font arrives late.
+ */
+function CrateTitle({ name }: { name: string }) {
+  const ref = useRef<HTMLHeadingElement | null>(null);
+
+  useLayoutEffect(() => {
+    const title = ref.current;
+    if (!title) return;
+    let measuredAt = -1;
+    const fit = (force = false) => {
+      const room = title.clientWidth;
+      if (room === 0 || (!force && room === measuredAt)) return;
+      measuredAt = room;
+      title.dataset.lines = '1';
+      title.style.fontSize = `${TITLE_MAX_PX}px`;
+      const one = oneLineSize(title.scrollWidth, room);
+      if (one !== null) {
+        title.style.fontSize = `${one}px`;
+        return;
+      }
+      title.dataset.lines = '2';
+      for (const size of twoLineSizes()) {
+        title.style.fontSize = `${size}px`;
+        const lines = Math.round(title.scrollHeight / (size * TITLE_LEADING));
+        if (lines <= 2 && title.scrollWidth <= room) return;
+      }
+      // A name that will not go into two lines even at the least size is cut short.
+      title.dataset.lines = 'cut';
+    };
+    fit(true);
+    // Width only: the fitting changes the height, and answering that would go round.
+    const watch = new ResizeObserver(() => fit());
+    watch.observe(title);
+    void document.fonts?.ready.then(() => fit(true));
+    return () => watch.disconnect();
+  }, [name]);
+
+  // Always the room two lines take, the name in the middle of it: a long name
+  // and a short one leave the cover where it is.
+  return (
+    <div className="flex w-full items-center" style={{ height: TITLE_ROOM_PX }}>
+      <h2
+        ref={ref}
+        title={name}
+        className="groove-crate-title w-full font-medium text-cream-50"
+        style={{ lineHeight: TITLE_LEADING, fontSize: TITLE_MAX_PX }}
+      >
+        {name}
+      </h2>
+    </div>
+  );
+}
+
+/** A round button beside Play, for what is done to the playlist itself. */
+function SideTool({
+  label,
+  onPress,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onPress}
+      className="flex h-9 w-9 items-center justify-center rounded-full bg-shell-700 text-cream-200 transition-colors hover:bg-shell-600 hover:text-cream-50"
+    >
+      <svg
+        viewBox="0 0 12 12"
+        className="h-3.5 w-3.5"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
+    </button>
+  );
+}
+
 /** A small round button in the crate's header, drawn with a 12px stroke icon. */
 function HeaderIcon({
   label,
@@ -1231,7 +1396,6 @@ function Record({
   recordKey,
   number,
   editing,
-  copies,
   onReorder,
   onTakeOut,
   onDeck,
@@ -1245,10 +1409,8 @@ function Record({
   recordKey: string;
   /** Its place in the list, from one. */
   number: number;
-  /** Edit mode: a press moves the record, and it can be taken out. */
+  /** Edit mode: a press moves the record. Taking one out is in its menu, in every mode. */
   editing: boolean;
-  /** How many times this song is in the playlist — all of which taking it out removes. */
-  copies: number;
   onReorder: (down: React.PointerEvent, card: HTMLElement) => void;
   onTakeOut: (card: HTMLElement | null) => void;
   /** This is the song on the deck. */
@@ -1267,7 +1429,6 @@ function Record({
   const lifted = useRef(false);
   /** Why Spotify will not play it here, if it will not. It can still be moved and taken out. */
   const refused = useUnplayable(track);
-  const takeOutLabel = copies > 1 ? t('spotify.removeCopies', { count: copies }) : t('spotify.removeSong');
 
   return (
     <button
@@ -1283,6 +1444,8 @@ function Record({
         editing ? undefined : refused ? whyUnplayable(refused) : absent ? t('spotify.onDeck') : undefined
       }
       onPointerDown={(e) => {
+        // The right button is for the menu: no lift, no refusal shaken at it.
+        if (e.button !== 0) return;
         if (editing) {
           onReorder(e, e.currentTarget);
           return;
@@ -1304,6 +1467,7 @@ function Record({
         });
       }}
       onDragStart={(e) => e.preventDefault()}
+      onContextMenu={(e) => openSongMenu(e, track, { takeOut: () => onTakeOut(button.current) })}
       onClick={() => {
         // Answered on the press already, and once is enough. A press that
         // became a lift has had its say too — the record went where it was
@@ -1312,37 +1476,12 @@ function Record({
         if (editing || absent || refused || lifted.current) return;
         if (disc.current) onPlay(disc.current);
       }}
-      className={`groove-record groove-crate-row group relative grid w-full shrink-0 ${ROW_COLUMNS} items-center gap-2.5 rounded-lg py-[5px] pr-2 pl-1.5 text-left transition-colors hover:bg-shell-600/40 ${
+      className={`groove-record groove-crate-row group relative grid w-full shrink-0 ${ROW_COLUMNS} items-center gap-2.5 rounded-lg py-[5px] pr-3 pl-1.5 text-left transition-colors hover:bg-shell-600/40 ${
         editing ? 'cursor-grab' : ''
       }`}
     >
       <span className="flex justify-end text-meta text-cream-400 tabular-nums">
-        {editing ? (
-          // Its own control, and it keeps the press to itself: a press here that
-          // also started a move would take the record out from under the hand.
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label={takeOutLabel}
-            title={takeOutLabel}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTakeOut(button.current);
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return;
-              e.preventDefault();
-              e.stopPropagation();
-              onTakeOut(button.current);
-            }}
-            className="flex h-5 w-5 items-center justify-center rounded-full bg-shell-900/85 text-cream-200 ring-1 ring-[var(--color-edge)] transition-colors hover:bg-red-800 hover:text-white"
-          >
-            <svg viewBox="0 0 10 10" className="h-2 w-2" aria-hidden="true">
-              <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </span>
-        ) : onDeck ? (
+        {onDeck ? (
           <span
             aria-hidden="true"
             className={`groove-crate-bars inline-flex h-[11px] items-end gap-[1.5px] ${sounding ? 'is-sounding' : ''}`}
@@ -1361,9 +1500,10 @@ function Record({
         <span
           ref={disc}
           data-disc
-          className={`absolute top-0 left-0 h-9 w-9 translate-x-[26%] scale-[.92] transition-transform duration-200 motion-reduce:transition-none ${
-            absent ? 'groove-sleeve-empty' : ''
-          } ${refused ? '' : 'group-hover:translate-x-[46%]'}`}
+          // Out of the sleeve by `left`, in `styles.css`: see `.groove-crate-disc`.
+          className={`groove-crate-disc absolute top-0 h-9 w-9 ${absent ? 'groove-sleeve-empty' : ''} ${
+            refused ? 'groove-crate-disc-still' : ''
+          }`}
         >
           <VinylDisc size={36} coverArtUrl={track.coverArtUrl} />
         </span>
