@@ -13,7 +13,7 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
-## 1.4.0 — 2026-11-08
+## 1.4.0 — 2026-11-10
 
 Bir ekolayzer, Spotify için de.
 
@@ -22,7 +22,8 @@ düğmesinin yanındaki düğme, çekmecede on bantlı bir eğri açar. Noktalar
 sürükleyin, hazır bir ayar seçin, kendi ayarlarınızdan üçünü adlarıyla saklayın.
 Ses, Windows ve ses kartınız ona dokunmadan önce alınır. Bu yüzden onların
 efektleri her zamanki gibi bir kez uygulanır. Açıp kapatırken ses kesilmez, biri
-diğerine karışır. Açıkken ses yaklaşık 0,15 saniye geç gelir.
+diğerine karışır. Açıkken ses yaklaşık 0,15 saniye geç gelir. Ekolayzer
+henüz beta aşamasında ve sekmesini açtığınızda bunu söylüyor.
 
 Sesi ayarlamak artık daha kolay. Fareyle düğmenin üstüne gelin, içinden bir sürgü
 açılır. Pirinç halkadan çıkıp çizgiye akar. Çizgide istediğiniz yere basın. Düğme
@@ -33,6 +34,13 @@ sıfırken sürgü kapanır. Düğmeye basana ya da tekerleği çevirene kadar a
 Elinize aldığınız plağı bırakarak bağlantısını kopyalayabilirsiniz. Spotify
 şarkıları ve çalma listeleriniz için geçerli. Bırakılacak yerler çekmecenin altında
 küçük bir şeritte belirir. Eskisini Ayarlar, Genel, Hareket'te bulursunuz.
+
+Bir şarkıya, nerede görünürse görünsün, sağ tıklayın. Sıradaki olarak
+çalabilir, sıranın sonuna ekleyebilir, bir listeye koyabilir ya da
+bağlantısını kopyalayabilirsiniz. Kapağı olmadan gelen yerel şarkılara
+kendine özgü bir kapak çizilir, bir albümün şarkıları aynı kapağı paylaşır.
+Çalma listesi sayfası, listeye ekleme penceresi ve arama yeniden çizildi.
+Arama artık kutusundan esneyerek açılıyor.
 
 ## 1.3.1 — 2026-10-27
 

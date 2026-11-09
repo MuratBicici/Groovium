@@ -4,7 +4,7 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
-## 1.4.0 — 2026-11-08
+## 1.4.0 — 2026-11-10
 
 An equaliser, for Spotify as well.
 
@@ -13,7 +13,8 @@ beside the volume opens ten bands on a curve in the drawer: drag the dots, pick
 a setting, and keep up to three of your own under names you choose. The sound
 is taken before Windows or your sound card has touched it, so their effects are
 applied once, as usual. Switching it on and off blends from one to the other
-without a gap. While it is on, sound arrives about 0.15 seconds late.
+without a gap. While it is on, sound arrives about 0.15 seconds late. It is
+still in beta, and says so when you open it.
 
 The volume is easier to set. Point at the knob and a slider opens out of it,
 the brass pouring off the ring and along the line; press the line where you
@@ -26,6 +27,11 @@ Lift a record and it can be dropped for its link, for a Spotify song or one of
 your playlists. The places to go rise on a small dock at the foot of the
 drawer, and the old palette is in Settings, General, Motion.
 
+Right click a song, anywhere it is shown, to play it next, put it at the end
+of the queue, add it to a playlist or copy its link. Songs on this computer
+that came without a cover are given one of their own, and the open playlist,
+the search and the playlist picker have been drawn again.
+
 HIGHLIGHTS
 · A ten-band equaliser for Spotify and songs on this computer, with presets
   and three settings of your own.
@@ -33,6 +39,10 @@ HIGHLIGHTS
 · The knob mutes when pressed, and shows its level on a brass ring.
 · Copy a song's or playlist's Spotify link by dropping its record.
 · The window no longer stops responding when moved between monitors.
+· A menu on every song by right click.
+· Covers drawn for songs on this computer that have none.
+· A new playlist page, a new playlist picker, and a search that opens out of
+  its box.
 
 ALL CHANGES
 
@@ -47,6 +57,9 @@ Equaliser
   at full level. If it cannot carry on, the sound returns to the ordinary way
   and a notice says so.
 · While it is on, sound arrives about 0.15 seconds late.
+· It is marked beta, with a note when its tab opens: now and then the sound
+  may catch or stop for a moment, and turning it off and on again puts it
+  right.
 
 Volume
 · The slider opens a moment after you point at the knob, and closes soon after
@@ -76,12 +89,36 @@ The window
 · Messages come up from the progress bar as a small pill, with a tick for
   something done and a warning for something wrong. Press one to put it away;
   it waits while the pointer is on it.
+· Scrollbars stay hidden until something scrolls, and fade away soon after.
+
+Songs
+· Right click a song on the shelves, in a playlist or in the search for a
+  menu: play next, add to the end of the queue, add to a playlist, copy its
+  link, and in a playlist, take it out of that one. The arrows and Escape
+  work in it.
+· Add to playlist shows the song and every playlist on its cover, and which
+  ones already have it. A Spotify song is shown its Spotify playlists first.
+  The record flies into the one you pick.
+· A song on this computer with no cover is given one drawn for it, the same
+  every time; the songs of one album share theirs.
+· The dark fold down the left edge of every cover is gone.
 
 Playlists
 · An open playlist swells out of its crate, with the cover and its buttons
   held on the left and the songs in a list beside it. The records fly out of
   the cover one by one to their rows, and back again when it closes.
 · Play and Shuffle for the whole playlist, each song's length and the total.
+· The cover, the name and the buttons sit in one block in the middle of the
+  left side, the cover's corner set in line with the page's. A long name gets
+  smaller rather than pushing the cover up.
+· The records come out while the page is still opening, and land on their
+  own rows.
+· Pointing at a song no longer redraws it a pixel smaller, and edit mode
+  moves nothing: taking a song out is in its menu.
+
+Search
+· The search opens out of its box rather than growing from a speck, and
+  goes back into it the same way. Nothing in it is stretched on the way.
 
 Spotify
 · Genre shelves show their sleeves while they are made, and are made sooner.
