@@ -7,6 +7,7 @@ import { VinylDisc } from '@/components/player/VinylDisc';
 import { useT } from '@/core/i18n';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { refuseUnplayable, UNPLAYABLE_LOOK } from './Unplayable';
+import { openSongMenu } from '@/components/menu/songMenuStore';
 import { SHEET_IN_EASING, SHEET_OUT_EASING } from './CrateSheets';
 import { prefersReducedMotion } from '@/core/utils/motion';
 
@@ -52,7 +53,10 @@ export function SearchBox({
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    el.focus();
+    // Without scrolling to it: as the search opens the box is still on its way
+    // from the magnifier, outside the window, and bringing it into view moved
+    // everything in the window sideways under it.
+    el.focus({ preventScroll: true });
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, []);
@@ -60,6 +64,8 @@ export function SearchBox({
   return (
     <div
       data-swap
+      // What the search window stretches out of its magnifier around: see `SearchSheet`.
+      data-search-box
       className="flex shrink-0 items-center gap-2 rounded-full groove-inset px-3 py-1.5 ring-1 ring-[var(--color-edge)] focus-within:ring-brass-500">
       <svg viewBox="0 0 12 12" className="h-3.5 w-3.5 shrink-0 text-brass-400" aria-hidden="true" fill="none">
         <circle cx="5" cy="5" r="3.4" stroke="currentColor" strokeWidth="1.4" />
@@ -182,7 +188,13 @@ export function Swap({ id, children }: { id: string; children: React.ReactNode }
   });
   const box = useRef<HTMLDivElement | null>(null);
   const leaving = useRef(false);
-  const arrived = useRef(false);
+  /**
+   * The answer last brought in, or null before the first. By which it was rather
+   * than a flag: React runs this twice on mounting in development, and with a
+   * flag the second run slid the first answer in — the search box with it, over
+   * the top of its own arrival out of the magnifier.
+   */
+  const arrived = useRef<string | null>(null);
   /**
    * The slides out, kept so they can be undone once what replaced them is on
    * screen. They hold their last frame — gone — and a row React carries over
@@ -239,10 +251,9 @@ export function Swap({ id, children }: { id: string; children: React.ReactNode }
   // And what replaces it comes in.
   useLayoutEffect(() => {
     settle();
-    if (!arrived.current) {
-      arrived.current = true;
-      return;
-    }
+    const first = arrived.current === null || arrived.current === shown.id;
+    arrived.current = shown.id;
+    if (first) return;
     if (prefersReducedMotion()) return;
     parts().forEach((el, k) =>
       el.animate(
@@ -340,6 +351,7 @@ export function BestMatch({ track, onPlay }: { track: TrackMetadata; onPlay: () 
     <div
       data-found
       data-swap
+      onContextMenu={(e) => openSongMenu(e, track)}
       // The whole height of the results beside it, the record and its name in
       // the middle of it and the way to play it at the foot.
       className="flex h-full flex-col gap-2 rounded-lg bg-shell-700/60 p-3 ring-1 ring-[var(--color-edge)]"
@@ -399,7 +411,7 @@ export function TrackResult({
   /** Why Spotify will not play it here, if it will not: listed, greyed, and saying so when pressed. */
   const { refused, press } = usePlayFound(track, onPlay);
   return (
-    <li data-found className="group/row flex items-center gap-1">
+    <li data-found className="group/row flex items-center gap-1" onContextMenu={(e) => openSongMenu(e, track)}>
       <button
         type="button"
         aria-disabled={refused ? true : undefined}

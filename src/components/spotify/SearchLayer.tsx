@@ -26,39 +26,52 @@ import { SHEET_IN_EASING, SHEET_OUT_EASING } from './CrateSheets';
  */
 
 /** Opening: a little longer than a sheet's, for the distance it grows across. */
-export const SEARCH_IN_MS = 260;
+export const SEARCH_IN_MS = 380;
 /** Closing: quicker, since nobody waits to watch a thing go. */
-export const SEARCH_OUT_MS = 190;
-/** How small it starts, at the least, so a tiny magnifier does not make it a dot. */
-const SMALLEST = 0.06;
-
+export const SEARCH_OUT_MS = 220;
+/** The box stretching into the window: a little past, and back. */
+const STRETCH_EASING = 'cubic-bezier(.3,1.25,.5,1)';
+/** Everything but the box comes once the window is mostly there. */
+const REST_AFTER_MS = 200;
+const REST_MS = 220;
+/** Beyond the window on every side, so its own shadow is not cut off when it has grown. */
+const GROWN_CLIP = 'inset(-16px round 24px)';
 /** Where something is on screen, in CSS pixels. */
 export type Box = { x: number; y: number; width: number; height: number };
-
-/**
- * The transform that puts a box `to` where `from` is and about its size —
- * what the search is at the start of its growing and the end of its going.
- *
- * About the box's own centre, which is where a CSS transform turns and scales
- * by default; scaled by the larger of the two ratios so the start covers the
- * magnifier rather than sitting inside it.
- */
-export function growFrom(from: Box, to: Box): { x: number; y: number; scale: number } {
-  const x = from.x + from.width / 2 - (to.x + to.width / 2);
-  const y = from.y + from.height / 2 - (to.y + to.height / 2);
-  const ratio = Math.max(from.width / Math.max(1, to.width), from.height / Math.max(1, to.height));
-  return { x, y, scale: Math.min(1, Math.max(SMALLEST, ratio)) };
-}
-
-const grown = (from: Box, to: Box) => {
-  const { x, y, scale } = growFrom(from, to);
-  return `translate(${x}px, ${y}px) scale(${scale})`;
-};
 
 const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect();
   return { x: r.left, y: r.top, width: r.width, height: r.height };
 };
+
+/**
+ * The window cut down to the magnifier's shape: what it looks like as it begins
+ * to stretch out of it, and as it goes back in.
+ */
+export function clipTo(from: Box, window: Box): string {
+  const top = from.y - window.y;
+  const left = from.x - window.x;
+  const right = window.x + window.width - (from.x + from.width);
+  const bottom = window.y + window.height - (from.y + from.height);
+  return `inset(${top}px ${right}px ${bottom}px ${left}px round ${from.height / 2}px)`;
+}
+
+/**
+ * Everything in the window but the search box: the siblings of the box and of
+ * each of its parents, up to the window. These come once the box has stretched
+ * into place, and go before it goes back.
+ */
+function allBut(box: Element, window: Element): HTMLElement[] {
+  const rest: HTMLElement[] = [];
+  let at: Element = box;
+  while (at !== window && at.parentElement) {
+    for (const sibling of at.parentElement.children) {
+      if (sibling !== at && sibling instanceof HTMLElement) rest.push(sibling);
+    }
+    at = at.parentElement;
+  }
+  return rest;
+}
 
 /**
  * Somewhere inside the search to go back to before the search closes — an
@@ -116,27 +129,52 @@ export function SearchSheet({
     const dialog = panel.current;
     const dim = backdrop.current;
     if (!box || !dialog || !dim) return;
-    for (const el of [dialog, dim]) for (const a of el.getAnimations()) a.cancel();
+    const field = dialog.querySelector<HTMLElement>('[data-search-box]');
+    const rest = field ? allBut(field, dialog) : [];
+    for (const el of [dialog, dim, ...(field ? [field] : []), ...rest]) for (const a of el.getAnimations()) a.cancel();
     const reduced = prefersReducedMotion();
     // Measured here, with nothing moving it: where it is when it has arrived.
     const at = boxOf(dialog);
     const from = magnifier.current ? boxOf(magnifier.current) : null;
+    const fieldAt = field ? boxOf(field) : null;
+    /** The box where the magnifier is and its size, from where it really is. */
+    const fieldFrom =
+      from && fieldAt
+        ? {
+            transform: `translate(${from.x - fieldAt.x}px, ${from.y - fieldAt.y}px)`,
+            width: `${from.width}px`,
+            height: `${from.height}px`,
+          }
+        : null;
+    const fieldHome = fieldAt
+      ? { transform: 'none', width: `${fieldAt.width}px`, height: `${fieldAt.height}px` }
+      : null;
 
     if (open) {
       box.style.pointerEvents = '';
       dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SEARCH_IN_MS, easing: SHEET_IN_EASING });
-      dialog.animate(
-        reduced || !from
-          ? [{ opacity: 0 }, { opacity: 1 }]
-          : [
-              { transform: grown(from, at), opacity: 0 },
-              // Seen early in its growing, so it reads as coming out of the
-              // magnifier rather than fading in somewhere near it.
-              { opacity: 1, offset: 0.3 },
-              { transform: 'none', opacity: 1 },
-            ],
-        { duration: SEARCH_IN_MS, easing: SHEET_IN_EASING },
-      );
+      if (reduced || !from) {
+        dialog.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SEARCH_IN_MS, easing: SHEET_IN_EASING });
+        return;
+      }
+      // The magnifier stretching into the window: the window cut to its shape
+      // and opened out, nothing scaled, so the words stay sharp all the way.
+      dialog.animate([{ clipPath: clipTo(from, at) }, { clipPath: GROWN_CLIP }], {
+        duration: SEARCH_IN_MS,
+        easing: STRETCH_EASING,
+      });
+      // And the box in it, carried from where the magnifier was to its place.
+      if (field && fieldFrom && fieldHome) {
+        field.animate([fieldFrom, fieldHome], { duration: SEARCH_IN_MS, easing: STRETCH_EASING });
+      }
+      for (const el of rest) {
+        el.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], {
+          duration: REST_MS,
+          delay: REST_AFTER_MS,
+          easing: SHEET_IN_EASING,
+          fill: 'backwards',
+        });
+      }
       return;
     }
 
@@ -148,13 +186,22 @@ export function SearchSheet({
       easing: SHEET_OUT_EASING,
       fill: 'forwards',
     });
+    if (!reduced && from) {
+      for (const el of rest) {
+        el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SEARCH_OUT_MS / 2, fill: 'forwards' });
+      }
+      if (field && fieldFrom && fieldHome) {
+        field.animate([fieldHome, fieldFrom], { duration: SEARCH_OUT_MS, easing: SHEET_OUT_EASING, fill: 'forwards' });
+      }
+    }
+    // Back into the magnifier, which is coming back as it arrives.
     const out = dialog.animate(
       reduced || !from
         ? [{ opacity: 1 }, { opacity: 0 }]
         : [
-            { transform: 'none', opacity: 1 },
-            { opacity: 1, offset: 0.7 },
-            { transform: grown(from, at), opacity: 0 },
+            { clipPath: GROWN_CLIP, opacity: 1 },
+            { clipPath: clipTo(from, at), opacity: 1, offset: 0.85 },
+            { clipPath: clipTo(from, at), opacity: 0 },
           ],
       { duration: SEARCH_OUT_MS, easing: SHEET_OUT_EASING, fill: 'forwards' },
     );
