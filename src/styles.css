@@ -251,12 +251,30 @@ body {
 /*
  * Scrollbars. The default Windows ones are wide, pale and sit outside the
  * palette entirely, which reads as a browser control bolted onto a physical
- * object. Both syntaxes are set: WebView2 honours the `-webkit-` pseudo
- * elements, and the standard properties cover everything else.
+ * object. Both syntaxes are set: the standard properties are what WebView2 goes
+ * by once they are set, and the `-webkit-` pseudo elements cover anything older.
+ *
+ * Unseen until something scrolls, and gone again soon after it stops: which list
+ * is scrolling is marked by `fadingScrollbars.ts`. Only marked lists transition,
+ * so that nothing else in the app has a transition it never asked for.
  */
 * {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+[data-scrollbar] {
+  transition: scrollbar-color 300ms ease-out;
+}
+
+[data-scrollbar='shown'] {
   scrollbar-color: var(--color-shell-600) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scrollbar] {
+    transition: none;
+  }
 }
 
 ::-webkit-scrollbar {
