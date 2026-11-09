@@ -884,18 +884,13 @@ body {
 }
 
 /*
- * The printed face of the sleeve: a fold down the opening edge and a sheen
- * where the light crosses it.
+ * The printed face of the sleeve: a sheen where the light crosses it.
  *
  * Laid over the artwork rather than applied to it, so a cover keeps its own
- * colours and only the light on it is ours. The fold is on the left because
- * that is the edge an LP sleeve is glued along, and it is what stops a bright
- * cover from reading as a flat swatch pasted onto the card.
+ * colours and only the light on it is ours.
  */
 .groove-sleeve-face {
-  background:
-    linear-gradient(to right, rgb(0 0 0 / calc(0.5 * var(--shade))), rgb(0 0 0 / 0) 8px),
-    linear-gradient(to bottom right, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 45%);
+  background: linear-gradient(to bottom right, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 45%);
   /* The lit top edge lives here rather than on the card. On the card it was
      painted underneath the artwork and never seen; here it is over the print,
      and the notch's mask takes it away where the sleeve is open. */
