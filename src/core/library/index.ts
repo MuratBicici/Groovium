@@ -3,6 +3,7 @@ import type { LyricsTiming } from '@/core/lyrics/timing';
 import { isTauri } from '@/core/utils/env';
 import { joinPath } from '@/core/utils/paths';
 import { log } from '@/platform/log';
+import { coverKey, paintedCover } from './paintedCover';
 
 /**
  * Bridge to the managed library and the app's playlists.
@@ -127,10 +128,14 @@ export async function attachCoverArtUrls(
   tracks: LibraryTrack[],
   storeDir: string,
 ): Promise<LibraryTrack[]> {
-  if (!isTauri() || !storeDir) return tracks;
+  // Painted first, and whether or not this is the app: nothing about it needs Tauri.
+  const covered = tracks.map((track) =>
+    track.coverFile || track.coverArtUrl ? track : { ...track, coverArtUrl: paintedCover(coverKey(track)) },
+  );
+  if (!isTauri() || !storeDir) return covered;
 
   const { convertFileSrc } = await import('@tauri-apps/api/core');
-  return tracks.map((track) =>
+  return covered.map((track) =>
     track.coverFile
       ? { ...track, coverArtUrl: convertFileSrc(joinPath(storeDir, track.coverFile)) }
       : track,
