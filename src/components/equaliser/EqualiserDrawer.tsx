@@ -338,8 +338,13 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
       style={{ width: `${DRAWER_WIDTH}px` }}
     >
       <div className="flex h-7 shrink-0 items-center gap-3">
-        <span className="min-w-0 flex-1 truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
-          {t('panel.equaliser')}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate text-label font-medium tracking-[0.18em] text-brass-400/80 uppercase">
+            {t('panel.equaliser')}
+          </span>
+          <span className="shrink-0 rounded-full bg-brass-500/15 px-1.5 py-px text-[9px] font-medium tracking-[0.14em] text-brass-400 uppercase ring-1 ring-brass-500/40">
+            {t('equaliser.beta')}
+          </span>
         </span>
         <button
           type="button"
@@ -371,6 +376,11 @@ export function EqualiserDrawer({ id, onClose }: { id: string; onClose: () => vo
           </svg>
         </button>
       </div>
+
+      {/* Said every time the tab is opened: it is still being finished. */}
+      <p className="mt-2 shrink-0 rounded-lg bg-brass-500/10 px-2.5 py-1.5 text-meta leading-snug text-cream-200 ring-1 ring-brass-500/25">
+        {t('equaliser.betaNote')}
+      </p>
 
       <div className={`mt-2 flex min-h-0 flex-1 flex-col transition-opacity duration-300 ${on ? '' : 'opacity-50'}`}>
         <div className="groove-inset shrink-0 rounded-[10px]">

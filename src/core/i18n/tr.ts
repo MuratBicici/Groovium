@@ -83,6 +83,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'queue.skip': 'Bu sefer atla',
   'panel.lyrics': 'Şarkı sözleri',
   'panel.equaliser': 'Ekolayzer',
+  'equaliser.beta': 'Beta',
+  'equaliser.betaNote': 'Ekolayzer beta aşamasında. Ses ara sıra takılabilir ya da bir an kesilebilir; öyle olursa kapatıp yeniden açın.',
   'equaliser.onOff': 'Ekolayzeri aç veya kapat',
   'equaliser.preset.flat': 'Düz',
   'equaliser.preset.bass': 'Bas',

@@ -83,6 +83,8 @@ export const en = {
   'queue.skip': 'Skip this time',
   'panel.lyrics': 'Lyrics',
   'panel.equaliser': 'Equaliser',
+  'equaliser.beta': 'Beta',
+  'equaliser.betaNote': 'The equaliser is in beta. Now and then the sound may catch or stop for a moment; if it does, turn it off and on again.',
   'equaliser.onOff': 'Turn the equaliser on or off',
   'equaliser.preset.flat': 'Flat',
   'equaliser.preset.bass': 'Bass',
