@@ -13,6 +13,10 @@
 <p align="center">Groovium brings the ritual of vinyl to your desktop.<br>Your local library and Spotify, together on a turntable made for today.</p>
 
 <p align="center">
+  <a href="https://hub.xerj.org/contributors/MuratBicici"><img src="https://hub.xerj.org/contributors/MuratBicici/badge.svg" alt="XERJ Corpus Hub contributor"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/MuratBicici/Groovium/releases/latest">Download for Windows</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#development">For developers</a>

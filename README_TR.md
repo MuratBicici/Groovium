@@ -13,6 +13,10 @@
 <p align="center">Groovium, plak dinleme ritüelini masaüstüne taşır.<br>Yerel arşivin ve Spotify, bugün için tasarlanmış bir pikapta buluşur.</p>
 
 <p align="center">
+  <a href="https://hub.xerj.org/contributors/MuratBicici"><img src="https://hub.xerj.org/contributors/MuratBicici/badge.svg" alt="XERJ Corpus Hub contributor"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/MuratBicici/Groovium/releases/latest">Windows için indir</a> ·
   <a href="#getting-started">Başlarken</a> ·
   <a href="#development">Geliştiriciler için</a>
