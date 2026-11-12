@@ -5,6 +5,7 @@ import {
   useIsPlaying,
   usePlaybackState,
   usePlayerStore,
+  useRadio,
 } from '@/core/store';
 import { useT } from '@/core/i18n';
 import { useSlowConnection } from '@/core/providers/connectionHealth';
@@ -29,6 +30,8 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
   // song on the deck plays on meanwhile, so its own state would say "Now
   // Playing" to somebody who has just asked for it to stop being.
   const finding = usePlayerStore((s) => s.findingNext);
+  // On a radio the line says which, for as long as it is simply playing.
+  const radio = useRadio();
   // A song on its way says so from the moment it is chosen, not from the
   // moment a provider gets round to it — see `awaitingSound`.
   const waiting = useAwaitingSound();
@@ -90,7 +93,13 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
       <p className="text-label font-medium tracking-[0.2em] text-brass-400/70 uppercase">
         {finding
           ? t('status.searching')
-          : t(`status.${waiting ? 'LOADING' : playbackState}`)}
+          : radio && !waiting && playbackState === 'PLAYING'
+            ? (
+                <>
+                  {t('radio.onAir')} · <span lang="en">{radio.name}</span>
+                </>
+              )
+            : t(`status.${waiting ? 'LOADING' : playbackState}`)}
         {slow && <span className="text-cream-400/70"> · {t('status.slowConnection')}</span>}
       </p>
 

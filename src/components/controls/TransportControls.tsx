@@ -5,6 +5,7 @@ import {
   usePlayerStore,
   useHasPlayback,
   useHoldingRecord,
+  useRadio,
   useRepeatMode,
   useShuffle,
   useStation,
@@ -31,6 +32,10 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const station = useStation();
   const stationSearching = useStationSearching();
   const stationHeldOff = useStationHeldOff();
+  // On a radio there is no order to shuffle, nothing to repeat and no way back:
+  // those are off, and the last button is the way out of it.
+  const radio = useRadio();
+  const leaveRadio = usePlayerStore((s) => s.leaveRadio);
 
   const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
   const next = usePlayerStore((s) => s.next);
@@ -64,15 +69,20 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       <AddToPlaylist track={currentTrack} variant="transport" />
 
       <ToggleButton
-        label={t('transport.shuffle')}
-        active={shuffle}
-        disabled={!hasQueue}
+        label={radio ? t('radio.offInRadio') : t('transport.shuffle')}
+        active={shuffle && !radio}
+        disabled={!hasQueue || radio !== null}
+        hint={radio !== null}
         onClick={toggleShuffle}
       >
         <ShuffleIcon />
       </ToggleButton>
 
-      <TactileButton label={t('transport.previous')} disabled={!hasQueue} onClick={() => void previous()}>
+      <TactileButton
+        label={t('transport.previous')}
+        disabled={!hasQueue || radio !== null}
+        onClick={() => void previous()}
+      >
         <SkipIcon direction="back" />
       </TactileButton>
 
@@ -91,9 +101,10 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       </TactileButton>
 
       <ToggleButton
-        label={t('transport.repeat', { mode: t(`repeat.${repeat}`) })}
-        active={repeat !== 'off'}
-        disabled={!hasQueue}
+        label={radio ? t('radio.offInRadio') : t('transport.repeat', { mode: t(`repeat.${repeat}`) })}
+        active={repeat !== 'off' && !radio}
+        disabled={!hasQueue || radio !== null}
+        hint={radio !== null}
         onClick={cycleRepeat}
       >
         <RepeatIcon mode={repeat} />
@@ -104,6 +115,11 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
           enabled with nothing playing, so it can be armed in advance. */}
       {/* Held off, and saying why, while a playlist put on whole plays: it
           was asked for as it is, and the station would add to it. */}
+      {radio ? (
+        <ToggleButton label={t('radio.leave')} active hint onClick={leaveRadio}>
+          <RadioIcon searching={stationSearching} />
+        </ToggleButton>
+      ) : (
       <ToggleButton
         label={
           stationHeldOff
@@ -117,6 +133,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       >
         <InfinityIcon searching={stationSearching} armed={station} />
       </ToggleButton>
+      )}
     </div>
   );
 }
@@ -215,6 +232,27 @@ function SkipIcon({ direction }: { direction: 'back' | 'forward' }) {
       style={direction === 'back' ? { transform: 'scaleX(-1)' } : undefined}
     >
       <path d="M6 6v12l9-6zM16.5 6H19v12h-2.5z" />
+    </svg>
+  );
+}
+
+/** A radio with its aerial up: lit while one is on, and pulsing while it looks for what is next. */
+function RadioIcon({ searching }: { searching: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-4 w-4 ${searching ? 'animate-pulse' : 'groove-breathe'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="9" width="17" height="10.5" rx="2.5" />
+      <path d="M7 9l9-5" />
+      <circle cx="9" cy="14.2" r="2.2" />
+      <path d="M15 12.8h2.5M15 15.6h2.5" />
     </svg>
   );
 }

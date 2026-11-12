@@ -64,6 +64,9 @@ import {
   trackKey,
 } from '@/core/station';
 import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
+import { nextOnRadio, radioById, radioContext, radioOf } from '@/core/radio';
+import { tagTracks } from '@/core/station/lastfm';
+import { getLyrics } from '@/core/lyrics/api';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
@@ -80,7 +83,7 @@ export type RepeatMode = 'off' | 'one' | 'all';
  * played on its own, which is what a Spotify search result does — it plays and
  * stops. Continuing afterwards means putting it in a playlist first.
  */
-export type ContextId = 'library' | 'single' | `playlist:${string}` | `spotify:${string}`;
+export type ContextId = 'library' | 'single' | `playlist:${string}` | `spotify:${string}` | `radio:${string}`;
 
 /**
  * Whether this app can rebuild the collection from what it holds.
@@ -338,6 +341,14 @@ export interface PlayerActions {
   toggleShuffle: () => void;
   /** Resolves false when there is no Last.fm key yet, so the UI can ask for one. */
   toggleStation: () => Promise<boolean>;
+  /**
+   * Put a radio on: one of Groovium's stations, which plays its kind of music
+   * until something else is put on. Which one is playing is read off the
+   * collection — see `radioOf`. Resolves false with no Last.fm key.
+   */
+  tuneRadio: (id: string, onFound?: (first: TrackMetadata) => void) => Promise<boolean>;
+  /** Leave the radio. The song playing plays on, on its own. */
+  leaveRadio: () => void;
   /** Sign out, and stop anything that was playing because of that account. */
   signOutOfSpotify: () => Promise<void>;
   /**
@@ -438,6 +449,20 @@ const initialState: PlayerState = {
 };
 
 export { stepWithin } from './order';
+
+/**
+ * Whether a song has words, by its lyrics: for a radio of songs without them.
+ * The same lookup the lyrics view makes, so the answer is kept for it too.
+ */
+async function hasWords(track: TrackMetadata): Promise<boolean | null> {
+  const found = await getLyrics(track);
+  if (!found) return null;
+  const { status } = found.result;
+  return status === 'Synced' || status === 'Plain' ? true : status === 'Instrumental' ? false : null;
+}
+
+/** Counted up by each turn of the radio's dial, so a slow answer for a station left behind is dropped. */
+let radioTurn = 0;
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
   function outputAmplitude(): number {
@@ -605,7 +630,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
   async function prefetchStationTrack(asked = false): Promise<void> {
     const { currentTrack, stationQueue, station } = get();
     if (!currentTrack) return;
-    if (!station && !asked) return;
+    // A radio never stops looking for what is next: that is what it is.
+    const radio = radioOf(get().playback.id);
+    if (!station && !asked && !radio) return;
     // Already stocked. Refilling early would spend a lookup to replace answers
     // that have not been used yet.
     if (stationQueue.length > 0) return;
@@ -630,7 +657,14 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
 
     try {
       const { library, stationHistory, stationArtists, stationQueue, stationSeeds } = get();
-      const found = await resolveNextTracks({
+      const found = radio
+        ? await nextOnRadio(
+            radio,
+            [...stationHistory, seedKey, ...stationQueue.map(trackKey)],
+            [...stationArtists, artistKey(currentTrack.artist)],
+            { tagTracks, searchSpotify: searchTracks, hasWords },
+          )
+        : await resolveNextTracks({
         // The run, newest first. Falling back to the playing track covers the
         // opening moment before `rememberPlayed` has run for it.
         seeds: stationSeeds.length > 0 ? stationSeeds : [currentTrack],
@@ -807,12 +841,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         await startTrack(nextIndex);
         return;
       }
-      if (get().station) {
+      if (get().station || radioOf(get().playback.id)) {
         // Continuing the run, so the queued suggestions stay good.
         await startTrack(nextIndex, true);
         return;
       }
-    } else if (get().station && (await playStationTrack())) {
+    } else if ((get().station || radioOf(get().playback.id)) && (await playStationTrack())) {
       // The collection is finished. With infinite play on, find something to
       // follow it; without it, stop. Everything else about finding a successor
       // runs the same either way.
@@ -1521,6 +1555,66 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       set({ station: true });
       void prefetchStationTrack();
       return true;
+    },
+
+    async tuneRadio(id, onFound) {
+      const radio = radioById(id);
+      if (!radio) return true;
+      if (!(await hasLastfmKey())) return false;
+      if (!(await spotifyIsAuthenticated())) {
+        set({ error: say('radio.needsSpotify') });
+        return true;
+      }
+      // Turned past before it answered: only the station asked for last comes on.
+      const turn = ++radioTurn;
+      set({ findingNext: true });
+      let found: TrackMetadata[] = [];
+      try {
+        const { stationHistory, stationArtists } = get();
+        found = await nextOnRadio(radio, stationHistory, stationArtists, {
+          tagTracks,
+          searchSpotify: searchTracks,
+          hasWords,
+        });
+      } catch (err) {
+        log('warn', 'radio', 'could not tune in', err);
+      } finally {
+        if (turn === radioTurn) set({ findingNext: false });
+      }
+      if (turn !== radioTurn) return true;
+      const [first, ...rest] = found;
+      if (!first) {
+        set({ error: say('radio.nothingFound', { name: radio.name }) });
+        return true;
+      }
+      // Told first, so a record can be sent to the deck before the deck has it.
+      onFound?.(first);
+      discardStationQueue();
+      set({
+        wholeList: false,
+        playback: { id: radioContext(radio.id), tracks: [first], index: 0 },
+        shuffleOrder: get().shuffle ? [0] : [],
+        // Every song of a radio is the radio's own, the first as much as the rest.
+        stationAdded: [first.id],
+        stationQueue: rest,
+        skipped: [],
+      });
+      await startTrack(0, true);
+      return true;
+    },
+
+    leaveRadio() {
+      const { playback, currentTrack } = get();
+      if (!radioOf(playback.id)) return;
+      radioTurn += 1;
+      discardStationQueue();
+      set({
+        findingNext: false,
+        playback: { id: 'single', tracks: currentTrack ? [currentTrack] : [], index: 0 },
+        shuffleOrder: get().shuffle && currentTrack ? [0] : [],
+        stationAdded: [],
+        skipped: [],
+      });
     },
 
     clearError() {

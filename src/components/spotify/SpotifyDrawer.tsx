@@ -18,6 +18,7 @@ import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
 import { GenreShelves, LikedShelf, RecentShelf } from './SpotifyHome';
 import { ArrangedShelves } from './ArrangedShelves';
+import { RadioShelf } from '@/components/radio/RadioShelf';
 import { readOrder, writeOrder } from './arrange';
 import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
@@ -477,6 +478,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
                 onOrder={reorder}
                 items={[
                   { id: 'recent', label: t('home.recent'), node: <RecentShelf /> },
+                  { id: 'radios', label: t('radio.shelf'), node: <RadioShelf /> },
                   { id: 'genres', label: t('home.genresHeading'), node: <GenreShelves /> },
                   {
                     id: 'liked',
@@ -584,7 +586,7 @@ function Offline() {
  * accident — it asks first all the same.
  */
 /** The front page's shelves, in the order they come before anybody moves them. */
-const HOME_SHELVES = ['recent', 'genres', 'liked', 'top', 'playlists'];
+const HOME_SHELVES = ['recent', 'radios', 'genres', 'liked', 'top', 'playlists'];
 
 /**
  * Loosens the shelves to be put in order, and fixes them again.

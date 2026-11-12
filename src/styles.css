@@ -1038,6 +1038,207 @@ body {
   }
 }
 
+/*
+ * Radios by Groovium: a card for each station on the drawer's front page.
+ */
+/* One row that never ends, faded at both ends so it has none. */
+.groove-radio-rail {
+  position: relative;
+  overflow: hidden;
+  /* Room below for the cards' shadow, which the overflow otherwise cuts off.
+     Inside the shelf: a shelf draws nothing outside itself (`.groove-shelf`),
+     so room taken back with a negative margin was cut off all the same. */
+  padding: 4px 0 24px;
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.groove-radio-rail:active {
+  cursor: grabbing;
+}
+.groove-radio-strip {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+}
+.groove-radio-card {
+  position: relative;
+  flex: none;
+  text-align: left;
+}
+.groove-radio-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  color: #fff;
+  box-shadow: 0 8px 20px rgb(0 0 0 / calc(0.45 * var(--shade)));
+  transition: box-shadow 200ms ease-out;
+}
+.groove-radio-card:hover .groove-radio-face {
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / calc(0.45 * var(--shade))),
+    0 0 0 1.5px color-mix(in srgb, #fff 45%, transparent);
+}
+.groove-radio-card.is-on .groove-radio-face {
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / calc(0.45 * var(--shade))),
+    0 0 0 2px var(--color-brass-400);
+}
+/* Dark under the name and under the signature, so either reads on any picture. */
+.groove-radio-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.18) 34%, transparent 52%),
+    linear-gradient(transparent 62%, rgb(0 0 0 / 0.5));
+}
+.groove-radio-name {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  left: 12px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.groove-radio-sign {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.groove-radio-sign span {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+}
+.groove-radio-sign small {
+  font-size: 8.5px;
+  letter-spacing: 0.24em;
+  opacity: 0.75;
+}
+/*
+ * A card turned over while its station finds a song: its record on the back,
+ * turning, ready to fly to the deck. Turned with a little spring, and back again.
+ */
+.groove-radio-card {
+  perspective: 700px;
+}
+.groove-radio-turn {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 460ms cubic-bezier(0.3, 1.2, 0.5, 1);
+}
+.groove-radio-card.is-tuning {
+  z-index: 1;
+}
+.groove-radio-card.is-tuning .groove-radio-turn {
+  transform: rotateY(180deg);
+}
+.groove-radio-face,
+.groove-radio-back {
+  backface-visibility: hidden;
+}
+.groove-radio-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 45%, var(--color-shell-700), var(--color-shell-900) 75%);
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / calc(0.45 * var(--shade))),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-cream-50) 8%, transparent);
+  transform: rotateY(180deg);
+}
+.groove-radio-card.is-tuning .groove-radio-disc > * {
+  animation: groove-radio-spin 1.6s linear infinite;
+}
+/* Gone to the deck, and not back on the card while it turns round: the flight
+   shows its record again as it lands, and that record is on the deck now. */
+.groove-radio-card.is-empty .groove-radio-disc {
+  visibility: hidden !important;
+}
+@keyframes groove-radio-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* What a pulse's ring goes out from: the card's own edge. */
+.groove-radio-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+}
+.groove-radio-card .groove-radio-bars {
+  transform-origin: bottom;
+  left: 12px;
+  right: auto;
+  bottom: 12px;
+}
+.groove-radio-bars {
+  position: absolute;
+  right: 9px;
+  bottom: 10px;
+  display: flex;
+  height: 14px;
+  align-items: flex-end;
+  gap: 2px;
+}
+.groove-radio-bars i {
+  width: 3px;
+  height: 40%;
+  border-radius: 1px;
+  background: #fff;
+}
+.groove-radio-bars.is-sounding i {
+  animation: groove-radio-bar 0.7s ease-in-out infinite alternate;
+}
+.groove-radio-bars.is-sounding i:nth-child(2) {
+  animation-delay: -0.25s;
+}
+.groove-radio-bars.is-sounding i:nth-child(3) {
+  animation-delay: -0.5s;
+}
+.groove-radio-bars.is-sounding i:nth-child(4) {
+  animation-delay: -0.1s;
+}
+@keyframes groove-radio-bar {
+  from {
+    height: 20%;
+  }
+  to {
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-radio-turn,
+  .groove-radio-card.is-tuning .groove-radio-disc > * {
+    transition: none;
+    animation: none;
+  }
+  /* Not turned over at all: the record goes straight to the deck. */
+  .groove-radio-card.is-tuning .groove-radio-turn {
+    transform: none;
+  }
+  .groove-radio-bars.is-sounding i {
+    animation: none;
+  }
+}
+
 /* A playlist's name on its page: one line, or two, or two cut short — see
    `fitTitle.ts`, which decides which. */
 .groove-crate-title[data-lines='1'] {

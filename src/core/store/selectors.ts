@@ -1,3 +1,4 @@
+import { radioOf } from '@/core/radio';
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { stepWithin, usePlayerStore, type PlayerState } from './playerStore';
@@ -29,6 +30,8 @@ export const usePlayback = () => usePlayerStore((s) => s.playback);
 export const useImporting = () => usePlayerStore((s) => s.importing);
 
 export const useStation = () => usePlayerStore((s) => s.station);
+/** The radio that is on, if one is: read off the collection that is playing. */
+export const useRadio = () => radioOf(usePlayerStore((s) => s.playback.id));
 /** A playlist put on whole is playing, so the station cannot be switched on. */
 export const useStationHeldOff = () => usePlayerStore((s) => s.wholeList && !s.station);
 export const useStationSearching = () => usePlayerStore((s) => s.stationSearching);

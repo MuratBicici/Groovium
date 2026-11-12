@@ -11,7 +11,7 @@
  */
 
 /** The accent, the main colour and the ground. */
-type Palette = readonly [string, string, string];
+export type Palette = readonly [string, string, string];
 
 type Draw = (palette: Palette, random: () => number) => string;
 
@@ -296,6 +296,22 @@ export function paintedCover(key: string): string {
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${S}' height='${S}' viewBox='0 0 ${S} ${S}'>${family.draw(palette, random)}</svg>`;
   const address = `data:image/svg+xml,${svg.replace(/[%#<>]/g, encodeURIComponent)}`;
   painted.set(key, address);
+  return address;
+}
+
+/**
+ * A picture drawn by one of the motifs in colours given, rather than ones picked by
+ * the key: for something that has its own colours, as a radio does. The key still
+ * lays it out, so the same thing is the same picture.
+ */
+export function paintedScene(family: number, palette: Palette, key: string): string {
+  const cacheKey = `scene:${family}:${palette.join()}:${key}`;
+  const known = painted.get(cacheKey);
+  if (known !== undefined) return known;
+  const motif = FAMILIES[family % FAMILIES.length] as Family;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${S}' height='${S}' viewBox='0 0 ${S} ${S}'>${motif.draw(palette, seeded(key))}</svg>`;
+  const address = `data:image/svg+xml,${svg.replace(/[%#<>]/g, encodeURIComponent)}`;
+  painted.set(cacheKey, address);
   return address;
 }
 
