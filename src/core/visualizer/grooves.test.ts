@@ -6,7 +6,6 @@ import {
   glintAt,
   glintSpeed,
   presence,
-  sounding,
   spread,
   springStep,
 } from './grooves';
@@ -154,10 +153,6 @@ describe('the grooves coming and going', () => {
     expect(after(0, true, true, 0.3)).toBeGreaterThan(1 - after(1, false, true, 0.3));
   });
 
-  it('count a sound too quiet to show as nothing', () => {
-    expect(sounding([0.01, 0.005])).toBe(false);
-    expect(sounding([0.01, 0.3])).toBe(true);
-  });
 });
 
 describe('flattening when the music stops', () => {

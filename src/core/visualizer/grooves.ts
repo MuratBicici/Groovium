@@ -113,7 +113,7 @@ export const FLARE_TAU = 0.02;
 export const FLARE_FADE = 3.5;
 
 /**
- * How present the grooves are: whether there is any sound for them to be.
+ * How present the grooves are: whether there is a song playing for them to be.
  *
  * Without it they went flat when the music stopped or the volume went right
  * down, sat there as four still lines, and then vanished in one frame when
@@ -123,17 +123,15 @@ export const FLARE_FADE = 3.5;
  * previews, over fading, gathering in and being wiped by the light. Down over
  * about two seconds, up in under one — both twice what was first tried, which
  * in the app was too quick to be seen as a movement at all.
+ *
+ * By the player, not the sound: going whenever the sound did, they went in the
+ * silent parts of songs and while one waited on the network, with the music
+ * still going. A song playing keeps them, lying flat if it is silent.
  */
-export const SOUNDING = 0.02;
 export const PRESENT_IN = 0.25;
 export const PRESENT_OUT = 0.6;
 /** How far the grooves sink when they go, as a share of the height. */
 export const SINK = 0.75;
-
-/** Whether any band of a frame is loud enough to count as sound. */
-export function sounding(bars: readonly number[]): boolean {
-  return bars.some((bar) => bar > SOUNDING);
-}
 
 /** Below this the grooves count as flat, and may sink. */
 export const FLAT = 0.02;
@@ -144,15 +142,15 @@ export const FLAT = 0.02;
  * In the order it was asked for: when the music stops they flatten first,
  * where they are, and only once they lie flat do they sink — so going is two
  * movements that can each be seen, not one that is over before it is noticed.
- * With sound they rise at once, flat or not.
+ * With a song playing they rise at once, flat or not.
  */
 export function presence(
   was: number,
-  heard: boolean,
+  playing: boolean,
   flat: boolean,
   seconds: number,
 ): number {
-  const to = heard || !flat ? 1 : 0;
+  const to = playing || !flat ? 1 : 0;
   return ease(was, to, seconds, to > was ? PRESENT_IN : PRESENT_OUT);
 }
 

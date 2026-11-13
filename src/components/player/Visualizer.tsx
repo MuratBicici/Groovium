@@ -19,7 +19,6 @@ import {
   SINK,
   FLAT,
   flatten,
-  sounding,
   spread,
 } from '@/core/visualizer/grooves';
 import { NO_BEAT, listen, type Beat } from '@/core/visualizer/onset';
@@ -242,7 +241,9 @@ export function Visualizer({
    * tear the drawing down.
    */
   const playing = useRef(false);
-  const isPlaying = usePlayerStore((s) => s.playbackState === 'PLAYING');
+  // Loading counts as playing: a song waiting on the network, or the next one
+  // on its way, is still the music going on, and the grooves stay for it.
+  const isPlaying = usePlayerStore((s) => s.playbackState === 'PLAYING' || s.playbackState === 'LOADING');
   useEffect(() => {
     playing.current = isPlaying;
   }, [isPlaying]);
@@ -462,7 +463,10 @@ export function Visualizer({
       travelled += seconds * glintSpeed(level, flare);
       present = presence(
         present,
-        !stopped && sounding(target),
+        // While a song plays they stay, flat in a silence rather than gone:
+        // they were going whenever the sound did, in the quiet parts of songs
+        // and while one waited on the network, and the music had not stopped.
+        !stopped,
         pos.every((at) => at < FLAT),
         seconds,
       );
