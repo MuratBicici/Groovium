@@ -35,6 +35,7 @@ import {
   outOfReach,
   OUTAGE_AFTER_MS,
   freshEars,
+  QUIET_HOLD_MS,
   hear,
 } from './stallWatch';
 
@@ -395,8 +396,15 @@ describe('hearing whether sound comes out', () => {
 
   it('calls it silent once the levels have been all but empty for long enough', () => {
     const frames: Array<[number, number]> = [[0, 0.5]];
-    for (let t = 33; t <= 33 * 20; t += 33) frames.push([t, 0]);
+    for (let t = 33; t <= QUIET_HOLD_MS + 100; t += 33) frames.push([t, 0]);
     expect(run(frames).silent).toBe(true);
+  });
+
+  it('does not take a song gone silent for a second or two for the sound running out', () => {
+    const frames: Array<[number, number]> = [[0, 0.5]];
+    for (let t = 33; t <= 2_000; t += 33) frames.push([t, 0]);
+    frames.push([2_033, 0.4]);
+    expect(run(frames).silent).toBe(false);
   });
 
   it('does not call a short gap silent', () => {

@@ -460,12 +460,16 @@ export function bufferStep(
  *
  * Levels are the visualiser's bars, 0..1 above a floor of −66 dB. Loud enough
  * to count as sound is well clear of that; silent is all of them all but empty
- * for half a second — a bar takes about two seconds to fall from full, so this
- * is not tripped by a beat's gap, and a quiet passage is still far above it.
+ * for two and a half seconds. Half a second, as it was, took songs that go
+ * silent for a moment — a break, a stop before the last chorus — for the sound
+ * running out, and the window said it was loading over music that was playing.
+ * Those are a second or two; the stalls in the logs were two to thirteen. One
+ * shorter than this is not said, and the player putting its clock back after
+ * it is still caught. A quiet passage is far above the level either way.
  */
 export const LOUD_LEVEL = 0.08;
 export const QUIET_LEVEL = 0.02;
-export const QUIET_HOLD_MS = 500;
+export const QUIET_HOLD_MS = 2_500;
 /** Frames further apart than this mean the measure has stopped, not the sound. */
 export const FRAME_GAP_MS = 250;
 
