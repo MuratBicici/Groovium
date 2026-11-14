@@ -212,3 +212,5 @@ Character theme packs are being designed, with separately installed artwork. The
 Found a bug or have an idea? [Open an issue](https://github.com/MuratBicici/Groovium/issues) with the app version and steps to reproduce where relevant.
 
 Groovium is released under the [MIT License](LICENSE).
+
+The rain in focus sessions is [Rain (loopable)](https://opengameart.org/content/rain-loopable) by Ylmir, released under CC0.

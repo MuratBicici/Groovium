@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { isTauri } from '@/core/utils/env';
+import { useFocusStore } from '@/core/focus/store';
 import {
   hideWindow,
   minimizeWindow,
@@ -25,6 +26,8 @@ export function WindowChrome() {
   const pinned = useSettingsStore((s) => s.alwaysOnTop);
   const setPinned = useSettingsStore((s) => s.setAlwaysOnTop);
   const compact = useSettingsStore((s) => s.compact);
+  // Over the water during a focus session: the window can still be moved, collapsed and closed.
+  const focusing = useFocusStore((s) => s.phase) !== 'idle';
   const setCompact = useSettingsStore((s) => s.setCompact);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export function WindowChrome() {
       data-tauri-drag-region
       // Raised over the lyrics record, which carries on up under the bar; still
       // under a record in the air (`z-10`).
-      className="relative z-[5] flex h-8 shrink-0 items-center justify-between px-3"
+      className={`relative flex h-8 shrink-0 items-center justify-between px-3 ${focusing ? 'z-[45]' : 'z-[5]'}`}
     >
       {/* `lang` because uppercasing is language-sensitive and this is a name,
           not a word. In a Turkish document a lowercase i capitalises to İ, so

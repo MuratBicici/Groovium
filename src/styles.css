@@ -2081,3 +2081,349 @@ body {
     transform: scaleX(0);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Focus sessions: the drawer side that sets one up, and the window under water.
+   --------------------------------------------------------------------------- */
+
+.groove-focus-label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-cream-400);
+}
+
+.groove-focus-chip {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--color-cream-200);
+  background: color-mix(in srgb, var(--color-shell-900) 60%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-edge);
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+.groove-focus-chip:hover {
+  color: var(--color-cream-50);
+  box-shadow: inset 0 0 0 1px var(--color-brass-600);
+}
+.groove-focus-chip.is-on {
+  background: var(--color-brass-600);
+  color: var(--color-on-accent);
+  box-shadow: none;
+}
+
+.groove-focus-stepper {
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-shell-900) 60%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-edge);
+  transition: box-shadow 160ms ease-out;
+}
+.groove-focus-stepper.is-on {
+  box-shadow: inset 0 0 0 1.5px var(--color-brass-500);
+}
+.groove-focus-stepper button {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--color-cream-200);
+  transition:
+    color 160ms ease-out,
+    background-color 160ms ease-out;
+}
+.groove-focus-stepper button:hover:not(:disabled) {
+  color: var(--color-cream-50);
+  background: var(--color-shell-600);
+}
+.groove-focus-stepper button:disabled {
+  opacity: 0.35;
+}
+.groove-focus-stepper output {
+  min-width: 52px;
+  text-align: center;
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-50);
+}
+
+.groove-focus-sound {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  overflow: hidden;
+  border-radius: 14px;
+  text-align: left;
+  color: #fff;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.4);
+}
+.groove-focus-sound.is-on {
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / 0.4),
+    0 0 0 2px var(--color-brass-400);
+}
+.groove-focus-sound img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.groove-focus-sound-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgb(0 0 0 / 0.55), transparent 45%, transparent 60%, rgb(0 0 0 / 0.55));
+}
+.groove-focus-sound-name {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.groove-focus-sound-by {
+  position: absolute;
+  bottom: 9px;
+  left: 12px;
+  font-size: var(--text-meta);
+  opacity: 0.85;
+}
+
+.groove-focus-range {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-brass-500) var(--filled),
+    color-mix(in srgb, var(--color-cream-400) 25%, transparent) var(--filled)
+  );
+  cursor: pointer;
+}
+.groove-focus-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-brass-400);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  transition: transform 140ms ease-out;
+}
+.groove-focus-range:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.groove-focus-start {
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: var(--text-heading);
+  font-weight: 600;
+  color: var(--color-on-accent);
+  background: var(--color-brass-500);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-brass-600) 45%, transparent);
+  transition:
+    transform 160ms ease-out,
+    background-color 160ms ease-out;
+}
+.groove-focus-start:hover {
+  background: var(--color-brass-400);
+  transform: translateY(-1px);
+}
+.groove-focus-start:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Under water. Over everything in the window but its own title bar and edge. */
+.groove-focus {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  container-type: size;
+  color: var(--color-cream-50);
+}
+.groove-focus-water {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.groove-focus-centre {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.groove-focus-clock {
+  font-size: 64px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 0.35);
+}
+.groove-focus-under {
+  font-size: var(--text-body);
+  letter-spacing: 0.06em;
+  color: var(--color-cream-200);
+}
+.groove-focus-done {
+  position: absolute;
+  inset-inline: 16px;
+  bottom: 74px;
+  text-align: center;
+  font-size: var(--text-heading);
+  color: var(--color-cream-50);
+  pointer-events: none;
+}
+
+/* Arriving: up out of the blur as the water settles. Leaving: quickly, before it goes. */
+.groove-focus-centre,
+.groove-focus-done {
+  opacity: 0;
+  filter: blur(6px);
+  translate: 0 12px;
+  transition:
+    opacity 240ms ease-in,
+    filter 240ms ease-in,
+    translate 240ms ease-in;
+}
+.groove-focus.is-revealed .groove-focus-centre,
+.groove-focus.is-revealed .groove-focus-done {
+  opacity: 1;
+  filter: none;
+  translate: 0 0;
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    translate 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.groove-focus.is-paused .groove-focus-clock {
+  animation: groove-focus-breathe 2.4s ease-in-out infinite;
+}
+.groove-focus.is-over .groove-focus-clock {
+  color: var(--color-brass-400);
+}
+@keyframes groove-focus-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.groove-focus-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(6px);
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  transition:
+    opacity 400ms ease-out,
+    transform 400ms ease-out;
+}
+.groove-focus-controls.is-shown,
+.groove-focus-controls:focus-within {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.groove-focus-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: var(--text-body);
+  color: var(--color-cream-50);
+  transition: background-color 160ms ease-out;
+}
+.groove-focus-button:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+.groove-focus-button svg {
+  width: 16px;
+  height: 16px;
+}
+.groove-focus-button.is-end {
+  padding-right: 12px;
+}
+.groove-focus-range.is-under {
+  width: 96px;
+}
+
+/* The player alone, without the drawer: a smaller clock. */
+@container (max-width: 520px) {
+  .groove-focus-clock {
+    font-size: 50px;
+  }
+  .groove-focus-done {
+    font-size: var(--text-body);
+  }
+  .groove-focus-range.is-under {
+    width: 64px;
+  }
+}
+
+/* The collapsed bar: one row — the clock, the bars drawn on the canvas, the buttons. */
+.groove-focus.is-compact .groove-focus-centre {
+  left: 16px;
+  top: calc(50% + 14px);
+  align-items: flex-start;
+  gap: 0;
+  transform: translate(0, -50%);
+}
+.groove-focus.is-compact .groove-focus-clock {
+  font-size: 26px;
+  font-weight: 400;
+}
+.groove-focus.is-compact .groove-focus-under {
+  font-size: var(--text-meta);
+}
+.groove-focus.is-compact .groove-focus-controls,
+.groove-focus.is-compact .groove-focus-controls.is-shown {
+  left: auto;
+  right: 12px;
+  bottom: auto;
+  top: calc(50% + 14px);
+  padding: 3px;
+  gap: 4px;
+  background: transparent;
+  backdrop-filter: none;
+  transform: translate(0, -50%);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-focus-centre,
+  .groove-focus-done,
+  .groove-focus-controls {
+    transition: opacity 200ms linear;
+    filter: none;
+    translate: none;
+  }
+  .groove-focus.is-paused .groove-focus-clock {
+    animation: none;
+    opacity: 0.6;
+  }
+}

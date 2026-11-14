@@ -236,6 +236,12 @@ pub struct Settings {
     /// computer's music and Groovium's playlists, `"spotify"` for Spotify.
     #[serde(default = "groovium_side")]
     pub library_tab: String,
+    /// The length a focus session was last given, in minutes.
+    #[serde(default = "focus_minutes")]
+    pub focus_minutes: u32,
+    /// The focus sound's volume, 0 to 1 of its own ceiling.
+    #[serde(default = "focus_volume")]
+    pub focus_volume: f64,
 }
 
 /// What a fresh installation is, spelled out.
@@ -292,6 +298,8 @@ impl Default for Settings {
             lyrics_on: false,
             lyrics_place: compact_place(),
             library_tab: groovium_side(),
+            focus_minutes: focus_minutes(),
+            focus_volume: focus_volume(),
         }
     }
 }
@@ -331,6 +339,14 @@ fn as_designed() -> f64 {
 
 fn groovium_side() -> String {
     "groovium".to_owned()
+}
+
+fn focus_minutes() -> u32 {
+    25
+}
+
+fn focus_volume() -> f64 {
+    0.5
 }
 
 fn compact_place() -> String {
@@ -516,6 +532,8 @@ mod tests {
             lyrics_on: true,
             lyrics_place: "full".into(),
             library_tab: "spotify".into(),
+            focus_minutes: 45,
+            focus_volume: 0.3,
         };
 
         let written = serde_json::to_string(&config).expect("serializes");

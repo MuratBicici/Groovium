@@ -120,6 +120,8 @@ describe('remembering that a version has been shown', () => {
       lyricsOn: true,
       lyricsPlace: 'full',
       libraryTab: 'groovium',
+      focusMinutes: 25,
+      focusVolume: 0.5,
     });
   });
 

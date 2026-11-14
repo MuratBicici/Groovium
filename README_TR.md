@@ -212,3 +212,5 @@ Görselleri ayrı yüklenen karakter tema paketleri tasarlanıyor. **Henüz uygu
 Bir hata mı buldun, bir fikrin mi var? [Issue aç](https://github.com/MuratBicici/Groovium/issues). Hata bildirirken uygulama sürümünü ve sorunu yeniden oluşturma adımlarını ekle.
 
 Groovium, [MIT Lisansı](LICENSE) ile sunulur.
+
+Odaklanma seanslarındaki yağmur, Ylmir’in CC0 ile yayımladığı [Rain (loopable)](https://opengameart.org/content/rain-loopable) kayıtlarıdır.

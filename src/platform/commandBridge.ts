@@ -1,4 +1,5 @@
 import { usePlayerStore } from '@/core/store';
+import { useFocusStore } from '@/core/focus/store';
 import { isTauri } from '@/core/utils/env';
 import { log } from '@/platform/log';
 
@@ -61,6 +62,12 @@ export function startCommandBridge(): () => void {
 }
 
 async function dispatch(command: MediaCommand): Promise<void> {
+  // Under water the music is not what is playing: play/pause holds the
+  // session, and next and previous have nothing to move between.
+  if (useFocusStore.getState().phase !== 'idle') {
+    if (command === 'playpause') useFocusStore.getState().togglePause();
+    return;
+  }
   const { togglePlayPause, next, previous } = usePlayerStore.getState();
 
   switch (command) {

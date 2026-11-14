@@ -70,6 +70,7 @@ interface SettingsStore extends Settings {
   setSleepWhenHidden: (on: boolean) => void;
   setScale: (scale: number) => void;
   setLibraryTab: (tab: LibraryTab) => void;
+  setFocus: (patch: { focusMinutes?: number; focusVolume?: number }) => void;
   setThemeFromCover: (on: boolean) => void;
   /** The palette taken from the cover on the deck, or null for none. */
   coverPalette: CoverPalette | null;
@@ -366,7 +367,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { visualizerLook, visualizerBrightness, pickAnimation, batterySaver, batterySaverOnBattery, dropZone, volumeStyle } = get();
     const { equaliserOn, equaliserPreamp, equaliserBands, equaliserSaved } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
-    const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab } = get();
+    const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab, focusMinutes, focusVolume } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
     // stops being saved.
@@ -415,6 +416,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       lyricsOn,
       lyricsPlace,
       libraryTab,
+      focusMinutes,
+      focusVolume,
     };
     return settings;
   };
@@ -487,6 +490,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setSleepWhenHidden: (sleepWhenHidden) => commit({ sleepWhenHidden }),
     setScale: (scale) => commit({ scale: nearestScale(scale) }),
     setLibraryTab: (libraryTab) => commit({ libraryTab }),
+    setFocus: (patch) => commit(patch),
     setThemeFromCover: (themeFromCover) => commit({ themeFromCover }),
 
     /**

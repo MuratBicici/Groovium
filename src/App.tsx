@@ -55,6 +55,8 @@ import { TransportControls } from '@/components/controls/TransportControls';
 import { VolumeKnob } from '@/components/controls/VolumeKnob';
 import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
+import { FocusOverlay } from '@/components/focus/FocusOverlay';
+import { useFocusStore } from '@/core/focus/store';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
 import {
@@ -384,6 +386,9 @@ export default function App() {
   }, [dropHover, stageRef]);
 
 
+  /** A focus session: the window is under water, and nothing under it can be reached. */
+  const focusing = useFocusStore((s) => s.phase) !== 'idle';
+
   const [overlay, setOverlay] = useState<Overlay>('none');
   // Collapsing takes the panel buttons away with it, so nothing may be showing
   // over a bar that has no way to close it. Derived rather than reset: what was
@@ -603,7 +608,7 @@ export default function App() {
           A row inside the shell rather than turning the shell itself sideways:
           `useCompactShell` reads the shell's height as chrome + stage + bottom,
           and that arithmetic only holds while the shell is a column. */}
-      <div className={`flex min-h-0 flex-1 ${drawerSide === 'left' ? 'flex-row-reverse' : ''}`}>
+      <div inert={focusing} className={`flex min-h-0 flex-1 ${drawerSide === 'left' ? 'flex-row-reverse' : ''}`}>
       {/* The player keeps its designed width whatever else is open, so that
           the shell narrowing around it during the drawer's animation moves
           nothing inside it.
@@ -884,6 +889,15 @@ export default function App() {
           `pointer-events-none` means nothing has to be. */}
       {/* Under the edge and on the same layer, so the hairline stays crisp on
           top of the light rather than being drawn through it. */}
+      {focusing && (
+        <FocusOverlay
+          compact={compact}
+          drawerOpen={drawerOpen}
+          onToggleDrawer={() =>
+            setLyricsLayout(drawerOpen ? closeDrawer(layout) : showSpotify(layout))
+          }
+        />
+      )}
       <EqualiserLink />
       <WindowGlow
         on={windowGlow}

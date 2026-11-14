@@ -6,6 +6,7 @@ import { isTauri } from '@/core/utils/env';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { useT } from '@/core/i18n';
 import { GrooviumDrawer } from './GrooviumDrawer';
+import { FocusDrawer } from '@/components/focus/FocusDrawer';
 
 /** How long changing sides takes: the pill across, and the side coming in. */
 const SWITCH_MS = 240;
@@ -14,17 +15,18 @@ const SWITCH_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const SLIDE_PX = 14;
 
 /** Left to right, the order the switch shows them in. */
-const ORDER: LibraryTab[] = ['groovium', 'spotify'];
+const ORDER: LibraryTab[] = ['groovium', 'spotify', 'focus'];
 
 /**
- * The library, pulled out beside the player: one drawer, two sides.
+ * The library, pulled out beside the player: one drawer, three sides.
  *
  * This computer's music and Groovium's playlists on one side, Spotify on the
- * other, chosen at the top. They were three buttons — a library panel, a
+ * next, chosen at the top. They were three buttons — a library panel, a
  * playlists panel, and this drawer for Spotify — for what is one question:
- * what to play next.
+ * what to play next. Focus sessions are the third side: not something to
+ * play, but where one is set up, and the drawer is where things are chosen.
  *
- * Both sides stay mounted and the one not chosen is hidden rather than taken
+ * The sides stay mounted and the one not chosen is hidden rather than taken
  * away, so going back finds the shelves where they were scrolled to and
  * Spotify not asked again for what it already said.
  */
@@ -34,7 +36,7 @@ export function LibraryDrawer({ id, onClose }: { id: string; onClose: () => void
   // Spotify needs the loopback listener and the OS credential store, neither
   // of which exists in a plain browser.
   const spotifyHere = isTauri();
-  const showing: LibraryTab = spotifyHere ? tab : 'groovium';
+  const showing: LibraryTab = spotifyHere || tab !== 'spotify' ? tab : 'groovium';
   const switcher = <Switcher tab={showing} onChoose={setTab} spotify={spotifyHere} />;
 
   const sides = useRef<Partial<Record<LibraryTab, HTMLDivElement | null>>>({});
@@ -95,11 +97,19 @@ export function LibraryDrawer({ id, onClose }: { id: string; onClose: () => void
           />
         </div>
       )}
+      <div
+        ref={(el) => {
+          sides.current.focus = el;
+        }}
+        className={showing === 'focus' ? 'flex h-full' : 'hidden'}
+      >
+        <FocusDrawer id={`${id}-focus`} switcher={switcher} onClose={onClose} />
+      </div>
     </div>
   );
 }
 
-/** Local | Spotify, at the top of whichever side is showing. */
+/** Local | Spotify | Focus, at the top of whichever side is showing. */
 function Switcher({
   tab,
   onChoose,
@@ -113,6 +123,7 @@ function Switcher({
   const sides: { id: LibraryTab; label: string; brand?: boolean }[] = [
     { id: 'groovium', label: t('library.local') },
     ...(spotify ? [{ id: 'spotify' as const, label: 'Spotify', brand: true }] : []),
+    { id: 'focus', label: t('library.focus') },
   ];
   const at = Math.max(0, sides.findIndex((side) => side.id === tab));
 

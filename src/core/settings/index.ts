@@ -2,6 +2,7 @@ import { heldBands, heldDb, heldSaved, type EqSaved } from '@/core/equaliser';
 import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
 import { log } from '@/platform/log';
+import { heldMinutes } from '@/core/focus/clock';
 import type { LyricsPlace } from '@/core/lyrics/layout';
 
 /**
@@ -250,12 +251,16 @@ export interface Settings {
   lyricsPlace: LyricsPlace;
   /** Which side of the library drawer is showing. */
   libraryTab: LibraryTab;
+  /** The length a focus session was last given, in minutes. */
+  focusMinutes: number;
+  /** The focus sound's volume, 0 to 1 of its own ceiling — not the music's. */
+  focusVolume: number;
 }
 
 export type DrawerSide = 'left' | 'right';
 
-/** The library drawer's two sides: this computer and Groovium's playlists, or Spotify. */
-export type LibraryTab = 'groovium' | 'spotify';
+/** The library drawer's sides: this computer and Groovium's playlists, Spotify, and focus sessions. */
+export type LibraryTab = 'groovium' | 'spotify' | 'focus';
 
 /** What the edge light listens to; see `glowListens`. */
 export type GlowListens = 'all' | 'bass';
@@ -339,6 +344,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lyricsOn: false,
   lyricsPlace: 'compact',
   libraryTab: 'groovium',
+  focusMinutes: 25,
+  focusVolume: 0.5,
 };
 
 /** The sizes the window can be drawn at. */
@@ -365,7 +372,10 @@ export async function loadSettings(): Promise<Settings> {
     // a word nobody recognises would leave it growing in neither.
     if (settings.drawerSide !== 'left') settings.drawerSide = 'right';
     if (settings.lyricsPlace !== 'full') settings.lyricsPlace = 'compact';
-    if (settings.libraryTab !== 'spotify') settings.libraryTab = 'groovium';
+    if (settings.libraryTab !== 'spotify' && settings.libraryTab !== 'focus') settings.libraryTab = 'groovium';
+    settings.focusMinutes = heldMinutes(settings.focusMinutes);
+    const focusVolume = Number(settings.focusVolume);
+    settings.focusVolume = Number.isFinite(focusVolume) ? Math.max(0, Math.min(1, focusVolume)) : 0.5;
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';
