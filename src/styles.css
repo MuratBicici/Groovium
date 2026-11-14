@@ -2094,69 +2094,11 @@ body {
   color: var(--color-cream-400);
 }
 
-.groove-focus-chip {
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: var(--text-body);
-  font-weight: 500;
-  color: var(--color-cream-200);
-  background: color-mix(in srgb, var(--color-shell-900) 60%, transparent);
-  box-shadow: inset 0 0 0 1px var(--color-edge);
-  transition:
-    background-color 160ms ease-out,
-    color 160ms ease-out,
-    box-shadow 160ms ease-out;
-}
-.groove-focus-chip:hover {
-  color: var(--color-cream-50);
-  box-shadow: inset 0 0 0 1px var(--color-brass-600);
-}
-.groove-focus-chip.is-on {
-  background: var(--color-brass-600);
-  color: var(--color-on-accent);
-  box-shadow: none;
-}
-
-.groove-focus-stepper {
-  display: flex;
-  align-items: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-shell-900) 60%, transparent);
-  box-shadow: inset 0 0 0 1px var(--color-edge);
-  transition: box-shadow 160ms ease-out;
-}
-.groove-focus-stepper.is-on {
-  box-shadow: inset 0 0 0 1.5px var(--color-brass-500);
-}
-.groove-focus-stepper button {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  font-size: 15px;
-  color: var(--color-cream-200);
-  transition:
-    color 160ms ease-out,
-    background-color 160ms ease-out;
-}
-.groove-focus-stepper button:hover:not(:disabled) {
-  color: var(--color-cream-50);
-  background: var(--color-shell-600);
-}
-.groove-focus-stepper button:disabled {
-  opacity: 0.35;
-}
-.groove-focus-stepper output {
-  min-width: 52px;
-  text-align: center;
-  font-size: var(--text-body);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-cream-50);
-}
-
 .groove-focus-sound {
   position: relative;
-  width: 128px;
-  height: 128px;
+  flex: none;
+  width: 220px;
+  height: 300px;
   overflow: hidden;
   border-radius: 14px;
   text-align: left;
@@ -2168,7 +2110,8 @@ body {
     0 8px 20px rgb(0 0 0 / 0.4),
     0 0 0 2px var(--color-brass-400);
 }
-.groove-focus-sound img {
+.groove-focus-sound img,
+.groove-focus-sound canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2182,9 +2125,9 @@ body {
 }
 .groove-focus-sound-name {
   position: absolute;
-  top: 10px;
-  left: 12px;
-  font-size: 18px;
+  top: 12px;
+  left: 14px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.1;
 }
@@ -2196,49 +2139,50 @@ body {
   opacity: 0.85;
 }
 
-.groove-focus-range {
-  width: 100%;
-  height: 4px;
-  appearance: none;
-  border-radius: 999px;
-  background: linear-gradient(
-    to right,
-    var(--color-brass-500) var(--filled),
-    color-mix(in srgb, var(--color-cream-400) 25%, transparent) var(--filled)
-  );
-  cursor: pointer;
+/* The length on a record, and its label the button that starts the session. */
+.groove-focus-dial {
+  position: relative;
+  flex: none;
 }
-.groove-focus-range::-webkit-slider-thumb {
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--color-brass-400);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
-  transition: transform 140ms ease-out;
+.groove-focus-dial canvas {
+  display: block;
+  border-radius: 50%;
+  outline: none;
+  touch-action: none;
 }
-.groove-focus-range:hover::-webkit-slider-thumb {
-  transform: scale(1.15);
+.groove-focus-dial canvas:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-brass-400);
 }
-
-.groove-focus-start {
-  border-radius: 999px;
-  padding: 10px 22px;
-  font-size: var(--text-heading);
-  font-weight: 600;
+.groove-focus-dial-start {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
   color: var(--color-on-accent);
-  background: var(--color-brass-500);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--color-brass-600) 45%, transparent);
-  transition:
-    transform 160ms ease-out,
-    background-color 160ms ease-out;
 }
-.groove-focus-start:hover {
-  background: var(--color-brass-400);
-  transform: translateY(-1px);
+.groove-focus-dial-start:focus-visible {
+  outline: 2px solid var(--color-cream-50);
+  outline-offset: 3px;
 }
-.groove-focus-start:active {
-  transform: translateY(1px) scale(0.98);
+.groove-focus-dial-minutes {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.groove-focus-dial-go {
+  margin-top: 2px;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* Under water. Over everything in the window but its own title bar and edge. */

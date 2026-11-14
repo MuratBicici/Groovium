@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   beginClock,
+  dialMinutes,
   elapsed,
   formatClock,
   heldMinutes,
@@ -66,11 +67,19 @@ describe('the time as shown', () => {
   });
 });
 
+describe('a length from the dial', () => {
+  it('goes in fives, between its ends', () => {
+    expect(dialMinutes(23)).toBe(25);
+    expect(dialMinutes(0)).toBe(5);
+    expect(dialMinutes(200)).toBe(120);
+  });
+});
+
 describe('a length asked for', () => {
   it('is held to whole minutes in range', () => {
     expect(heldMinutes(24.6)).toBe(25);
     expect(heldMinutes(1)).toBe(5);
-    expect(heldMinutes(999)).toBe(180);
+    expect(heldMinutes(999)).toBe(120);
     expect(heldMinutes('nonsense')).toBe(25);
   });
 });

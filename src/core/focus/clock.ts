@@ -18,16 +18,22 @@ export interface SessionClock {
   pausedAt: number | null;
 }
 
-/** The lengths offered, in minutes. */
-export const FOCUS_LENGTHS = [15, 25, 45, 60] as const;
+/** The shortest session, and the longest: one full turn of the dial. */
 export const MIN_MINUTES = 5;
-export const MAX_MINUTES = 180;
+export const MAX_MINUTES = 120;
+export const DIAL_MINUTES = MAX_MINUTES;
 
-/** A length somebody asked for, held to whole minutes the stepper can reach. */
+/** A length somebody asked for, held to whole minutes within the ends. */
 export function heldMinutes(value: unknown): number {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return 25;
   return Math.max(MIN_MINUTES, Math.min(MAX_MINUTES, n));
+}
+
+/** A length from the dial: to the nearest five minutes, within its ends. */
+export function dialMinutes(value: number): number {
+  const n = Math.round(value / 5) * 5;
+  return Number.isFinite(n) ? Math.max(MIN_MINUTES, Math.min(MAX_MINUTES, n)) : 25;
 }
 
 export function beginClock(now: number, minutes: number): SessionClock {
