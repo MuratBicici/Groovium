@@ -899,8 +899,9 @@ export default function App() {
         />
       )}
       <EqualiserLink />
+      {/* Out under water: the edge light answers the music, and a focus session has none. */}
       <WindowGlow
-        on={windowGlow}
+        on={windowGlow && !focusing}
         strength={glowStrength}
         sensitivity={glowSensitivity}
         speed={glowSpeed}
