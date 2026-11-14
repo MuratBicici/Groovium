@@ -41,14 +41,42 @@ const SLIDER_LETS_GO_MS = 120;
 const SLIDER_OPENS_AFTER_MS = 150;
 
 /**
- * Current volume read straight from the store rather than from a render
- * closure. Repeated key or wheel events fire faster than React re-renders, and
- * a captured value would make every event in a burst compute from the same
- * stale baseline — holding an arrow key would move one step and then stall.
+ * What a knob sets: the music's volume unless it is given something else — a
+ * focus session's sound has one of its own, turned by the same knob.
  */
-function liveVolume(): number {
-  const { volume, muted } = usePlayerStore.getState();
-  return muted ? 0 : volume;
+export interface VolumeSource {
+  volume: number;
+  muted: boolean;
+  /**
+   * The level as it is this moment, read straight from its store rather than
+   * from a render closure. Repeated key or wheel events fire faster than React
+   * re-renders, and a captured value would make every event in a burst compute
+   * from the same stale baseline — holding an arrow key would move one step and
+   * then stall.
+   */
+  live: () => { volume: number; muted: boolean };
+  set: (volume: number) => void;
+  toggleMute: () => void;
+  label: string;
+  /** Always the slider, whatever the setting says. */
+  slider?: boolean;
+}
+
+/** The music's volume, as a source. */
+function usePlayerVolume(): VolumeSource {
+  const t = useT();
+  const volume = useVolume();
+  const muted = useMuted();
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const toggleMute = usePlayerStore((s) => s.toggleMute);
+  return {
+    volume,
+    muted,
+    live: () => usePlayerStore.getState(),
+    set: (level) => setVolume(level),
+    toggleMute: () => toggleMute(),
+    label: t('transport.volume'),
+  };
 }
 
 /** What one gesture needs to remember. */
@@ -110,13 +138,16 @@ interface Turn {
  * Keyboard access goes through the standard slider role, so this is not
  * pointer-only, and the wheel still works.
  */
-export function VolumeKnob() {
+export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
   const t = useT();
-  const volume = useVolume();
-  const muted = useMuted();
-  const setVolume = usePlayerStore((s) => s.setVolume);
-  const toggleMute = usePlayerStore((s) => s.toggleMute);
-  const slider = useSettingsStore((s) => s.volumeStyle) === 'slider';
+  const player = usePlayerVolume();
+  const { volume, muted, live, set: setVolume, toggleMute, label } = source ?? player;
+  const liveVolume = () => {
+    const now = live();
+    return now.muted ? 0 : now.volume;
+  };
+  const chosenSlider = useSettingsStore((s) => s.volumeStyle) === 'slider';
+  const slider = source?.slider ?? chosenSlider;
 
   // A ref, not state: `pointermove` fires far faster than React re-renders, and
   // the running total has to be what the previous event left, not what the last
@@ -229,7 +260,7 @@ export function VolumeKnob() {
       // The handle comes to where the line was pressed, and goes on from there.
       setMoving(true);
       stepOut();
-      void setVolume(volumeAlongSlider(e.clientX - box.left));
+      setVolume(volumeAlongSlider(e.clientX - box.left));
     } else {
       setPressed(true);
     }
@@ -254,15 +285,15 @@ export function VolumeKnob() {
     }
     if (gesture.by === 'pressing') return;
     if (gesture.by === 'pointing') {
-      void setVolume(volumeAlongSlider(x - gesture.left));
+      setVolume(volumeAlongSlider(x - gesture.left));
       return;
     }
     if (gesture.by === 'sliding') {
-      void setVolume(volumeBySlide(gesture.volume, x - gesture.from.x));
+      setVolume(volumeBySlide(gesture.volume, x - gesture.from.x));
       return;
     }
     if (gesture.by === 'dragging') {
-      void setVolume(volumeByDrag(gesture.volume, x - gesture.from.x, y - gesture.from.y));
+      setVolume(volumeByDrag(gesture.volume, x - gesture.from.x, y - gesture.from.y));
       return;
     }
     const dx = x - gesture.centre.x;
@@ -271,7 +302,7 @@ export function VolumeKnob() {
     gesture.grip = moved.grip;
     if (moved.rotation === gesture.rotation) return;
     gesture.rotation = moved.rotation;
-    void setVolume(volumeFor(moved.rotation));
+    setVolume(volumeFor(moved.rotation));
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
@@ -290,13 +321,13 @@ export function VolumeKnob() {
     if (gesture.stillAPress) {
       if (press !== 'counts') return;
       if (slider && e.pointerType === 'mouse') {
-        const { muted: isMuted } = usePlayerStore.getState();
+        const { muted: isMuted } = live();
         const next = pressOnSliderKnob({ silent: liveVolume() === 0, muted: isMuted, open: out });
-        if (next.toggleMute) void toggleMute();
+        if (next.toggleMute) toggleMute();
         if (next.open) stepOut();
         else shut();
       } else {
-        void toggleMute();
+        toggleMute();
       }
     } else {
       // A hand let go of away from it was held there by the capture, and no word
@@ -314,7 +345,7 @@ export function VolumeKnob() {
   /** A nudge from the keyboard or the wheel, which shows itself as a hand does. */
   function nudge(by: number) {
     const next = liveVolume() + by;
-    void setVolume(next);
+    setVolume(next);
     if (slider && next <= 0) {
       // Down to nothing the line goes, pointer or no pointer, once the wheel stops.
       comeBack(true);
@@ -334,7 +365,7 @@ export function VolumeKnob() {
       nudge(-step);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      void toggleMute();
+      toggleMute();
     }
   }
 
@@ -346,7 +377,7 @@ export function VolumeKnob() {
     <div
       role="slider"
       tabIndex={0}
-      aria-label={t('transport.volume')}
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={figure}

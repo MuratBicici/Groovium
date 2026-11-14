@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '@/core/i18n';
-import { useSettingsStore } from '@/core/settings/store';
 import { formatClock, remaining, share } from '@/core/focus/clock';
 import { useFocusStore } from '@/core/focus/store';
 import { rainBands } from '@/core/focus/sound';
 import {
   LAYERS,
+  swell,
   css,
   diveTotal,
   layerRise,
@@ -16,6 +16,7 @@ import {
   type Rgb,
 } from '@/core/focus/water';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { FocusVolume } from './FocusVolume';
 
 /** The ring around the clock: this many bars, fed by this many bands of the rain. */
 const RING_BARS = 84;
@@ -26,7 +27,7 @@ const CONTROLS_MS = 2600;
 const REVEAL_AT = 0.72;
 /** Before the water starts down, the clock and ring go. */
 const SURFACE_DELAY_S = 0.28;
-const WAVE_PX = 15;
+const WAVE_PX = 22;
 const COMPACT_WAVE_PX = 4;
 
 /** What is said once the time is up, one of these a session. */
@@ -61,9 +62,7 @@ export function FocusOverlay({
   const phase = useFocusStore((s) => s.phase);
   const clock = useFocusStore((s) => s.clock);
   const silent = useFocusStore((s) => s.silent);
-  const { dived, surfaced, togglePause, end, setVolume } = useFocusStore.getState();
-  const volume = useSettingsStore((s) => s.focusVolume);
-  const setFocus = useSettingsStore((s) => s.setFocus);
+  const { dived, surfaced, togglePause, end } = useFocusStore.getState();
 
   const host = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -157,6 +156,13 @@ export function FocusOverlay({
       onPointerDown={stir}
       onFocus={stir}
     >
+      {/* How the window looks through the water while it rises: bent by noise that drifts. */}
+      <svg width="0" height="0" className="absolute" aria-hidden="true">
+        <filter id="groove-sink" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence id="groove-sink-noise" type="fractalNoise" baseFrequency="0.008 0.03" numOctaves="2" seed="7" result="noise" />
+          <feDisplacementMap id="groove-sink-bend" in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </svg>
       <canvas ref={canvas} className="groove-focus-water" aria-hidden="true" />
 
       <div className="groove-focus-centre" role="timer" aria-live="off">
@@ -175,6 +181,12 @@ export function FocusOverlay({
       )}
 
       <div className={`groove-focus-controls ${showControls ? 'is-shown' : ''}`} inert={!revealed}>
+        {/* First, so its line opens across the buttons beside it, as it does over the equaliser's on the deck. */}
+        {!compact && (
+          <div className="groove-focus-knob">
+            <FocusVolume />
+          </div>
+        )}
         <button type="button" className="groove-focus-button" onClick={togglePause} aria-label={paused ? t('focus.resume') : t('focus.pause')} title={paused ? t('focus.resume') : t('focus.pause')}>
           {paused ? (
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -194,22 +206,6 @@ export function FocusOverlay({
         </button>
         {!compact && (
           <>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={Math.round(volume * 100)}
-              aria-label={t('focus.volume')}
-              title={t('focus.volume')}
-              onChange={(e) => {
-                const next = Number(e.target.value) / 100;
-                setFocus({ focusVolume: next });
-                setVolume(next);
-              }}
-              className="groove-focus-range is-under"
-              style={{ ['--filled' as string]: `${Math.round(volume * 100)}%` }}
-            />
             <button
               type="button"
               className="groove-focus-button"
@@ -237,6 +233,18 @@ interface Live {
   share: number;
   over: boolean;
 }
+
+/** A drop of water thrown up off the crest, or left to run down as the water goes. */
+interface Drop {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+}
+
+/** Pulled down, in px a second a second. */
+const GRAVITY = 1150;
 
 interface Bubble {
   x: number;
@@ -293,7 +301,31 @@ function useWater(
     const bands = new Float32Array(BANDS);
     const heard = new Float32Array(RING_BARS);
     let bubbles: Bubble[] = [];
+    let drops: Drop[] = [];
     let frame = 0;
+    // What is under the water: the player and the drawer, bent and blurred
+    // through it while the water is still thin enough to see them.
+    const sinking = document.querySelector<HTMLElement>('[data-focus-sinks]');
+    const bend = document.getElementById('groove-sink-bend');
+    const noise = document.getElementById('groove-sink-noise');
+    let sunk = false;
+    const sink = (amount: number, time: number) => {
+      if (!sinking) return;
+      if (amount <= 0.001 || amount >= 0.999) {
+        if (sunk) {
+          sinking.style.filter = '';
+          sunk = false;
+        }
+        return;
+      }
+      sunk = true;
+      bend?.setAttribute('scale', String(Math.round(34 * amount * (0.85 + 0.15 * Math.sin(time * 2.2)))));
+      noise?.setAttribute(
+        'baseFrequency',
+        `${(0.007 + 0.0025 * Math.sin(time * 1.1)).toFixed(4)} ${(0.026 + 0.008 * Math.sin(time * 1.6)).toFixed(4)}`,
+      );
+      sinking.style.filter = `url(#groove-sink) blur(${(3.2 * amount * amount).toFixed(2)}px)`;
+    };
     let lastTime = performance.now() / 1000;
 
     const draw = (ms: number) => {
@@ -344,7 +376,10 @@ function useWater(
         } else {
           ctx.fillStyle = css(colours[layer] as Rgb, 0.92);
         }
+        // Thin at first, so what it rises over shows through it; deep once over.
+        ctx.globalAlpha = (quick ? ctx.globalAlpha : 1) * (layer === LAYERS - 1 ? 0.42 + 0.58 * rise * rise : 0.5 + 0.45 * rise);
         ctx.fill();
+        ctx.globalAlpha = quick ? (state.phase === 'surfacing' ? 0 : 1) : 1;
 
         // A line of light along the front crest while it moves.
         if (layer === LAYERS - 1 && rise < 1) {
@@ -354,9 +389,34 @@ function useWater(
             if (x === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
           }
-          ctx.strokeStyle = css(brassLight, 0.55);
+          // Foam first, broad and soft, then the lit edge on top of it.
+          ctx.strokeStyle = css(LIGHT, 0.22);
+          ctx.lineWidth = state.compact ? 3 : 7;
+          ctx.stroke();
+          ctx.strokeStyle = css(mix(LIGHT, brassLight, 0.5), 0.75);
           ctx.lineWidth = 1.5;
           ctx.stroke();
+          // Drops thrown up off the crest, harder the bigger the swell.
+          if (!quick && state.phase === 'diving' && rise > 0.04 && rise < 0.97) {
+            const count = Math.round(dt * (state.compact ? 25 : 110) * swell(rise));
+            for (let i = 0; i < count; i += 1) {
+              const x = Math.random() * width;
+              const force = (state.compact ? 90 : 260) + Math.random() * (state.compact ? 80 : 260);
+              drops.push({
+                x,
+                y: surfaceAt(x, time, layer, rise, height, amplitude),
+                vx: (Math.random() - 0.5) * 70,
+                vy: -force * swell(rise) * 0.7,
+                r: 0.8 + Math.random() * 2,
+              });
+            }
+          }
+          // Going down, the water leaves drops behind that run after it.
+          if (!quick && state.phase === 'surfacing' && rise > 0.03 && Math.random() < dt * (state.compact ? 8 : 40)) {
+            const x = Math.random() * width;
+            const crest = surfaceAt(x, time, layer, rise, height, amplitude);
+            drops.push({ x, y: Math.max(0, crest - 20 - Math.random() * height * 0.4), vx: 0, vy: 20 + Math.random() * 60, r: 0.8 + Math.random() * 1.6 });
+          }
           // Bubbles thrown up where the water is moving fastest.
           if (!quick && state.phase === 'diving' && rise > 0.05 && Math.random() < dt * 54) {
             for (let i = 0; i < (state.compact ? 1 : 3); i += 1) {
@@ -375,6 +435,24 @@ function useWater(
       ctx.globalAlpha = 1;
 
       const front = rises[LAYERS - 1] as number;
+      // Bent for as long as anything shows through: until the front is over the top.
+      sink(front >= 1 ? 1 : Math.min(0.98, rises[0] as number), time);
+
+      // Drops: up, over, and back into the water.
+      ctx.fillStyle = css(mix(LIGHT, [255, 255, 255], 0.35), 0.8);
+      drops = drops.filter((drop) => {
+        drop.vy += GRAVITY * dt;
+        drop.x += drop.vx * dt;
+        drop.y += drop.vy * dt;
+        const surface = surfaceAt(drop.x, time, LAYERS - 1, front, height, amplitude);
+        if (drop.vy > 0 && drop.y > surface) return false;
+        if (drop.y > height + 10) return false;
+        ctx.beginPath();
+        ctx.ellipse(drop.x, drop.y, drop.r, drop.r * (1 + Math.min(1.5, Math.abs(drop.vy) / 500)), 0, 0, Math.PI * 2);
+        ctx.fill();
+        return true;
+      });
+      if (drops.length > 400) drops = drops.slice(-400);
       if (front >= 1 && !quick) {
         // Light coming down from the surface in slow shafts that sway, and
         // the surface itself, just above, catching it.
@@ -449,6 +527,7 @@ function useWater(
     return () => {
       cancelAnimationFrame(frame);
       watch.disconnect();
+      if (sinking) sinking.style.filter = '';
     };
   }, [host, canvasRef, live]);
 }

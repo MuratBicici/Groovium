@@ -22,6 +22,9 @@ export interface FocusState {
   clock: SessionClock | null;
   /** The rain could not be read, so the session runs silent. */
   silent: boolean;
+  /** Turned down to nothing by a press on the knob, its level kept for the next press. */
+  muted: boolean;
+  toggleMute: (volume: number) => void;
   start: (minutes: number, volume: number) => Promise<void>;
   /** The overlay says the water has covered the window. */
   dived: () => void;
@@ -38,10 +41,11 @@ export const useFocusStore = create<FocusState>((set, get) => ({
   phase: 'idle',
   clock: null,
   silent: false,
+  muted: false,
 
   async start(minutes, volume) {
     if (get().phase !== 'idle') return;
-    set({ phase: 'diving', clock: beginClock(Date.now(), minutes), silent: false });
+    set({ phase: 'diving', clock: beginClock(Date.now(), minutes), silent: false, muted: false });
     const player = usePlayerStore.getState();
     if (player.playbackState === 'PLAYING') await player.togglePlayPause();
     const playing = await startRain(volume);
@@ -90,7 +94,14 @@ export const useFocusStore = create<FocusState>((set, get) => ({
   },
 
   setVolume(volume) {
+    if (get().muted && volume > 0) set({ muted: false });
     setRainVolume(volume);
+  },
+
+  toggleMute(volume) {
+    const muted = !get().muted;
+    set({ muted });
+    setRainVolume(muted ? 0 : volume);
   },
 }));
 

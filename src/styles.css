@@ -2368,8 +2368,14 @@ body {
 .groove-focus-button.is-end {
   padding-right: 12px;
 }
-.groove-focus-range.is-under {
-  width: 96px;
+/* The player's own volume knob, opening into its line as it does on the deck. */
+.groove-focus-knob {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  min-width: 36px;
+  margin-right: 2px;
 }
 
 /* The player alone, without the drawer: a smaller clock. */
@@ -2379,9 +2385,6 @@ body {
   }
   .groove-focus-done {
     font-size: var(--text-body);
-  }
-  .groove-focus-range.is-under {
-    width: 64px;
   }
 }
 

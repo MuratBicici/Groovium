@@ -9,10 +9,10 @@
  */
 
 /** How long one layer takes to cross the window, in seconds. */
-export const DIVE_S = 1.55;
-export const SURFACE_S = 1.25;
+export const DIVE_S = 2.05;
+export const SURFACE_S = 1.6;
 /** How far behind each layer starts, back to front. */
-export const LAYER_LAG_S = 0.11;
+export const LAYER_LAG_S = 0.15;
 export const LAYERS = 3;
 
 /** The whole of a dive or a surfacing, from the first layer moving to the last one stopping. */

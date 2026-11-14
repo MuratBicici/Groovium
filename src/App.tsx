@@ -608,7 +608,7 @@ export default function App() {
           A row inside the shell rather than turning the shell itself sideways:
           `useCompactShell` reads the shell's height as chrome + stage + bottom,
           and that arithmetic only holds while the shell is a column. */}
-      <div inert={focusing} className={`flex min-h-0 flex-1 ${drawerSide === 'left' ? 'flex-row-reverse' : ''}`}>
+      <div inert={focusing} data-focus-sinks="" className={`flex min-h-0 flex-1 ${drawerSide === 'left' ? 'flex-row-reverse' : ''}`}>
       {/* The player keeps its designed width whatever else is open, so that
           the shell narrowing around it during the drawer's animation moves
           nothing inside it.
