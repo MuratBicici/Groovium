@@ -8,6 +8,7 @@ import { DRAWER_WIDTH } from '@/platform/window';
 import { FocusDial } from './FocusDial';
 import { WeatherCard } from './WeatherCard';
 import { WeatherSteps, wordAt } from './WeatherSteps';
+import { setWeatherGlow } from './weatherGlow';
 
 /** Below this, there is no thunder, and how near it is has nothing to act on. */
 const NO_THUNDER = 0.25;
@@ -44,7 +45,6 @@ export function FocusDrawer({
   const start = useFocusStore((s) => s.start);
   const [open, setOpen] = useState(false);
   const [strikeSoon, setStrikeSoon] = useState(0);
-  const glow = useRef<HTMLDivElement | null>(null);
   const openRef = useRef(open);
   useEffect(() => {
     openRef.current = open;
@@ -98,8 +98,6 @@ export function FocusDrawer({
       className="relative isolate flex h-full shrink-0 flex-col border-l border-[var(--color-edge)]"
       style={{ width: `${DRAWER_WIDTH}px` }}
     >
-      {/* The room, lit by the card's lightning: faintly, and more while the card is forward. */}
-      <div ref={glow} aria-hidden="true" className="groove-weather-room" />
       <div data-drawer-head className="relative flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         {switcher}
         <button
@@ -132,9 +130,7 @@ export function FocusDrawer({
           <WeatherCard
             weather={weather}
             strikeSoon={strikeSoon}
-            onFlash={(brightness) => {
-              if (glow.current) glow.current.style.opacity = (brightness * (openRef.current ? 0.14 : 0.05)).toFixed(3);
-            }}
+            onFlash={(brightness) => setWeatherGlow(brightness * (openRef.current ? 0.16 : 0.07))}
           />
           <span className="groove-weather-card-shade" aria-hidden="true" />
           <span className="groove-weather-card-name">{t('focus.rain')}</span>

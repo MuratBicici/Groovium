@@ -55,7 +55,7 @@ const PEAK_ROOM = 10 ** (-1 / 20);
 /** The same for a roll of thunder, measured through the filter that takes its rain out. */
 const THUNDER_RMS = 10 ** (-24 / 20);
 const THUNDER_PEAK = 10 ** (-5 / 20);
-const THUNDER_MEASURED_HZ = 400;
+const THUNDER_MEASURED_HZ = 1000;
 const FADE_IN_S = 3;
 const FADE_OUT_S = 1.5;
 const PAUSE_FADE_S = 0.6;
@@ -352,9 +352,9 @@ export async function startRain(volume: number, chosen: Partial<Weather> = CALM_
   rainBus.gain.setValueAtTime(dbToGain(start.gainDb), now);
   rainTone.frequency.setValueAtTime(Math.min(18_000, start.brightHz), now);
   heavyBus.gain.setValueAtTime(start.heavyShare, now);
-  const firstThunder = nextThunderIn(weather, false, Math.random);
-  // Never in the first moments: the session should begin with the rain alone.
-  thunderAt = firstThunder === null ? null : now + 20 + firstThunder;
+  // The first soon, so the weather is heard for what it is — but not in the
+  // first moments, which belong to the rain coming up.
+  thunderAt = weather.thunder <= 0.001 ? null : now + 6 + Math.random() * 10;
   master.gain.cancelScheduledValues(now);
   master.gain.setValueAtTime(0, now);
   master.gain.linearRampToValueAtTime(MAX_LEVEL * level, now + FADE_IN_S);

@@ -2095,11 +2095,14 @@ body {
 }
 
 /* The weather: a card that comes forward, and its settings beside it. */
-.groove-weather-room {
+/* Lightning on the whole window, screened over it so it lightens and never covers. */
+.groove-weather-glow {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 45;
+  border-radius: var(--radius-widget);
   background: #cfe4ff;
+  mix-blend-mode: screen;
   opacity: 0;
   pointer-events: none;
 }

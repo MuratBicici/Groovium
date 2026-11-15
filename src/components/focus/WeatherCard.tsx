@@ -122,6 +122,9 @@ export function WeatherCard({
     let litX = W / 2;
     let last = performance.now();
     let frame = 0;
+    /** The light as reported, following the flashes quickly up and easing back down. */
+    let shown = 0;
+    let hidden = true;
 
     const makeBolt = () => {
       const points: [number, number][] = [];
@@ -193,7 +196,23 @@ export function WeatherCard({
     const draw = (now: number) => {
       // Asked for first, so a frame that goes wrong cannot stop the ones after it.
       frame = requestAnimationFrame(draw);
-      if (el.offsetParent === null) return;
+      if (el.offsetParent === null) {
+        // Put away mid-flash, it comes back to a dark sky rather than to the
+        // end of a flash, and the window is not left lit.
+        if (!hidden) {
+          hidden = true;
+          flash = 0;
+          far = 0;
+          lit = 0;
+          bolt = null;
+          flickers = [];
+          shown = 0;
+          state.current.onFlash(0);
+        }
+        last = now;
+        return;
+      }
+      hidden = false;
       const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
       last = Math.max(last, now);
       const t = now / 1000;
@@ -328,11 +347,19 @@ export function WeatherCard({
       });
       if (splashes.length > 120) splashes = splashes.slice(-120);
 
-      state.current.onFlash(flash > 0 ? flash : far * 0.3);
+      const light = flash > 0 ? flash : far * 0.3;
+      // Up fast, down slowly: a flash, then the light ebbing, rather than a
+      // lamp switched on and off.
+      shown += (light - shown) * (1 - Math.exp(-dt * (light > shown ? 30 : 5)));
+      state.current.onFlash(shown);
       if (flash > 0) flash -= dt * 2.6;
     };
     frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
+    const live = state.current;
+    return () => {
+      cancelAnimationFrame(frame);
+      live.onFlash(0);
+    };
   }, []);
 
   return (

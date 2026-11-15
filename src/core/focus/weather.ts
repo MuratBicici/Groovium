@@ -88,9 +88,11 @@ export function intensity(weather: Weather, wandering: number, pouring: number):
 /** Seconds until the next thunder, or null for none. Sooner while it pours. */
 export function nextThunderIn(weather: Weather, pouring: boolean, random: () => number): number | null {
   if (weather.thunder <= 0.001) return null;
-  const mean = (160 - 125 * weather.thunder) / (pouring ? 2.2 : 1);
-  // Spread out by chance, as thunder is: an exponential wait, never under ten seconds.
-  return Math.max(10, -Math.log(1 - random() * 0.999) * mean);
+  // About a minute apart now and then, a quarter of a minute often; it was
+  // two minutes and more, and a session could pass with nothing to hear.
+  const mean = (75 - 60 * weather.thunder) / (pouring ? 1.8 : 1);
+  // Spread out by chance, as thunder is: an exponential wait, never under six seconds.
+  return Math.max(6, -Math.log(1 - random() * 0.999) * mean);
 }
 
 /** How one roll of thunder sounds: its level in dB over the evened clip, how much of its brightness is let through, and how fast it arrives. */
@@ -102,10 +104,12 @@ export function thunderSound(
   // Mostly where the setting says, but any roll can be nearer or further than that.
   const near = clamp01(weather.power * 0.7 + random() * 0.6 - 0.15 + (pouring ? 0.15 : 0));
   return {
-    gainDb: -10 + 12 * near,
-    // Kept low: the recordings have rain of their own above this, and it would
-    // fall on top of ours. Nearer thunder lets more of its crack through.
-    brightHz: 170 * 4.5 ** near,
+    gainDb: -6 + 10 * near,
+    // Kept under the hiss: the recordings have rain of their own above a couple
+    // of kilohertz, and it would fall on top of ours. Not much lower than that,
+    // though — below a few hundred hertz is rumble a laptop cannot play at all.
+    // Nearer thunder lets more of its crack through.
+    brightHz: 450 * 5 ** near,
     arriveS: 0.9 - 0.8 * near,
     pan: (random() * 2 - 1) * 0.55,
   };

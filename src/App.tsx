@@ -57,6 +57,7 @@ import { PanelButton } from '@/components/controls/PanelButton';
 import { WindowChrome } from '@/components/controls/WindowChrome';
 import { FocusOverlay } from '@/components/focus/FocusOverlay';
 import { useFocusStore } from '@/core/focus/store';
+import { holdWeatherGlow } from '@/components/focus/weatherGlow';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
 import {
@@ -898,6 +899,8 @@ export default function App() {
           }
         />
       )}
+      {/* The weather card's lightning, over the whole window: see `weatherGlow`. */}
+      <div ref={holdWeatherGlow} aria-hidden="true" className="groove-weather-glow" />
       <EqualiserLink />
       {/* Out under water: the edge light answers the music, and a focus session has none. */}
       <WindowGlow

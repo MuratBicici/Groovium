@@ -57,7 +57,7 @@ describe('the thunder', () => {
     const pouring = nextThunderIn({ ...CALM_WEATHER, thunder: 1 }, true, half) ?? 0;
     expect(often).toBeLessThan(rare);
     expect(pouring).toBeLessThanOrEqual(often);
-    expect(nextThunderIn({ ...CALM_WEATHER, thunder: 1 }, true, always(0))).toBe(10);
+    expect(nextThunderIn({ ...CALM_WEATHER, thunder: 1 }, true, always(0))).toBe(6);
   });
 
   it('is nearer, louder and brighter when set close', () => {
@@ -66,8 +66,9 @@ describe('the thunder', () => {
     expect(close.gainDb).toBeGreaterThan(far.gainDb);
     expect(close.brightHz).toBeGreaterThan(far.brightHz);
     expect(close.arriveS).toBeLessThan(far.arriveS);
-    expect(close.gainDb).toBeLessThanOrEqual(4);
-    expect(close.brightHz).toBeLessThanOrEqual(800);
+    expect(close.gainDb).toBeLessThanOrEqual(6);
+    expect(close.brightHz).toBeLessThanOrEqual(2300);
+    expect(far.brightHz).toBeGreaterThanOrEqual(400);
   });
 });
 
