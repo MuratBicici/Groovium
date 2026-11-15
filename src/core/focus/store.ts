@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { usePlayerStore } from '@/core/store';
 import { beginClock, pauseClock, resumeClock, type SessionClock } from './clock';
 import { pauseRain, resumeRain, setRainVolume, startRain, stopRain } from './sound';
+import type { Weather } from './weather';
 
 /**
  * A focus session: the window goes under water, the music stops, and rain
@@ -25,7 +26,7 @@ export interface FocusState {
   /** Turned down to nothing by a press on the knob, its level kept for the next press. */
   muted: boolean;
   toggleMute: (volume: number) => void;
-  start: (minutes: number, volume: number) => Promise<void>;
+  start: (minutes: number, volume: number, weather?: Partial<Weather>) => Promise<void>;
   /** The overlay says the water has covered the window. */
   dived: () => void;
   pause: () => void;
@@ -43,12 +44,12 @@ export const useFocusStore = create<FocusState>((set, get) => ({
   silent: false,
   muted: false,
 
-  async start(minutes, volume) {
+  async start(minutes, volume, weather) {
     if (get().phase !== 'idle') return;
     set({ phase: 'diving', clock: beginClock(Date.now(), minutes), silent: false, muted: false });
     const player = usePlayerStore.getState();
     if (player.playbackState === 'PLAYING') await player.togglePlayPause();
-    const playing = await startRain(volume);
+    const playing = await startRain(volume, weather);
     // Still under: a session ended while the rain was loading must not have
     // the rain start behind it.
     if (get().phase === 'idle' || get().phase === 'surfacing') {

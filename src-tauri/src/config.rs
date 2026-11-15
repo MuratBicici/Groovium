@@ -242,6 +242,16 @@ pub struct Settings {
     /// The focus sound's volume, 0 to 1 of its own ceiling.
     #[serde(default = "focus_volume")]
     pub focus_volume: f64,
+    /// A focus session's weather, each 0 to 1: how hard it rains, how much
+    /// that changes, how often it thunders and how close.
+    #[serde(default = "half")]
+    pub focus_rain: f64,
+    #[serde(default = "half")]
+    pub focus_change: f64,
+    #[serde(default = "half")]
+    pub focus_thunder: f64,
+    #[serde(default = "half")]
+    pub focus_power: f64,
 }
 
 /// What a fresh installation is, spelled out.
@@ -300,6 +310,10 @@ impl Default for Settings {
             library_tab: groovium_side(),
             focus_minutes: focus_minutes(),
             focus_volume: focus_volume(),
+            focus_rain: half(),
+            focus_change: half(),
+            focus_thunder: half(),
+            focus_power: half(),
         }
     }
 }
@@ -346,6 +360,10 @@ fn focus_minutes() -> u32 {
 }
 
 fn focus_volume() -> f64 {
+    0.5
+}
+
+fn half() -> f64 {
     0.5
 }
 
@@ -534,6 +552,10 @@ mod tests {
             library_tab: "spotify".into(),
             focus_minutes: 45,
             focus_volume: 0.3,
+            focus_rain: 0.8,
+            focus_change: 1.0,
+            focus_thunder: 0.0,
+            focus_power: 0.25,
         };
 
         let written = serde_json::to_string(&config).expect("serializes");

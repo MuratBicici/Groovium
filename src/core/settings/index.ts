@@ -3,6 +3,7 @@ import { isTauri } from '@/core/utils/env';
 import { NOTCHES } from '@/core/visualizer';
 import { log } from '@/platform/log';
 import { heldMinutes } from '@/core/focus/clock';
+import { CALM_WEATHER, heldWeather } from '@/core/focus/weather';
 import type { LyricsPlace } from '@/core/lyrics/layout';
 
 /**
@@ -255,6 +256,11 @@ export interface Settings {
   focusMinutes: number;
   /** The focus sound's volume, 0 to 1 of its own ceiling — not the music's. */
   focusVolume: number;
+  /** A focus session's weather, each 0 to 1: see `src/core/focus/weather.ts`. */
+  focusRain: number;
+  focusChange: number;
+  focusThunder: number;
+  focusPower: number;
 }
 
 export type DrawerSide = 'left' | 'right';
@@ -346,6 +352,10 @@ export const DEFAULT_SETTINGS: Settings = {
   libraryTab: 'groovium',
   focusMinutes: 25,
   focusVolume: 0.5,
+  focusRain: CALM_WEATHER.rain,
+  focusChange: CALM_WEATHER.change,
+  focusThunder: CALM_WEATHER.thunder,
+  focusPower: CALM_WEATHER.power,
 };
 
 /** The sizes the window can be drawn at. */
@@ -376,6 +386,16 @@ export async function loadSettings(): Promise<Settings> {
     settings.focusMinutes = heldMinutes(settings.focusMinutes);
     const focusVolume = Number(settings.focusVolume);
     settings.focusVolume = Number.isFinite(focusVolume) ? Math.max(0, Math.min(1, focusVolume)) : 0.5;
+    const weather = heldWeather({
+      rain: Number(settings.focusRain),
+      change: Number(settings.focusChange),
+      thunder: Number(settings.focusThunder),
+      power: Number(settings.focusPower),
+    });
+    settings.focusRain = weather.rain;
+    settings.focusChange = weather.change;
+    settings.focusThunder = weather.thunder;
+    settings.focusPower = weather.power;
     if (settings.glowListens !== 'bass') settings.glowListens = 'all';
     if (settings.visualizerLook !== 'blocks') settings.visualizerLook = 'grooves';
     if (settings.pickAnimation !== 'arc') settings.pickAnimation = 'meteor';

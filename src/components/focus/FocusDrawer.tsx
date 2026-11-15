@@ -61,7 +61,15 @@ export function FocusDrawer({
             <FocusDial
               minutes={dialMinutes(minutes)}
               onMinutes={(next) => setFocus({ focusMinutes: next })}
-              onStart={() => void start(dialMinutes(minutes), useSettingsStore.getState().focusVolume)}
+              onStart={() => {
+                const now = useSettingsStore.getState();
+                void start(dialMinutes(minutes), now.focusVolume, {
+                  rain: now.focusRain,
+                  change: now.focusChange,
+                  thunder: now.focusThunder,
+                  power: now.focusPower,
+                });
+              }}
             />
             <p className="text-meta text-cream-400">{t('focus.gentle')}</p>
           </div>

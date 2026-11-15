@@ -122,6 +122,10 @@ describe('remembering that a version has been shown', () => {
       libraryTab: 'groovium',
       focusMinutes: 25,
       focusVolume: 0.5,
+      focusRain: 0.5,
+      focusChange: 0.5,
+      focusThunder: 0.5,
+      focusPower: 0.5,
     });
   });
 

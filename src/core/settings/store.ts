@@ -70,7 +70,9 @@ interface SettingsStore extends Settings {
   setSleepWhenHidden: (on: boolean) => void;
   setScale: (scale: number) => void;
   setLibraryTab: (tab: LibraryTab) => void;
-  setFocus: (patch: { focusMinutes?: number; focusVolume?: number }) => void;
+  setFocus: (
+    patch: Partial<Pick<Settings, 'focusMinutes' | 'focusVolume' | 'focusRain' | 'focusChange' | 'focusThunder' | 'focusPower'>>,
+  ) => void;
   setThemeFromCover: (on: boolean) => void;
   /** The palette taken from the cover on the deck, or null for none. */
   coverPalette: CoverPalette | null;
@@ -368,6 +370,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const { equaliserOn, equaliserPreamp, equaliserBands, equaliserSaved } = get();
     const { backdrop, backdropBrightness, backdropSpread, backdropSpeed, backdropBreath, backdropDust } = get();
     const { lastSeenVersion, declinedVersion, lyricsOn, lyricsPlace, libraryTab, focusMinutes, focusVolume } = get();
+    const { focusRain, focusChange, focusThunder, focusPower } = get();
     // Named one by one rather than spread, so that adding a field to `Settings`
     // and forgetting it here is a type error instead of a value that quietly
     // stops being saved.
@@ -418,6 +421,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       libraryTab,
       focusMinutes,
       focusVolume,
+      focusRain,
+      focusChange,
+      focusThunder,
+      focusPower,
     };
     return settings;
   };
