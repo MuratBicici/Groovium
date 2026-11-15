@@ -2094,49 +2094,219 @@ body {
   color: var(--color-cream-400);
 }
 
-.groove-focus-sound {
+/* The weather: a card that comes forward, and its settings beside it. */
+.groove-weather-room {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: #cfe4ff;
+  opacity: 0;
+  pointer-events: none;
+}
+.groove-weather-stage {
   position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  padding: 8px 20px 20px;
+}
+.groove-weather-veil {
+  position: absolute;
+  inset: 0;
+  background: #0b0806;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 450ms ease-out;
+}
+.groove-weather-stage.is-open .groove-weather-veil {
+  opacity: 0.35;
+  pointer-events: auto;
+}
+
+.groove-weather-card {
+  position: relative;
+  z-index: 1;
   flex: none;
   width: 220px;
   height: 300px;
-  overflow: hidden;
   border-radius: 14px;
   text-align: left;
   color: #fff;
-  box-shadow: 0 8px 20px rgb(0 0 0 / 0.4);
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.groove-focus-sound.is-on {
-  box-shadow:
-    0 8px 20px rgb(0 0 0 / 0.4),
-    0 0 0 2px var(--color-brass-400);
+.groove-weather-stage.is-open .groove-weather-card {
+  transform: translateX(34px) scale(1.06);
 }
-.groove-focus-sound img,
-.groove-focus-sound canvas {
+.groove-weather-card-face {
   position: absolute;
   inset: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px var(--color-brass-400),
+    0 8px 20px rgb(0 0 0 / 0.45);
+  transition: box-shadow 400ms ease-out;
+}
+.groove-weather-stage.is-open .groove-weather-card-face {
+  box-shadow:
+    0 0 0 2px var(--color-brass-400),
+    0 18px 40px rgb(0 0 0 / 0.65);
+}
+.groove-weather-card-face canvas {
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
-.groove-focus-sound-shade {
+.groove-weather-card:focus-visible .groove-weather-card-face {
+  box-shadow:
+    0 0 0 2px var(--color-cream-50),
+    0 8px 20px rgb(0 0 0 / 0.45);
+}
+.groove-weather-card-shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(rgb(0 0 0 / 0.55), transparent 45%, transparent 60%, rgb(0 0 0 / 0.55));
+  border-radius: 14px;
+  background: linear-gradient(rgb(0 0 0 / 0.45), transparent 26%, transparent 72%, rgb(0 0 0 / 0.62));
+  pointer-events: none;
 }
-.groove-focus-sound-name {
+.groove-weather-card-name {
+  position: absolute;
+  top: 9px;
+  left: 12px;
+  font-size: 22px;
+  font-weight: 700;
+}
+.groove-weather-card-hint {
   position: absolute;
   top: 12px;
-  left: 14px;
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
+  right: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.4);
+  font-size: var(--text-meta);
+  transition: opacity 300ms ease-out;
 }
-.groove-focus-sound-by {
+.groove-weather-stage.is-open .groove-weather-card-hint {
+  opacity: 0;
+}
+.groove-weather-card-summary {
   position: absolute;
-  bottom: 9px;
+  right: 12px;
+  bottom: 10px;
   left: 12px;
   font-size: var(--text-meta);
-  opacity: 0.85;
+  line-height: 1.4;
+  opacity: 0.92;
+}
+
+/* Where the dial is, and where the settings come out in its place. */
+.groove-weather-slot {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 300px;
+}
+.groove-weather-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transition:
+    opacity 400ms ease-out,
+    transform 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.groove-weather-stage.is-open .groove-weather-dial {
+  opacity: 0;
+  transform: translateX(60px) scale(0.9);
+}
+.groove-weather-panel {
+  position: absolute;
+  top: 50%;
+  left: 34px;
+  display: flex;
+  width: 250px;
+  flex-direction: column;
+  gap: 16px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.groove-weather-stage.is-open .groove-weather-panel {
+  pointer-events: auto;
+}
+.groove-weather-panel > * {
+  opacity: 0;
+  translate: -14px 0;
+  transition:
+    opacity 350ms ease-out,
+    translate 450ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.groove-weather-stage.is-open .groove-weather-panel > * {
+  opacity: 1;
+  translate: 0 0;
+}
+.groove-weather-stage.is-open .groove-weather-panel > :nth-child(1) { transition-delay: 120ms; }
+.groove-weather-stage.is-open .groove-weather-panel > :nth-child(2) { transition-delay: 190ms; }
+.groove-weather-stage.is-open .groove-weather-panel > :nth-child(3) { transition-delay: 260ms; }
+.groove-weather-stage.is-open .groove-weather-panel > :nth-child(4) { transition-delay: 330ms; }
+.groove-weather-stage.is-open .groove-weather-panel > :nth-child(5) { transition-delay: 400ms; }
+.groove-weather-stage.is-open .groove-weather-panel > .is-dim {
+  opacity: 0.4;
+}
+
+/* One setting: a row of lights, like a meter. */
+.groove-weather-steps-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.groove-weather-steps-word {
+  font-size: var(--text-body);
+  color: var(--color-brass-400);
+}
+.groove-weather-steps-row {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+  padding: 3px;
+  border-radius: 6px;
+  background: #0d0a08;
+  box-shadow: inset 0 0 0 1px var(--color-edge);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.groove-weather-steps-row:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--color-edge),
+    0 0 0 2px var(--color-brass-400);
+}
+.groove-weather-steps-row i {
+  flex: 1;
+  height: 14px;
+  border-radius: 2px;
+  background: #2a2019;
+  transition:
+    background-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+.groove-weather-steps-row i.is-on {
+  background: var(--color-brass-500);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-brass-500) 45%, transparent);
+}
+.groove-weather-steps-row i.is-hot {
+  background: #f0c27a;
+  box-shadow: 0 0 8px rgb(240 194 122 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groove-weather-card,
+  .groove-weather-dial,
+  .groove-weather-panel > *,
+  .groove-weather-veil {
+    transition: opacity 150ms linear;
+  }
 }
 
 /* The length on a record, and its label the button that starts the session. */
