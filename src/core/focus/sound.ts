@@ -56,7 +56,8 @@ const PEAK_ROOM = 10 ** (-1 / 20);
 const THUNDER_RMS = 10 ** (-24 / 20);
 const THUNDER_PEAK = 10 ** (-5 / 20);
 const THUNDER_MEASURED_HZ = 1000;
-const FADE_IN_S = 3;
+/** How long the sound takes to come up from silence: long enough to be noticed arriving, not switched on. */
+const FADE_IN_S = 8;
 const FADE_OUT_S = 1.5;
 const PAUSE_FADE_S = 0.6;
 const CROSS_S = 4;
@@ -82,6 +83,23 @@ function measure(channels: readonly Float32Array[]): { rms: number; peak: number
     }
   }
   return { rms: n === 0 ? 0 : Math.sqrt(sum / n), peak };
+}
+
+/**
+ * The sound coming up from silence, as an ear hears it come up.
+ *
+ * A straight line in gain is most of the way there in its first second — the
+ * ear hears loudness in decibels — so it sounded switched on rather than
+ * arriving. This rises evenly in decibels instead, from 60 dB under to the
+ * level, and starts from true silence.
+ */
+export function fadeInCurve(to: number, points = 64): Float32Array {
+  const curve = new Float32Array(points);
+  for (let i = 0; i < points; i += 1) {
+    const p = i / (points - 1);
+    curve[i] = i === 0 ? 0 : to * 10 ** ((-60 * (1 - p)) / 20);
+  }
+  return curve;
 }
 
 /** The gain that brings one recording to the common average without letting its peak past −1 dB. */
@@ -354,10 +372,10 @@ export async function startRain(volume: number, chosen: Partial<Weather> = CALM_
   heavyBus.gain.setValueAtTime(start.heavyShare, now);
   // The first soon, so the weather is heard for what it is — but not in the
   // first moments, which belong to the rain coming up.
-  thunderAt = weather.thunder <= 0.001 ? null : now + 6 + Math.random() * 10;
+  thunderAt = weather.thunder <= 0.001 ? null : now + FADE_IN_S + 4 + Math.random() * 10;
   master.gain.cancelScheduledValues(now);
   master.gain.setValueAtTime(0, now);
-  master.gain.linearRampToValueAtTime(MAX_LEVEL * level, now + FADE_IN_S);
+  master.gain.setValueCurveAtTime(fadeInCurve(MAX_LEVEL * level), now, FADE_IN_S);
   ticking ??= setInterval(tick, TICK_MS);
   return true;
 }
