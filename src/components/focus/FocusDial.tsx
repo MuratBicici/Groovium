@@ -5,8 +5,12 @@ import { css, mix, parseColour, type Rgb } from '@/core/focus/water';
 import { prefersReducedMotion } from '@/core/utils/motion';
 
 const SIZE = 300;
-/** Where the brass runs, and where the handle sits on it. */
-const TRACK = 0.46;
+/**
+ * Where the brass runs, and where the handle sits on it. Far enough in that the
+ * handle, at its largest under the pointer, stays inside the round canvas: at
+ * 0.46 it was drawn past the edge and cut off.
+ */
+const TRACK = 0.42;
 const FACE = 0.18;
 
 /**
@@ -80,7 +84,7 @@ export function FocusDial({
       ctx.arc(c, c, SIZE * 0.5 - 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.lineWidth = 1;
-      for (let groove = SIZE * 0.2; groove < SIZE * 0.43; groove += 3.5) {
+      for (let groove = SIZE * 0.18; groove < SIZE * 0.39; groove += 3.5) {
         ctx.strokeStyle = css(brassLight, Math.round(groove) % 4 === 0 ? 0.08 : 0.035);
         ctx.beginPath();
         ctx.arc(c, c, groove, 0, Math.PI * 2);
@@ -94,7 +98,7 @@ export function FocusDial({
         ctx.fillStyle = css(brassLight, 0.02);
         ctx.beginPath();
         ctx.moveTo(c, c);
-        ctx.arc(c, c, SIZE * 0.43, at, at + 0.35);
+        ctx.arc(c, c, SIZE * 0.39, at, at + 0.35);
         ctx.closePath();
         ctx.fill();
       }
