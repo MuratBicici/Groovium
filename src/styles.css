@@ -2347,6 +2347,46 @@ body {
   outline: 2px solid var(--color-cream-50);
   outline-offset: 3px;
 }
+/* Wheels of digits, each place rolling to its figure. */
+.groove-rolling {
+  display: inline-flex;
+  height: 1em;
+  overflow: hidden;
+  line-height: 1;
+}
+.groove-rolling-place {
+  display: block;
+  width: 0.62em;
+  height: 1em;
+  overflow: hidden;
+  transition:
+    width 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease-out;
+}
+.groove-rolling-place.is-unused {
+  width: 0;
+  opacity: 0;
+}
+.groove-rolling-strip {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.groove-rolling-strip > span {
+  display: block;
+  height: 1em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-rolling-place,
+  .groove-rolling-strip {
+    transition: none;
+  }
+}
+:root[data-motion='off'] .groove-rolling-place,
+:root[data-motion='off'] .groove-rolling-strip {
+  transition: none;
+}
 .groove-focus-dial-minutes {
   font-size: 34px;
   font-weight: 700;

@@ -221,7 +221,6 @@ export const en = {
   'focus.rain': 'Rain',
   'focus.rainBy': 'Recorded by Ylmir',
   'focus.volume': 'Volume',
-  'focus.gentle': 'It starts silent and comes up slowly, over eight seconds.',
   'focus.start': 'Start session',
   'focus.dive': 'min · dive',
   'focus.weather': 'Set the weather',

@@ -149,7 +149,6 @@ export function FocusDrawer({
               onMinutes={(next) => setFocus({ focusMinutes: next })}
               onStart={begin}
             />
-            <p className="text-meta text-cream-400">{t('focus.gentle')}</p>
           </div>
           <div className="groove-weather-panel" inert={!open}>
             <WeatherSteps

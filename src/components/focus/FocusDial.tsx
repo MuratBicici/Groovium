@@ -3,6 +3,7 @@ import { useT } from '@/core/i18n';
 import { DIAL_MINUTES, MIN_MINUTES, dialMinutes } from '@/core/focus/clock';
 import { css, mix, parseColour, type Rgb } from '@/core/focus/water';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { RollingNumber } from './RollingNumber';
 
 const SIZE = 300;
 /**
@@ -222,7 +223,9 @@ export function FocusDial({
         onClick={onStart}
         aria-label={`${t('focus.start')} · ${t('focus.minutes', { count: minutes })}`}
       >
-        <span className="groove-focus-dial-minutes">{minutes}</span>
+        <span className="groove-focus-dial-minutes">
+          <RollingNumber value={minutes} max={DIAL_MINUTES} />
+        </span>
         <span className="groove-focus-dial-go">{t('focus.dive')}</span>
       </button>
     </div>

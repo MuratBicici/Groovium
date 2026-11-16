@@ -211,7 +211,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'focus.rain': 'Yağmur',
   'focus.rainBy': 'Kayıt: Ylmir',
   'focus.volume': 'Ses düzeyi',
-  'focus.gentle': 'Sessiz başlar, sekiz saniyede yavaşça yükselir.',
   'focus.start': 'Seansı başlat',
   'focus.dive': 'dk · dal',
   'focus.weather': 'Havayı ayarla',
