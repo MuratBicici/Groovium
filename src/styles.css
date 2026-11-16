@@ -2116,16 +2116,19 @@ body {
   gap: 44px;
   padding: 8px 20px 20px;
 }
+/* Darkest behind the card and its settings, and nothing at all by the time it
+   reaches any edge: a flat dark layer stopped short at the drawer's sides and
+   under its header, and those edges were all anyone saw of it. */
 .groove-weather-veil {
   position: absolute;
   inset: 0;
-  background: #0b0806;
+  background: radial-gradient(closest-side, rgb(11 8 6 / 0.85), rgb(11 8 6 / 0.45) 55%, transparent);
   opacity: 0;
   pointer-events: none;
   transition: opacity 450ms ease-out;
 }
 .groove-weather-stage.is-open .groove-weather-veil {
-  opacity: 0.35;
+  opacity: 0.6;
   pointer-events: auto;
 }
 
