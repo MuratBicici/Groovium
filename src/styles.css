@@ -2297,13 +2297,11 @@ body {
     background-color 120ms ease-out,
     box-shadow 120ms ease-out;
 }
+/* From the brass's deep shade at the left to a near-white gold at the right, and glowing more as it goes. */
 .groove-weather-steps-row i.is-on {
-  background: var(--color-brass-500);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-brass-500) 45%, transparent);
-}
-.groove-weather-steps-row i.is-hot {
-  background: #f0c27a;
-  box-shadow: 0 0 8px rgb(240 194 122 / 0.6);
+  --lit: color-mix(in srgb, #fbe2ad calc(var(--step) * 100%), var(--color-brass-600));
+  background: var(--lit);
+  box-shadow: 0 0 calc(3px + var(--step) * 7px) color-mix(in srgb, var(--lit) calc(25% + var(--step) * 45%), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

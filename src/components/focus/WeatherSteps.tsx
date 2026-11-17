@@ -8,9 +8,9 @@ export const wordAt = (level: number): 0 | 1 | 2 => Math.min(2, Math.round(level
 
 /**
  * One setting as a row of lights, like a meter on a hi-fi: lit from the left
- * to its level, the last few brighter. Pressed or dragged across, it lights up
- * to where the pointer is; the wheel and the arrow keys move it a light at a
- * time.
+ * to its level, each light a little brighter than the one before. Pressed or
+ * dragged across, it lights up to where the pointer is; the wheel and the
+ * arrow keys move it a light at a time.
  */
 export function WeatherSteps({
   label,
@@ -81,7 +81,12 @@ export function WeatherSteps({
         }}
       >
         {Array.from({ length: STEPS }, (_, i) => (
-          <i key={i} className={i < lit ? (i >= STEPS - 3 ? 'is-hot' : 'is-on') : undefined} />
+          <i
+            key={i}
+            className={i < lit ? 'is-on' : undefined}
+            // How far along the row: each light a little brighter than the one before.
+            style={{ ['--step' as string]: i / (STEPS - 1) }}
+          />
         ))}
       </div>
     </div>
