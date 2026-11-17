@@ -2277,7 +2277,7 @@ body {
   margin-top: 5px;
   padding: 3px;
   border-radius: 6px;
-  background: #0d0a08;
+  background: color-mix(in srgb, var(--color-shell-900) 70%, black);
   box-shadow: inset 0 0 0 1px var(--color-edge);
   cursor: pointer;
   touch-action: none;
@@ -2292,14 +2292,17 @@ body {
   flex: 1;
   height: 14px;
   border-radius: 2px;
-  background: #2a2019;
+  background: color-mix(in srgb, var(--color-shell-700) 85%, var(--color-brass-600));
   transition:
     background-color 120ms ease-out,
     box-shadow 120ms ease-out;
 }
-/* From the brass's deep shade at the left to a near-white gold at the right, and glowing more as it goes. */
+/* From the theme's accent in its deep shade at the left to that accent nearly
+   white at the right, glowing more as it goes: brass in Espresso, gold in
+   Prussian Blue, whatever the theme or the cover makes it. */
 .groove-weather-steps-row i.is-on {
-  --lit: color-mix(in srgb, #fbe2ad calc(var(--step) * 100%), var(--color-brass-600));
+  --lit-top: color-mix(in srgb, var(--color-brass-400) 55%, white);
+  --lit: color-mix(in srgb, var(--lit-top) calc(var(--step) * 100%), var(--color-brass-600));
   background: var(--lit);
   box-shadow: 0 0 calc(3px + var(--step) * 7px) color-mix(in srgb, var(--lit) calc(25% + var(--step) * 45%), transparent);
 }
