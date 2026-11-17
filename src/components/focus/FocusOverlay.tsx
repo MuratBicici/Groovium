@@ -277,7 +277,13 @@ function useWater(
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     fit();
-    const watch = new ResizeObserver(fit);
+    // Resizing a canvas wipes it, and the window changes size whenever the
+    // drawer comes or goes or the player collapses: drawn again at once, or
+    // that one frame showed the window without its water.
+    const watch = new ResizeObserver(() => {
+      fit();
+      render(performance.now());
+    });
     watch.observe(el);
 
     // The theme's own colours, read now and again: the cover can change them.
@@ -328,8 +334,8 @@ function useWater(
     };
     let lastTime = performance.now() / 1000;
 
-    const draw = (ms: number) => {
-      frame = requestAnimationFrame(draw);
+    let backdrop = '';
+    const render = (ms: number) => {
       const time = ms / 1000;
       // Everything that eases or moves goes by the time that passed, not by
       // frames: a window that draws slowly must not dive slowly too.
@@ -435,6 +441,13 @@ function useWater(
       ctx.globalAlpha = 1;
 
       const front = rises[LAYERS - 1] as number;
+      // Under, the water is also the overlay's own ground, so nothing of the
+      // window behind can show through even for a frame the canvas misses.
+      const ground = front >= 1 ? css(deep) : '';
+      if (ground !== backdrop) {
+        backdrop = ground;
+        el.style.backgroundColor = ground;
+      }
       // Bent for as long as anything shows through: until the front is over the top.
       sink(front >= 1 ? 1 : Math.min(0.98, rises[0] as number), time);
 
@@ -522,6 +535,10 @@ function useWater(
         if (state.compact) drawStrip(ctx, width, height, heard, reveal, brass, brassLight, state);
         else drawRing(ctx, width, height, heard, reveal, brass, brassLight, state, time);
       }
+    };
+    const draw = (ms: number) => {
+      frame = requestAnimationFrame(draw);
+      render(ms);
     };
     frame = requestAnimationFrame(draw);
     return () => {

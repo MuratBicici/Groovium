@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Weather } from '@/core/focus/weather';
 import { prefersReducedMotion } from '@/core/utils/motion';
+import { useFocusStore } from '@/core/focus/store';
 
 const W = 220;
 const H = 300;
@@ -196,7 +197,10 @@ export function WeatherCard({
     const draw = (now: number) => {
       // Asked for first, so a frame that goes wrong cannot stop the ones after it.
       frame = requestAnimationFrame(draw);
-      if (el.offsetParent === null) {
+      // Not drawn while its side of the drawer is hidden, nor under water: the
+      // session has begun, the card is behind the water, and its lightning
+      // would light the window over it.
+      if (el.offsetParent === null || useFocusStore.getState().phase !== 'idle') {
         // Put away mid-flash, it comes back to a dark sky rather than to the
         // end of a flash, and the window is not left lit.
         if (!hidden) {
