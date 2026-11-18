@@ -91,6 +91,8 @@ export const radioOf = (context: string): Radio | null =>
 /** How many songs a fill hands over, and how many Spotify searches it may spend on them. */
 export const RADIO_BATCH = 3;
 export const RADIO_SEARCHES = 8;
+/** A station without words passes over much of what it finds, so it may look further. */
+export const RADIO_SEARCHES_WORDLESS = 14;
 /** How far down a word's most played a station reaches: six pages of fifty. */
 export const RADIO_PAGES = 6;
 /** How many artists back the same one is kept off the air. */
@@ -218,7 +220,7 @@ export async function nextOnRadio(
   const random = sources.random ?? Math.random;
   const heard = new Set(played);
   const found: TrackMetadata[] = [];
-  let searches = RADIO_SEARCHES;
+  let searches = radio.wordless ? RADIO_SEARCHES_WORDLESS : RADIO_SEARCHES;
 
   for (const list of listings(radio, sources, random)) {
     const listed = await list();

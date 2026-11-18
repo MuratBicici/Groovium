@@ -5,6 +5,7 @@ import {
   RADIOS,
   RADIO_BATCH,
   RADIO_SEARCHES,
+  RADIO_SEARCHES_WORDLESS,
   forgetRadioPages,
   nextOnRadio,
   radioContext,
@@ -143,6 +144,28 @@ describe('the next songs of a station', () => {
       sources({ hasWords: async (track) => track.title === 'one' || track.title === 'three' }),
     );
     expect(found.map((track) => track.title)).toEqual(['two', 'four', 'five']);
+  });
+
+  it('may look further on a station that wants none, since it passes much over', async () => {
+    const study = RADIOS.find((entry) => entry.wordless) as (typeof RADIOS)[number];
+    let searches = 0;
+    const many = Array.from({ length: 40 }, (_, i) => song(`Artist ${i}`, `Song ${i}`));
+    await nextOnRadio(
+      study,
+      [],
+      [],
+      sources({
+        tagTracks: async () => many,
+        searchSpotify: async (query) => {
+          searches += 1;
+          const [, title, artist] = /^track:(.*) artist:(.*)$/.exec(query) ?? [];
+          return [onSpotify(artist ?? '', title ?? '')];
+        },
+        hasWords: async () => true,
+      }),
+    );
+    expect(searches).toBe(RADIO_SEARCHES_WORDLESS);
+    expect(searches).toBeGreaterThan(RADIO_SEARCHES);
   });
 
   it('plays a song whose words cannot be told', async () => {

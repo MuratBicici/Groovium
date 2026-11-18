@@ -627,6 +627,29 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * off, which is deliberate and is what `asked` carries: the toggle governs an
    * ending track, not a button somebody pushed.
    */
+  /** How many times a radio looks again during one song after finding nothing, and how long between. */
+  const RADIO_RETRIES = 3;
+  const RADIO_RETRY_MS = 12_000;
+  let radioRetry: { seedKey: string; left: number; timer: ReturnType<typeof setTimeout> | null } | null = null;
+
+  function retryRadioFill(seedKey: string): void {
+    if (radioRetry?.seedKey !== seedKey) {
+      if (radioRetry?.timer) clearTimeout(radioRetry.timer);
+      radioRetry = { seedKey, left: RADIO_RETRIES, timer: null };
+    }
+    const retry = radioRetry;
+    if (retry.left <= 0 || retry.timer) return;
+    retry.left -= 1;
+    retry.timer = setTimeout(() => {
+      retry.timer = null;
+      const { currentTrack, stationQueue, playback } = get();
+      // Only for the song it was looking after, still on a radio, still with nothing.
+      if (!currentTrack || trackKey(currentTrack) !== seedKey) return;
+      if (!radioOf(playback.id) || stationQueue.length > 0) return;
+      void prefetchStationTrack();
+    }, RADIO_RETRY_MS);
+  }
+
   async function prefetchStationTrack(asked = false): Promise<void> {
     const { currentTrack, stationQueue, station } = get();
     if (!currentTrack) return;
@@ -689,6 +712,15 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // The user may have moved on mid-lookup.
       if (prefetchSeedKey !== seedKey) return;
       set({ stationQueue: [...get().stationQueue, ...found] });
+      // A radio that came back empty-handed is not out of songs: it looked at
+      // two pages by chance and spent its searches on songs Spotify lacks or
+      // that have words. Pinning that answer to the song, as a station's is,
+      // left the radio with nothing when the song ended, and it stopped. So
+      // the answer is not kept, and it looks again while the song still plays.
+      if (radio && found.length === 0) {
+        prefetchSeedKey = null;
+        if (!asked) retryRadioFill(seedKey);
+      }
     } catch (err) {
       // A station that cannot find anything should fall quiet, not interrupt
       // playback with an error banner over a background lookup. But a failure
@@ -727,6 +759,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       set({ findingNext: true });
       try {
         await prefetchStationTrack(true);
+        // A radio asks again rather than stopping: each ask reads other pages.
+        for (let again = 0; again < 2; again += 1) {
+          if (get().stationQueue.length > 0 || !radioOf(get().playback.id)) break;
+          if ((get().starting ?? get().currentTrack)?.id !== seed) break;
+          await prefetchStationTrack(true);
+        }
       } finally {
         set({ findingNext: false });
       }
@@ -856,6 +894,9 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // Played to the end: a playlist put on whole has had its say, and the
     // station can be asked for again.
     set({ playbackState: 'IDLE', positionMs: 0, wholeList: false });
+    // A radio that stops has failed at the one thing it is, and says why.
+    const stopped = radioOf(get().playback.id);
+    if (stopped) set({ error: say('radio.nothingFound', { name: stopped.name }) });
   }
 
   function handleProviderEvent(event: ProviderEvent): void {
@@ -1378,6 +1419,13 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       // track. Rather than leave the press unanswered, start the collection
       // again. Pointless for a lone track, which would just replay itself.
       const { playback } = get();
+      // Not on a radio, whose collection is only what it has already played:
+      // starting that over is the radio repeating itself. It says so instead.
+      const radio = radioOf(playback.id);
+      if (radio) {
+        set({ error: say('radio.nothingFound', { name: radio.name }) });
+        return;
+      }
       if (playback.tracks.length > 1) {
         const order = playbackOrder();
         const first = order[0];
