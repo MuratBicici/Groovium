@@ -65,7 +65,19 @@ export function pacer(fixed?: number): (now: number) => boolean {
  * battery saver off. Thirty when they are working in another window — this
  * one sits over the others on purpose and is still glanced at, so it slows
  * rather than stops — and thirty whenever battery saver is on.
+ *
+ * Pinned on top, it is never slowed for being out of focus, nor by battery
+ * saver coming on by itself: a window somebody pinned is one they mean to
+ * watch while they work elsewhere, which is the very case the slowing was
+ * for. Only battery saver turned on by hand still slows it — that was asked
+ * for in so many words.
  */
-export function rateFor(focused: boolean, saving: boolean): number {
+export function rateFor(
+  focused: boolean,
+  saving: boolean,
+  pinned = false,
+  savingByHand = false,
+): number {
+  if (pinned) return savingByHand ? SAVING_RATE : FRAME_RATE;
   return focused && !saving ? FRAME_RATE : SAVING_RATE;
 }

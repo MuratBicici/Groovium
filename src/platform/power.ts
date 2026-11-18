@@ -120,15 +120,16 @@ export function usePowerAwareMotion(): void {
   const auto = useSettingsStore((s) => s.batterySaverOnBattery);
   const onBattery = usePower((s) => s.onBattery);
   const declined = usePower((s) => s.declined);
+  const pinned = useSettingsStore((s) => s.alwaysOnTop);
 
   useEffect(() => watchBattery(), []);
 
   useEffect(() => {
-    const rate = rateFor(focused, saving(manual, auto, { onBattery, declined }));
+    const rate = rateFor(focused, saving(manual, auto, { onBattery, declined }), pinned, manual);
     setFrameRate(rate);
     // The record turns in as many steps a second; see `.groove-platter`.
     document.documentElement.style.setProperty('--spin-steps', String(Math.round(rate * SPIN_SECONDS)));
-  }, [focused, manual, auto, onBattery, declined]);
+  }, [focused, manual, auto, onBattery, declined, pinned]);
 
   // The record's turning and everything else the stylesheet animates stop
   // with the drawing. Paused rather than removed, so they pick up where they

@@ -45,6 +45,12 @@ describe('the window’s rate', () => {
     expect(rateFor(true, true)).toBe(30);
   });
 
+  it('is not slowed when pinned, unless battery saver was turned on by hand', () => {
+    expect(rateFor(false, false, true)).toBe(60);
+    expect(rateFor(false, true, true, false)).toBe(60);
+    expect(rateFor(true, true, true, true)).toBe(30);
+  });
+
   it('reaches a running gate on its next frame', () => {
     const gate = pacer();
     let drawn = 0;
