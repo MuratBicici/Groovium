@@ -157,6 +157,51 @@ describe('the next songs of a station', () => {
     expect(asked).toBe(0);
   });
 
+  describe('a station built around an artist', () => {
+    const like = RADIOS.find((entry) => entry.like) as (typeof RADIOS)[number];
+    const around = [song('Kanisan', 'one'), song('So.lo', 'two'), song('squeeda', 'three'), song('iamalex', 'four')];
+
+    it('plays the songs around that artist, not its word', async () => {
+      const asked: string[] = [];
+      let words = 0;
+      const found = await nextOnRadio(
+        like,
+        [],
+        [],
+        sources({
+          tagTracks: async () => ((words += 1), page),
+          artistTracks: async (artist) => (asked.push(artist), around),
+        }),
+      );
+      expect(asked[0]).toBe(like.like);
+      expect(words).toBe(0);
+      expect(found.map((track) => track.artist)).toEqual(['Kanisan', 'So.lo', 'squeeda']);
+    });
+
+    it('goes on to the artists it found, one step out', async () => {
+      const asked: string[] = [];
+      const from = sources({ artistTracks: async (artist) => (asked.push(artist), around), random: () => 0 });
+      await nextOnRadio(like, [], [], from);
+      await nextOnRadio(like, around.map((c) => matchKey(c.artist, c.title)), [], from);
+      const allowed = new Set([like.like, ...around.map((c) => c.artist)]);
+      expect(asked.length).toBeGreaterThan(1);
+      expect(asked.every((artist) => allowed.has(artist))).toBe(true);
+      expect(asked.some((artist) => artist !== like.like)).toBe(true);
+    });
+
+    it('falls back on its word when nothing is known around the artist', async () => {
+      const asked: string[] = [];
+      const found = await nextOnRadio(
+        like,
+        [],
+        [],
+        sources({ tagTracks: async (tag) => (asked.push(tag), page), artistTracks: async () => [] }),
+      );
+      expect(asked).toEqual([like.tag]);
+      expect(found).toHaveLength(RADIO_BATCH);
+    });
+  });
+
   it('reads a page once and remembers it', async () => {
     let read = 0;
     const once = sources({ tagTracks: async () => ((read += 1), page) });

@@ -65,7 +65,7 @@ import {
 } from '@/core/station';
 import { searchTracks, tracksLikeArtist } from '@/core/providers/spotifyApi';
 import { nextOnRadio, radioById, radioContext, radioOf } from '@/core/radio';
-import { tagTracks } from '@/core/station/lastfm';
+import { artistCandidates, tagTracks } from '@/core/station/lastfm';
 import { getLyrics } from '@/core/lyrics/api';
 import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
@@ -662,7 +662,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
             radio,
             [...stationHistory, seedKey, ...stationQueue.map(trackKey)],
             [...stationArtists, artistKey(currentTrack.artist)],
-            { tagTracks, searchSpotify: searchTracks, hasWords },
+            { tagTracks, artistTracks: artistCandidates, searchSpotify: searchTracks, hasWords },
           )
         : await resolveNextTracks({
         // The run, newest first. Falling back to the playing track covers the
@@ -1573,6 +1573,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         const { stationHistory, stationArtists } = get();
         found = await nextOnRadio(radio, stationHistory, stationArtists, {
           tagTracks,
+          artistTracks: artistCandidates,
           searchSpotify: searchTracks,
           hasWords,
         });

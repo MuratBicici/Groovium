@@ -24,6 +24,14 @@ export interface Radio {
    * is played.
    */
   wordless?: true;
+  /**
+   * An artist the station is built around instead of its word: its songs are
+   * those of the artists Last.fm's listeners play alongside this one, and
+   * alongside those in turn. For a sound that has no word of its own — "lofi"
+   * on Last.fm is everything from bedroom rock to black metal, while the
+   * artists around one beat-maker are all beat-makers.
+   */
+  like?: string;
   /** Which of the painted motifs its card is drawn with — see `paintedScene`. */
   scene: number;
   /** Its colours for that picture: the light, the main and the ground. */
@@ -39,6 +47,15 @@ export const RADIOS: readonly Radio[] = [
     wordless: true,
     scene: 2,
     colours: ['#d8e4ff', '#7d8fc9', '#161c38'],
+  },
+  {
+    id: 'lofistudy',
+    name: 'Lo-Fi Study',
+    tag: 'lofi',
+    like: 'Cosmic Koala',
+    wordless: true,
+    scene: 4,
+    colours: ['#ffe1c4', '#d98a6a', '#2a1626'],
   },
   { id: 'phonk', name: 'Phonk', tag: 'phonk', scene: 5, colours: ['#ff9aa2', '#e5484d', '#1f0a12'] },
   { id: 'synthwave', name: 'Synthwave', tag: 'synthwave', scene: 0, colours: ['#ffd166', '#ff7ad1', '#1a0a2a'] },
@@ -112,6 +129,8 @@ export function worthPlaying(
 
 export interface RadioSources {
   tagTracks: (tag: string, page: number) => Promise<SimilarTrack[]>;
+  /** Songs by the artists played alongside this one; for a station built around an artist. */
+  artistTracks?: (artist: string) => Promise<SimilarTrack[]>;
   searchSpotify: (query: string) => Promise<TrackMetadata[]>;
   /** Whether a song has words, for a station that wants none; null when it cannot be told. */
   hasWords?: (track: TrackMetadata) => Promise<boolean | null>;
@@ -121,8 +140,65 @@ export interface RadioSources {
 /** A word's pages as they were read, for this run of the app: they change by the week, not the minute. */
 const pages = new Map<string, SimilarTrack[]>();
 
+/** The artists found around a station's own, for it to be built around in their turn. */
+const neighbours = new Map<string, string[]>();
+
 export function forgetRadioPages(): void {
   pages.clear();
+  neighbours.clear();
+}
+
+/**
+ * The lists a fill looks through, in order, each asked for only when the one
+ * before has not filled it.
+ *
+ * A station with a word reads two of its pages, picked by chance. A station
+ * built around an artist reads the songs around that artist or one of its
+ * neighbours — one step out and no further, so it stays the sound it started
+ * as — and falls back on its word only if Last.fm knows nothing around it.
+ */
+function listings(radio: Radio, sources: RadioSources, random: () => number): (() => Promise<SimilarTrack[]>)[] {
+  const page = (number: number) => async () => {
+    const key = `${radio.tag}:${number}`;
+    let listed = pages.get(key);
+    if (!listed) {
+      listed = await sources.tagTracks(radio.tag, number);
+      if (listed.length > 0) pages.set(key, listed);
+    }
+    return listed;
+  };
+  const order = shuffled(
+    Array.from({ length: RADIO_PAGES }, (_, i) => i + 1),
+    random,
+  );
+  const artistTracks = sources.artistTracks;
+  if (!radio.like || !artistTracks) return order.slice(0, 2).map(page);
+
+  const seed = radio.like;
+  const around = (artist: string) => async () => {
+    const key = `like:${artist}`;
+    let listed = pages.get(key);
+    if (!listed) {
+      listed = await artistTracks(artist);
+      if (listed.length > 0) pages.set(key, listed);
+    }
+    if (artist === seed && listed.length > 0) {
+      neighbours.set(radio.id, [...new Set(listed.map((track) => track.artist))]);
+    }
+    return listed;
+  };
+  const known = neighbours.get(radio.id) ?? [];
+  // The first fill has only the artist itself to go on; after it, mostly the neighbours.
+  const pool = shuffled([seed, ...known], random);
+  const first = pool[0] as string;
+  const second = pool.find((artist) => artist !== first) ?? seed;
+  let found = 0;
+  const counted = (list: () => Promise<SimilarTrack[]>) => async () => {
+    const listed = await list();
+    found += listed.length;
+    return listed;
+  };
+  return [counted(around(first)), counted(around(second)), async () => (found > 0 ? [] : page(order[0] as number)())];
 }
 
 /**
@@ -143,18 +219,9 @@ export async function nextOnRadio(
   const heard = new Set(played);
   const found: TrackMetadata[] = [];
   let searches = RADIO_SEARCHES;
-  const order = shuffled(
-    Array.from({ length: RADIO_PAGES }, (_, i) => i + 1),
-    random,
-  );
 
-  for (const page of order.slice(0, 2)) {
-    const key = `${radio.tag}:${page}`;
-    let listed = pages.get(key);
-    if (!listed) {
-      listed = await sources.tagTracks(radio.tag, page);
-      if (listed.length > 0) pages.set(key, listed);
-    }
+  for (const list of listings(radio, sources, random)) {
+    const listed = await list();
     const artists = [...recentArtists, ...found.map((track) => artistKey(track.artist))];
     for (const candidate of worthPlaying(shuffled(listed, random), heard, artists)) {
       if (found.length >= RADIO_BATCH || searches <= 0) return found;
