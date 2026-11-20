@@ -497,6 +497,17 @@ export function setWeather(chosen: Partial<Weather>): void {
   if (thunderAt === null || soonest < thunderAt) thunderAt = soonest;
 }
 
+/**
+ * A roll soon, a second or two from now, so a change to the thunder or its
+ * distance made under water is heard rather than waited for. Nothing while
+ * previewing, where the card's strikes bring it, or with the thunder off.
+ */
+export function thunderSoon(): void {
+  if (!ctx || previewing || !ticking || weather.thunder <= 0.001) return;
+  const soon = ctx.currentTime + 1 + Math.random();
+  if (thunderAt === null || soon < thunderAt) thunderAt = soon;
+}
+
 /** Hold the sound where it is, after a short fade. */
 export async function pauseRain(): Promise<void> {
   if (!ctx || !master || ctx.state !== 'running') return;

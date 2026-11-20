@@ -2470,7 +2470,18 @@ body {
   transition:
     opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
     filter 700ms cubic-bezier(0.22, 1, 0.36, 1),
-    translate 900ms cubic-bezier(0.22, 1, 0.36, 1);
+    translate 900ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 550ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The weather's lights out: the clock goes up and smaller to make room, and the closing line steps aside. */
+.groove-focus.is-weather .groove-focus-centre {
+  top: 15%;
+  /* In the same transform as the centring, so it shrinks about its own middle. */
+  transform: translate(-50%, -50%) scale(0.6);
+}
+.groove-focus.is-revealed.is-weather .groove-focus-done {
+  opacity: 0;
 }
 .groove-focus.is-paused .groove-focus-clock {
   animation: groove-focus-breathe 2.4s ease-in-out infinite;
@@ -2528,7 +2539,38 @@ body {
 }
 .groove-focus-button.is-end {
   padding-right: 12px;
+  white-space: nowrap;
 }
+.groove-focus-button.is-on {
+  background: color-mix(in srgb, var(--color-brass-400) 32%, transparent);
+}
+
+/* The weather's four rows of lights, risen from the controls, over the water. */
+.groove-focus-weather {
+  position: absolute;
+  left: 50%;
+  bottom: 82px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(264px, calc(100% - 32px));
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translate(-50%, 16px);
+  pointer-events: none;
+  transition:
+    opacity 300ms ease-out,
+    transform 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.groove-focus.is-weather .groove-focus-weather {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
 /* The player's own volume knob, opening into its line as it does on the deck. */
 .groove-focus-knob {
   position: relative;

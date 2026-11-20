@@ -10,11 +10,10 @@ import { useShown } from '@/platform/shown';
 import { DRAWER_WIDTH } from '@/platform/window';
 import { FocusDial } from './FocusDial';
 import { WeatherCard } from './WeatherCard';
-import { WeatherSteps, wordAt } from './WeatherSteps';
+import { wordAt } from './WeatherSteps';
+import { NO_THUNDER, WeatherRows, useWeatherWords } from './WeatherRows';
 import { setWeatherGlow } from './weatherGlow';
 
-/** Below this, there is no thunder, and how near it is has nothing to act on. */
-const NO_THUNDER = 0.25;
 /** How far the music is turned down while the weather is heard over it: a quarter of its amplitude, 12 dB. */
 const MUSIC_UNDER_PREVIEW = 0.25;
 
@@ -99,13 +98,7 @@ export function FocusDrawer({
   }, [open]);
 
   const lower = (word: string) => word.toLocaleLowerCase(language === 'tr' ? 'tr' : 'en');
-  const words = {
-    rain: [t('focus.w.rain0'), t('focus.w.rain1'), t('focus.w.rain2')] as const,
-    change: [t('focus.w.change0'), t('focus.w.change1'), t('focus.w.change2')] as const,
-    thunder: [t('focus.w.thunder0'), t('focus.w.thunder1'), t('focus.w.thunder2')] as const,
-    // Near on the left, far on the right: more lights, further away.
-    power: [t('focus.w.power0'), t('focus.w.power1'), t('focus.w.power2')] as const,
-  };
+  const words = useWeatherWords();
   const summary =
     thunder < NO_THUNDER
       ? t('focus.w.summaryDry', { rain: words.rain[wordAt(rain)], change: lower(words.change[wordAt(change)]) })
@@ -187,35 +180,7 @@ export function FocusDrawer({
             />
           </div>
           <div className="groove-weather-panel" inert={!open}>
-            <WeatherSteps
-              label={t('focus.w.rain')}
-              words={words.rain}
-              level={rain}
-              onLevel={(level) => setFocus({ focusRain: level })}
-              onSettle={() => {}}
-            />
-            <WeatherSteps
-              label={t('focus.w.change')}
-              words={words.change}
-              level={change}
-              onLevel={(level) => setFocus({ focusChange: level })}
-              onSettle={() => {}}
-            />
-            <WeatherSteps
-              label={t('focus.w.thunder')}
-              words={words.thunder}
-              level={thunder}
-              onLevel={(level) => setFocus({ focusThunder: level })}
-              onSettle={() => setStrikeSoon((n) => n + 1)}
-            />
-            <WeatherSteps
-              label={t('focus.w.power')}
-              words={words.power}
-              level={1 - power}
-              dim={thunder < NO_THUNDER}
-              onLevel={(level) => setFocus({ focusPower: 1 - level })}
-              onSettle={() => setStrikeSoon((n) => n + 1)}
-            />
+            <WeatherRows onThunderSettled={() => setStrikeSoon((n) => n + 1)} />
             <p className="text-meta text-cream-400">{t('focus.rainBy')}</p>
           </div>
         </div>

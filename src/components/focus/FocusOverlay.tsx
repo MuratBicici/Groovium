@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useT } from '@/core/i18n';
 import { formatClock, remaining, share } from '@/core/focus/clock';
 import { useFocusStore } from '@/core/focus/store';
-import { rainBands } from '@/core/focus/sound';
+import { rainBands, setWeather, thunderSoon } from '@/core/focus/sound';
 import {
   LAYERS,
   swell,
@@ -17,6 +17,7 @@ import {
 } from '@/core/focus/water';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { FocusVolume } from './FocusVolume';
+import { WeatherRows } from './WeatherRows';
 
 /** The ring around the clock: this many bars, fed by this many bands of the rain. */
 const RING_BARS = 84;
@@ -76,13 +77,18 @@ export function FocusOverlay({
   // The overlay is only here for one session, so this is one line a session.
   const [doneLine] = useState(() => DONE_LINES[Math.floor(Math.random() * DONE_LINES.length)] ?? 'focus.done1');
 
+  // The weather's lights, brought up from the controls to be changed while it is heard.
+  const [weatherOpen, setWeatherOpen] = useState(false);
+  const weatherShown = weatherOpen && revealed && !compact;
+
   // What the canvas loop reads each frame, without re-rendering for it.
-  const live = useRef({ phase, compact, revealed, paused: false, share: 1, over: false });
+  const live = useRef({ phase, compact, revealed, weather: false, paused: false, share: 1, over: false });
   useEffect(() => {
     live.current = {
       phase,
       compact,
       revealed,
+      weather: weatherShown,
       paused: clock?.pausedAt != null,
       share: clock ? share(clock, now) : 1,
       over: clock ? remaining(clock, now) < 0 : false,
@@ -126,12 +132,24 @@ export function FocusOverlay({
     };
   }, []);
 
+  // Escape puts the lights away, and only that.
+  useEffect(() => {
+    if (!weatherShown) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setWeatherOpen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [weatherShown]);
+
   // Space pauses, as it would a record — unless a button or slider has it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== ' ' || useFocusStore.getState().phase !== 'under') return;
       const target = e.target as HTMLElement | null;
-      if (target?.closest('button, input, select, textarea')) return;
+      if (target?.closest('button, input, select, textarea, [role="slider"]')) return;
       e.preventDefault();
       togglePause();
     };
@@ -144,14 +162,15 @@ export function FocusOverlay({
   const left = clock ? remaining(clock, now) : 0;
   const paused = clock?.pausedAt != null;
   const over = left < 0;
-  const showControls = revealed && (stirred || paused);
+  // Kept up while the lights are out, so the button that puts them away is there.
+  const showControls = revealed && (stirred || paused || weatherShown);
 
   return (
     <div
       ref={host}
       className={`groove-focus ${compact ? 'is-compact' : ''} ${revealed ? 'is-revealed' : ''} ${
         paused ? 'is-paused' : ''
-      } ${over ? 'is-over' : ''}`}
+      } ${over ? 'is-over' : ''} ${weatherShown ? 'is-weather' : ''}`}
       onPointerMove={stir}
       onPointerDown={stir}
       onFocus={stir}
@@ -178,6 +197,12 @@ export function FocusOverlay({
         <p className="groove-focus-done" aria-live="polite">
           {over ? t(doneLine) : ''}
         </p>
+      )}
+
+      {!compact && (
+        <div className="groove-focus-weather" inert={!weatherShown} aria-hidden={!weatherShown}>
+          <WeatherRows onWeather={setWeather} onThunderSettled={thunderSoon} />
+        </div>
       )}
 
       <div className={`groove-focus-controls ${showControls ? 'is-shown' : ''}`} inert={!revealed}>
@@ -208,6 +233,19 @@ export function FocusOverlay({
           <>
             <button
               type="button"
+              className={`groove-focus-button ${weatherShown ? 'is-on' : ''}`}
+              onClick={() => setWeatherOpen((was) => !was)}
+              aria-expanded={weatherShown}
+              aria-label={weatherShown ? t('focus.weatherDone') : t('focus.weather')}
+              title={weatherShown ? t('focus.weatherDone') : t('focus.weather')}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 15.5a4 4 0 0 1-.4-8 5.5 5.5 0 0 1 10.6 1.6A3.3 3.3 0 0 1 17 15.5z" />
+                <path d="M9 18.5l-.8 1.8M13 18.5l-.8 1.8M17 18.5l-.8 1.8" />
+              </svg>
+            </button>
+            <button
+              type="button"
               className="groove-focus-button"
               onClick={onToggleDrawer}
               aria-label={drawerOpen ? t('focus.foldDrawer') : t('focus.unfoldDrawer')}
@@ -229,6 +267,8 @@ interface Live {
   phase: string;
   compact: boolean;
   revealed: boolean;
+  /** The weather's lights are out, and the clock has gone up to make room. */
+  weather: boolean;
   paused: boolean;
   share: number;
   over: boolean;
@@ -304,6 +344,7 @@ function useWater(
     let motionStart = performance.now() / 1000;
     let motionPhase = live.current.phase;
     let reveal = 0;
+    let aside = 0;
     const bands = new Float32Array(BANDS);
     const heard = new Float32Array(RING_BARS);
     let bubbles: Bubble[] = [];
@@ -522,7 +563,10 @@ function useWater(
 
       // The ring of bars, brought in as the water settles and taken away first.
       reveal += ((state.revealed ? 1 : 0) - reveal) * (quick ? 1 : 1 - Math.exp(-dt * (state.revealed ? 3.4 : 10)));
-      if (reveal > 0.002) {
+      // Out of the way while the weather's lights are out: the clock has gone up without it.
+      aside += ((state.weather ? 1 : 0) - aside) * (quick ? 1 : 1 - Math.exp(-dt * 7));
+      const ringShown = reveal * (1 - aside);
+      if (ringShown > 0.002) {
         rainBands(bands);
         for (let i = 0; i < RING_BARS; i += 1) {
           // Each bar follows a band, mirrored so the ring has no seam at the top.
@@ -533,7 +577,7 @@ function useWater(
           heard[i] = (heard[i] as number) + (target - (heard[i] as number)) * (1 - Math.exp(-dt * 16));
         }
         if (state.compact) drawStrip(ctx, width, height, heard, reveal, brass, brassLight, state);
-        else drawRing(ctx, width, height, heard, reveal, brass, brassLight, state, time);
+        else drawRing(ctx, width, height, heard, ringShown, brass, brassLight, state, time);
       }
     };
     const draw = (ms: number) => {
