@@ -4,6 +4,87 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.5.0 — 2026-11-20
+
+A place to work, under the rain.
+
+The drawer has a third side, Focus. Set the length on a record, set the
+weather on a card, and start: the music pauses and stays paused, and the
+window sinks under water. The player shows through it, bent, until the water
+closes over; then the clock rises inside a ring of bars that move with the
+rain. When the time is up it carries on into minus with a line to say so,
+until you end the session and the water goes back down. It works with the
+drawer open, with the player alone and in the collapsed bar.
+
+The rain is real recordings, with thunder. On the card you set how hard it
+rains, how much it changes, how often it thunders and how near. The sound
+comes up slowly, and from there it is never quite the same twice: now and then
+the rain pours, and the thunder comes when it likes.
+
+Groovium has radios. Stations of one kind of music each sit on the Spotify
+home as a shelf of painted cards; choose one and its record goes to the deck,
+and the songs keep coming. Chill Study plays lo-fi without words, and Lo-Fi
+Study plays songs like Cosmic Koala's. A radio no longer stops between songs
+when a search comes back empty.
+
+HIGHLIGHTS
+· Focus sessions: a clock under water, with rain and thunder.
+· The weather set on a card: rain, change, thunder and its distance.
+· Groovium radios on the Spotify home, Lo-Fi Study among them.
+· Radios keep playing when a search for songs comes back empty.
+· A pinned window keeps its full frame rate.
+
+ALL CHANGES
+
+Focus sessions
+· A third side of the drawer, Focus. The length is set on a record in fives,
+  from five minutes to two hours, by its handle, the wheel or the arrow keys,
+  and the minutes roll over like a counter.
+· Starting a session pauses the music and leaves it paused. The window sinks:
+  three layers of water rise, with the player and the drawer showing through
+  them, bent, until they are covered.
+· Under water there is the clock in a ring of bars that move with the rain, a
+  pause and an end button, and the deck's own volume knob for the session's
+  sound. Space and the media keys pause the session, not the music.
+· When the time is up the clock goes on into minus, with a line to say the
+  session is done.
+· It keeps its shape with the drawer open, with the player alone and in the
+  collapsed bar, and while the window changes between them.
+· The edge light is off during a session.
+
+Weather
+· The card shows the weather it is set to: clouds, rain, mist and lightning.
+  Press it and it comes forward with four rows of lights beside it: Rain,
+  Change, Thunder and Distance. The lights take the theme's own colours.
+· The rain is four recordings, layered so that no loop is heard. The sound
+  comes up over eight seconds.
+· With Change up, the rain wanders and now and then pours. Thunder comes at
+  random, more often in a downpour, and Distance sets how near it sounds.
+· Rain recorded by Ylmir; thunder by WuxiaScrub, rubberduck and kindland. All
+  CC0.
+
+Radios
+· Groovium radios: a fixed set of stations, one kind of music each, on the
+  Spotify home as an endless shelf of painted cards. Choosing one turns its
+  card over and sends its record to the deck. While a radio plays, shuffle,
+  previous and repeat step aside.
+· Radios find their songs through Last.fm and play them from Spotify, so both
+  need to be connected. Songs already heard and recent artists are kept off
+  the air.
+· Chill Study plays lo-fi hip hop without words.
+· Lo-Fi Study is built around an artist, Cosmic Koala, and the artists nearest
+  to them.
+· If a search for the next songs comes back empty, the radio tries again, and
+  if it still finds nothing it says so rather than stopping without a word.
+
+Playback
+· A song with a second or two of real silence in it is no longer marked as
+  loading.
+· The visualiser stays up through a quiet passage for as long as the song
+  plays.
+· A pinned window keeps the full frame rate while another window is in use,
+  unless battery saver was turned on by hand.
+
 ## 1.4.0 — 2026-11-10
 
 An equaliser, for Spotify as well.

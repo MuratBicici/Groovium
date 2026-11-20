@@ -13,6 +13,29 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.5.0 — 2026-11-20
+
+Yağmurun altında çalışmak için bir yer.
+
+Çekmecenin artık üçüncü bir yüzü var: Odak. Süreyi bir plağın üstünde
+ayarlayın, havayı bir kartta seçin ve başlatın. Müzik durur ve öyle kalır.
+Pencere suyun altına batar. Oynatıcı suyun arkasından kırılarak görünür, sonra
+su üstünü kapatır. Ardından saat, yağmurla kıpırdayan çubuklardan bir halkanın
+ortasında belirir. Süre dolunca saat eksiye doğru işlemeye devam eder ve
+seansın bittiğini söyleyen bir söz çıkar. Seansı bitirdiğinizde su geri
+çekilir. Çekmece açıkken de, yalnız oynatıcıda da, kompakt şeritte de çalışır.
+
+Yağmur gerçek kayıtlardan geliyor, gök gürültüsüyle birlikte. Kartta yağmurun
+şiddetini, havanın ne kadar değişeceğini, ne sıklıkla gürleyeceğini ve ne kadar
+yakından geleceğini seçersiniz. Ses yavaşça yükselir. Sonrası hiçbir zaman tam
+aynı olmaz: arada bir yağmur bastırır, gök gürültüsü ne zaman isterse gelir.
+
+Groovium'un artık radyoları var. Her biri tek tür müzik çalan istasyonlar,
+Spotify ana sayfasında boyalı kartlardan bir rafta durur. Birini seçin, plağı
+çalara gider ve şarkılar gelmeye devam eder. Chill Study sözsüz lo-fi çalar.
+Lo-Fi Study ise Cosmic Koala'nınkilere benzeyen şarkılar çalar. Bir arama boş
+döndüğünde radyo artık şarkı arasında durmuyor.
+
 ## 1.4.0 — 2026-11-10
 
 Bir ekolayzer, Spotify için de.
