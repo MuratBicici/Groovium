@@ -187,6 +187,11 @@ interface SpotifyPlaylistsState {
    * deck, quietly overruling a setting they had chosen.
    */
   playCrate: (id: string, shuffled?: boolean) => Promise<void>;
+  /**
+   * Play a crate from a song picked out of it, at `index` in the crate as it
+   * is shown: on through the rest of the crate, and the station after it.
+   */
+  playCrateFrom: (id: string, track: TrackMetadata, index: number) => Promise<void>;
 
   openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
   closeCrate: () => void;
@@ -645,6 +650,21 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       } catch (err) {
         set({ starting: null, playError: describe(err) });
       }
+    },
+
+    async playCrateFrom(id, track, index) {
+      if (get().starting) return;
+      set({ starting: id, playError: null });
+      // The whole crate, not just the pages read so far, so the song is followed by all of what comes after it.
+      const tracks = await contentsOf(id);
+      set({ starting: null });
+      const player = usePlayerStore.getState();
+      // Could not be read: the song on its own is still what was asked for most.
+      if (!tracks || tracks.length === 0) return player.playSingle(track);
+      // The same place if the crate is as shown; otherwise the song wherever it now is.
+      const at = tracks[index]?.id === track.id ? index : tracks.findIndex((each) => each.id === track.id);
+      if (at < 0) return player.playSingle(track);
+      await player.playList(`spotify:${id}`, tracks, undefined, at);
     },
 
     async open() {

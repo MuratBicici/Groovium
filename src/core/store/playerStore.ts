@@ -308,8 +308,12 @@ export interface PlayerActions {
    * being toggled afterwards: a crate played shuffled starts on a random one of
    * its records, and turning the setting on after the first track had already
    * been chosen would leave that one track always the same.
+   *
+   * With `from`, a song was picked out of the list rather than the list put on:
+   * it starts there and plays on through the rest of the list, and the station
+   * is left as it was, to follow the list once it ends — see `wholeList`.
    */
-  playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean) => Promise<void>;
+  playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean, from?: number) => Promise<void>;
 
   /** Put a song at the end of the queue. */
   queueLast: (track: TrackMetadata) => void;
@@ -1274,21 +1278,22 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       await startTrack(index);
     },
 
-    async playList(id, tracks, shuffle) {
+    async playList(id, tracks, shuffle, from) {
       if (tracks.length === 0) return;
       const shuffling = shuffle ?? get().shuffle;
+      const picked = from !== undefined && from >= 0 && from < tracks.length ? from : null;
       // Started on a song that plays here; the rest are passed over as they come.
       const playable = tracks.flatMap((track, at) => (unplayable(track) ? [] : [at]));
-      if (playable.length === 0) {
-        set({ error: whyUnplayable(unplayable(tracks[0] as TrackMetadata) ?? 'unknown') });
+      if (playable.length === 0 || (picked !== null && unplayable(tracks[picked] as TrackMetadata))) {
+        set({ error: whyUnplayable(unplayable(tracks[picked ?? 0] as TrackMetadata) ?? 'unknown') });
         return;
       }
-      const index = shuffling
-        ? (playable[Math.floor(Math.random() * playable.length)] as number)
-        : (playable[0] as number);
+      const index =
+        picked ??
+        (shuffling ? (playable[Math.floor(Math.random() * playable.length)] as number) : (playable[0] as number));
       set({
-        // Only ever a whole crate: a song from one is played on its own.
-        ...wholeListStarting(true),
+        // A song picked out of the list is a starting point, and the station may follow the list.
+        ...wholeListStarting(picked === null),
         playback: { id, tracks, index },
         shuffle: shuffling,
         shuffleOrder: shuffling ? shuffledIndices(tracks.length, index) : [],

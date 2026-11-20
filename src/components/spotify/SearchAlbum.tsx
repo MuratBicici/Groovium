@@ -29,7 +29,6 @@ export function SearchAlbum({
 }) {
   const t = useT();
   const playList = usePlayerStore((s) => s.playList);
-  const playSingle = usePlayerStore((s) => s.playSingle);
   const [songs, setSongs] = useState<{ for: string; tracks: TrackMetadata[] } | null>(null);
   const [problem, setProblem] = useState<{ for: string; text: string } | null>(null);
 
@@ -117,13 +116,14 @@ export function SearchAlbum({
       <ul className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         {failed && <Hint>{failed}</Hint>}
         {!failed && !tracks && <Hint>{t('search.openingAlbum')}</Hint>}
-        {tracks?.map((track) => (
+        {tracks?.map((track, index) => (
           <TrackResult
             key={track.id}
             track={track}
             onPlay={() => {
               onPlayed();
-              void playSingle(track);
+              // From this song on through the album, and the station after it.
+              void playList(`spotify:album:${album.id}`, tracks, undefined, index);
             }}
           />
         ))}

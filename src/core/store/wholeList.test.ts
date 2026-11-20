@@ -120,3 +120,50 @@ describe('the station and a whole playlist', () => {
     expect(store().station).toBe(true);
   });
 });
+
+describe('a song picked out of a list', () => {
+  const C = track('c');
+
+  beforeEach(async () => {
+    registerProvider(new Silent());
+    await store().setActiveProvider('local');
+    usePlayerStore.setState({
+      station: true,
+      wholeList: false,
+      stationQueue: [],
+      upNext: [],
+      skipped: [],
+      repeat: 'off',
+      shuffle: false,
+    });
+  });
+
+  it('starts there and leaves the station on', async () => {
+    await store().playList('spotify:album:x', [A, B, C], undefined, 1);
+    expect(store().currentTrack?.id).toBe('b');
+    expect(store().wholeList).toBe(false);
+    expect(store().station).toBe(true);
+  });
+
+  it('plays on through the rest of the list', async () => {
+    await store().playList('spotify:album:x', [A, B, C], undefined, 1);
+    tell({ type: 'ended', trackId: 'b' });
+    await vi.waitFor(() => expect(store().currentTrack?.id).toBe('c'));
+    expect(store().playback.id).toBe('spotify:album:x');
+  });
+
+  it('asks the station for what follows once the list has ended', async () => {
+    const { resolveNextTracks } = await import('@/core/station');
+    vi.mocked(resolveNextTracks).mockClear();
+    await store().playList('spotify:album:x', [A, B, C], undefined, 2);
+    tell({ type: 'ended', trackId: 'c' });
+    await vi.waitFor(() => expect(vi.mocked(resolveNextTracks)).toHaveBeenCalled());
+  });
+
+  it('keeps the shuffle switch as it was, and starts on the song picked', async () => {
+    usePlayerStore.setState({ shuffle: true });
+    await store().playList('spotify:album:x', [A, B, C], undefined, 2);
+    expect(store().shuffle).toBe(true);
+    expect(store().currentTrack?.id).toBe('c');
+  });
+});

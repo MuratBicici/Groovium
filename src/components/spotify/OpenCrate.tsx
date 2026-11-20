@@ -212,8 +212,8 @@ function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
   const moveInCrate = useSpotifyPlaylistsStore((s) => s.moveInCrate);
   const writeError = useSpotifyPlaylistsStore((s) => s.writeError);
   const clearWriteError = useSpotifyPlaylistsStore((s) => s.clearWriteError);
-  const playSingle = usePlayerStore((s) => s.playSingle);
   const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
+  const playCrateFrom = useSpotifyPlaylistsStore((s) => s.playCrateFrom);
   return {
     name: playlist.name,
     trackCount: playlist.trackCount,
@@ -228,8 +228,8 @@ function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
     // Spotify takes a song out by its address, every copy of it at once.
     takeOut: (track) => removeFromCrate(playlist.id, track.id),
     move: (from, to) => moveInCrate(playlist.id, from, to),
-    // One song at a time, as a record taken out of a sleeve is.
-    play: (track) => playSingle(track),
+    // From the song taken out on through the rest of the crate, and the station after it.
+    play: (track, index) => playCrateFrom(playlist.id, track, index),
     playAll: (shuffled) => playCrate(playlist.id, shuffled),
     writeError,
     clearWriteError,

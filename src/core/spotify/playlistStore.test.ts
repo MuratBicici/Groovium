@@ -23,8 +23,9 @@ vi.mock('@/core/providers/spotifyPlaylists', () => ({
 
 // The deck, stubbed to the one thing this store asks of it.
 const played = vi.fn();
+const playedAlone = vi.fn();
 vi.mock('@/core/store', () => ({
-  usePlayerStore: { getState: () => ({ playList: played }) },
+  usePlayerStore: { getState: () => ({ playList: played, playSingle: playedAlone }) },
 }));
 
 // Who is signed in, and the line the store listens on for that changing. The
@@ -409,6 +410,34 @@ const kept = (id: string, snapshotId: string, tracks: TrackMetadata[], cursor: s
 
 /** Thirty records, which is more than one page of a crate. */
 const thirty = records(...Array.from({ length: 30 }, (_, at) => String(at)));
+
+describe('playing a crate from a song picked out of it', () => {
+  it('hands the deck the whole crate, starting at that song', async () => {
+    const all = records('1', '2', '3');
+    fetchWhole.mockResolvedValueOnce(all);
+    await useSpotifyPlaylistsStore.getState().playCrateFrom('p1', all[1] as TrackMetadata, 1);
+
+    expect(played).toHaveBeenLastCalledWith('spotify:p1', all, undefined, 1);
+    expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+  });
+
+  it('finds the song where it now is if the crate has moved under it', async () => {
+    const all = records('1', '2', '3');
+    fetchWhole.mockResolvedValueOnce(all);
+    await useSpotifyPlaylistsStore.getState().playCrateFrom('p1', all[2] as TrackMetadata, 0);
+    expect(played).toHaveBeenLastCalledWith('spotify:p1', all, undefined, 2);
+  });
+
+  it('plays the song on its own when the crate cannot be read', async () => {
+    const song = records('9')[0] as TrackMetadata;
+    played.mockClear();
+    fetchWhole.mockRejectedValueOnce(new Error('offline'));
+    await useSpotifyPlaylistsStore.getState().playCrateFrom('p1', song, 0);
+    expect(playedAlone).toHaveBeenLastCalledWith(song);
+    expect(played).not.toHaveBeenCalled();
+    expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+  });
+});
 
 describe('opening on what was kept from last time', () => {
   it('shows the kept shelf before Spotify has answered', async () => {
