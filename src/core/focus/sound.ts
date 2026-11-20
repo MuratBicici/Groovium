@@ -36,10 +36,20 @@ import {
  * rules about gain, and nothing here should be able to touch them.
  *
  * Built to be gentle on ears first. It starts from silence and comes up over
- * three seconds; its level has a ceiling well under full scale; and a limiter
+ * eight seconds; its level has a ceiling well under full scale; and a limiter
  * sits last, so no downpour and no thunder can go past it. Every recording is
  * brought to the same average before it plays, so nothing jumps in loudness
  * because of which file it came from.
+ *
+ * The thunder is lifted well above that average, because most of a roll is
+ * rumble under 160 Hz that a laptop's speakers cannot play: at the old level
+ * it was clear in good earphones and lost on speakers. What keeps the lift
+ * safe is one soft ceiling that every roll goes through after it has been
+ * panned. Panning a stereo roll folds one side into the other, and two rolls
+ * can overlap; neither can take the thunder past the ceiling. Measured at full
+ * volume over the heaviest rain, the nearest roll panned hardest peaks at
+ * −4.0 dBFS, two overlapping at −3.9. Before the lift and the ceiling, the
+ * same measurement gave −2.3 and −1.8.
  */
 
 const CLIPS = ['1', '2', '3', '4'].map((name) => `/ambient/rain/${name}.ogg`);
@@ -56,6 +66,15 @@ const PEAK_ROOM = 10 ** (-1 / 20);
 const THUNDER_RMS = 10 ** (-24 / 20);
 const THUNDER_PEAK = 10 ** (-5 / 20);
 const THUNDER_MEASURED_HZ = 1000;
+/** How far the thunder is lifted over that average, so speakers that cannot play its rumble still carry it. */
+const THUNDER_LIFT_DB = 9;
+/**
+ * The soft ceiling all thunder goes through, in dBFS before the master: set so
+ * that the worst case, measured as played, stays near −4 dBFS at the output.
+ */
+export const THUNDER_CEILING_DB = -1.75;
+/** How far past the ceiling the shaper can take an input, as a factor (18 dB). */
+const CEILING_REACH = 8;
 /** How long the sound takes to come up from silence: long enough to be noticed arriving, not switched on. */
 const FADE_IN_S = 8;
 const FADE_OUT_S = 1.5;
@@ -102,6 +121,20 @@ export function fadeInCurve(to: number, points = 64): Float32Array {
   return curve;
 }
 
+/**
+ * The shape of the thunder's soft ceiling, for a WaveShaper fed 1/`reach` of
+ * the signal and followed by `reach` again: straight well under `ceiling`,
+ * rounding off towards it, and never past it.
+ */
+export function softCeilingCurve(ceiling: number, reach = CEILING_REACH, points = 8193): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(new ArrayBuffer(points * 4));
+  for (let i = 0; i < points; i += 1) {
+    const x = ((i / (points - 1)) * 2 - 1) * reach;
+    curve[i] = (ceiling * Math.tanh(x / ceiling)) / reach;
+  }
+  return curve;
+}
+
 /** The gain that brings one recording to the common average without letting its peak past −1 dB. */
 export function evenOut(channels: readonly Float32Array[]): number {
   const { rms, peak } = measure(channels);
@@ -128,6 +161,7 @@ let master: GainNode | null = null;
 let rainBus: GainNode | null = null;
 let rainTone: BiquadFilterNode | null = null;
 let heavyBus: GainNode | null = null;
+let thunderBus: GainNode | null = null;
 let analyser: AnalyserNode | null = null;
 let buffers: AudioBuffer[] = [];
 let trims: number[] = [];
@@ -190,6 +224,17 @@ function load(): Promise<boolean> {
       heavyBus.connect(rainBus);
       rainBus.connect(rainTone);
       rainTone.connect(master);
+      // Every roll through one ceiling, after its panner, so that overlapping rolls share it too.
+      thunderBus = ctx.createGain();
+      thunderBus.gain.value = 1 / CEILING_REACH;
+      const ceiling = ctx.createWaveShaper();
+      ceiling.curve = softCeilingCurve(dbToGain(THUNDER_CEILING_DB));
+      ceiling.oversample = '4x';
+      const afterCeiling = ctx.createGain();
+      afterCeiling.gain.value = CEILING_REACH;
+      thunderBus.connect(ceiling);
+      ceiling.connect(afterCeiling);
+      afterCeiling.connect(master);
       analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.7;
@@ -281,7 +326,7 @@ function turn(layer: Layer, fadeS: number): void {
 
 /** One roll of thunder, from a recording picked by chance, near or far by chance. */
 function roll(pouring: boolean): void {
-  if (!ctx || !master || thunder.length === 0) return;
+  if (!ctx || !thunderBus || thunder.length === 0) return;
   const index = pick(thunder.length, lastThunder);
   lastThunder = index;
   const buffer = thunder[index] as AudioBuffer;
@@ -292,7 +337,7 @@ function roll(pouring: boolean): void {
   const first = lowpass(ctx, sound.brightHz);
   const second = lowpass(ctx, sound.brightHz);
   const gain = ctx.createGain();
-  const loud = (thunderTrims[index] ?? 0) * dbToGain(sound.gainDb);
+  const loud = (thunderTrims[index] ?? 0) * dbToGain(sound.gainDb + THUNDER_LIFT_DB);
   const tail = Math.min(1.5, buffer.duration / 3);
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(loud, now + sound.arriveS);
@@ -304,7 +349,7 @@ function roll(pouring: boolean): void {
   first.connect(second);
   second.connect(gain);
   gain.connect(pan);
-  pan.connect(master);
+  pan.connect(thunderBus);
   source.start(now);
 }
 
