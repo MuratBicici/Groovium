@@ -4,6 +4,63 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.5.1 — 2026-11-20
+
+Thunder you can hear, and lists that play on.
+
+The thunder in a focus session was clear in good earphones and nearly lost on
+a laptop's speakers, because most of a roll is rumble lower than they can
+play. It is now much louder, and safer than before: every roll goes through
+one soft ceiling, so even two at once cannot pass it.
+
+The weather is heard while it is set. With the card forward on the Focus
+side, its rain and thunder play as the session will have them, with any
+music turned down underneath, and each strike on the card brings its own
+thunder after it. Under water, a new button brings up the same lights, and
+every change is heard at once.
+
+A song picked out of an album or a playlist now plays on through the rest of
+it, instead of on its own. When an album or a playlist ends, infinite play
+carries on with songs like it and a notice says so; putting a list on whole
+no longer switches infinite play off.
+
+HIGHLIGHTS
+· Thunder that laptop speakers can carry, under a safer ceiling.
+· Hear the weather while you set it, with the music turned down.
+· Change the weather under water, during a session.
+· Albums and playlists play on from the song you pick.
+· Infinite play follows a list once it ends, and says so.
+
+ALL CHANGES
+
+Focus sessions
+· The thunder is 9 dB louder. On a laptop's speakers a distant roll went
+  from under the rain to clearly over it.
+· All thunder goes through one soft ceiling after it is panned, so that
+  overlapping rolls cannot pass it. The loudest moment at full volume over
+  the heaviest rain is now lower than it was before the change.
+· With the weather card forward, its sound plays at the session's volume
+  and comes up over two seconds. Changes to the lights are heard at once,
+  and the thunder follows the card's own lightning, sooner the nearer.
+· Music playing at the time is turned down to a quarter while the card is
+  forward, and comes back when it goes back. The volume you set is not
+  changed.
+· Under water, a weather button beside the others brings up the four rows
+  of lights. The clock moves up to make room; the button again, or Escape,
+  puts them away. Changing the thunder or its distance brings a roll within
+  a couple of seconds.
+· Space on a row of lights no longer pauses the session.
+
+Playback
+· A song picked from a Spotify playlist in the drawer, or from an album in
+  the search, plays on through the rest of the list from there. The whole
+  playlist is used, not only the part already shown.
+· Putting a whole album or playlist on no longer switches infinite play
+  off, and the button stays usable while it plays.
+· When an album or playlist ends and infinite play takes over, a notice
+  says the list has ended and infinite play is carrying on. With infinite
+  play off, the list stops at its end as before.
+
 ## 1.5.0 — 2026-11-20
 
 A place to work, under the rain.

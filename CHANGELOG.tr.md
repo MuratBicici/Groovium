@@ -13,6 +13,26 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.5.1 — 2026-11-20
+
+Duyulan gök gürültüsü, sonuna kadar çalan listeler.
+
+Odak seansındaki gök gürültüsü iyi kulaklıklarda net duyuluyordu ama
+laptop hoparlöründe neredeyse kayboluyordu. Çünkü gürlemenin büyük kısmı,
+hoparlörlerin çalamayacağı kadar pes bir uğultu. Artık çok daha yüksek ve
+öncekinden daha güvenli. Her gürleme tek bir yumuşak tavandan geçiyor, ikisi
+üst üste gelse bile onu aşamıyor.
+
+Havayı ayarlarken artık duyuyorsunuz. Odak sekmesinde kart öndeyken yağmur ve
+gök gürültüsü seansta olacağı gibi çalar, müzik varsa altında kısılır. Karttaki
+her şimşeğin ardından kendi gök gürültüsü gelir. Su altında yeni bir düğme
+aynı ışıkları açar, her değişikliği anında duyarsınız.
+
+Bir albümden ya da listeden seçtiğiniz şarkı artık tek başına çalmıyor,
+listenin geri kalanıyla devam ediyor. Albüm ya da liste bitince sonsuz çalma
+benzer şarkılarla devam ediyor ve bunu bir uyarıyla söylüyor. Bütün bir listeyi
+çalmak artık sonsuz çalmayı kapatmıyor.
+
 ## 1.5.0 — 2026-11-20
 
 Yağmurun altında çalışmak için bir yer.
