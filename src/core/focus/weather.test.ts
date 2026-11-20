@@ -7,6 +7,7 @@ import {
   maybeDownpour,
   nextThunderIn,
   rainSound,
+  thunderNear,
   thunderSound,
   wander,
 } from './weather';
@@ -69,6 +70,15 @@ describe('the thunder', () => {
     expect(close.gainDb).toBeLessThanOrEqual(6);
     expect(close.brightHz).toBeLessThanOrEqual(2300);
     expect(far.brightHz).toBeGreaterThanOrEqual(400);
+  });
+
+  it('sounds as near as the card struck, when the card says how near', () => {
+    const far = thunderNear(0, always(0.5));
+    const close = thunderNear(1, always(0.5));
+    expect(close.gainDb).toBeGreaterThan(far.gainDb);
+    expect(close.arriveS).toBeLessThan(far.arriveS);
+    // Out of range is held to it rather than going past the loudest roll.
+    expect(thunderNear(5, always(0.5)).gainDb).toBe(close.gainDb);
   });
 });
 

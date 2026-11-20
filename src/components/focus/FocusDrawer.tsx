@@ -3,7 +3,10 @@ import { useT } from '@/core/i18n';
 import { useLanguage, useSettingsStore } from '@/core/settings/store';
 import { dialMinutes } from '@/core/focus/clock';
 import { useFocusStore } from '@/core/focus/store';
+import { setWeather, startPreview, stopPreview, strikeFromCard } from '@/core/focus/sound';
 import type { Weather } from '@/core/focus/weather';
+import { usePlayerStore } from '@/core/store';
+import { useShown } from '@/platform/shown';
 import { DRAWER_WIDTH } from '@/platform/window';
 import { FocusDial } from './FocusDial';
 import { WeatherCard } from './WeatherCard';
@@ -12,6 +15,8 @@ import { setWeatherGlow } from './weatherGlow';
 
 /** Below this, there is no thunder, and how near it is has nothing to act on. */
 const NO_THUNDER = 0.25;
+/** How far the music is turned down while the weather is heard over it: a quarter of its amplitude, 12 dB. */
+const MUSIC_UNDER_PREVIEW = 0.25;
 
 /**
  * The focus side of the drawer: the weather, and for how long.
@@ -24,6 +29,11 @@ const NO_THUNDER = 0.25;
  *
  * The volume is not here: under water the session has the deck's own knob,
  * where the sound can be heard while it is turned.
+ *
+ * While the card is forward its sound plays, as the session will have it, so
+ * the weather is heard while it is set; any music is turned down under it and
+ * comes back up when the card goes back. The card's own strikes bring the
+ * thunder, so what is seen and heard are the same storm.
  */
 export function FocusDrawer({
   id,
@@ -43,7 +53,10 @@ export function FocusDrawer({
   const power = useSettingsStore((s) => s.focusPower);
   const setFocus = useSettingsStore((s) => s.setFocus);
   const start = useFocusStore((s) => s.start);
+  const phase = useFocusStore((s) => s.phase);
+  const windowShown = useShown();
   const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(false);
   const [strikeSoon, setStrikeSoon] = useState(0);
   const openRef = useRef(open);
   useEffect(() => {
@@ -51,6 +64,27 @@ export function FocusDrawer({
   }, [open]);
 
   const weather: Weather = { rain, change, thunder, power };
+
+  // Heard while it is set: only with the card forward and in sight, and not once a session has the sound.
+  const hearing = open && seen && windowShown && phase === 'idle';
+  useEffect(() => {
+    if (!hearing) return;
+    const now = useSettingsStore.getState();
+    void startPreview(now.focusVolume, {
+      rain: now.focusRain,
+      change: now.focusChange,
+      thunder: now.focusThunder,
+      power: now.focusPower,
+    });
+    void usePlayerStore.getState().duck(MUSIC_UNDER_PREVIEW);
+    return () => {
+      void stopPreview();
+      void usePlayerStore.getState().duck(1);
+    };
+  }, [hearing]);
+  useEffect(() => {
+    if (hearing) setWeather({ rain, change, thunder, power });
+  }, [hearing, rain, change, thunder, power]);
 
   // Escape puts the card back, and only that: not the drawer with it.
   useEffect(() => {
@@ -131,6 +165,8 @@ export function FocusDrawer({
             weather={weather}
             strikeSoon={strikeSoon}
             onFlash={(brightness) => setWeatherGlow(brightness * (openRef.current ? 0.16 : 0.07))}
+            onStrike={strikeFromCard}
+            onSeen={setSeen}
           />
           <span className="groove-weather-card-shade" aria-hidden="true" />
           <span className="groove-weather-card-name">{t('focus.rain')}</span>

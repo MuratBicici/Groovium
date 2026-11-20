@@ -7,9 +7,11 @@ import {
   maybeDownpour,
   nextThunderIn,
   rainSound,
+  thunderNear,
   thunderSound,
   wander,
   type Downpour,
+  type ThunderSound,
   type Weather,
 } from './weather';
 
@@ -77,6 +79,11 @@ export const THUNDER_CEILING_DB = -1.75;
 const CEILING_REACH = 8;
 /** How long the sound takes to come up from silence: long enough to be noticed arriving, not switched on. */
 const FADE_IN_S = 8;
+/** The same for a preview of the weather card: there to be heard while it is set, so it comes sooner. */
+const PREVIEW_FADE_IN_S = 2;
+/** After a strike on the card, how long before its thunder: light first, sound after, longer the further. */
+const PREVIEW_THUNDER_AFTER_S = 0.25;
+const PREVIEW_THUNDER_FAR_S = 1.6;
 const FADE_OUT_S = 1.5;
 const PAUSE_FADE_S = 0.6;
 const CROSS_S = 4;
@@ -180,6 +187,13 @@ let wanderTo = 0;
 let wanderNext = 0;
 let spell: Downpour | null = null;
 let thunderAt: number | null = null;
+/**
+ * The sound is a preview of the weather card, not a session: its thunder comes
+ * from the card's own strikes, so what is seen and what is heard are one storm.
+ */
+let previewing = false;
+/** Counts previews asked for, so one put away while the rain was loading never starts. */
+let previewTurn = 0;
 let lastTick = 0;
 
 function lowpass(context: BaseAudioContext, hz: number): BiquadFilterNode {
@@ -324,13 +338,13 @@ function turn(layer: Layer, fadeS: number): void {
   layer.turnAt = now + STRETCH_MIN_S + Math.random() * STRETCH_SPREAD_S;
 }
 
-/** One roll of thunder, from a recording picked by chance, near or far by chance. */
-function roll(pouring: boolean): void {
+/** One roll of thunder, from a recording picked by chance, near or far by chance unless told how near. */
+function roll(pouring: boolean, told?: ThunderSound): void {
   if (!ctx || !thunderBus || thunder.length === 0) return;
   const index = pick(thunder.length, lastThunder);
   lastThunder = index;
   const buffer = thunder[index] as AudioBuffer;
-  const sound = thunderSound(weather, pouring, Math.random);
+  const sound = told ?? thunderSound(weather, pouring, Math.random);
   const now = ctx.currentTime;
   const source = ctx.createBufferSource();
   source.buffer = buffer;
@@ -390,8 +404,14 @@ function tick(): void {
 }
 
 /** Begin, from silence. False when the recordings could not be read. */
-export async function startRain(volume: number, chosen: Partial<Weather> = CALM_WEATHER): Promise<boolean> {
+export async function startRain(
+  volume: number,
+  chosen: Partial<Weather> = CALM_WEATHER,
+  fadeInS = FADE_IN_S,
+  preview = false,
+): Promise<boolean> {
   if (!(await load()) || !ctx || !master || !rainBus || !rainTone || !heavyBus) return false;
+  previewing = preview;
   stopVoices();
   level = clampVolume(volume);
   weather = heldWeather(chosen);
@@ -417,12 +437,64 @@ export async function startRain(volume: number, chosen: Partial<Weather> = CALM_
   heavyBus.gain.setValueAtTime(start.heavyShare, now);
   // The first soon, so the weather is heard for what it is — but not in the
   // first moments, which belong to the rain coming up.
-  thunderAt = weather.thunder <= 0.001 ? null : now + FADE_IN_S + 4 + Math.random() * 10;
+  thunderAt = preview || weather.thunder <= 0.001 ? null : now + fadeInS + 4 + Math.random() * 10;
   master.gain.cancelScheduledValues(now);
   master.gain.setValueAtTime(0, now);
-  master.gain.setValueCurveAtTime(fadeInCurve(MAX_LEVEL * level), now, FADE_IN_S);
+  master.gain.setValueCurveAtTime(fadeInCurve(MAX_LEVEL * level), now, fadeInS);
   ticking ??= setInterval(tick, TICK_MS);
   return true;
+}
+
+/**
+ * Play the weather card's sound while it is being set. Quieter in nothing but
+ * its arrival: it is the session's sound at the session's volume, so what is
+ * heard is what the session will be. False when it could not start, or was
+ * put away before it had loaded.
+ */
+export async function startPreview(volume: number, chosen: Partial<Weather>): Promise<boolean> {
+  const turn = ++previewTurn;
+  if (!(await load())) return false;
+  if (turn !== previewTurn) return false;
+  return startRain(volume, chosen, PREVIEW_FADE_IN_S, true);
+}
+
+/** Put the preview away. Nothing if a session has taken the sound over since. */
+export async function stopPreview(): Promise<void> {
+  previewTurn += 1;
+  if (!previewing) return;
+  previewing = false;
+  await stopRain();
+}
+
+/**
+ * The card has struck, at this nearness: its thunder follows, sooner the
+ * nearer, as it does outside. Only while previewing; a session brings its own.
+ */
+export function strikeFromCard(nearness: number): void {
+  if (!previewing) return;
+  const sound = thunderNear(nearness, Math.random);
+  const after = PREVIEW_THUNDER_AFTER_S + (1 - Math.max(0, Math.min(1, nearness))) * PREVIEW_THUNDER_FAR_S;
+  setTimeout(() => {
+    if (previewing) roll(false, sound);
+  }, after * 1000);
+}
+
+/**
+ * The weather changed while it plays, from the card's lights or from under
+ * water: heard from now on, without starting over.
+ */
+export function setWeather(chosen: Partial<Weather>): void {
+  weather = heldWeather(chosen);
+  if (!ctx || previewing || !ticking) return;
+  if (weather.thunder <= 0.001) {
+    thunderAt = null;
+    return;
+  }
+  // More thunder asked for should not wait out a long gap chosen for less.
+  const wait = nextThunderIn(weather, false, Math.random);
+  if (wait === null) return;
+  const soonest = ctx.currentTime + wait;
+  if (thunderAt === null || soonest < thunderAt) thunderAt = soonest;
 }
 
 /** Hold the sound where it is, after a short fade. */
@@ -448,6 +520,7 @@ export async function resumeRain(): Promise<void> {
 
 /** Fade out and let go of everything that was playing. */
 export async function stopRain(): Promise<void> {
+  previewing = false;
   if (ticking) clearInterval(ticking);
   ticking = null;
   thunderAt = null;

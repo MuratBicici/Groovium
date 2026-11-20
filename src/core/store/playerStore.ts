@@ -163,6 +163,12 @@ export interface PlayerState {
   durationMs: number;
   volume: number;
   muted: boolean;
+  /**
+   * How far the music is turned down for something else to be heard over it,
+   * as a factor on its amplitude: 1 for not at all. Not the volume, which stays
+   * as it was set and comes back the moment this returns to 1; never saved.
+   */
+  ducked: number;
   repeat: RepeatMode;
   shuffle: boolean;
   error: string | null;
@@ -327,6 +333,8 @@ export interface PlayerActions {
   seek: (positionMs: number) => Promise<void>;
   setVolume: (volume: number) => Promise<void>;
   toggleMute: () => Promise<void>;
+  /** Turn the music down to `factor` of its amplitude, or back up with 1, gently, over about half a second. */
+  duck: (factor: number) => Promise<void>;
   cycleRepeat: () => void;
   toggleShuffle: () => void;
   /** Resolves false when there is no Last.fm key yet, so the UI can ask for one. */
@@ -412,6 +420,7 @@ const initialState: PlayerState = {
   durationMs: 0,
   volume: 0.8,
   muted: false,
+  ducked: 1,
   repeat: 'off',
   shuffle: false,
   error: null,
@@ -455,9 +464,12 @@ let radioTurn = 0;
 
 export const usePlayerStore = create<PlayerStore>()((set, get) => {
   function outputAmplitude(): number {
-    const { muted, volume } = get();
-    return muted ? 0 : volumeToAmplitude(volume);
+    const { muted, volume, ducked } = get();
+    return muted ? 0 : volumeToAmplitude(volume) * ducked;
   }
+
+  /** Counts duck moves, so a newer one takes over from one still stepping. */
+  let duckTurn = 0;
 
   /** A key for a newly queued song, unique for the life of the window. */
   let queuedSoFar = 0;
@@ -1465,6 +1477,23 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     async toggleMute() {
       set({ muted: !get().muted });
       await withProvider((provider) => provider.setVolume(outputAmplitude()));
+    },
+
+    async duck(factor) {
+      const to = clamp(factor, 0, 1);
+      const from = get().ducked;
+      if (to === from) return;
+      const turn = ++duckTurn;
+      // In steps: a provider's volume is set, not ramped, and one jump is heard as one.
+      const STEPS = 8;
+      for (let step = 1; step <= STEPS; step += 1) {
+        if (turn !== duckTurn) return;
+        // Even in decibels, as the ear hears a fade.
+        const ducked = step === STEPS ? to : from * (to / Math.max(from, 1e-3)) ** (step / STEPS);
+        set({ ducked });
+        await withProvider((provider) => provider.setVolume(outputAmplitude()));
+        if (step < STEPS) await new Promise((resolve) => setTimeout(resolve, 70));
+      }
     },
 
     cycleRepeat() {

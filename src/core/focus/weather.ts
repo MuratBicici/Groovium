@@ -100,9 +100,21 @@ export function thunderSound(
   weather: Weather,
   pouring: boolean,
   random: () => number,
-): { gainDb: number; brightHz: number; arriveS: number; pan: number } {
+): ThunderSound {
   // Mostly where the setting says, but any roll can be nearer or further than that.
-  const near = clamp01(weather.power * 0.7 + random() * 0.6 - 0.15 + (pouring ? 0.15 : 0));
+  return thunderNear(clamp01(weather.power * 0.7 + random() * 0.6 - 0.15 + (pouring ? 0.15 : 0)), random);
+}
+
+export interface ThunderSound {
+  gainDb: number;
+  brightHz: number;
+  arriveS: number;
+  pan: number;
+}
+
+/** A roll of thunder at a given nearness, 0 far to 1 overhead: what the weather card's own strikes ask for. */
+export function thunderNear(nearness: number, random: () => number): ThunderSound {
+  const near = clamp01(nearness);
   return {
     gainDb: -6 + 10 * near,
     // Kept under the hiss: the recordings have rain of their own above a couple

@@ -63,25 +63,35 @@ function cloudPath(ctx: CanvasRenderingContext2D, cloud: Cloud) {
  *
  * Drawn every frame while it can be seen, by the time that passed rather than
  * by frames, and nothing at all while its side of the drawer is hidden.
- * `onFlash` reports how bright a flash is, for the room around the card.
+ * `onFlash` reports how bright a flash is, for the room around the card;
+ * `onStrike` how near each strike is, for its thunder; `onSeen` whether it can
+ * be seen at all.
  */
 export function WeatherCard({
   weather,
   strikeSoon,
   onFlash,
+  onStrike,
+  onSeen,
 }: {
   weather: Weather;
   /** Counted up when the thunder's settings change, so a flash comes soon and shows what they do. */
   strikeSoon: number;
   onFlash: (brightness: number) => void;
+  /** A strike, from 0 far to 1 overhead. */
+  onStrike?: (nearness: number) => void;
+  /** It came into sight, or went out of it. */
+  onSeen?: (seen: boolean) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const shake = useRef<HTMLDivElement | null>(null);
-  const state = useRef({ weather, onFlash, next: 1.5 });
+  const state = useRef({ weather, onFlash, onStrike, onSeen, next: 1.5 });
 
   useEffect(() => {
     state.current.weather = weather;
     state.current.onFlash = onFlash;
+    state.current.onStrike = onStrike;
+    state.current.onSeen = onSeen;
   });
   useEffect(() => {
     if (strikeSoon > 0) state.current.next = Math.min(state.current.next, 0.3);
@@ -154,6 +164,7 @@ export function WeatherCard({
     const strike = (now: number) => {
       const { power } = state.current.weather;
       const near = Math.max(0, Math.min(1, power * 0.8 + Math.random() * 0.4 - 0.2 + (pour > 0.12 ? 0.12 : 0)));
+      state.current.onStrike?.(near);
       if (near > 0.5) {
         flash = 0.6 + 0.4 * near;
         bolt = makeBolt();
@@ -212,10 +223,12 @@ export function WeatherCard({
           flickers = [];
           shown = 0;
           state.current.onFlash(0);
+          state.current.onSeen?.(false);
         }
         last = now;
         return;
       }
+      if (hidden) state.current.onSeen?.(true);
       hidden = false;
       const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
       last = Math.max(last, now);
@@ -363,6 +376,7 @@ export function WeatherCard({
     return () => {
       cancelAnimationFrame(frame);
       live.onFlash(0);
+      live.onSeen?.(false);
     };
   }, []);
 
