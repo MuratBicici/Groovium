@@ -174,7 +174,6 @@ export const en = {
   'transport.pause': 'Pause',
   'transport.repeat': 'Repeat: {mode}',
   'transport.station': 'Infinite play: {state}',
-  'transport.stationHeldOff': 'Infinite play is off while a whole playlist plays',
   'transport.seek': 'Seek',
   'transport.volume': 'Volume',
   'transport.mute': 'Mute',
@@ -490,6 +489,8 @@ export const en = {
     'Could not reach the clipboard. Select the address and copy it manually.',
 
   // Infinite play setup
+  'station.listEnded': 'The playlist has ended. Infinite play carries on with songs like it.',
+  'station.albumEnded': 'The album has ended. Infinite play carries on with songs like it.',
   'station.heading': 'Infinite play',
   'station.dialog': 'Set up infinite play',
   'station.intro':

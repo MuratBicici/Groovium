@@ -9,7 +9,6 @@ import {
   useRepeatMode,
   useShuffle,
   useStation,
-  useStationHeldOff,
   useStationSearching,
 } from '@/core/store';
 import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
@@ -31,7 +30,6 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
   const shuffle = useShuffle();
   const station = useStation();
   const stationSearching = useStationSearching();
-  const stationHeldOff = useStationHeldOff();
   // On a radio there is no order to shuffle, nothing to repeat and no way back:
   // those are off, and the last button is the way out of it.
   const radio = useRadio();
@@ -113,22 +111,14 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
       {/* Sits beside repeat because the two answer the same question — what
           happens when the track ends — and unlike the rest of the row it stays
           enabled with nothing playing, so it can be armed in advance. */}
-      {/* Held off, and saying why, while a playlist put on whole plays: it
-          was asked for as it is, and the station would add to it. */}
       {radio ? (
         <ToggleButton label={t('radio.leave')} active hint onClick={leaveRadio}>
           <RadioIcon searching={stationSearching} />
         </ToggleButton>
       ) : (
       <ToggleButton
-        label={
-          stationHeldOff
-            ? t('transport.stationHeldOff')
-            : t('transport.station', { state: station ? t('common.on') : t('common.off') })
-        }
+        label={t('transport.station', { state: station ? t('common.on') : t('common.off') })}
         active={station}
-        disabled={stationHeldOff}
-        hint={stationHeldOff}
         onClick={() => void onStationClick()}
       >
         <InfinityIcon searching={stationSearching} armed={station} />

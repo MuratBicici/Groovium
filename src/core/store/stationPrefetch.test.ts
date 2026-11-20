@@ -96,17 +96,16 @@ describe('looking for a successor', () => {
   });
 
   it('looks once the station is on', async () => {
-    // A song on its own: a playlist put on whole switches the station off.
     usePlayerStore.setState({ station: true });
     await usePlayerStore.getState().playSingle(track('a'));
     await settle();
     expect(looked).toHaveBeenCalled();
   });
 
-  it('does not look for a playlist put on whole, station or not', async () => {
+  it('looks for a playlist put on whole too, to follow it once it ends', async () => {
     usePlayerStore.setState({ station: true });
     await usePlayerStore.getState().playList('library', COLLECTION);
     await settle();
-    expect(looked).not.toHaveBeenCalled();
+    expect(looked).toHaveBeenCalled();
   });
 });

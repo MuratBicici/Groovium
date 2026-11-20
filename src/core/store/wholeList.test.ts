@@ -7,6 +7,8 @@ vi.mock('@/core/station', async (importOriginal) => ({
 }));
 
 import { usePlayerStore } from './playerStore';
+import { say } from '@/core/i18n';
+import { clearNotice, useNotice } from '@/core/notice';
 import { registerProvider } from '@/core/providers/registry';
 import type {
   AudioProvider,
@@ -16,9 +18,9 @@ import type {
 } from '@/core/types';
 
 /**
- * A playlist put on whole and a song picked out of one are two different
- * requests. The first is that playlist, as it is, and the station keeps out of
- * it; the second is a starting point, and the station may follow it.
+ * A list put on whole and a song picked out of one both play on through the
+ * list; with infinite play on, the station follows once it has ended, and a
+ * notice says that it has.
  */
 
 const track = (id: string): TrackMetadata => ({
@@ -63,13 +65,13 @@ class Silent implements AudioProvider {
 
 const store = () => usePlayerStore.getState();
 
-describe('the station and a whole playlist', () => {
+describe('a list put on whole', () => {
   beforeEach(async () => {
     registerProvider(new Silent());
     await store().setActiveProvider('local');
+    clearNotice();
     usePlayerStore.setState({
       station: true,
-      wholeList: false,
       stationQueue: [],
       upNext: [],
       skipped: [],
@@ -78,46 +80,49 @@ describe('the station and a whole playlist', () => {
     });
   });
 
-  it('is switched off when a playlist is put on whole', async () => {
+  it('leaves infinite play as it was', async () => {
     await store().playList('spotify:crate', [A, B], false);
-    expect(store().station).toBe(false);
-    expect(store().wholeList).toBe(true);
-  });
-
-  it('cannot be switched back on while that playlist plays', async () => {
-    await store().playList('spotify:crate', [A, B], false);
-    // True, not false: false would mean "there is no key", and open the setup.
-    expect(await store().toggleStation()).toBe(true);
-    expect(store().station).toBe(false);
-  });
-
-  it('is left alone when one song is picked out of a playlist', async () => {
-    await store().playSingle(A);
     expect(store().station).toBe(true);
-    expect(store().wholeList).toBe(false);
   });
 
-  it('can be switched on again once something else is played', async () => {
+  it('lets infinite play be switched off and on while it plays', async () => {
     await store().playList('spotify:crate', [A, B], false);
-    await store().playSingle(B);
+    await store().toggleStation();
+    expect(store().station).toBe(false);
     expect(await store().toggleStation()).toBe(true);
     expect(store().station).toBe(true);
   });
 
-  it('can be switched on again once the playlist has played to its end', async () => {
+  it('hands over to the station when it ends, and says so', async () => {
+    const { resolveNextTracks } = await import('@/core/station');
+    vi.mocked(resolveNextTracks).mockResolvedValue([track('x')]);
     await store().playList('spotify:crate', [A, B], false);
     await store().next();
     tell({ type: 'ended', trackId: 'b' });
-    await vi.waitFor(() => expect(store().wholeList).toBe(false));
-    await store().toggleStation();
-    expect(store().station).toBe(true);
+    await vi.waitFor(() => expect(store().currentTrack?.id).toBe('x'));
+    await vi.waitFor(() => expect(useNotice.getState().message).toBe(say('station.listEnded')));
+    expect(useNotice.getState().kind).toBe('info');
+    vi.mocked(resolveNextTracks).mockResolvedValue([]);
   });
 
-  it('can be switched on again once the record is thrown away', async () => {
+  it('says an album has ended, not a playlist', async () => {
+    const { resolveNextTracks } = await import('@/core/station');
+    vi.mocked(resolveNextTracks).mockResolvedValue([track('y')]);
+    await store().playList('spotify:album:x', [A, B], false);
+    await store().next();
+    tell({ type: 'ended', trackId: 'b' });
+    await vi.waitFor(() => expect(store().currentTrack?.id).toBe('y'));
+    await vi.waitFor(() => expect(useNotice.getState().message).toBe(say('station.albumEnded')));
+    vi.mocked(resolveNextTracks).mockResolvedValue([]);
+  });
+
+  it('stops at its end with infinite play off, and says nothing', async () => {
+    usePlayerStore.setState({ station: false });
     await store().playList('spotify:crate', [A, B], false);
-    await store().discardRecord();
-    await store().toggleStation();
-    expect(store().station).toBe(true);
+    await store().next();
+    tell({ type: 'ended', trackId: 'b' });
+    await vi.waitFor(() => expect(store().playbackState).toBe('IDLE'));
+    expect(useNotice.getState().message).toBeNull();
   });
 });
 
@@ -129,7 +134,6 @@ describe('a song picked out of a list', () => {
     await store().setActiveProvider('local');
     usePlayerStore.setState({
       station: true,
-      wholeList: false,
       stationQueue: [],
       upNext: [],
       skipped: [],
@@ -141,7 +145,6 @@ describe('a song picked out of a list', () => {
   it('starts there and leaves the station on', async () => {
     await store().playList('spotify:album:x', [A, B, C], undefined, 1);
     expect(store().currentTrack?.id).toBe('b');
-    expect(store().wholeList).toBe(false);
     expect(store().station).toBe(true);
   });
 

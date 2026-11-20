@@ -32,8 +32,6 @@ export const useImporting = () => usePlayerStore((s) => s.importing);
 export const useStation = () => usePlayerStore((s) => s.station);
 /** The radio that is on, if one is: read off the collection that is playing. */
 export const useRadio = () => radioOf(usePlayerStore((s) => s.playback.id));
-/** A playlist put on whole is playing, so the station cannot be switched on. */
-export const useStationHeldOff = () => usePlayerStore((s) => s.wholeList && !s.station);
 export const useStationSearching = () => usePlayerStore((s) => s.stationSearching);
 
 /** True while a track is actually producing sound. */

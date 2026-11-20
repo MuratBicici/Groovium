@@ -169,7 +169,6 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'transport.pause': 'Duraklat',
   'transport.repeat': 'Tekrar: {mode}',
   'transport.station': 'Sonsuz çalma: {state}',
-  'transport.stationHeldOff': 'Bütün bir çalma listesi çalarken sonsuz çalma kapalı',
   'transport.seek': 'İleri sar',
   'transport.volume': 'Ses',
   'transport.mute': 'Sesi kapat',
@@ -474,6 +473,8 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
     'Spotify Premium gerekir. Yalnızca müzik çalmak için değil: Spotify, uygulamayı kaydeden hesabın aboneliğinin sürmesini istiyor. Abonelik biterse uygulama da çalışmayı bırakır.',
   'setup.clipboardFailed': 'Panoya erişilemedi. Adresi seçip elle kopyalayın.',
 
+  'station.listEnded': 'Çalma listesi bitti. Sonsuz çalma benzer şarkılarla devam ediyor.',
+  'station.albumEnded': 'Albüm bitti. Sonsuz çalma benzer şarkılarla devam ediyor.',
   'station.heading': 'Sonsuz çalma',
   'station.dialog': 'Sonsuz çalmayı kur',
   'station.intro':

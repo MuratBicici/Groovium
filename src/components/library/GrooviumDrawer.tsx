@@ -74,7 +74,7 @@ export function GrooviumDrawer({
   const arrived = useCallback(() => setJustMade(null), []);
   // Carried to the deck, a crate plays from its first song.
   const playWhole = useCallback(
-    (face: CrateFace) => void playFrom(`playlist:${face.id}`, 0, true),
+    (face: CrateFace) => void playFrom(`playlist:${face.id}`, 0),
     [playFrom],
   );
   const carry = useCrateCarry(playWhole);
