@@ -11,6 +11,7 @@ import { useT } from '@/core/i18n';
 import { useSlowConnection } from '@/core/providers/connectionHealth';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { VinylDisc } from './VinylDisc';
+import { VolumeKnob } from '@/components/controls/VolumeKnob';
 
 /**
  * What is playing.
@@ -84,6 +85,8 @@ export function TrackDisplay({ compact = false }: { compact?: boolean }) {
             {track ? track.artist : t('status.IDLE')}
           </span>
         </span>
+        {/* The volume, at the end of the row, its line opening back over the name. */}
+        <VolumeKnob toward="left" />
       </div>
     );
   }

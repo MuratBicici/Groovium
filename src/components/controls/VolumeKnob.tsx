@@ -88,8 +88,9 @@ interface Turn {
   volume: number;
   /** Whether it is still only a press, and not yet a move at all. */
   stillAPress: boolean;
-  /** Where the knob's left edge is, for reading a point along the slider. */
+  /** Where the knob's edges are, for reading a point along the slider. */
   left: number;
+  right: number;
   /**
    * How this hand moves it, settled by the setting and by where it pressed.
    * `pressing` is a mouse on the slider style's knob, which is a button and nothing else.
@@ -137,8 +138,14 @@ interface Turn {
  *
  * Keyboard access goes through the standard slider role, so this is not
  * pointer-only, and the wheel still works.
+ *
+ * `toward` says which way the slider opens. To the right on the deck, where the
+ * knob is at the window's left; to the left in the collapsed bar, where it is at
+ * the right. Leftwards it is the same slider in a mirror — the ring, the brass
+ * pouring off it and the line are drawn as on the deck and turned about the
+ * knob's middle — and a point on the line is read from the knob's right edge.
  */
-export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
+export function VolumeKnob({ source, toward = 'right' }: { source?: VolumeSource; toward?: 'right' | 'left' } = {}) {
   const t = useT();
   const player = usePlayerVolume();
   const { volume, muted, live, set: setVolume, toggleMute, label } = source ?? player;
@@ -148,6 +155,11 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
   };
   const chosenSlider = useSettingsStore((s) => s.volumeStyle) === 'slider';
   const slider = source?.slider ?? chosenSlider;
+  const leftward = toward === 'left';
+  /** How far along the line a point is, from the knob's outer edge, whichever way it opens. */
+  const along = (x: number, box: { left: number; right: number }) => (leftward ? box.right - x : x - box.left);
+  /** A sideways move, turned round when the line runs leftwards, so that along it is always up. */
+  const outwards = (dx: number) => (leftward ? -dx : dx);
 
   // A ref, not state: `pointermove` fires far faster than React re-renders, and
   // the running total has to be what the previous event left, not what the last
@@ -237,10 +249,11 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
     // Where the hand took hold, here and not once it has moved: taken late, the
     // first few degrees of a turn were lost, for good, on the way to being one.
     const held = turnTo(grip(), from, inDeadZone(dx, dy) ? null : angleAt(dx, dy));
-    const onTheLine = slider && out && e.clientX - box.left >= KNOB_PX;
+    const onTheLine = slider && out && along(e.clientX, box) >= KNOB_PX;
     turn.current = {
       centre,
       left: box.left,
+      right: box.right,
       from: { x: e.clientX, y: e.clientY },
       volume: liveVolume(),
       stillAPress: !onTheLine,
@@ -260,7 +273,7 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
       // The handle comes to where the line was pressed, and goes on from there.
       setMoving(true);
       stepOut();
-      setVolume(volumeAlongSlider(e.clientX - box.left));
+      setVolume(volumeAlongSlider(along(e.clientX, box)));
     } else {
       setPressed(true);
     }
@@ -285,15 +298,15 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
     }
     if (gesture.by === 'pressing') return;
     if (gesture.by === 'pointing') {
-      setVolume(volumeAlongSlider(x - gesture.left));
+      setVolume(volumeAlongSlider(along(x, gesture)));
       return;
     }
     if (gesture.by === 'sliding') {
-      setVolume(volumeBySlide(gesture.volume, x - gesture.from.x));
+      setVolume(volumeBySlide(gesture.volume, outwards(x - gesture.from.x)));
       return;
     }
     if (gesture.by === 'dragging') {
-      setVolume(volumeByDrag(gesture.volume, x - gesture.from.x, y - gesture.from.y));
+      setVolume(volumeByDrag(gesture.volume, outwards(x - gesture.from.x), y - gesture.from.y));
       return;
     }
     const dx = x - gesture.centre.x;
@@ -384,6 +397,7 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
       aria-valuetext={muted ? t('transport.muted') : undefined}
       title={open ? undefined : muted ? t('transport.unmute') : t('transport.mute')}
       data-out={stepped ? '' : undefined}
+      data-opens={toward}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       onPointerDown={onPointerDown}
@@ -402,6 +416,8 @@ export function VolumeKnob({ source }: { source?: VolumeSource } = {}) {
         className={`groove-knob-body absolute top-0 left-0 h-9 overflow-hidden rounded-full bg-shell-900 shadow-[0_2px_4px_rgba(0,0,0,0.6)] group-focus-visible:ring-2 group-focus-visible:ring-brass-400 ${
           still || slider ? 'groove-knob-still' : ''
         } w-9`}
+        // The deck's slider in a mirror, turned about the knob's middle: see `toward`.
+        style={leftward && slider ? { transform: 'scaleX(-1)', transformOrigin: `${KNOB_PX / 2}px 50%` } : undefined}
       >
         <div
           className={`absolute top-0 left-0 h-9 w-9 transition-transform duration-100 ${
