@@ -751,6 +751,10 @@ body {
 .groove-arranging section {
   animation: groove-shelf-wobble 0.38s ease-in-out infinite alternate;
 }
+/* While arranging the arrows along a shelf could not be pressed, and the eye that hides it sits where they were. */
+.groove-arranging [data-shelf-arrows] {
+  visibility: hidden;
+}
 .groove-arranging section:nth-of-type(2n) {
   animation-duration: 0.42s;
   animation-delay: -0.2s;

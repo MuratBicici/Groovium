@@ -126,7 +126,7 @@ export function Shelf({
             do anything is furniture, and three rows of it is a lot of
             furniture. */}
         {scrolls(reach) && (
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div data-shelf-arrows className="flex shrink-0 items-center gap-0.5">
             <Arrow way="left" label={t('shelf.left')} spent={!canGo(reach, 'left')} onPress={go} />
             <Arrow
               way="right"

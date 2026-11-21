@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '@/core/i18n';
-import { arranged, landing, makingRoom, moved, type Span } from './arrange';
+import { arranged, landing, makingRoom, moved, toggled, type Span } from './arrange';
 
 /**
  * The front page's shelves in somebody's order, and the way to change it.
@@ -14,6 +14,11 @@ import { arranged, landing, makingRoom, moved, type Span } from './arrange';
  *
  * The arrows move the one in focus as well, for whoever is not holding a
  * mouse.
+ *
+ * While arranging, each shelf has an eye at the end of its name. Closed, the
+ * shelf is put away: out of arranging it is not there at all — not drawn and
+ * nothing asked for it — and in arranging only its name stays, dimmed, in its
+ * place, so it can be moved and brought back.
  */
 
 export interface ShelfItem {
@@ -42,11 +47,16 @@ export function ArrangedShelves({
   items,
   order,
   onOrder,
+  hidden,
+  onHidden,
   arranging,
 }: {
   items: ShelfItem[];
   order: string[];
   onOrder: (order: string[]) => void;
+  /** The shelves put away; see above. */
+  hidden: string[];
+  onHidden: (hidden: string[]) => void;
   arranging: boolean;
 }) {
   const t = useT();
@@ -65,19 +75,30 @@ export function ArrangedShelves({
     [shown],
   );
 
-  /** Change the order, remembering where everything was so it can glide to where it goes. */
+  /** Remember where everything is, so that after a change it can glide to where it goes. */
+  const markPlaces = useCallback(() => {
+    const tops = new Map<string, number>();
+    for (const [id, el] of els.current) {
+      tops.set(id, el.getBoundingClientRect().top);
+      move(el, '', 'none');
+    }
+    before.current = tops;
+  }, []);
+
+  /** Change the order, from where everything was. */
   const commit = useCallback(
     (next: string[]) => {
-      const tops = new Map<string, number>();
-      for (const [id, el] of els.current) {
-        tops.set(id, el.getBoundingClientRect().top);
-        move(el, '', 'none');
-      }
-      before.current = tops;
+      markPlaces();
       onOrder(next);
     },
-    [onOrder],
+    [markPlaces, onOrder],
   );
+
+  /** Put a shelf away or bring it back, the others gliding up or down to make the change. */
+  const flip = (id: string) => {
+    markPlaces();
+    onHidden(toggled(hidden, id));
+  };
 
   // From where each was to where it is now: measured after the new order is
   // laid out and before it is painted, started from the old place, and let go.
@@ -94,7 +115,7 @@ export function ArrangedShelves({
       void el.offsetHeight;
       move(el, '', `transform ${SETTLE_MS}ms ${EASE}`);
     }
-  }, [order]);
+  }, [order, hidden]);
 
   /** A shelf picked up, carried, and put down. */
   const pickUp = (id: string, down: React.PointerEvent<HTMLElement>) => {
@@ -177,6 +198,9 @@ export function ArrangedShelves({
       {shown.map((id) => {
         const item = byId.get(id);
         if (!item) return null;
+        const away = hidden.includes(id);
+        // Put away, and not being arranged: not there at all.
+        if (away && !arranging) return null;
         return (
           <div
             key={id}
@@ -190,7 +214,16 @@ export function ArrangedShelves({
               carrying === id ? 'groove-lifted z-30' : ''
             }`}
           >
-            {item.node}
+            {away ? (
+              // Only its name, dimmed, so it can still be found, moved and brought back.
+              <section className="groove-shelf flex shrink-0 flex-col" aria-label={item.label}>
+                <div className="flex items-center gap-2 px-0.5 pb-1.5">
+                  <h3 className="min-w-0 truncate text-heading font-semibold text-cream-50/40">{item.label}</h3>
+                </div>
+              </section>
+            ) : (
+              item.node
+            )}
             {arranging && (
               <button
                 type="button"
@@ -206,6 +239,26 @@ export function ArrangedShelves({
                   carrying === id ? 'cursor-grabbing' : 'cursor-grab'
                 }`}
               />
+            )}
+            {arranging && carrying !== id && (
+              <button
+                type="button"
+                aria-pressed={!away}
+                aria-label={away ? t('home.showShelf', { name: item.label }) : t('home.hideShelf', { name: item.label })}
+                title={away ? t('home.showShelf', { name: item.label }) : t('home.hideShelf', { name: item.label })}
+                // Above the handle that picks the shelf up, and not a pick-up itself.
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => flip(id)}
+                className={`absolute top-0 right-0 z-30 flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-shell-600 focus-visible:ring-2 focus-visible:ring-brass-400/70 focus-visible:outline-none ${
+                  away ? 'text-cream-400' : 'text-brass-400'
+                }`}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+                  <circle cx="12" cy="12" r="2.8" />
+                  {away && <path d="M4 4l16 16" />}
+                </svg>
+              </button>
             )}
           </div>
         );

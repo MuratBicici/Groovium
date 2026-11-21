@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { arranged, landing, makingRoom, moved, readOrder, writeOrder } from './arrange';
+import { arranged, landing, makingRoom, moved, readOrder, toggled, writeOrder } from './arrange';
 
 /**
  * Moving the front page's shelves: what order is kept, and where a shelf
@@ -92,5 +92,18 @@ describe('carrying a shelf', () => {
   it('reorders', () => {
     expect(moved(['a', 'b', 'c', 'd'], 3, 1)).toEqual(['a', 'd', 'b', 'c']);
     expect(moved(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+  });
+});
+
+describe('putting a shelf away', () => {
+  it('puts it away, and brings it back on the second press', () => {
+    const once = toggled([], 'radios');
+    expect(once).toEqual(['radios']);
+    expect(toggled(once, 'radios')).toEqual([]);
+  });
+
+  it('leaves the others as they were', () => {
+    expect(toggled(['genres', 'top'], 'radios')).toEqual(['genres', 'top', 'radios']);
+    expect(toggled(['genres', 'radios', 'top'], 'radios')).toEqual(['genres', 'top']);
   });
 });

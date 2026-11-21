@@ -46,6 +46,32 @@ export function writeOrder(order: readonly string[]): void {
   }
 }
 
+const HIDDEN_KEY = 'groovium.homeHidden';
+
+/** The shelves put away from the Edit mode, which the front page leaves out. */
+export function readHidden(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((id): id is string => typeof id === 'string'))] : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeHidden(hidden: readonly string[]): void {
+  try {
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+  } catch {
+    // Refused: every shelf comes back next time.
+  }
+}
+
+/** The same list with one shelf put away, or brought back if it was away. */
+export function toggled(hidden: readonly string[], id: string): string[] {
+  return hidden.includes(id) ? hidden.filter((other) => other !== id) : [...hidden, id];
+}
+
 /** One item's place in the column: where it starts and how tall it is. */
 export interface Span {
   top: number;

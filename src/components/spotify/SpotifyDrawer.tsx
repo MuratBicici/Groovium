@@ -19,7 +19,7 @@ import { SpotlightStrip } from './SpotlightStrip';
 import { GenreShelves, LikedShelf, RecentShelf } from './SpotifyHome';
 import { ArrangedShelves } from './ArrangedShelves';
 import { RadioShelf } from '@/components/radio/RadioShelf';
-import { readOrder, writeOrder } from './arrange';
+import { readHidden, readOrder, writeHidden, writeOrder } from './arrange';
 import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
 import { RemoveSheet, SheetPresence } from './CrateSheets';
@@ -90,6 +90,11 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
   /** Whether the shelves are loose and being put in order — see `ArrangedShelves`. */
   const [arranging, setArranging] = useState(false);
   const [order, setOrder] = useState(() => readOrder(HOME_SHELVES));
+  const [hidden, setHidden] = useState(readHidden);
+  const hide = useCallback((next: string[]) => {
+    setHidden(next);
+    writeHidden(next);
+  }, []);
   const reorder = useCallback((next: string[]) => {
     setOrder(next);
     writeOrder(next);
@@ -476,6 +481,8 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
                 arranging={arranging}
                 order={order}
                 onOrder={reorder}
+                hidden={hidden}
+                onHidden={hide}
                 items={[
                   { id: 'recent', label: t('home.recent'), node: <RecentShelf /> },
                   { id: 'radios', label: t('radio.shelf'), node: <RadioShelf /> },
