@@ -13,6 +13,7 @@ import {
   PLAY_CAP,
   playlistEntryPage,
   playlistPage,
+  crateKind,
   removeFromLibrary,
   removeItems,
   uploadCover,
@@ -24,6 +25,7 @@ import {
 import { forgetSpotlight } from '@/core/providers/spotifySpotlight';
 import { forgetHome } from '@/core/providers/spotifyHome';
 import { forgetHeard } from '@/core/listening/history';
+import { forgetOpened, noteOpened } from '@/core/listening/opened';
 import { usePlayerStore } from '@/core/store';
 import { account, onAccountChange } from '@/core/security/spotifyAuth';
 import { say } from '@/core/i18n';
@@ -107,6 +109,30 @@ export type AddOutcome = 'added' | 'already' | 'refused' | 'failed';
  * Spotify refuses is undone on screen, along with anything queued behind it.
  */
 
+/**
+ * How a crate that is not on the playlists shelf is drawn and remembered: an
+ * album or the liked songs, from the front page.
+ */
+export interface CrateLook {
+  name: string;
+  trackCount: number;
+  cover?: string;
+  /** An album's artist. */
+  artist?: string;
+}
+
+/**
+ * The looks of the albums and liked songs the front page has put out, by crate
+ * id, so that playing one — dropped on the deck as well as pressed — can be
+ * noted as opened under its own name.
+ */
+const looks = new Map<string, CrateLook>();
+
+/** Remember how a crate the front page shows looks; see `looks`. */
+export function rememberCrate(id: string, look: CrateLook): void {
+  looks.set(id, look);
+}
+
 interface SpotifyPlaylistsState {
   playlists: SpotifyPlaylist[];
   /** Where the next page starts, or null once there are no more. */
@@ -147,6 +173,12 @@ interface SpotifyPlaylistsState {
    * layer covering it has no business holding.
    */
   openOrigin: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * What the open crate is, when it is not one of the playlists on the shelf:
+   * an album or the liked songs, opened from the front page. Those are not in
+   * `playlists`, so the page is told their name and cover here.
+   */
+  openFace: CrateLook | null;
   tracks: TrackMetadata[];
   /**
    * Where each of `tracks` sits in the playlist, one per track.
@@ -193,7 +225,7 @@ interface SpotifyPlaylistsState {
    */
   playCrateFrom: (id: string, track: TrackMetadata, index: number) => Promise<void>;
 
-  openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }) => Promise<void>;
+  openCrate: (id: string, origin: { x: number; y: number; width: number; height: number }, look?: CrateLook) => Promise<void>;
   closeCrate: () => void;
   moreTracks: () => Promise<void>;
 
@@ -384,6 +416,25 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       .catch(() => {
         /* not knowing who this is says nothing either way */
       });
+  }
+
+  /** Write down that somebody played this crate themselves, under the name it is shown by. */
+  function noteCrateOpened(id: string): void {
+    const at = Date.now();
+    const kind = crateKind(id);
+    const playlist = get().playlists.find((p) => p.id === id);
+    const look = looks.get(id) ?? (get().openId === id ? get().openFace : null);
+    if (kind === 'album') {
+      if (!look) return;
+      const entry = { kind: 'album' as const, id, name: look.name, artist: look.artist ?? '', at };
+      noteOpened(look.cover ? { ...entry, cover: look.cover } : entry);
+      return;
+    }
+    const name = playlist?.name ?? look?.name;
+    if (name === undefined) return;
+    const cover = playlist ? playlist.coverArtUrl : look?.cover;
+    const entry = { kind: 'playlist' as const, id, name, trackCount: playlist?.trackCount ?? look?.trackCount ?? 0, at };
+    noteOpened(cover ? { ...entry, cover } : entry);
   }
 
   /**
@@ -646,6 +697,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
           return;
         }
         set({ starting: null });
+        noteCrateOpened(id);
         await usePlayerStore.getState().playList(`spotify:${id}`, tracks, shuffled);
       } catch (err) {
         set({ starting: null, playError: describe(err) });
@@ -664,6 +716,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       // The same place if the crate is as shown; otherwise the song wherever it now is.
       const at = tracks[index]?.id === track.id ? index : tracks.findIndex((each) => each.id === track.id);
       if (at < 0) return player.playSingle(track);
+      noteCrateOpened(id);
       await player.playList(`spotify:${id}`, tracks, undefined, at);
     },
 
@@ -713,6 +766,8 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       // made from it. The songs played from this computer are nobody's account.
       forgetHome();
       forgetHeard('spotify');
+      forgetOpened();
+      looks.clear();
       clearCache();
       set({
         playlists: [],
@@ -723,6 +778,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
         error: null,
         openId: null,
         openOrigin: null,
+        openFace: null,
         tracks: [],
         positions: [],
         tracksCursor: null,
@@ -740,19 +796,22 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
 
     openId: null,
     openOrigin: null,
+    openFace: null,
     tracks: [],
     positions: [],
     tracksCursor: null,
     tracksLoading: false,
     tracksError: null,
 
-    async openCrate(id, origin) {
+    async openCrate(id, origin, look) {
       // Cleared before anything is looked up, not after. Opening a second crate
       // must not show the first one's records for the length of a request.
       shelved = null;
+      if (look) rememberCrate(id, look);
       set({
         openId: id,
         openOrigin: origin,
+        openFace: look ?? looks.get(id) ?? null,
         tracks: [],
         positions: [],
         tracksCursor: null,
@@ -779,6 +838,7 @@ export const useSpotifyPlaylistsStore = create<SpotifyPlaylistsState>((set, get)
       set({
         openId: null,
         openOrigin: null,
+        openFace: null,
         tracks: [],
         positions: [],
         tracksCursor: null,

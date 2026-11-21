@@ -36,7 +36,7 @@ function apiTrack(track: TrackMetadata, market: string | null = null) {
     name: track.title,
     duration_ms: track.duration,
     artists: [{ id: `artist-${track.artist}`, name: track.artist }],
-    album: { name: track.album, images },
+    album: { id: albumIdOf(track.album), name: track.album, images },
     ...(market && { is_playable: !refused, ...(refused && { restrictions: { reason: 'market' } }) }),
   };
 }
@@ -45,11 +45,16 @@ function apiTrack(track: TrackMetadata, market: string | null = null) {
  * The collection's Spotify songs gathered by album, as the search finds albums
  * and opens them. The id is made from the album's name, which is unique here.
  */
+/** An album's id in the demo, from its name. */
+function albumIdOf(name: string): string {
+  return `demo-album-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
 function albums(): { id: string; name: string; artist: string; tracks: TrackMetadata[] }[] {
   const byName = new Map<string, { id: string; name: string; artist: string; tracks: TrackMetadata[] }>();
   for (const track of tracks().filter((t) => t.source === 'spotify')) {
     const found = byName.get(track.album) ?? {
-      id: `demo-album-${track.album.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      id: albumIdOf(track.album),
       name: track.album,
       artist: track.artist,
       tracks: [],
@@ -214,6 +219,17 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
       artists: { items: [] },
       ...(types.includes('album') && { albums: page(shelved.map(apiAlbum), url) }),
     });
+  }
+
+  if (path === '/me/albums') {
+    // Every other album "saved", newest first.
+    const kept = albums().filter((_, at) => at % 2 === 0).reverse();
+    return json(page(kept.map((album) => ({ album: apiAlbum(album) })), url));
+  }
+  const aboutAlbum = /^\/albums\/([^/]+)$/.exec(path);
+  if (aboutAlbum) {
+    const album = albums().find((a) => a.id === decodeURIComponent(aboutAlbum[1] ?? ''));
+    return album ? json(apiAlbum(album)) : json({ error: { status: 404, message: 'Not found' } }, 404);
   }
 
   const onAlbum = /^\/albums\/([^/]+)\/tracks$/.exec(path);

@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
 import { albumTracks, type SpotifyAlbum } from '@/core/providers/spotifyApi';
+import { noteOpened } from '@/core/listening/opened';
+
+/** Write an album down as opened, for the front page's shelf of what was. */
+function openedAlbum(album: SpotifyAlbum): void {
+  const entry = { kind: 'album' as const, id: `album:${album.id}`, name: album.name, artist: album.artist, at: Date.now() };
+  noteOpened(album.coverArtUrl ? { ...entry, cover: album.coverArtUrl } : entry);
+}
 import type { TrackMetadata } from '@/core/types';
 import { usePlayerStore } from '@/core/store';
 import { errorText } from '@/core/utils/errorText';
@@ -101,6 +108,7 @@ export function SearchAlbum({
             onClick={() => {
               if (!tracks) return;
               onPlayed();
+              openedAlbum(album);
               void playList(`spotify:album:${album.id}`, tracks);
             }}
             className="mt-1 flex w-fit items-center gap-1.5 rounded-full bg-brass-600 px-3 py-1 text-meta font-semibold text-on-accent transition-colors hover:bg-brass-500 disabled:opacity-50"
@@ -122,6 +130,7 @@ export function SearchAlbum({
             track={track}
             onPlay={() => {
               onPlayed();
+              openedAlbum(album);
               // From this song on through the album, and the station after it.
               void playList(`spotify:album:${album.id}`, tracks, undefined, index);
             }}

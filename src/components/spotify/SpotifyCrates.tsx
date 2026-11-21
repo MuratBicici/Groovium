@@ -108,6 +108,10 @@ export interface CrateFace {
   trackCount: number;
   /** One printed cover, or four to lay out as a mosaic, or none for a blank sleeve. */
   covers: string[];
+  /** The second line, where it is not the number of songs: an album's artist, or what kind of thing it is. */
+  caption?: string;
+  /** The liked songs: a heart on the theme's colour, rather than a cover. */
+  heart?: boolean;
 }
 
 /** A Spotify playlist, as the sleeve draws it. */
@@ -701,7 +705,17 @@ export function Crate({
           </span>
         )}
         <span className="groove-sleeve-art absolute inset-0 overflow-hidden rounded-md bg-shell-900">
-          {face.covers.length >= 4 ? (
+          {face.heart ? (
+            // The liked songs have no cover of their own: a heart, in the theme's colour.
+            <span
+              aria-hidden="true"
+              className="flex h-full w-full items-center justify-center bg-gradient-to-br from-brass-400 to-brass-600 text-cream-50"
+            >
+              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor">
+                <path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" />
+              </svg>
+            </span>
+          ) : face.covers.length >= 4 ? (
             // A playlist of Groovium's has no cover of its own: the first four
             // of its songs' make one, as a compilation's sleeve does.
             <span className="grid h-full w-full grid-cols-2 grid-rows-2">
@@ -752,7 +766,7 @@ export function Crate({
           {face.name}
         </span>
         <span ref={countEl} className="truncate text-meta text-cream-400">
-          {t('spotify.trackCount', { count: face.trackCount })}
+          {face.caption ?? t('spotify.trackCount', { count: face.trackCount })}
         </span>
       </span>
     </button>

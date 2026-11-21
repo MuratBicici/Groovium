@@ -289,12 +289,72 @@ export async function playlistTrackPage(
   return { items: page.items.map((entry) => entry.track), cursor: page.cursor };
 }
 
+/** The crate that is somebody's liked songs, rather than a playlist. */
+export const LIKED_CRATE = 'liked';
+/** The start of a crate id that is an album rather than a playlist: `album:<Spotify id>`. */
+export const ALBUM_CRATE = 'album:';
+
+/** What kind of thing a crate id stands for. Only a playlist can be changed. */
+export function crateKind(id: string): 'playlist' | 'album' | 'liked' {
+  if (id === LIKED_CRATE) return 'liked';
+  return id.startsWith(ALBUM_CRATE) ? 'album' : 'playlist';
+}
+
+/** The most Spotify hands over at once from the library and from an album. */
+const LIBRARY_PAGE_MOST = 50;
+
+/** One page of the liked songs, newest first, numbered as they stand. */
+async function likedEntryPage(cursor: string | null | undefined, perPage: number): Promise<Page<CrateEntry>> {
+  const params = new URLSearchParams({ limit: String(Math.min(perPage, LIBRARY_PAGE_MOST)), market: HERE });
+  if (cursor) params.set('offset', cursor);
+  const data = await request<ApiPage<{ track?: ApiTrack | null }>>(`/me/tracks?${params}`, { cache: 'no-store' });
+  const offset = Number(cursor ?? 0) || 0;
+  const items = (data?.items ?? [])
+    .map((entry, at) => ({ raw: entry?.track ?? null, position: offset + at }))
+    .filter((entry): entry is { raw: ApiTrack; position: number } => entry.raw !== null && !!entry.raw.uri)
+    .map(({ raw, position }) => ({ track: toTrackMetadata(raw), position }));
+  return { items, cursor: offsetFromNext(data?.next) };
+}
+
+/** An album's name and cover, asked for once, to put back on its songs. */
+const albumFaces = new Map<string, { name: string; images: ApiImage[] }>();
+
+/**
+ * One page of an album's songs. Spotify sends them without the album on them,
+ * so its name and cover are asked for once and put back on every song.
+ */
+async function albumEntryPage(albumId: string, cursor: string | null | undefined, perPage: number): Promise<Page<CrateEntry>> {
+  let face = albumFaces.get(albumId);
+  if (!face) {
+    const about = await request<{ name?: string; images?: ApiImage[] }>(
+      `/albums/${encodeURIComponent(albumId)}?market=${HERE}`,
+    );
+    face = { name: about?.name ?? '', images: about?.images ?? [] };
+    albumFaces.set(albumId, face);
+  }
+  const params = new URLSearchParams({ limit: String(Math.min(perPage, LIBRARY_PAGE_MOST)), market: HERE });
+  if (cursor) params.set('offset', cursor);
+  const data = await request<ApiPage<ApiTrack>>(`/albums/${encodeURIComponent(albumId)}/tracks?${params}`);
+  const offset = Number(cursor ?? 0) || 0;
+  const album = { id: albumId, ...face };
+  const items = (data?.items ?? [])
+    .map((raw, at) => ({ raw, position: offset + at }))
+    .filter((entry): entry is { raw: ApiTrack; position: number } => entry.raw !== null && !!entry.raw.uri)
+    .map(({ raw, position }) => ({ track: toTrackMetadata({ ...raw, album }), position }));
+  return { items, cursor: offsetFromNext(data?.next) };
+}
+
 /** One page of a playlist's playable entries, with their positions. */
 export async function playlistEntryPage(
   id: string,
   cursor?: string | null,
   perPage = ITEMS_PER_PAGE,
 ): Promise<Page<CrateEntry>> {
+  // An album or the liked songs is read from its own address, the same way after that.
+  const kind = crateKind(id);
+  if (kind === 'liked') return likedEntryPage(cursor, perPage);
+  if (kind === 'album') return albumEntryPage(id.slice(ALBUM_CRATE.length), cursor, perPage);
+
   // With the account's country, so each song comes as the release that plays
   // here, or says it does not (`toTrackMetadata`).
   const params = new URLSearchParams({ limit: String(perPage), market: HERE });

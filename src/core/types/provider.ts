@@ -18,6 +18,11 @@ export interface TrackMetadata {
   /** Milliseconds. Chosen over seconds so it lines up with `seek(positionMs)`. */
   duration: number;
   coverArtUrl?: string;
+  /**
+   * The album's Spotify id, for a Spotify song: what puts a song heard here on
+   * the album it came from, for the shelf of albums played most.
+   */
+  albumId?: string;
   source: SourceType;
   /**
    * Why Spotify will not play this song here, when it said so: asked with the

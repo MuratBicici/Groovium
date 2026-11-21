@@ -32,8 +32,11 @@ export function RecordCard({
   track,
   onPlay,
   heard,
+  caption,
 }: {
   track: TrackMetadata;
+  /** The second line, where it is more than the artist: on the shelf of what was opened, what kind of thing it is. */
+  caption?: string;
   /** Where it was last heard, on a shelf of what was heard lately. */
   heard?: 'here' | 'elsewhere';
   /**
@@ -195,7 +198,7 @@ export function RecordCard({
       </span>
       <span className={`relative mt-1.5 flex min-w-0 flex-col ${refused ? UNPLAYABLE_LOOK : ''}`}>
         <span className="truncate text-body font-medium text-cream-50">{track.title}</span>
-        <span className="truncate text-meta text-cream-400">{track.artist}</span>
+        <span className="truncate text-meta text-cream-400">{caption ?? track.artist}</span>
       </span>
     </button>
   );

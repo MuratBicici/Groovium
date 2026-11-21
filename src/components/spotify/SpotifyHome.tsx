@@ -1,20 +1,26 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { onHeard } from '@/core/listening/history';
+import { onOpened, openedNow, type Opened } from '@/core/listening/opened';
 import {
   GENRE_SHELVES,
   genreShelves,
-  likedShelf,
   recentShelf,
+  savedShelf,
   shelvesAreComing,
+  topAlbumsShelf,
   type GenreAnswer,
   type Recent,
 } from '@/core/providers/spotifyHome';
+import { LIKED_CRATE, ALBUM_CRATE } from '@/core/providers/spotifyPlaylists';
+import type { SpotifyAlbum } from '@/core/providers/spotifyApi';
+import { rememberCrate, useSpotifyPlaylistsStore, type CrateLook } from '@/core/spotify/store';
 import { usePlayerStore } from '@/core/store';
 import { useT, type TranslationKey } from '@/core/i18n';
 import type { TrackMetadata } from '@/core/types';
 import { Shelf } from './Shelf';
 import { RECORD_SIZE, RecordCard } from './RecordCard';
 import { Retry, Waiting } from './SpotlightStrip';
+import { Crate, useCrateCarry, type CrateFace } from './SpotifyCrates';
 
 /**
  * The shelves on the drawer's front page made from somebody's listening: what
@@ -185,13 +191,71 @@ export function GenreShelves() {
   );
 }
 
+/** Nothing is put into an album or the liked songs from a shelf. */
+const refuseAll = () => false;
+const addNothing = () => Promise.resolve('refused' as const);
+const nothing = () => {};
+
 /**
- * The songs somebody liked on Spotify, newest first, and how many there are.
+ * An album or a playlist on a front-page shelf, as a sleeve like the
+ * playlists'. Pressed, it opens in the drawer; carried to the deck, it plays
+ * whole. Its look is remembered by its crate id, so that playing it is written
+ * down under its own name.
+ */
+function ShelfCrate({ face, look }: { face: CrateFace; look: CrateLook }) {
+  const openCrate = useSpotifyPlaylistsStore((s) => s.openCrate);
+  const playCrate = useSpotifyPlaylistsStore((s) => s.playCrate);
+  const starting = useSpotifyPlaylistsStore((s) => s.starting);
+  useEffect(() => rememberCrate(face.id, look), [face.id, look]);
+  const deliver = useCallback(() => void playCrate(face.id), [face.id, playCrate]);
+  const carry = useCrateCarry(deliver);
+  return (
+    <Crate
+      face={face}
+      accepts={refuseAll}
+      add={addNothing}
+      arriving={false}
+      onArrived={nothing}
+      starting={starting === face.id}
+      onCarry={carry}
+      onOpen={(rect) => void openCrate(face.id, rect, look)}
+    />
+  );
+}
+
+/** An album as a sleeve, with what is said under its name. */
+function AlbumCrate({ album, caption }: { album: SpotifyAlbum; caption: string }) {
+  const id = `${ALBUM_CRATE}${album.id}`;
+  const look: CrateLook = { name: album.name, trackCount: album.trackCount, artist: album.artist };
+  if (album.coverArtUrl) look.cover = album.coverArtUrl;
+  return (
+    <ShelfCrate
+      face={{ id, name: album.name, trackCount: album.trackCount, covers: album.coverArtUrl ? [album.coverArtUrl] : [], caption }}
+      look={look}
+    />
+  );
+}
+
+/** The liked songs as one playlist, with a heart for a cover. */
+function LikedCrate({ count }: { count: number }) {
+  const t = useT();
+  const name = t('home.likedSongs');
+  return (
+    <ShelfCrate
+      face={{ id: LIKED_CRATE, name, trackCount: count, covers: [], heart: true }}
+      look={{ name, trackCount: count }}
+    />
+  );
+}
+
+/**
+ * What somebody keeps on Spotify: their liked songs as one playlist first,
+ * then the albums they saved, newest first.
  *
  * Needs a permission the other shelves do not. Until it is given, the shelf
  * asks for it in place, and everything else on the page goes on working.
  */
-export function LikedShelf({ allowed, onAllow }: { allowed: boolean; onAllow: () => void }) {
+export function SavedShelf({ allowed, onAllow }: { allowed: boolean; onAllow: () => void }) {
   const t = useT();
   if (!allowed) {
     return (
@@ -209,25 +273,114 @@ export function LikedShelf({ allowed, onAllow }: { allowed: boolean; onAllow: ()
       </Shelf>
     );
   }
-  return <Liked />;
+  return <Saved />;
 }
 
-function Liked() {
+function Saved() {
   const t = useT();
-  const playSingle = usePlayerStore((s) => s.playSingle);
-  const { shown, again } = useAnswer(likedShelf);
-  const total = shown && !failed(shown) ? shown.value.total : undefined;
+  const { shown, again } = useAnswer(savedShelf);
 
   return (
-    <Shelf heading={t('home.liked')} count={total}>
+    <Shelf heading={t('home.liked')}>
       {shown === undefined && <Waiting />}
       {failed(shown) && <Retry onPress={again} />}
-      {shown && !failed(shown) && shown.value.tracks.length === 0 && (
+      {shown && !failed(shown) && shown.value.likedTotal === 0 && shown.value.albums.length === 0 && (
         <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('home.likedEmpty')}</p>
+      )}
+      {shown && !failed(shown) && shown.value.likedTotal > 0 && <LikedCrate count={shown.value.likedTotal} />}
+      {shown &&
+        !failed(shown) &&
+        shown.value.albums.map((album) => <AlbumCrate key={album.id} album={album} caption={album.artist} />)}
+    </Shelf>
+  );
+}
+
+/**
+ * The albums played most lately: those several of Spotify's top songs came
+ * from, and those played most here. Beside the top songs, a shelf of its own.
+ */
+export function TopAlbumsShelf() {
+  const t = useT();
+  const { shown, again } = useAnswer(topAlbumsShelf);
+  useEffect(() => onHeard(again), [again]);
+
+  return (
+    <Shelf heading={t('home.topAlbums')}>
+      {shown === undefined && <Waiting />}
+      {failed(shown) && <Retry onPress={again} />}
+      {shown && !failed(shown) && shown.value.length === 0 && (
+        <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('home.topAlbumsEmpty')}</p>
       )}
       {shown &&
         !failed(shown) &&
-        shown.value.tracks.map((track) => <RecordCard key={track.id} track={track} onPlay={playSingle} />)}
+        shown.value.map((album) => <AlbumCrate key={album.id} album={album} caption={album.artist} />)}
+    </Shelf>
+  );
+}
+
+/** The opened list, read again whenever something is opened. */
+function useOpened(): Opened[] {
+  return useSyncExternalStore(onOpened, openedNow);
+}
+
+/**
+ * What somebody opened themselves lately, newest first: albums, playlists and
+ * songs they chose and played. What infinite play or a radio brought after
+ * them is not here; it was not opened.
+ */
+export function OpenedShelf() {
+  const t = useT();
+  const playSingle = usePlayerStore((s) => s.playSingle);
+  const list = useOpened();
+
+  return (
+    <Shelf heading={t('home.opened')}>
+      {list.length === 0 && <p className="px-0.5 py-3 text-meta text-cream-400/70">{t('home.openedEmpty')}</p>}
+      {list.map((entry) => {
+        if (entry.kind === 'song') {
+          return (
+            <RecordCard
+              key={`song:${entry.id}`}
+              track={entry.track}
+              onPlay={playSingle}
+              caption={`${t('home.kindSong')} · ${entry.track.artist}`}
+            />
+          );
+        }
+        if (entry.kind === 'album') {
+          const look: CrateLook = { name: entry.name, trackCount: 0, artist: entry.artist };
+          if (entry.cover) look.cover = entry.cover;
+          return (
+            <ShelfCrate
+              key={`album:${entry.id}`}
+              face={{
+                id: entry.id,
+                name: entry.name,
+                trackCount: 0,
+                covers: entry.cover ? [entry.cover] : [],
+                caption: `${t('home.kindAlbum')} · ${entry.artist}`,
+              }}
+              look={look}
+            />
+          );
+        }
+        const look: CrateLook = { name: entry.name, trackCount: entry.trackCount };
+        if (entry.cover) look.cover = entry.cover;
+        return (
+          <ShelfCrate
+            key={`playlist:${entry.id}`}
+            face={{
+              id: entry.id,
+              name: entry.name,
+              trackCount: entry.trackCount,
+              covers: entry.cover ? [entry.cover] : [],
+              heart: entry.id === LIKED_CRATE,
+              caption: `${t('home.kindPlaylist')} · ${t('spotify.trackCount', { count: entry.trackCount })}`,
+            }}
+            look={look}
+          />
+        );
+      })}
     </Shelf>
   );
 }

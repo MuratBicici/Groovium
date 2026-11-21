@@ -71,6 +71,7 @@ import { clamp } from '@/core/utils/time';
 import { volumeToAmplitude } from '@/core/utils/volume';
 import { say } from '@/core/i18n';
 import { tellNotice } from '@/core/notice';
+import { noteOpened } from '@/core/listening/opened';
 import { unplayable, whyUnplayable } from '@/core/spotify/playable';
 import { log } from '@/platform/log';
 import { errorText } from '@/core/utils/errorText';
@@ -1310,6 +1311,8 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     },
 
     async playSingle(track) {
+      // Somebody chose this song: on the front page's shelf of what was opened.
+      if (track.source === 'spotify') noteOpened({ kind: 'song', id: track.id, track, at: Date.now() });
       set({
         playback: { id: 'single', tracks: [track], index: 0 },
         // `[0]`, not `[]`, when shuffle is on. `playbackOrder` needs the order

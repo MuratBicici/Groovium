@@ -4,7 +4,15 @@ import { artistCounts, heard, lastHeard, type Heard } from '@/core/listening/his
 import { artistTags, hasApiKey, tagTracks, type SimilarTrack, type Tag } from '@/core/station/lastfm';
 import { artistKey, matchKey, trackKey } from '@/core/station';
 import { log } from '@/platform/log';
-import { likedTracks, searchTracks, topArtists } from './spotifyApi';
+import {
+  likedTracks,
+  savedAlbums,
+  searchTracks,
+  topArtists,
+  topSongAlbums,
+  type SpotifyAlbum,
+  type TopAlbum,
+} from './spotifyApi';
 import { played, type Played } from './spotifySpotlight';
 
 /**
@@ -507,29 +515,116 @@ async function make(now: number, asked: number): Promise<GenreAnswer> {
   return { shelves, none: shelves.length === 0 ? 'nothing-yet' : null };
 }
 
-// --- Liked -------------------------------------------------------------------
-
-/** How many liked songs go on the shelf. The count beside it is all of them. */
-export const LIKED_SHOWN = 30;
-
-/** Liked songs change when somebody likes one, which a few minutes covers. */
+/** What is kept changes when somebody likes a song or saves an album, which a few minutes covers. */
 const LIKED_KEEPS_FOR = 5 * 60_000;
 
-let liked: { at: number; answer: { tracks: TrackMetadata[]; total: number } } | null = null;
-let liking: Promise<{ tracks: TrackMetadata[]; total: number }> | null = null;
+// --- Saved: the liked songs as one playlist, and the albums kept ----------------
 
-export function likedShelf(): Promise<{ tracks: TrackMetadata[]; total: number }> {
-  if (liked && Date.now() - liked.at < LIKED_KEEPS_FOR) return Promise.resolve(liked.answer);
+/** How many saved albums go on the shelf after the liked songs. */
+export const SAVED_SHOWN = 30;
+
+export interface SavedAnswer {
+  /** How many liked songs there are, for the playlist that holds them. */
+  likedTotal: number;
+  albums: SpotifyAlbum[];
+}
+
+let saved: { at: number; answer: SavedAnswer } | null = null;
+let saving: Promise<SavedAnswer> | null = null;
+
+/**
+ * What somebody keeps on Spotify: how many songs they liked, which the shelf
+ * shows as one playlist, and the albums they saved, newest first.
+ */
+export function savedShelf(): Promise<SavedAnswer> {
+  if (saved && Date.now() - saved.at < LIKED_KEEPS_FOR) return Promise.resolve(saved.answer);
   const asked = era;
-  liking ??= likedTracks(LIKED_SHOWN)
-    .then((answer) => {
-      if (asked === era) liked = { at: Date.now(), answer };
+  saving ??= Promise.all([likedTracks(1), savedAlbums(SAVED_SHOWN)])
+    .then(([songs, kept]) => {
+      const answer = { likedTotal: songs.total, albums: kept.albums };
+      if (asked === era) saved = { at: Date.now(), answer };
       return answer;
     })
     .finally(() => {
-      liking = null;
+      saving = null;
     });
-  return liking;
+  return saving;
+}
+
+// --- Top albums --------------------------------------------------------------
+
+/** How many albums go on the shelf of the most played. */
+export const TOP_ALBUMS_SHOWN = 12;
+
+/** Spotify's top songs move over weeks, not minutes. */
+const TOP_ALBUMS_KEEP_FOR = 30 * 60_000;
+
+/** Two plays here before an album counts, so one evening's album does not. */
+const OWN_PLAYS_TO_COUNT = 2;
+
+let topFromSpotify: { at: number; albums: TopAlbum[] } | null = null;
+
+/** The albums played most here: Spotify songs heard in this app, counted by the album they came from. */
+export function ownTopAlbums(entries: readonly Heard[]): { album: SpotifyAlbum; plays: number }[] {
+  const counted = new Map<string, { album: SpotifyAlbum; plays: number }>();
+  for (const { track } of entries) {
+    if (track.source !== 'spotify' || !track.albumId) continue;
+    const known = counted.get(track.albumId);
+    if (known) {
+      known.plays += 1;
+      continue;
+    }
+    // The first name of the credit as it is written: `firstArtist` is a key, in lower case.
+    const artist = (track.artist.split(',')[0] ?? '').trim();
+    const album: SpotifyAlbum = { id: track.albumId, name: track.album, artist, trackCount: 0 };
+    if (track.coverArtUrl) album.coverArtUrl = track.coverArtUrl;
+    counted.set(track.albumId, { album, plays: 1 });
+  }
+  return [...counted.values()].filter((own) => own.plays >= OWN_PLAYS_TO_COUNT);
+}
+
+/**
+ * The two lists made one: an album among Spotify's top songs twice counts as
+ * much as four plays here, which is about what a song in somebody's top fifty
+ * is worth against a single play. Spotify's description of an album wins where
+ * both have it.
+ */
+export function blendTopAlbums(
+  spotify: readonly TopAlbum[],
+  own: readonly { album: SpotifyAlbum; plays: number }[],
+  limit = TOP_ALBUMS_SHOWN,
+): SpotifyAlbum[] {
+  const scored = new Map<string, { album: SpotifyAlbum; score: number }>();
+  for (const { album, songs } of spotify) scored.set(album.id, { album, score: songs * 2 });
+  for (const { album, plays } of own) {
+    const known = scored.get(album.id);
+    if (known) known.score += plays;
+    else scored.set(album.id, { album, score: plays });
+  }
+  return [...scored.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => entry.album);
+}
+
+/**
+ * The albums played most lately: from Spotify's top songs, kept half an hour,
+ * and this app's own log, read fresh. Spotify not answering leaves the shelf
+ * to the log rather than empty.
+ */
+export async function topAlbumsShelf(): Promise<SpotifyAlbum[]> {
+  const asked = era;
+  let fromSpotify = topFromSpotify && Date.now() - topFromSpotify.at < TOP_ALBUMS_KEEP_FOR ? topFromSpotify.albums : null;
+  if (!fromSpotify) {
+    try {
+      fromSpotify = await topSongAlbums();
+      if (asked === era) topFromSpotify = { at: Date.now(), albums: fromSpotify };
+    } catch (err) {
+      log('warn', 'home', 'could not read the top songs for the albums shelf', err);
+      fromSpotify = [];
+    }
+  }
+  return blendTopAlbums(fromSpotify, ownTopAlbums(heard()));
 }
 
 /** Forget everything here about the account that is signing out, saved and in memory. */
@@ -537,8 +632,9 @@ export function forgetHome(): void {
   era += 1;
   building = null;
   answeredNone = false;
-  liked = null;
-  liking = null;
+  saved = null;
+  saving = null;
+  topFromSpotify = null;
   try {
     localStorage.removeItem(SHELVES_KEY);
     // The artists looked up as well. Genres are no secret, but which artists

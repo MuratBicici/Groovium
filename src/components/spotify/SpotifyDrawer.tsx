@@ -16,7 +16,7 @@ import { SearchButton } from './SearchParts';
 import { SpotifySearch } from './SpotifySearch';
 import { SpotifyCrates } from './SpotifyCrates';
 import { SpotlightStrip } from './SpotlightStrip';
-import { GenreShelves, LikedShelf, RecentShelf } from './SpotifyHome';
+import { GenreShelves, OpenedShelf, RecentShelf, SavedShelf, TopAlbumsShelf } from './SpotifyHome';
 import { ArrangedShelves } from './ArrangedShelves';
 import { RadioShelf } from '@/components/radio/RadioShelf';
 import { readHidden, readOrder, writeHidden, writeOrder } from './arrange';
@@ -24,6 +24,7 @@ import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
 import { RemoveSheet, SheetPresence } from './CrateSheets';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
+import type { SpotifyPlaylist } from '@/core/providers/spotifyPlaylists';
 import { useT } from '@/core/i18n';
 import { DRAWER_WIDTH } from '@/platform/window';
 import { useOnline } from '@/platform/online';
@@ -104,7 +105,26 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
   const openOrigin = useSpotifyPlaylistsStore((s) => s.openOrigin);
   const playlists = useSpotifyPlaylistsStore((s) => s.playlists);
   const closeCrate = useSpotifyPlaylistsStore((s) => s.closeCrate);
-  const opened = playlists.find((p) => p.id === openId) ?? null;
+  const openFace = useSpotifyPlaylistsStore((s) => s.openFace);
+  // A playlist from the shelf, or an album, the liked songs or a playlist not
+  // on the shelf yet, from the front page: drawn as a playlist that nothing
+  // here can change.
+  const onShelf = playlists.find((p) => p.id === openId) ?? null;
+  const opened: SpotifyPlaylist | null =
+    onShelf ??
+    (openId && openFace
+      ? {
+          id: openId,
+          name: openFace.name,
+          description: '',
+          isPublic: false,
+          snapshotId: '',
+          trackCount: openFace.trackCount,
+          ownerId: '',
+          ownerName: openFace.artist ?? '',
+          ...(openFace.cover ? { coverArtUrl: openFace.cover } : {}),
+        }
+      : null);
 
   /**
    * Whether there is a network to reach Spotify over.
@@ -485,14 +505,16 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
                 onHidden={hide}
                 items={[
                   { id: 'recent', label: t('home.recent'), node: <RecentShelf /> },
+                  { id: 'opened', label: t('home.opened'), node: <OpenedShelf /> },
                   { id: 'radios', label: t('radio.shelf'), node: <RadioShelf /> },
                   { id: 'genres', label: t('home.genresHeading'), node: <GenreShelves /> },
                   {
                     id: 'liked',
                     label: t('home.liked'),
-                    node: <LikedShelf allowed={!missing.includes(LIKED_SCOPE)} onAllow={() => void connect()} />,
+                    node: <SavedShelf allowed={!missing.includes(LIKED_SCOPE)} onAllow={() => void connect()} />,
                   },
                   { id: 'top', label: t('spotlight.top'), node: <SpotlightStrip which="top" /> },
+                  { id: 'topAlbums', label: t('home.topAlbums'), node: <TopAlbumsShelf /> },
                   { id: 'playlists', label: t('spotify.playlistsShelf'), node: <SpotifyCrates /> },
                 ]}
               />
@@ -531,7 +553,7 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
         {online && searching !== null && <SpotifySearch opensWith={searching} onChosen={closeSearch} />}
       </SearchSheet>
       {online && opened && openOrigin && (
-        <OpenCrate playlist={opened} origin={openOrigin} onClose={closeCrate} />
+        <OpenCrate playlist={opened} readOnly={onShelf === null} origin={openOrigin} onClose={closeCrate} />
       )}
 
       <SheetPresence show={askingSignOut}>
@@ -593,7 +615,7 @@ function Offline() {
  * accident — it asks first all the same.
  */
 /** The front page's shelves, in the order they come before anybody moves them. */
-const HOME_SHELVES = ['recent', 'radios', 'genres', 'liked', 'top', 'playlists'];
+const HOME_SHELVES = ['recent', 'opened', 'radios', 'genres', 'liked', 'top', 'topAlbums', 'playlists'];
 
 /**
  * Loosens the shelves to be put in order, and fixes them again.

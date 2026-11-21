@@ -427,7 +427,7 @@ export interface ApiTrack {
   duration_ms: number;
   /** `id` is what tells two artists with the same name apart. */
   artists: { id: string; name: string }[];
-  album?: { name: string; images: ApiImage[] };
+  album?: { id?: string; name: string; images: ApiImage[] };
   /**
    * Only when asked with a country (`market=from_token`): whether it plays
    * there, why not, and — where the release that does is another one than
@@ -475,6 +475,7 @@ export function toTrackMetadata(track: ApiTrack): TrackMetadata {
     source: 'spotify',
   };
   if (cover) metadata.coverArtUrl = cover;
+  if (track.album?.id) metadata.albumId = track.album.id;
   if (track.is_playable === false) metadata.unplayable = restriction(track);
   return metadata;
 }
@@ -743,6 +744,60 @@ export async function likedTracks(limit: number): Promise<{ tracks: TrackMetadat
     .filter((track): track is ApiTrack => !!track && !!track.uri)
     .map(toTrackMetadata);
   return { tracks, total: data?.total ?? tracks.length };
+}
+
+/**
+ * The albums somebody saved, newest first, as far as one page goes, and how
+ * many there are. The same permission as the liked songs.
+ */
+export async function savedAlbums(limit: number): Promise<{ albums: SpotifyAlbum[]; total: number }> {
+  const params = new URLSearchParams({ limit: String(Math.min(limit, 50)), market: HERE });
+  const data = await request<{ items?: ({ album?: ApiAlbum | null } | null)[]; total?: number }>(
+    `/me/albums?${params}`,
+    { cache: 'no-store' },
+  );
+  const albums = (data?.items ?? [])
+    .map((item) => item?.album)
+    .filter((album): album is ApiAlbum => !!album && !!album.id)
+    .map(toAlbum);
+  return { albums, total: data?.total ?? albums.length };
+}
+
+/** An album that more than one of somebody's top songs came from, and how many did. */
+export interface TopAlbum {
+  album: SpotifyAlbum;
+  songs: number;
+}
+
+/**
+ * The albums behind somebody's fifty top songs lately, where two or more of
+ * them came from the same one. Spotify has no list of top albums; an album
+ * that keeps turning up among the top songs is the nearest thing to one.
+ */
+export async function topSongAlbums(): Promise<TopAlbum[]> {
+  const data = await request<{ items?: (ApiTrack | null)[] }>('/me/top/tracks?limit=50&time_range=short_term', {
+    cache: 'no-store',
+  });
+  const found = new Map<string, TopAlbum>();
+  for (const track of data?.items ?? []) {
+    const album = track?.album;
+    if (!track || !album?.id) continue;
+    const known = found.get(album.id);
+    if (known) {
+      known.songs += 1;
+      continue;
+    }
+    const entry: SpotifyAlbum = {
+      id: album.id,
+      name: album.name,
+      artist: track.artists[0]?.name ?? '',
+      trackCount: 0,
+    };
+    const cover = pickCover(album.images);
+    if (cover) entry.coverArtUrl = cover;
+    found.set(album.id, { album: entry, songs: 1 });
+  }
+  return [...found.values()].filter((top) => top.songs >= 2);
 }
 
 /** Start playback of a track URI on this app's own device. */

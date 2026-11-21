@@ -19,7 +19,13 @@ vi.mock('@/core/providers/spotifyPlaylists', () => ({
   currentSnapshot: vi.fn(),
   removeFromLibrary: vi.fn(),
   createPlaylist: vi.fn(),
+  // The real one: which kind of crate an id is, and nothing else.
+  crateKind: (id: string) => (id === 'liked' ? 'liked' : id.startsWith('album:') ? 'album' : 'playlist'),
 }));
+
+// What was opened, watched rather than written.
+const noted = vi.hoisted(() => vi.fn());
+vi.mock('@/core/listening/opened', () => ({ noteOpened: noted, forgetOpened: vi.fn() }));
 
 // The deck, stubbed to the one thing this store asks of it.
 const played = vi.fn();
@@ -59,7 +65,7 @@ import {
   type SpotifyPlaylist,
 } from '@/core/providers/spotifyPlaylists';
 import type { TrackMetadata } from '@/core/types';
-import { useSpotifyPlaylistsStore } from './store';
+import { rememberCrate, useSpotifyPlaylistsStore } from './store';
 import { SHELF_FRESH_MS, withCrate, withShelf } from './cache';
 import { loadCache, settled, updateCache } from './cacheFile';
 
@@ -436,6 +442,33 @@ describe('playing a crate from a song picked out of it', () => {
     expect(playedAlone).toHaveBeenLastCalledWith(song);
     expect(played).not.toHaveBeenCalled();
     expect(useSpotifyPlaylistsStore.getState().starting).toBeNull();
+  });
+});
+
+describe('writing down what was opened', () => {
+  it('notes an album played from the front page under the name it was shown by', async () => {
+    noted.mockClear();
+    rememberCrate('album:a1', { name: 'An Album', trackCount: 2, artist: 'Someone', cover: 'https://c/a1' });
+    fetchWhole.mockResolvedValueOnce(records('1', '2'));
+    await useSpotifyPlaylistsStore.getState().playCrate('album:a1');
+    expect(noted).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'album', id: 'album:a1', name: 'An Album', artist: 'Someone', cover: 'https://c/a1' }),
+    );
+  });
+
+  it('notes the liked songs as a playlist', async () => {
+    noted.mockClear();
+    rememberCrate('liked', { name: 'Liked songs', trackCount: 17 });
+    fetchWhole.mockResolvedValueOnce(records('1'));
+    await useSpotifyPlaylistsStore.getState().playCrate('liked');
+    expect(noted).toHaveBeenCalledWith(expect.objectContaining({ kind: 'playlist', id: 'liked', trackCount: 17 }));
+  });
+
+  it('notes nothing for an album it was never shown', async () => {
+    noted.mockClear();
+    fetchWhole.mockResolvedValueOnce(records('1'));
+    await useSpotifyPlaylistsStore.getState().playCrate('album:never-shown');
+    expect(noted).not.toHaveBeenCalled();
   });
 });
 

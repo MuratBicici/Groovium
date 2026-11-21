@@ -180,6 +180,11 @@ export interface CrateSource {
   setCover?: (jpeg: string) => unknown;
   /** The cover the details sheet shows. */
   coverUrl?: string;
+  /**
+   * Nothing here can be changed: an album, or the liked songs. No edit mode,
+   * no details; the songs are only played.
+   */
+  readOnly?: boolean;
 }
 
 interface CrateLayerProps {
@@ -190,16 +195,18 @@ interface CrateLayerProps {
 
 interface OpenCrateProps {
   playlist: SpotifyPlaylist;
+  /** An album or the liked songs, or a playlist not on the shelf: shown and played, not changed. */
+  readOnly?: boolean;
   origin: Origin;
   onClose: () => void;
 }
 
 /** A Spotify playlist opened: the page, fed from Spotify's store. */
-export function OpenCrate({ playlist, origin, onClose }: OpenCrateProps) {
-  return <CrateLayer source={useSpotifyCrate(playlist)} origin={origin} onClose={onClose} />;
+export function OpenCrate({ playlist, readOnly = false, origin, onClose }: OpenCrateProps) {
+  return <CrateLayer source={useSpotifyCrate(playlist, readOnly)} origin={origin} onClose={onClose} />;
 }
 
-function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
+function useSpotifyCrate(playlist: SpotifyPlaylist, readOnly: boolean): CrateSource {
   const tracks = useSpotifyPlaylistsStore((s) => s.tracks);
   const loading = useSpotifyPlaylistsStore((s) => s.tracksLoading);
   const cursor = useSpotifyPlaylistsStore((s) => s.tracksCursor);
@@ -233,7 +240,10 @@ function useSpotifyCrate(playlist: SpotifyPlaylist): CrateSource {
     playAll: (shuffled) => playCrate(playlist.id, shuffled),
     writeError,
     clearWriteError,
-    spotify: playlist,
+    // An album or the liked songs has no details to edit and no songs to move.
+    ...(!readOnly
+      ? { spotify: playlist }
+      : { readOnly: true, ...(playlist.coverArtUrl ? { coverUrl: playlist.coverArtUrl } : {}) }),
   };
 }
 
@@ -979,17 +989,19 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
                     <path d="M7.5 3l1.5 1.5" />
                   </SideTool>
                 )}
-                <SideTool
-                  label={t('spotify.editSongs')}
-                  onPress={() => {
-                    clearWriteError();
-                    void setEditing(true);
-                  }}
-                >
-                  {/* A list with arrows: the songs in it, moved and taken out. */}
-                  <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
-                  <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
-                </SideTool>
+                {!source.readOnly && (
+                  <SideTool
+                    label={t('spotify.editSongs')}
+                    onPress={() => {
+                      clearWriteError();
+                      void setEditing(true);
+                    }}
+                  >
+                    {/* A list with arrows: the songs in it, moved and taken out. */}
+                    <path d="M1.5 3h5M1.5 6h5M1.5 9h3.5" />
+                    <path d="M9.5 2v7.5M8 8l1.5 1.5L11 8" />
+                  </SideTool>
+                )}
                 {deleteOwn && !hasDetails && (
                   <SideTool label={t('playlists.deleteTitle')} onPress={() => setSurface('remove')}>
                     {/* A bin: the playlist, not the songs in it. */}
