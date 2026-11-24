@@ -22,11 +22,18 @@ const heardFrom = (albumId: string | undefined, source: 'spotify' | 'local' = 's
 });
 
 describe('the albums played most', () => {
-  it('counts Spotify songs heard here by their album, from two plays up', () => {
+  it('counts Spotify songs heard here by their album, from two different songs up', () => {
     const own = ownTopAlbums([heardFrom('a'), heardFrom('a'), heardFrom('b'), heardFrom(undefined), heardFrom('c', 'local')]);
     expect(own).toHaveLength(1);
     expect(own[0]?.album).toMatchObject({ id: 'a', artist: 'First' });
     expect(own[0]?.plays).toBe(2);
+  });
+
+  it('leaves out a single, however often its one song was played', () => {
+    const once = heardFrom('single');
+    const again = { ...once, at: 1 };
+    const thrice = { ...once, at: 2 };
+    expect(ownTopAlbums([once, again, thrice])).toEqual([]);
   });
 
   it('puts the two lists together, an album on both first', () => {

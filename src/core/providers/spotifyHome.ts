@@ -541,7 +541,8 @@ export function savedShelf(): Promise<SavedAnswer> {
   const asked = era;
   saving ??= Promise.all([likedTracks(1), savedAlbums(SAVED_SHOWN)])
     .then(([songs, kept]) => {
-      const answer = { likedTotal: songs.total, albums: kept.albums };
+      // A single is one song, which the liked songs already hold: only albums here.
+      const answer = { likedTotal: songs.total, albums: kept.albums.filter((album) => album.trackCount > 1) };
       if (asked === era) saved = { at: Date.now(), answer };
       return answer;
     })
@@ -559,28 +560,35 @@ export const TOP_ALBUMS_SHOWN = 12;
 /** Spotify's top songs move over weeks, not minutes. */
 const TOP_ALBUMS_KEEP_FOR = 30 * 60_000;
 
-/** Two plays here before an album counts, so one evening's album does not. */
-const OWN_PLAYS_TO_COUNT = 2;
+/**
+ * Two different songs from it heard here before an album counts. Songs, not
+ * plays: one song played twice is a single somebody liked, and a single is
+ * not an album.
+ */
+const OWN_SONGS_TO_COUNT = 2;
 
 let topFromSpotify: { at: number; albums: TopAlbum[] } | null = null;
 
 /** The albums played most here: Spotify songs heard in this app, counted by the album they came from. */
 export function ownTopAlbums(entries: readonly Heard[]): { album: SpotifyAlbum; plays: number }[] {
-  const counted = new Map<string, { album: SpotifyAlbum; plays: number }>();
+  const counted = new Map<string, { album: SpotifyAlbum; plays: number; songs: Set<string> }>();
   for (const { track } of entries) {
     if (track.source !== 'spotify' || !track.albumId) continue;
     const known = counted.get(track.albumId);
     if (known) {
       known.plays += 1;
+      known.songs.add(track.id);
       continue;
     }
     // The first name of the credit as it is written: `firstArtist` is a key, in lower case.
     const artist = (track.artist.split(',')[0] ?? '').trim();
     const album: SpotifyAlbum = { id: track.albumId, name: track.album, artist, trackCount: 0 };
     if (track.coverArtUrl) album.coverArtUrl = track.coverArtUrl;
-    counted.set(track.albumId, { album, plays: 1 });
+    counted.set(track.albumId, { album, plays: 1, songs: new Set([track.id]) });
   }
-  return [...counted.values()].filter((own) => own.plays >= OWN_PLAYS_TO_COUNT);
+  return [...counted.values()]
+    .filter((own) => own.songs.size >= OWN_SONGS_TO_COUNT)
+    .map(({ album, plays }) => ({ album, plays }));
 }
 
 /**
