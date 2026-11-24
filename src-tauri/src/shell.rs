@@ -163,7 +163,16 @@ pub fn place_changed(app: &AppHandle) {
         std::thread::sleep(LOOK_FOR_STILLNESS);
         match step(&app.state::<Placekeeper>(), Instant::now()) {
             Next::Wait => {}
-            Next::Write => write_place(&app),
+            // On the main thread, never this one. The plugin holds its cache
+            // while it asks the window where it is, and asked from here that
+            // question waits for the main thread — which, if the window moves
+            // in that moment, is waiting for the cache in the plugin's own
+            // move handler. Each waited for the other and the app froze; the
+            // drawer on the left moves the window on every open and close.
+            Next::Write => {
+                let writer = app.clone();
+                let _ = app.run_on_main_thread(move || write_place(&writer));
+            }
             Next::Done => return,
         }
     });
