@@ -58,20 +58,20 @@ export function widthFor(drawerOpen: boolean): number {
 }
 
 /**
- * The window's width, which on the left is not the shell's.
+ * The page's width, which on the left is not the shell's.
  *
  * Opening to the left means the player has to stay where it is while the drawer
- * appears beside it, and the only way to do that by resizing is to move the
- * window's left edge — which flickers, unfixably: the window takes its existing
- * pixels with it and the webview lays out again a frame later, so for that frame
- * the shell is drawn where the window used to be. No ordering of the two calls
- * helps, because the lag is inside the webview.
+ * appears beside it. Moving the window's left edge with the page inside it
+ * flickered: the window takes its existing pixels with it and the webview lays
+ * out again a frame later, so for that frame the shell is drawn where the
+ * window used to be.
  *
- * So on the left the window does not change at all. It is always as wide as the
- * drawer needs and the shell grows into it, exactly as the shell grows inside a
- * widening window on the right — except that here there is no widening. What it
- * leaves is transparent window beside the player, which `setWindowMask` cuts
- * away so that clicks land on whatever is actually behind it.
+ * So on the left the *page* does not change at all. It is always as wide as the
+ * drawer needs, and the shell grows inside it. What changes is the window: shut,
+ * it is only the player, and the page reaches past its left edge by the
+ * drawer's width (`Placement.reach`; `place_window` in Rust, with a patched wry).
+ * The page is never laid out again for it, so nothing on screen moves but the
+ * window's edge.
  */
 export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): number {
   return side === 'left' ? PLAYER_WIDTH + DRAWER_WIDTH : widthFor(drawerOpen);
@@ -80,10 +80,12 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
 /**
  * Say which part of the window takes clicks, or `null` for all of it.
  *
- * The drawer opening leftwards needs the window wider than what it shows, which
- * is what lets it stay still — and a window that stays still cannot flicker.
- * What that leaves is a stretch of transparent window beside the player, which
- * would otherwise swallow clicks meant for whatever is behind it.
+ * Asked in the page's pixels, and moved into the window's here, by the page's
+ * reach past the window's left edge (`Placement`). At rest the window is only
+ * the shell and all of it takes clicks. While the drawer opens or shuts on the
+ * left, the window is as wide as the drawer for the length of the animation and
+ * the shell grows or shrinks inside it; what is not shell yet is transparent
+ * window, which would otherwise swallow clicks meant for whatever is behind it.
  *
  * Cutting the window's *shape* was the obvious answer and was the wrong one. A
  * window that composes with per-pixel alpha stops doing so once it is given a
@@ -99,6 +101,18 @@ export function windowWidthFor(drawerOpen: boolean, side: 'left' | 'right'): num
 let clickable = 'none';
 
 /**
+ * Where the window goes around the page: which side the player is on, and how
+ * much of the page lies past the window's left edge, in the page's pixels.
+ */
+export interface Placement {
+  side: 'left' | 'right';
+  reach: number;
+}
+
+/** The placement the window is in now, for the clickable area and for a zoom. */
+let placed: Placement = { side: 'right', reach: 0 };
+
+/**
  * How large the window is drawn: see `Settings.scale`.
  *
  * Everything the page asks of the window is in the page's own pixels, and the
@@ -107,7 +121,7 @@ let clickable = 'none';
  */
 let zoom = 1;
 /** The last size asked for, in the page's pixels, to redo when the zoom changes. */
-let lastSize: { width: number; height: number } | null = null;
+let lastSize: { width: number; height: number; place: Placement } | null = null;
 /** The last clickable area asked for, likewise; undefined before the first. */
 let lastArea: { x: number; y: number; width: number; height: number } | null | undefined;
 
@@ -145,7 +159,7 @@ export function setWindowZoom(scale: number): Promise<void> {
     }
     // The same page at the new size: the window follows, and so does the
     // part of it that takes clicks.
-    if (lastSize) await applySize(lastSize.width, lastSize.height, 0);
+    if (lastSize) await applySize(lastSize.width, lastSize.height, lastSize.place);
     if (lastArea !== undefined) {
       clickable = 'unknown';
       await applyArea(lastArea);
@@ -162,8 +176,13 @@ export function setClickArea(
 }
 
 async function applyArea(
-  rect: { x: number; y: number; width: number; height: number } | null,
+  asked: { x: number; y: number; width: number; height: number } | null,
 ): Promise<void> {
+  // Asked in the page's pixels; the window starts `reach` into the page.
+  let rect = asked && { ...asked, x: asked.x - placed.reach };
+  // The whole of what is shown is the same as all of it.
+  const shown = lastSize ? lastSize.width - placed.reach : Infinity;
+  if (rect && rect.width > 0 && rect.x <= 0 && rect.x + rect.width >= shown) rect = null;
   const scaled = rect && {
     x: rect.x * zoom,
     y: rect.y * zoom,
@@ -199,50 +218,45 @@ async function applyArea(
 }
 
 /**
- * Set the window's size, keeping the top left corner where it is.
+ * Lay the page out `width` by `height` and put the window round it, keeping
+ * the player where it is on screen.
  *
- * Windows anchors a resize at the top left, which is what both callers want:
- * collapsing moves the bottom edge and leaves the titlebar, and the drawer
- * moves the right edge and leaves everything else.
+ * `place` says which side the player is on and how much of the page lies past
+ * the window's left edge; see `Placement` and `windowWidthFor`. The window is
+ * moved and sized in one go, in Rust, so the player never lands anywhere else
+ * for a frame — on the left, where the window's edge moves, nor when the drawer
+ * changes sides.
  *
- * The window is declared `resizable: false`, which governs whether someone can
- * drag its edges rather than whether it can be resized in code — but rather
- * than take that on faith, this reads the size back and, if nothing moved,
- * retries with the flag lifted for the duration of the call. The check costs
- * one IPC round trip on a gesture that happens by hand, and it means the
- * uncertainty is answered at runtime instead of assumed.
- *
- * Every path is caught. Each of these calls is gated by a capability in
- * `capabilities/default.json`, and a missing one is rejected rather than
- * ignored — an uncaught rejection here would surface as an unhandled promise
- * from a `void` call site with nothing to catch it, over a window that is
- * merely the wrong size.
+ * Every path is caught: an uncaught rejection here would surface as an
+ * unhandled promise from a `void` call site, over a window that is merely the
+ * wrong size.
  */
-export function setWindowSize(width: number, height: number, dx = 0): Promise<void> {
+export function setWindowSize(width: number, height: number, place: Placement): Promise<void> {
   if (!isTauri()) return Promise.resolve();
-  lastSize = { width, height };
-  return inOrder(() => applySize(width, height, dx));
+  lastSize = { width, height, place };
+  return inOrder(() => applySize(width, height, place));
 }
 
-async function applySize(width: number, height: number, dx: number): Promise<void> {
+async function applySize(width: number, height: number, place: Placement): Promise<void> {
   const w = Math.round(width * zoom);
   const h = Math.round(height * zoom);
 
-  // Anything that moves the window goes through Rust, where the resize and the
-  // move happen microseconds apart inside one command rather than across two
-  // IPC round trips. The drawer opening leftwards changes the width and the x
-  // by the same amount, and either of them landing a frame before the other
-  // puts the player six hundred and eighty pixels from where it was.
-  if (dx !== 0) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('set_window_box', { width: w, height: h, dx: Math.round(dx * zoom) });
-      return;
-    } catch (err) {
-      // Falling through to the plain resize. A window at the right size in the
-      // wrong place beats one at neither.
-      log('warn', 'window', 'could not move and resize', err);
-    }
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('place_window', {
+      width: w,
+      height: h,
+      reach: Math.round(place.reach * zoom),
+      side: place.side,
+      player: Math.round(PLAYER_WIDTH * zoom),
+    });
+    placed = place;
+    return;
+  } catch (err) {
+    // Falling through to a plain resize of the whole page: a window at the
+    // right size, wider than it needs to be on the left, beats one at neither.
+    log('warn', 'window', 'could not place the window', err);
+    placed = { side: place.side, reach: 0 };
   }
 
   try {

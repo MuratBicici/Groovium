@@ -80,9 +80,19 @@ panic = "abort"
 strip = true
 
 [target."cfg(windows)".dependencies]
+# The patched copy in vendor/wry (see [patch.crates-io] below): `set_left_reach`.
+wry = "=0.55.1"
 windows = { version = "0.61", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Foundation", "Win32_System_Variant", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Networking_NetworkListManager"] }
 windows-core = "0.61"
 
 [dev-dependencies]
 # A runtime to drive the async tests with; the app gets one from Tauri.
 tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+
+# wry with one change: the main webview can reach past its window's left edge,
+# which is how the drawer on the left narrows the window without anything on
+# screen moving. See vendor/wry/src/webview2/mod.rs, "Groovium patch", and
+# `shell::place_window`. Taken from wry 0.55.1 as published; to update, copy the
+# new version over it and put the patch back.
+[patch.crates-io]
+wry = { path = "vendor/wry" }

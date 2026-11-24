@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, State, Window};
+use tauri::{AppHandle, Manager, State, Window};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// What is remembered about where the window was left.
@@ -178,37 +178,172 @@ pub fn place_changed(app: &AppHandle) {
     });
 }
 
-/// Resize the window and move its left edge by `dx`, in that order.
-///
-/// `dx` is how far the left edge travels, in logical pixels. Zero is an
-/// ordinary resize. Minus the width gained is the drawer opening leftwards: the
-/// right edge stays where it is, so the player underneath does not move.
-///
-/// The frontend supplies the distance rather than this working it out, because
-/// the frontend is where the widths come from — it knows what the window is
-/// changing from as well as to, and a second opinion here could only disagree.
-///
-/// Where the window is *now* is read here, which keeps the frontend from
-/// needing a position permission it has no other use for.
-#[tauri::command]
-pub fn set_window_box(window: Window, width: f64, height: f64, dx: f64) -> Result<(), String> {
-    let scale = window.scale_factor().map_err(|e| e.to_string())?;
-    let at = window.outer_position().map_err(|e| e.to_string())?;
-    let px = |v: f64| (v * scale).round() as i32;
+/// The side of the window the player sits at, as the last placement left it.
+/// `None` until the first one, which takes the side it is given as the one the
+/// window was restored in.
+static PLAYER_LEFT: Mutex<Option<bool>> = Mutex::new(None);
 
-    // Size first. Growing to the right briefly covers ground the window is
-    // about to occupy anyway; moving first would put it somewhere it never
-    // belongs. Neither is normally seen — the webview lays out on the next
-    // frame, by which time both have landed.
-    window
-        .set_size(PhysicalSize::new(
-            px(width).max(1) as u32,
-            px(height).max(1) as u32,
-        ))
-        .map_err(|e| e.to_string())?;
-    window
-        .set_position(PhysicalPosition::new(at.x + px(dx), at.y))
-        .map_err(|e| e.to_string())
+/// Where the window goes, and how wide, so that the player does not move.
+///
+/// Physical pixels throughout. `at_x` and `client_w` are the window as it is;
+/// `was_left` whether the player was at its right (the drawer on the left) as
+/// it is; `left` whether it will be. `webview_w` is how wide the page is laid
+/// out, `reach` how much of that is past the window's left edge, and `player`
+/// the player's own width.
+///
+/// The player is at the window's right with the drawer on the left and at its
+/// left with the drawer on the right, so its place on screen is read from the
+/// window as it is, and the window is put round it as it will be.
+pub(crate) fn placed(
+    at_x: i32,
+    client_w: i32,
+    was_left: bool,
+    left: bool,
+    webview_w: i32,
+    reach: i32,
+    player: i32,
+) -> (i32, i32) {
+    let player_x = at_x + if was_left { client_w - player } else { 0 };
+    let width = (webview_w - reach).max(1);
+    let x = player_x - if left { width - player } else { 0 };
+    (x, width)
+}
+
+/// Size and place the window around a page laid out `width` wide, of which
+/// `reach` lies past the window's left edge, keeping the player where it is.
+///
+/// This is how the drawer on the left is done. The page keeps the drawer's
+/// width for as long as the drawer is on the left, open or shut, and never lays
+/// out again for it. Shut, the window narrows to the player and the page
+/// reaches past its left edge by the drawer's width; open, the window takes the
+/// whole page. The window's edge and the page's place inside it change in the
+/// one WM_SIZE that resizes it (the patched wry: `set_left_reach`), so on
+/// screen nothing moves but the edge of the window.
+///
+/// The move and the resize are one `SetWindowPos`, made just after the
+/// compositor has presented a frame (`DwmFlush`), so both land before the next.
+/// Going from one side to the other is the same call: the player stays put and
+/// the window is put round it on its new side.
+///
+/// Logical pixels in, already multiplied by the page's zoom. `side` is `left`
+/// or `right`; `player` is the player's width.
+#[tauri::command]
+pub fn place_window(
+    window: Window,
+    width: f64,
+    height: f64,
+    reach: f64,
+    side: String,
+    player: f64,
+) -> Result<(), String> {
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let px = |v: f64| (v * scale).round() as i32;
+    let left = side == "left";
+    let was_left = {
+        let last = PLAYER_LEFT.lock().unwrap_or_else(|e| e.into_inner());
+        last.unwrap_or(left)
+    };
+    // Where reaching past the edge cannot be done, the window simply takes the
+    // whole page, as it did before.
+    let reach = if cfg!(windows) { reach.max(0.0) } else { 0.0 };
+    let h = px(height).max(1);
+
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+        use windows::Win32::Graphics::Dwm::DwmFlush;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetWindowPlacement, GetWindowRect, IsIconic, SendMessageW, SetWindowPlacement,
+            SetWindowPos, SIZE_RESTORED, SWP_NOACTIVATE, SWP_NOZORDER, WINDOWPLACEMENT, WM_SIZE,
+        };
+        let hwnd = HWND(window.hwnd().map_err(|e| e.to_string())?.0);
+
+        // Minimised, the window is parked off screen and the place that counts
+        // is the one it will be restored to. That is moved instead, and the
+        // reach is taken up in the WM_SIZE that restoring sends.
+        if unsafe { IsIconic(hwnd) }.as_bool() {
+            let mut placement = WINDOWPLACEMENT {
+                length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+                ..Default::default()
+            };
+            unsafe { GetWindowPlacement(hwnd, &mut placement) }.map_err(|e| e.to_string())?;
+            let normal = placement.rcNormalPosition;
+            let (x, w) = placed(
+                normal.left,
+                normal.right - normal.left,
+                was_left,
+                left,
+                px(width),
+                px(reach),
+                px(player),
+            );
+            placement.rcNormalPosition = RECT {
+                left: x,
+                top: normal.top,
+                right: x + w,
+                bottom: normal.top + h,
+            };
+            wry::set_left_reach(reach);
+            unsafe { SetWindowPlacement(hwnd, &placement) }.map_err(|e| e.to_string())?;
+        } else {
+            let mut now = RECT::default();
+            unsafe { GetWindowRect(hwnd, &mut now) }.map_err(|e| e.to_string())?;
+            let (old_w, old_h) = (now.right - now.left, now.bottom - now.top);
+            let (x, w) = placed(
+                now.left,
+                old_w,
+                was_left,
+                left,
+                px(width),
+                px(reach),
+                px(player),
+            );
+            let reach_before = wry::set_left_reach(reach);
+            // Just after a frame, so the move and the resize land before the next.
+            let _ = unsafe { DwmFlush() };
+            unsafe { SetWindowPos(hwnd, None, x, now.top, w, h, SWP_NOZORDER | SWP_NOACTIVATE) }
+                .map_err(|e| e.to_string())?;
+            // A window that keeps its size gets no WM_SIZE, and it is in WM_SIZE
+            // that the webview takes up its reach. Changing sides while shut
+            // does exactly that, and so does a launch into a window already
+            // narrow.
+            if (w, h) == (old_w, old_h) && reach_before != reach {
+                let both = ((h as u32 & 0xffff) << 16) | (w as u32 & 0xffff);
+                unsafe {
+                    SendMessageW(
+                        hwnd,
+                        WM_SIZE,
+                        Some(WPARAM(SIZE_RESTORED as usize)),
+                        Some(LPARAM(both as isize)),
+                    )
+                };
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri::{PhysicalPosition, PhysicalSize};
+        let at = window.outer_position().map_err(|e| e.to_string())?;
+        let size = window.outer_size().map_err(|e| e.to_string())?;
+        let (x, w) = placed(
+            at.x,
+            size.width as i32,
+            was_left,
+            left,
+            px(width),
+            0,
+            px(player),
+        );
+        window
+            .set_size(PhysicalSize::new(w.max(1) as u32, h as u32))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_position(PhysicalPosition::new(x, at.y))
+            .map_err(|e| e.to_string())?;
+    }
+
+    *PLAYER_LEFT.lock().unwrap_or_else(|e| e.into_inner()) = Some(left);
+    Ok(())
 }
 
 /// Take away the frame Windows draws around this window.
@@ -266,10 +401,11 @@ pub fn undress(window: &Window) {
 
 /// Which part of the window takes clicks, and the watcher that enforces it.
 ///
-/// The drawer opening leftwards needs the window to be wider than what it shows
-/// — that is what lets the window stay still, and a window that stays still
-/// cannot flicker. It leaves a stretch of transparent window beside the player
-/// which would otherwise swallow clicks meant for whatever is behind it.
+/// While the drawer opens or shuts on the left, the window is as wide as the
+/// drawer and the shell grows or shrinks inside it (see `place_window`). For
+/// the length of the animation that leaves a stretch of transparent window
+/// beside the player which would otherwise swallow clicks meant for whatever is
+/// behind it.
 ///
 /// A window region was the obvious answer and was the wrong one. Cutting the
 /// shape of a window that composes with per-pixel alpha turns that alpha off:
@@ -283,7 +419,7 @@ pub fn undress(window: &Window) {
 /// player the window takes its clicks; anywhere else it is transparent to the
 /// mouse and they land on whatever is behind. `GetCursorPos` is a call into the
 /// window manager with no allocation and no round trip, thirty times a second,
-/// and only while the drawer is shut on the left.
+/// and only while part of the window is not the shell.
 ///
 /// A rectangle in logical pixels, measured from the window's own corner.
 ///
@@ -605,5 +741,73 @@ mod tests {
         forget_old_place_in(&dir);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // --- Where the window goes around the player -------------------------------
+
+    const PLAYER: i32 = 340;
+    const PAGE: i32 = 1020;
+    const DRAWER: i32 = 680;
+
+    #[test]
+    fn the_drawer_shutting_on_the_left_narrows_the_window_to_the_player() {
+        // Wide at 100, the player at 780..1120.
+        assert_eq!(
+            placed(100, PAGE, true, true, PAGE, DRAWER, PLAYER),
+            (780, PLAYER)
+        );
+    }
+
+    #[test]
+    fn the_drawer_opening_on_the_left_widens_the_window_leftwards() {
+        // Narrow at 780: the player stays at 780..1120, the window starts at 100.
+        assert_eq!(
+            placed(780, PLAYER, true, true, PAGE, 0, PLAYER),
+            (100, PAGE)
+        );
+    }
+
+    #[test]
+    fn a_window_from_before_this_narrows_where_it_stands() {
+        // An always-wide window on the left, restored at launch: the player is
+        // at its right, and the window comes in to it.
+        assert_eq!(
+            placed(0, PAGE, true, true, PAGE, DRAWER, PLAYER),
+            (DRAWER, PLAYER)
+        );
+    }
+
+    #[test]
+    fn a_narrow_window_at_launch_stays_where_it_is() {
+        assert_eq!(
+            placed(780, PLAYER, true, true, PAGE, DRAWER, PLAYER),
+            (780, PLAYER)
+        );
+    }
+
+    #[test]
+    fn on_the_right_the_left_edge_stays() {
+        assert_eq!(
+            placed(300, PLAYER, false, false, PAGE, 0, PLAYER),
+            (300, PAGE)
+        );
+        assert_eq!(
+            placed(300, PAGE, false, false, PLAYER, 0, PLAYER),
+            (300, PLAYER)
+        );
+    }
+
+    #[test]
+    fn changing_sides_keeps_the_player_where_it_is() {
+        // Shut on the left, at 780: to the right, still at 780.
+        assert_eq!(
+            placed(780, PLAYER, true, false, PLAYER, 0, PLAYER),
+            (780, PLAYER)
+        );
+        // Shut on the right at 780: to the left, the page reaching past.
+        assert_eq!(
+            placed(780, PLAYER, false, true, PAGE, DRAWER, PLAYER),
+            (780, PLAYER)
+        );
     }
 }

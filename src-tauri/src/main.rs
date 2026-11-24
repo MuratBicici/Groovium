@@ -186,7 +186,7 @@ fn main() {
             lyrics::chosen::lyrics_choose,
             lyrics::chosen::lyrics_unchoose,
             audio::audio_backend_available,
-            shell::set_window_box,
+            shell::place_window,
             shell::set_click_area,
             report::logs_open_folder,
             report::report_problem,

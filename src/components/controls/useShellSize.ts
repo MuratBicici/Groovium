@@ -2,12 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import type { DrawerSide } from '@/core/settings';
 import {
-  DRAWER_WIDTH,
   EXPANDED_HEIGHT,
   setClickArea,
   setWindowSize,
   widthFor,
   windowWidthFor,
+  type Placement,
 } from '@/platform/window';
 
 /**
@@ -195,6 +195,16 @@ export function sideArriving(
   return onScreen.drawerOut ? 'choreograph' : 'take';
 }
 
+/**
+ * Where the window goes round a page `pageWidth` wide with the shell
+ * `shellWidth` wide in it: on the left, the page reaches past the window's
+ * left edge by whatever the shell is not using, so the window is only the
+ * shell. On the right the window is the page.
+ */
+function placement(side: DrawerSide, pageWidth: number, shellWidth: number): Placement {
+  return { side, reach: side === 'left' ? Math.max(0, pageWidth - shellWidth) : 0 };
+}
+
 function shape(
   side: DrawerSide,
   windowWidth: number,
@@ -221,11 +231,11 @@ export function useShellSize(
 
   const width = widthFor(wide);
   /**
-   * The window's width, which on the left is not the shell's.
+   * The page's width, which on the left is not the shell's.
    *
-   * See `windowWidthFor`: opening leftwards without moving the window is the
-   * only arrangement that does not flicker, so on that side the window is
-   * always as wide as the drawer needs and the shell grows inside it.
+   * See `windowWidthFor`: on that side the page is always as wide as the
+   * drawer needs and the shell grows inside it, and the window shows only the
+   * shell (`placement`).
    */
   const windowWidth = windowWidthFor(wide, side);
 
@@ -291,10 +301,10 @@ export function useShellSize(
   /**
    * Changing which side the drawer belongs to.
    *
-   * The one time the window moves, and the only one left. On the left it is
-   * permanently as wide as the drawer needs, so going there widens it leftwards
-   * and coming back narrows it from the left — either way by the drawer's own
-   * width, and either way the player stays exactly where it is.
+   * The page is laid out again for the other side, behind a fade, and the
+   * window is put round the player there: on the left the page is as wide as
+   * the drawer needs and reaches past the window's left edge, on the right it
+   * is the window. Either way the player stays exactly where it is.
    *
    * Declared before the animation below so that when a swap does both at once —
    * the drawer shuts on one side and opens on the other — the window is the
@@ -310,19 +320,18 @@ export function useShellSize(
       wasSide.current = side;
       return;
     }
-    const cameFrom = wasSide.current;
-
     const shell = shellRef.current;
     if (!shell || !ready) return;
 
-    const dx = cameFrom === 'right' ? -DRAWER_WIDTH : DRAWER_WIDTH;
+    // The window is put round the player on its new side: `place_window`
+    // keeps the player where it is, whichever side it came from.
     // Recorded at the point of no return rather than up here, so a swap
     // interrupted before the window has moved is restarted rather than lost.
     const travel = () => {
       wasSide.current = side;
       shell.style.width = restingWidth(side, width);
       const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-      return setWindowSize(windowWidth, height, dx).then(() =>
+      return setWindowSize(windowWidth, height, placement(side, windowWidth, width)).then(() =>
         shape(side, windowWidth, width, height),
       );
     };
@@ -377,7 +386,9 @@ export function useShellSize(
       // is shut, so this runs whichever state it starts in.
       shell.style.width = restingWidth(side, width);
       const height = compact ? ((shell.style.height = 'auto'), shell.offsetHeight) : EXPANDED_HEIGHT;
-      void setWindowSize(windowWidth, height).then(() => shape(side, windowWidth, width, height));
+      void setWindowSize(windowWidth, height, placement(side, windowWidth, width)).then(() =>
+        shape(side, windowWidth, width, height),
+      );
       record();
       return;
     }
@@ -417,16 +428,16 @@ export function useShellSize(
     // for the duration, or the shell would animate past its edge and be cut
     // off. Shrinking, the surplus is transparent and nobody sees it; the exact
     // size is set at the far end.
-    // Room for both ends before anything moves, and on the left the window is
-    // already at both.
     const wideEnough = Math.max(fromWidth, width, windowWidth);
-    const room = setWindowSize(wideEnough, EXPANDED_HEIGHT);
+    // On the left the window opens out to the wider of the two shells before
+    // anything moves, and stays at it until the far end.
+    const room = setWindowSize(wideEnough, EXPANDED_HEIGHT, placement(side, wideEnough, Math.max(fromWidth, width)));
 
     if (prefersReducedMotion()) {
       if (compact) shell.style.height = 'auto';
       shell.style.width = `${width}px`;
       const settledHeight = compact ? chrome + to.stage + to.bottom : EXPANDED_HEIGHT;
-      void setWindowSize(windowWidth, settledHeight).then(() => {
+      void setWindowSize(windowWidth, settledHeight, placement(side, windowWidth, width)).then(() => {
         shell.style.width = restingWidth(side, width);
         void shape(side, windowWidth, width, settledHeight);
         record();
@@ -542,7 +553,7 @@ export function useShellSize(
       cancelAnimationFrame(tracking);
       tracking = 0;
       const settledHeight = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-      void setWindowSize(windowWidth, settledHeight).then(() => {
+      void setWindowSize(windowWidth, settledHeight, placement(side, windowWidth, width)).then(() => {
         if (!alive) return;
         // The shape last, once the window is the size the shape is measured
         // against.
