@@ -14,7 +14,7 @@ vi.mock('@/core/security/spotifyAuth', () => ({
 vi.mock('@/core/providers/spotifyHome', () => ({ forgetSaved: vi.fn() }));
 vi.mock('@/platform/log', () => ({ log: vi.fn() }));
 
-import { explainHeartOnce, learnLiked, setLiked, useLikes } from './likes';
+import { explainHeartOnce, learnLiked, setLiked, useHeartHint, useLikes } from './likes';
 import { useNotice } from '@/core/notice';
 
 const SONG = 'spotify:track:abc';
@@ -90,9 +90,12 @@ describe('liking from Groovium', () => {
     expect(useNotice.getState().message).toBeNull();
   });
 
-  it('explains the heart the first time only', () => {
+  it('explains the heart the first time only, in a balloon out of it', () => {
+    useHeartHint.setState({ open: false });
     expect(explainHeartOnce()).toBe(true);
-    expect(useNotice.getState().kind).toBe('info');
+    expect(useHeartHint.getState().open).toBe(true);
+    useHeartHint.setState({ open: false });
     expect(explainHeartOnce()).toBe(false);
+    expect(useHeartHint.getState().open).toBe(false);
   });
 });

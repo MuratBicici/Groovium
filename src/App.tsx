@@ -42,6 +42,7 @@ import { clearNotice, useNotice } from '@/core/notice';
 import { DropDock } from '@/components/queue/DropDock';
 import { EqualiserDrawer } from '@/components/equaliser/EqualiserDrawer';
 import { EqualiserLink } from '@/components/equaliser/EqualiserLink';
+import { Tooltips } from '@/components/overlay/Tooltips';
 import { declineSaving, dismissSavingNotice, usePower, usePowerAwareMotion } from '@/platform/power';
 import { useUpdateStore, useUpdateWaiting } from '@/core/updates/store';
 import { shouldOffer } from '@/core/updates/offer';
@@ -919,6 +920,8 @@ export default function App() {
       {/* The weather card's lightning, over the whole window: see `weatherGlow`. */}
       <div ref={holdWeatherGlow} aria-hidden="true" className="groove-weather-glow" />
       <EqualiserLink />
+      {/* The hover hints, in the app's dress: every `title` in it is taken over. */}
+      <Tooltips />
       {/* Out under water: the edge light answers the music, and a focus session has none. */}
       <WindowGlow
         on={windowGlow && !focusing}

@@ -70,7 +70,7 @@ export const tr: Partial<Record<keyof typeof en, string>> = {
   'like.likeNamed': '{title} şarkısını beğen',
   'like.unlikeNamed': '{title} şarkısını beğenmekten vazgeç',
   'like.title': 'Beğen. Listeye eklemek için sağ tıklayın',
-  'like.hint': 'Kalp şarkıyı Spotify’da beğenir. Bir listeye eklemek için kalbe sağ tıklayın.',
+  'like.hint': 'Yeni: kalbe basınca şarkıyı beğenirsiniz. Bir listeye eklemek için kalbe sağ tıklayın.',
   'like.liked': 'Beğenilen şarkılara eklendi',
   'like.unliked': 'Beğenilen şarkılardan çıkarıldı',
   'like.saveAlbum': 'Albümü kitaplığınıza kaydedin',

@@ -2641,3 +2641,86 @@ body {
     opacity: 0.6;
   }
 }
+
+/*
+ * The app's hover hints (`Tooltips`): a dark pill with a thin brass edge, as
+ * the notices are. It grows out of the element it is about, from the edge that
+ * faces it, and draws back into it when it goes. Between two buttons it glides
+ * rather than going out and growing again.
+ */
+.groove-tip {
+  --rise: 4px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  max-width: 260px;
+  padding: 5px 11px;
+  border-radius: 13px;
+  font-size: var(--text-meta);
+  line-height: 1.35;
+  color: var(--color-cream-50);
+  background: color-mix(in srgb, var(--color-shell-900) 94%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-brass-400) 55%, transparent),
+    0 3px 10px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: var(--ox, 50%) 100%;
+  transform: translate3d(var(--x, 0px), calc(var(--y, 0px) + var(--rise)), 0) scale(0.6);
+  transition:
+    opacity 110ms ease-in,
+    transform 110ms ease-in;
+}
+.groove-tip[data-side='below'] {
+  --rise: -4px;
+  transform-origin: var(--ox, 50%) 0%;
+}
+.groove-tip[data-shown] {
+  opacity: 1;
+  transform: translate3d(var(--x, 0px), var(--y, 0px), 0) scale(1);
+  transition:
+    opacity 120ms ease-out,
+    transform 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .groove-tip,
+  .groove-tip[data-shown] {
+    transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
+    transition: opacity 120ms linear;
+  }
+}
+
+/* The heart's once-only balloon: a hint, larger, with a point down at the heart and a way to put it away. */
+.groove-tip.groove-coach {
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  pointer-events: auto;
+}
+.groove-coach p {
+  margin: 0;
+}
+.groove-coach::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: calc(var(--ox, 50%) - 5px);
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  box-shadow: inset -1px -1px 0 color-mix(in srgb, var(--color-brass-400) 55%, transparent);
+  transform: rotate(45deg);
+}
+.groove-coach-done {
+  margin-top: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--color-brass-600);
+  color: var(--color-on-accent);
+  font-weight: 500;
+  transition: background-color 150ms ease-out;
+}
+.groove-coach-done:hover {
+  background: var(--color-brass-500);
+}

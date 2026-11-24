@@ -91,9 +91,13 @@ export async function setLiked(uri: string, on: boolean, what: 'song' | 'album',
 
 const HINT_KEY = 'groovium.likeHint';
 
+/** The heart's balloon is up, saying how it works; see `HeartHint`. */
+export const useHeartHint = create<{ open: boolean }>(() => ({ open: false }));
+
 /**
- * Whether the heart has said how it works yet, and say it the first time.
- * True the first time only, so the caller can say this instead of what it did.
+ * Whether the heart has said how it works yet, and say it the first time: a
+ * balloon out of the heart, until it is put away. True the first time only,
+ * so the caller can say this instead of what it did.
  */
 export function explainHeartOnce(): boolean {
   try {
@@ -102,6 +106,6 @@ export function explainHeartOnce(): boolean {
   } catch {
     return false;
   }
-  tellNotice(say('like.hint'), 'info');
+  useHeartHint.setState({ open: true });
   return true;
 }

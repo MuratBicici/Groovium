@@ -70,7 +70,7 @@ export const en = {
   'like.likeNamed': 'Like {title}',
   'like.unlikeNamed': 'Remove {title} from Liked songs',
   'like.title': 'Like. Right-click to add to a playlist',
-  'like.hint': 'The heart likes the song on Spotify. Right-click it to add the song to a playlist.',
+  'like.hint': 'New: the heart likes the song. Right-click it to add the song to a playlist.',
   'like.liked': 'Added to Liked songs',
   'like.unliked': 'Removed from Liked songs',
   'like.saveAlbum': 'Save the album to your library',
