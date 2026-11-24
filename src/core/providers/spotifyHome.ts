@@ -555,7 +555,7 @@ export function savedShelf(): Promise<SavedAnswer> {
 // --- Top albums --------------------------------------------------------------
 
 /** How many albums go on the shelf of the most played. */
-export const TOP_ALBUMS_SHOWN = 12;
+export const TOP_ALBUMS_SHOWN = 20;
 
 /** Spotify's top songs move over weeks, not minutes. */
 const TOP_ALBUMS_KEEP_FOR = 30 * 60_000;
@@ -592,10 +592,9 @@ export function ownTopAlbums(entries: readonly Heard[]): { album: SpotifyAlbum; 
 }
 
 /**
- * The two lists made one: an album among Spotify's top songs twice counts as
- * much as four plays here, which is about what a song in somebody's top fifty
- * is worth against a single play. Spotify's description of an album wins where
- * both have it.
+ * The two lists made one: Spotify's score — three for each song on the last
+ * month's list, two on the half year's, one on all time's — and one for each
+ * play here. Spotify's description of an album wins where both have it.
  */
 export function blendTopAlbums(
   spotify: readonly TopAlbum[],
@@ -603,7 +602,7 @@ export function blendTopAlbums(
   limit = TOP_ALBUMS_SHOWN,
 ): SpotifyAlbum[] {
   const scored = new Map<string, { album: SpotifyAlbum; score: number }>();
-  for (const { album, songs } of spotify) scored.set(album.id, { album, score: songs * 2 });
+  for (const { album, score } of spotify) scored.set(album.id, { album, score });
   for (const { album, plays } of own) {
     const known = scored.get(album.id);
     if (known) known.score += plays;

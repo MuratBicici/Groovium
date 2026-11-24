@@ -427,7 +427,14 @@ export interface ApiTrack {
   duration_ms: number;
   /** `id` is what tells two artists with the same name apart. */
   artists: { id: string; name: string }[];
-  album?: { id?: string; name: string; images: ApiImage[] };
+  album?: {
+    id?: string;
+    name: string;
+    images: ApiImage[];
+    /** `album`, `single` or `compilation`: what keeps a single off a shelf of albums. */
+    album_type?: string;
+    total_tracks?: number;
+  };
   /**
    * Only when asked with a country (`market=from_token`): whether it plays
    * there, why not, and — where the release that does is another one than
@@ -763,41 +770,91 @@ export async function savedAlbums(limit: number): Promise<{ albums: SpotifyAlbum
   return { albums, total: data?.total ?? albums.length };
 }
 
-/** An album that more than one of somebody's top songs came from, and how many did. */
+/** An album somebody's top songs came from: how many different ones, and how much they weigh. */
 export interface TopAlbum {
   album: SpotifyAlbum;
+  /** Different songs from it among the top songs, over every stretch of time asked about. */
   songs: number;
+  /** Each of those songs counted by how recent the list it was on: the last month most. */
+  score: number;
+}
+
+/** Spotify's three stretches of somebody's listening, the nearest weighing most. */
+export const TOP_RANGES = [
+  { range: 'short_term', weight: 3 },
+  { range: 'medium_term', weight: 2 },
+  { range: 'long_term', weight: 1 },
+] as const;
+
+/** An album with one of the top songs on it counts this much less than one with several. */
+const ONE_SONG_SHARE = 0.4;
+
+/**
+ * Albums out of lists of top songs, each list with the weight of its stretch.
+ *
+ * An album two or more different songs came from comes first. After those, so
+ * that a shelf of a few becomes a shelf, real albums one of the songs came
+ * from, at less than half the weight. A single never: one song is a song, not
+ * an album, however high it is.
+ */
+export function albumsFromTopSongs(lists: readonly { weight: number; tracks: readonly (ApiTrack | null)[] }[]): TopAlbum[] {
+  const found = new Map<string, { album: SpotifyAlbum; songs: Set<string>; score: number; anAlbum: boolean }>();
+  for (const { weight, tracks } of lists) {
+    for (const track of tracks) {
+      const album = track?.album;
+      if (!track || !album?.id) continue;
+      let known = found.get(album.id);
+      if (!known) {
+        const entry: SpotifyAlbum = {
+          id: album.id,
+          name: album.name,
+          artist: track.artists[0]?.name ?? '',
+          trackCount: album.total_tracks ?? 0,
+        };
+        const cover = pickCover(album.images);
+        if (cover) entry.coverArtUrl = cover;
+        known = {
+          album: entry,
+          songs: new Set(),
+          score: 0,
+          anAlbum: album.album_type !== 'single' && (album.total_tracks ?? 0) > 1,
+        };
+        found.set(album.id, known);
+      }
+      known.songs.add(track.uri);
+      known.score += weight;
+    }
+  }
+  return [...found.values()]
+    .filter((top) => top.songs.size >= 2 || top.anAlbum)
+    .map((top) => ({
+      album: top.album,
+      songs: top.songs.size,
+      score: top.songs.size >= 2 ? top.score : top.score * ONE_SONG_SHARE,
+    }))
+    .sort((a, b) => b.score - a.score);
 }
 
 /**
- * The albums behind somebody's fifty top songs lately, where two or more of
- * them came from the same one. Spotify has no list of top albums; an album
- * that keeps turning up among the top songs is the nearest thing to one.
+ * The albums behind somebody's top songs: the last month's, the last half
+ * year's and all time's, fifty each. Spotify has no list of top albums; an
+ * album that keeps turning up among the top songs is the nearest thing to
+ * one. A stretch Spotify does not answer for is left out rather than losing
+ * the others.
  */
 export async function topSongAlbums(): Promise<TopAlbum[]> {
-  const data = await request<{ items?: (ApiTrack | null)[] }>('/me/top/tracks?limit=50&time_range=short_term', {
-    cache: 'no-store',
-  });
-  const found = new Map<string, TopAlbum>();
-  for (const track of data?.items ?? []) {
-    const album = track?.album;
-    if (!track || !album?.id) continue;
-    const known = found.get(album.id);
-    if (known) {
-      known.songs += 1;
-      continue;
-    }
-    const entry: SpotifyAlbum = {
-      id: album.id,
-      name: album.name,
-      artist: track.artists[0]?.name ?? '',
-      trackCount: 0,
-    };
-    const cover = pickCover(album.images);
-    if (cover) entry.coverArtUrl = cover;
-    found.set(album.id, { album: entry, songs: 1 });
-  }
-  return [...found.values()].filter((top) => top.songs >= 2);
+  const answers = await Promise.allSettled(
+    TOP_RANGES.map(({ range }) =>
+      request<{ items?: (ApiTrack | null)[] }>(`/me/top/tracks?limit=50&time_range=${range}`, { cache: 'no-store' }),
+    ),
+  );
+  if (answers.every((answer) => answer.status === 'rejected')) throw (answers[0] as PromiseRejectedResult).reason;
+  return albumsFromTopSongs(
+    answers.map((answer, at) => ({
+      weight: TOP_RANGES[at]?.weight ?? 1,
+      tracks: answer.status === 'fulfilled' ? (answer.value?.items ?? []) : [],
+    })),
+  );
 }
 
 /** Start playback of a track URI on this app's own device. */

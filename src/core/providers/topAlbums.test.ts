@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/core/security/spotifyAuth', () => ({ account: () => null }));
 
 import { blendTopAlbums, ownTopAlbums } from './spotifyHome';
+import { albumsFromTopSongs, type ApiTrack } from './spotifyApi';
 import { crateKind } from './spotifyPlaylists';
 import type { Heard } from '@/core/listening/history';
 import type { SpotifyAlbum } from './spotifyApi';
@@ -39,8 +40,8 @@ describe('the albums played most', () => {
   it('puts the two lists together, an album on both first', () => {
     const blended = blendTopAlbums(
       [
-        { album: album('spotify-only'), songs: 2 },
-        { album: album('both'), songs: 2 },
+        { album: album('spotify-only'), songs: 2, score: 4 },
+        { album: album('both'), songs: 2, score: 4 },
       ],
       [
         { album: album('both'), plays: 2 },
@@ -53,6 +54,38 @@ describe('the albums played most', () => {
   it('keeps no more than asked for', () => {
     const many = Array.from({ length: 20 }, (_, i) => ({ album: album(String(i)), plays: 2 + i }));
     expect(blendTopAlbums([], many, 5)).toHaveLength(5);
+  });
+});
+
+const top = (uri: string, albumId: string, type = 'album', total = 10): ApiTrack => ({
+  uri,
+  name: uri,
+  duration_ms: 1,
+  artists: [{ id: 'x', name: 'Someone' }],
+  album: { id: albumId, name: `Album ${albumId}`, images: [], album_type: type, total_tracks: total },
+});
+
+describe('albums out of the top songs', () => {
+  it('puts an album with several songs first, and fills with albums of one', () => {
+    const albums = albumsFromTopSongs([
+      { weight: 3, tracks: [top('s1', 'many'), top('s2', 'many'), top('s3', 'one')] },
+      { weight: 1, tracks: [top('s4', 'another')] },
+    ]);
+    expect(albums.map((a) => a.album.id)).toEqual(['many', 'one', 'another']);
+    expect(albums[0]?.songs).toBe(2);
+  });
+
+  it('never takes a single, however high its song is', () => {
+    const albums = albumsFromTopSongs([{ weight: 3, tracks: [top('hit', 'single-1', 'single', 1), top('x', 'ep', 'album', 1)] }]);
+    expect(albums).toEqual([]);
+  });
+
+  it('counts a song on two lists once as a song, twice in weight', () => {
+    const albums = albumsFromTopSongs([
+      { weight: 3, tracks: [top('s1', 'a'), top('s2', 'a')] },
+      { weight: 2, tracks: [top('s1', 'a')] },
+    ]);
+    expect(albums[0]).toMatchObject({ songs: 2, score: 8 });
   });
 });
 
