@@ -289,6 +289,11 @@ export function useShellSize(
   const was = useRef(compact);
   const wasWide = useRef(wide);
   const wasSide = useRef(side);
+  /**
+   * Where in the page the shell was last drawn at rest, so that a change of
+   * side can hold it there until the window has moved. See the swap below.
+   */
+  const restingLeft = useRef<number | null>(null);
   const applied = useRef(false);
   /** The current state's geometry, taken while it is at rest. */
   const settled = useRef<{
@@ -303,6 +308,7 @@ export function useShellSize(
     const stage = stageRef.current;
     const bottom = bottomRef.current;
     if (!shell || !stage || !bottom) return;
+    restingLeft.current = shell.getBoundingClientRect().left;
     settled.current = {
       stage: stage.offsetHeight,
       bottom: bottom.offsetHeight,
@@ -346,11 +352,13 @@ export function useShellSize(
     // interrupted before the window has moved is restarted rather than lost.
     const travel = () => {
       wasSide.current = side;
+      shell.style.translate = '';
       shell.style.width = restingWidth(side, width);
       const height = compact ? shell.offsetHeight : EXPANDED_HEIGHT;
-      return setWindowSize(windowWidth, height, placement(side, windowWidth, width)).then(() =>
-        shape(side, windowWidth, width, height),
-      );
+      return setWindowSize(windowWidth, height, placement(side, windowWidth, width)).then(() => {
+        restingLeft.current = shell.getBoundingClientRect().left;
+        return shape(side, windowWidth, width, height);
+      });
     };
 
     if (prefersReducedMotion()) {
@@ -360,6 +368,13 @@ export function useShellSize(
     }
 
     let alive = true;
+    // The new side's layout is already in the page, but the window is still
+    // round the old one: the shell would leave the window — or, wider, jump
+    // across it — for as long as the fade takes. So it fades out where it was
+    // drawn, and moves only with the window.
+    const drawnAt = restingLeft.current;
+    const nowAt = shell.getBoundingClientRect().left;
+    if (drawnAt !== null && Math.abs(drawnAt - nowAt) > 0.5) shell.style.translate = `${drawnAt - nowAt}px 0`;
     shell.style.transition = `opacity ${SWAP_FADE_MS}ms linear`;
     shell.style.opacity = '0';
 
@@ -379,6 +394,7 @@ export function useShellSize(
       clearTimeout(swap);
       shell.style.opacity = '';
       shell.style.transition = '';
+      shell.style.translate = '';
     };
   }, [side, ready, compact, windowWidth, width]);
 
