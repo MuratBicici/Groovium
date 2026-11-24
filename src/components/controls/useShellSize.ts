@@ -71,6 +71,23 @@ export const DURATION_MS = 260;
  */
 export const SETTLE_MS = DURATION_MS + 40;
 
+/** A frame later than this after the one before it was held up. */
+const STEADY_FRAME_MS = 25;
+
+/** The animation in progress, if any, settling. Resolved when there is none. */
+let settling: Promise<void> = Promise.resolve();
+
+/**
+ * When the shell has stopped moving and the window has been put right round
+ * it. Anything that has to wait for the drawer to finish shutting waits for
+ * this, rather than for a guess at how long that takes: the animation starts
+ * only once the page is drawing steadily after the window has changed size,
+ * which is not a fixed time after anything.
+ */
+export function shellSettled(): Promise<void> {
+  return settling;
+}
+
 /**
  * Half of the fade the window changes sides behind.
  *
@@ -484,6 +501,28 @@ export function useShellSize(
     let alive = true;
     let start = 0;
     let tracking = 0;
+    let settle = 0;
+    let stopped = () => {};
+    settling = new Promise<void>((resolve) => (stopped = resolve));
+
+    /**
+     * Run `then` once the page is drawing every frame again.
+     *
+     * Resizing the window stalls the webview for a few frames, and a CSS
+     * transition's clock runs through a stall: the drawer opening on the left
+     * was three quarters open in the first frame anyone saw, which looked like
+     * no animation at all. So the start waits for three frames in a row that
+     * came on time — two were measured to leave a hitch in the first steps —
+     * and never for more than ten.
+     */
+    const whenSteady = (then: () => void, last = 0, onTime = 0, waited = 0) => {
+      start = requestAnimationFrame((now) => {
+        if (!alive) return;
+        const steady = last > 0 && now - last < STEADY_FRAME_MS ? onTime + 1 : 0;
+        if (steady >= 3 || waited >= 10) then();
+        else whenSteady(then, now, steady, waited + 1);
+      });
+    };
 
     /**
      * Keep the window's shape on the shell while the shell is moving.
@@ -514,8 +553,7 @@ export function useShellSize(
     // moves, is the difference between growing leftwards and jumping.
     void room.then(() => {
       if (!alive) return;
-      start = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      whenSteady(() => {
           if (side === 'left') follow();
           shell.style.transition = `width ${DURATION_MS}ms ${EASING}`;
           shell.style.width = `${width}px`;
@@ -525,11 +563,15 @@ export function useShellSize(
             pin(to);
             morph(shell, before.rects, arriving);
           }
-        });
+          // Counted from here, where the animation starts, rather than from
+          // the click: the window and the stall before this would otherwise
+          // eat into it, and the window would narrow round a shell still
+          // shrinking.
+          settle = window.setTimeout(finish, SETTLE_MS);
       });
     });
 
-    const settle = setTimeout(() => {
+    const finish = () => {
       if (heightMoves) {
         for (const el of [stage, bottom]) {
           el.style.height = '';
@@ -566,11 +608,14 @@ export function useShellSize(
         shell.style.width = restingWidth(side, width);
         shell.style.transition = '';
         record();
+        stopped();
       });
-    }, SETTLE_MS);
+    };
 
     return () => {
       alive = false;
+      // Interrupted: nothing is going to settle, so nobody waits for it.
+      stopped();
       cancelAnimationFrame(start);
       cancelAnimationFrame(tracking);
       clearTimeout(settle);

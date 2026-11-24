@@ -62,7 +62,7 @@ import { holdWeatherGlow } from '@/components/focus/weatherGlow';
 import { usePlayerError, usePlayerStore } from '@/core/store';
 import { useSettingsStore } from '@/core/settings/store';
 import {
-  SETTLE_MS,
+  shellSettled,
   SWAP_MS,
   SWAP_PAUSE_MS,
   sideArriving,
@@ -327,20 +327,30 @@ export default function App() {
     // the side flipped, so a drawer was growing out of a shell that was fading
     // and a window that was travelling.
     //
-    // `SETTLE_MS` rather than the animation's own length: the window is put
-    // right a little after the shell stops moving, and anything that starts
-    // before that is working from a window that is still the old size.
+    // The side changes once the shut has settled (`shellSettled`) rather than
+    // after the animation's own length: the window is put right a little after
+    // the shell stops moving, the shell starts moving only once the page is
+    // drawing steadily, and anything that starts before both is working from
+    // a window that is still the old size.
     //
     // With motion turned down there are no beats: both land in the same tick,
     // in this order, and the drawer is simply on the other side.
-    const quick = prefersReducedMotion();
-    const swap = setTimeout(() => setDrawerSide(chosenSide), quick ? 0 : SETTLE_MS);
-    const reopen = setTimeout(
-      () => setSwapping(false),
-      quick ? 0 : SETTLE_MS + SWAP_MS + SWAP_PAUSE_MS,
-    );
+    let alive = true;
+    let reopen: ReturnType<typeof setTimeout> | undefined;
+    if (prefersReducedMotion()) {
+      const now = setTimeout(() => {
+        setDrawerSide(chosenSide);
+        setSwapping(false);
+      }, 0);
+      return () => clearTimeout(now);
+    }
+    void shellSettled().then(() => {
+      if (!alive) return;
+      setDrawerSide(chosenSide);
+      reopen = setTimeout(() => setSwapping(false), SWAP_MS + SWAP_PAUSE_MS);
+    });
     return () => {
-      clearTimeout(swap);
+      alive = false;
       clearTimeout(reopen);
     };
   }, [swapping, chosenSide]);
