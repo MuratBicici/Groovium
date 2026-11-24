@@ -11,7 +11,7 @@ import {
   useStation,
   useStationSearching,
 } from '@/core/store';
-import { AddToPlaylist } from '@/components/playlists/AddToPlaylist';
+import { LikeButton } from './LikeButton';
 import { useT } from '@/core/i18n';
 
 interface TransportControlsProps {
@@ -64,7 +64,7 @@ export function TransportControls({ onStationNeedsSetup }: TransportControlsProp
           dead centre — it used to float over the platter, where it had to be
           hidden behind every overlay and vanished with nothing playing. A
           spacer held this slot until it had a real occupant. */}
-      <AddToPlaylist track={currentTrack} variant="transport" />
+      <LikeButton track={currentTrack} />
 
       <ToggleButton
         label={radio ? t('radio.offInRadio') : t('transport.shuffle')}

@@ -133,6 +133,9 @@ function page<T>(all: T[], url: URL) {
   };
 }
 
+/** What the demo's library holds this run, by URI. */
+const library = new Set<string>();
+
 /** Answer a request to the Web API, or null if it is not one. */
 export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Response | null {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -141,6 +144,17 @@ export function answerSpotify(input: RequestInfo | URL, init?: RequestInit): Res
   const path = url.pathname.replace('/v1', '');
   const method = (init?.method ?? 'GET').toUpperCase();
   const market = url.searchParams.get('market');
+
+  // The library: what the heart and an album's save put in and take out, for this run.
+  if (path === '/me/library' || path === '/me/library/contains') {
+    const uris = (url.searchParams.get('uris') ?? '').split(',').filter(Boolean);
+    if (path === '/me/library/contains') return json(uris.map((uri) => library.has(uri)));
+    for (const uri of uris) {
+      if (method === 'PUT') library.add(uri);
+      if (method === 'DELETE') library.delete(uri);
+    }
+    return new Response(null, { status: 200 });
+  }
 
   if (method !== 'GET') return json({ snapshot_id: `demo-${Date.now()}` }, 200);
 

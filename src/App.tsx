@@ -154,6 +154,7 @@ export default function App() {
   const savingTold = usePower((s) => s.told);
   const notice = useNotice((s) => s.message);
   const noticeKind = useNotice((s) => s.kind);
+  const noticeAction = useNotice((s) => s.action);
   const toggleStation = usePlayerStore((s) => s.toggleStation);
 
   const compact = useSettingsStore((s) => s.compact);
@@ -710,7 +711,23 @@ export default function App() {
             message={error ?? notice ?? (savingTold ? t('power.savingOn') : null)}
             kind={error ? 'problem' : notice ? noticeKind : 'info'}
             onDismiss={error ? clearError : notice ? clearNotice : dismissSavingNotice}
-            action={error || notice || !savingTold ? undefined : { label: t('power.turnOff'), onPress: declineSaving }}
+            action={
+              error
+                ? undefined
+                : notice
+                  ? noticeAction
+                    ? {
+                        label: noticeAction.label,
+                        onPress: () => {
+                          clearNotice();
+                          noticeAction.onPress();
+                        },
+                      }
+                    : undefined
+                  : savingTold
+                    ? { label: t('power.turnOff'), onPress: declineSaving }
+                    : undefined
+            }
           />
         </div>
 

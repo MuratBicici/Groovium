@@ -736,6 +736,54 @@ export async function topArtists(): Promise<FiledArtist[]> {
 /** The scope that reading somebody's liked songs needs. Asked for on its own; see `SpotifyDrawer`. */
 export const LIKED_SCOPE = 'user-library-read';
 
+/** The scope that liking a song or saving an album needs. Asked for when first used; see `likes`. */
+export const LIKE_SCOPE = 'user-library-modify';
+
+/** Spotify's library answers for up to this many at once. */
+const LIBRARY_BATCH = 40;
+
+/**
+ * Whether each of these songs or albums is in somebody's library: liked, or
+ * saved. By URI, `spotify:track:…` or `spotify:album:…`, in the order given.
+ *
+ * The library's own address since February 2026, or the old one per kind
+ * where that address is not there.
+ */
+export async function inLibrary(uris: readonly string[]): Promise<boolean[]> {
+  const asked = uris.slice(0, LIBRARY_BATCH);
+  if (asked.length === 0) return [];
+  try {
+    const answer = await request<boolean[]>(`/me/library/contains?uris=${encodeURIComponent(asked.join(','))}`, {
+      cache: 'no-store',
+    });
+    return asked.map((_, at) => answer?.[at] === true);
+  } catch (err) {
+    if (!(err instanceof SpotifyError) || err.status !== 404) throw err;
+  }
+  // One kind at a time at the old addresses, put back in the order asked.
+  const answers = new Map<string, boolean>();
+  for (const kind of ['track', 'album'] as const) {
+    const ofKind = asked.filter((uri) => uri.startsWith(`spotify:${kind}:`));
+    if (ofKind.length === 0) continue;
+    const ids = ofKind.map((uri) => uri.slice(`spotify:${kind}:`.length));
+    const answer = await request<boolean[]>(`/me/${kind}s/contains?ids=${encodeURIComponent(ids.join(','))}`, {
+      cache: 'no-store',
+    });
+    ofKind.forEach((uri, at) => answers.set(uri, answer?.[at] === true));
+  }
+  return asked.map((uri) => answers.get(uri) ?? false);
+}
+
+/** Like these songs, or save these albums. */
+export async function addToLibrary(uris: readonly string[]): Promise<void> {
+  await request(`/me/library?uris=${encodeURIComponent(uris.join(','))}`, { method: 'PUT' });
+}
+
+/** Take these songs or albums back out of the library. */
+export async function takeFromLibrary(uris: readonly string[]): Promise<void> {
+  await request(`/me/library?uris=${encodeURIComponent(uris.join(','))}`, { method: 'DELETE' });
+}
+
 /**
  * The songs somebody has liked, newest first, as far as one page goes, and
  * how many there are altogether.

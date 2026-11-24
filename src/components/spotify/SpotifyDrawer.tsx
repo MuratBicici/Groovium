@@ -20,7 +20,7 @@ import { GenreShelves, OpenedShelf, RecentShelf, SavedShelf, TopAlbumsShelf } fr
 import { ArrangedShelves } from './ArrangedShelves';
 import { RadioShelf } from '@/components/radio/RadioShelf';
 import { readHidden, readOrder, writeHidden, writeOrder } from './arrange';
-import { LIKED_SCOPE } from '@/core/providers/spotifyApi';
+import { LIKE_SCOPE, LIKED_SCOPE } from '@/core/providers/spotifyApi';
 import { OpenCrate } from './OpenCrate';
 import { RemoveSheet, SheetPresence } from './CrateSheets';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
@@ -87,7 +87,8 @@ export function SpotifyDrawer({ onClose, id, switcher, active = true }: SpotifyD
    * that shelf asks in its own place, so a grant from before it arrived costs
    * one shelf and not the drawer.
    */
-  const blocking = missing.filter((scope) => scope !== LIKED_SCOPE);
+  // The library's two are asked for where they are used, not by closing the drawer until they are given.
+  const blocking = missing.filter((scope) => scope !== LIKED_SCOPE && scope !== LIKE_SCOPE);
   /** Whether the shelves are loose and being put in order — see `ArrangedShelves`. */
   const [arranging, setArranging] = useState(false);
   const [order, setOrder] = useState(() => readOrder(HOME_SHELVES));

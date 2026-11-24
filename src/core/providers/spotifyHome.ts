@@ -552,6 +552,11 @@ export function savedShelf(): Promise<SavedAnswer> {
   return saving;
 }
 
+/** Read what is kept again next time: a song was liked or an album saved from here. */
+export function forgetSaved(): void {
+  saved = null;
+}
+
 // --- Top albums --------------------------------------------------------------
 
 /** How many albums go on the shelf of the most played. */

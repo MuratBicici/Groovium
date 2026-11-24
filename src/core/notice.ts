@@ -8,17 +8,24 @@ export type NoticeKind = 'done' | 'problem' | 'info';
  * the equaliser having to stop. Kept apart from the player's `error` so nothing that
  * reads errors mistakes one of these for one.
  */
-export const useNotice = create<{ message: string | null; kind: NoticeKind }>(() => ({
+/** Something the notice offers to do about what it says. */
+export interface NoticeAction {
+  label: string;
+  onPress: () => void;
+}
+
+export const useNotice = create<{ message: string | null; kind: NoticeKind; action: NoticeAction | null }>(() => ({
   message: null,
   kind: 'done',
+  action: null,
 }));
 
-/** Say it. Done unless told otherwise. */
-export function tellNotice(message: string, kind: NoticeKind = 'done'): void {
-  useNotice.setState({ message, kind });
+/** Say it. Done unless told otherwise; with something to do about it, if there is. */
+export function tellNotice(message: string, kind: NoticeKind = 'done', action: NoticeAction | null = null): void {
+  useNotice.setState({ message, kind, action });
 }
 
 /** Put the card away. */
 export function clearNotice(): void {
-  useNotice.setState({ message: null });
+  useNotice.setState({ message: null, action: null });
 }

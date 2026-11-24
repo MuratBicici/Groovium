@@ -4,6 +4,7 @@ import { usePlayerStore, usePlaylists } from '@/core/store';
 import { useSpotifyPlaylistsStore } from '@/core/spotify/store';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { tellNotice } from '@/core/notice';
+import { learnLiked, setLiked, useLikes } from '@/core/spotify/likes';
 import { useT } from '@/core/i18n';
 import { prefersReducedMotion } from '@/core/utils/motion';
 import { formatDuration } from '@/core/utils/time';
@@ -76,6 +77,11 @@ function MenuCard({
   const [subTop, setSubTop] = useState(0);
 
   const refused = useUnplayable(track);
+  /** Whether the song is liked, asked as the menu opens; until it answers, not. */
+  const liked = useLikes((s) => s.saved[track.id] === true);
+  useEffect(() => {
+    if (track.source === 'spotify') void learnLiked([track.id]);
+  }, [track.id, track.source]);
   const queueNext = usePlayerStore((s) => s.queueNext);
   const queueLast = usePlayerStore((s) => s.queueLast);
   const { pick } = usePlaylistPicker();
@@ -320,6 +326,21 @@ function MenuCard({
               />
             )}
           </div>
+          {track.source === 'spotify' && (
+            <Row
+              label={liked ? t('like.unlike') : t('like.like')}
+              onLight={(row) => {
+                light(row);
+                closeSubNow();
+              }}
+              onPress={run(() => void setLiked(track.id, !liked, 'song'))}
+            >
+              <path
+                d="M8 13.3S3 10.3 3 6.6A2.9 2.9 0 0 1 8 4.9a2.9 2.9 0 0 1 5 1.7c0 3.7-5 6.7-5 6.7z"
+                fill={liked ? 'currentColor' : 'none'}
+              />
+            </Row>
+          )}
           {hasLink(track) && (
             <Row
               label={t('menu.copyLink')}

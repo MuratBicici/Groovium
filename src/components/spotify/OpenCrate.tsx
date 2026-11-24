@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { learnLiked, setLiked, useLikes } from '@/core/spotify/likes';
 import type { TrackMetadata } from '@/core/types';
 import { useUnplayable, whyUnplayable } from '@/core/spotify/playable';
 import { refuse, refuseUnplayable, UNPLAYABLE_LOOK } from './Unplayable';
@@ -185,6 +186,8 @@ export interface CrateSource {
    * no details; the songs are only played.
    */
   readOnly?: boolean;
+  /** An album, which can be saved to the library or taken out of it from its page. */
+  albumUri?: string;
 }
 
 interface CrateLayerProps {
@@ -223,7 +226,9 @@ function useSpotifyCrate(playlist: SpotifyPlaylist, readOnly: boolean): CrateSou
   const playCrateFrom = useSpotifyPlaylistsStore((s) => s.playCrateFrom);
   return {
     name: playlist.name,
-    trackCount: playlist.trackCount,
+    // An album opened from the shelf of what was opened comes without a count:
+    // the songs on its page are the count, once they have all come.
+    trackCount: playlist.trackCount > 0 || cursor !== null ? playlist.trackCount : tracks.length,
     tracks,
     loading,
     cursor,
@@ -243,7 +248,11 @@ function useSpotifyCrate(playlist: SpotifyPlaylist, readOnly: boolean): CrateSou
     // An album or the liked songs has no details to edit and no songs to move.
     ...(!readOnly
       ? { spotify: playlist }
-      : { readOnly: true, ...(playlist.coverArtUrl ? { coverUrl: playlist.coverArtUrl } : {}) }),
+      : {
+          readOnly: true,
+          ...(playlist.coverArtUrl ? { coverUrl: playlist.coverArtUrl } : {}),
+          ...(playlist.id.startsWith('album:') ? { albumUri: `spotify:album:${playlist.id.slice('album:'.length)}` } : {}),
+        }),
   };
 }
 
@@ -961,6 +970,7 @@ export function CrateLayer({ source, origin, onClose }: CrateLayerProps) {
                 {t('transport.play')}
               </button>
               <div className="flex items-center justify-center gap-3">
+                {source.albumUri && <SaveAlbum uri={source.albumUri} />}
                 <button
                   type="button"
                   aria-label={t('transport.shuffle')}
@@ -1561,4 +1571,32 @@ interface Sleeve {
   disc: HTMLElement | null;
   /** This press has become a lift; the click that follows is not a play. */
   lifted: () => void;
+}
+
+/**
+ * An album's save, beside its shuffle: into the library, or back out of it.
+ * Filled while it is saved. Asked about as the page opens.
+ */
+function SaveAlbum({ uri }: { uri: string }) {
+  const t = useT();
+  const saved = useLikes((s) => s.saved[uri] === true);
+  useEffect(() => {
+    void learnLiked([uri]);
+  }, [uri]);
+  return (
+    <button
+      type="button"
+      aria-pressed={saved}
+      aria-label={saved ? t('like.unsaveAlbum') : t('like.saveAlbum')}
+      title={saved ? t('like.unsaveAlbum') : t('like.saveAlbum')}
+      onClick={() => void setLiked(uri, !saved, 'album')}
+      className={`flex h-9 w-9 items-center justify-center rounded-full bg-shell-700 transition-colors hover:bg-shell-600 ${
+        saved ? 'text-brass-400' : 'text-cream-200 hover:text-cream-50'
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+        <path d="M12 20s-7.5-4.6-7.5-10.1A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z" />
+      </svg>
+    </button>
+  );
 }
