@@ -13,6 +13,28 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.5.2 — 2026-11-24
+
+Sevdiğiniz şarkılar için bir kalp.
+
+Şarkının yanındaki artı artık bir kalp. Basınca şarkı Spotify'daki Beğenilen
+şarkılarınıza girer, yeniden basınca çıkar. Listeye eklemek aynı kalbe sağ
+tıklamaya taşındı. İlk bastığınızda küçük bir not bunu anlatır. Bir albümü
+kendi sayfasından kitaplığınıza kaydedebilirsiniz. Beğenmek için Spotify'dan
+bir izin daha gerekiyor. Groovium bunu ilk seferde, yalnızca o zaman ister.
+
+Spotify ana sayfasında üç yeni raf var. Beğenilenler, beğendiğiniz şarkıları
+ve kaydettiğiniz albümleri tutar. En çok dinlediğiniz albümler, üç ayrı
+dönemden sık döndüğünüz albümleri toplar, tek şarkılık olanlar hariç. Son
+açılanlar, kendi açtığınız albümleri, listeleri ve şarkıları gösterir. Sonsuz
+çalmanın seçtikleri buraya girmez. Ana sayfayı düzenlerken her rafta bir göz
+var, basınca raf gizlenir.
+
+Çekmece soldayken ve kapalıyken pencere artık yalnızca oynatıcı kadar.
+Eskiden çekmece genişliğinde kalıyordu, oynatıcının yanı boştu. Pencereyi
+ölçen şeyler o boş kısmı uygulamanın parçası sanıyordu. Açılıp kapanma eskisi
+gibi görünür, oynatıcı yerinden oynamaz.
+
 ## 1.5.1 — 2026-11-20
 
 Duyulan gök gürültüsü, sonuna kadar çalan listeler.

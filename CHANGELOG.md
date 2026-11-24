@@ -4,6 +4,75 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.5.2 — 2026-11-24
+
+A heart for the songs you love.
+
+The plus beside the song is now a heart. Press it and the song goes into your
+Liked Songs on Spotify; press it again to take it out. Adding to a playlist
+has moved to a right click on the same heart, and the first time you press
+it a small note says so. An album can be saved to your library from its own
+page. Liking needs one more permission from Spotify, which Groovium asks for
+the first time, and only then.
+
+The Spotify home has three new shelves. Liked holds your Liked Songs with the
+albums you have saved. Your top albums lately gathers the albums you keep
+coming back to, from three stretches of listening, without singles. Recently
+opened keeps the albums, playlists and songs you opened yourself, and none of
+the ones infinite play chose. While arranging the home, an eye on each shelf
+hides it.
+
+With the drawer on the left, the window is now only the player while the
+drawer is shut. It used to stay as wide as the drawer, empty beside the
+player, and things that measured the window took the empty part for the app.
+Opening and shutting look as they did, and the player does not move.
+
+HIGHLIGHTS
+· Like a song with the heart; right-click it to add to a playlist.
+· Save albums to your library from their page.
+· New shelves: Liked, your top albums and recently opened.
+· Hide shelves from the home with an eye.
+· The volume in the collapsed bar.
+· Hints over buttons in the app's own style.
+· With the drawer on the left, the window shrinks to the player.
+
+ALL CHANGES
+
+Spotify
+· The heart likes the song playing, or the one a menu belongs to, and shows
+  whether it is liked already. A right click on it opens the add-to-playlist
+  menu that the plus used to. The song menu has a Like row too.
+· The first press of the heart in this version shows a note on how it works.
+· An album's page has a button to save it to your library or take it out.
+· Liking and saving ask Spotify for the permission to change your library.
+  The home does not wait for it: the Liked shelf asks for it in place.
+
+Home
+· Liked: the Liked Songs list first, then the albums you have saved.
+· Your top albums lately: the albums of your top songs on Spotify over the
+  last month, half year and year, together with the albums you played in
+  Groovium (two different songs or more from each), up to twenty. Albums of
+  a single song are left out, here and on the other album shelves.
+· Recently opened: albums, playlists and songs you opened, newest first.
+  Albums open in the drawer to look through without changing anything.
+· In Edit, every shelf has an eye. A hidden shelf stays in the list while
+  you arrange, as its name dimmed, so it can be moved and brought back; out
+  of Edit it is not there at all.
+
+Player
+· The collapsed bar has the volume knob. Its slider opens towards the left,
+  the mirror of the full player's.
+· The hints that appear over buttons are drawn in the app's own style and
+  grow out of the button they belong to. They stay inside the app.
+
+Window
+· With the drawer on the left and shut, the window narrows to the player
+  instead of keeping a transparent stretch beside it. The drawer's animation
+  starts once the window is ready for it, so its first steps are seen.
+· Changing sides holds the player where it is while it fades.
+· Fixed a rare freeze when the window moved at the moment its place was
+  being saved.
+
 ## 1.5.1 — 2026-11-20
 
 Thunder you can hear, and lists that play on.
