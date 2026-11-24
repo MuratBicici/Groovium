@@ -27,6 +27,18 @@ const WARM_MS = 300;
 const GAP_PX = 8;
 const EDGE_PX = 6;
 
+/**
+ * Where a hint may go: the app as drawn, not the window. With the drawer on
+ * the left the window keeps the drawer's width while the drawer is shut, and
+ * that part of it is see-through, so a hint placed by the window's edges can
+ * land outside the app.
+ */
+export function hintBounds(): { left: number; top: number; right: number; bottom: number } {
+  const shell = document.querySelector('[data-app-shell]')?.getBoundingClientRect();
+  if (shell && shell.width > 0) return { left: shell.left, top: shell.top, right: shell.right, bottom: shell.bottom };
+  return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+}
+
 /** Take an element's title over, if it still has one. Returns what it says. */
 function takeOver(el: Element): string | null {
   const title = el.getAttribute('title');
@@ -68,11 +80,15 @@ export function Tooltips() {
 
     const place = (el: Element, glide: boolean) => {
       const box = el.getBoundingClientRect();
+      const room = hintBounds();
       const width = tip.offsetWidth;
       const height = tip.offsetHeight;
-      const roomAbove = box.top - GAP_PX - height >= EDGE_PX;
+      const roomAbove = box.top - GAP_PX - height >= room.top + EDGE_PX;
       const top = roomAbove ? box.top - GAP_PX - height : box.bottom + GAP_PX;
-      const left = Math.max(EDGE_PX, Math.min(window.innerWidth - width - EDGE_PX, box.left + box.width / 2 - width / 2));
+      const left = Math.max(
+        room.left + EDGE_PX,
+        Math.min(room.right - width - EDGE_PX, box.left + box.width / 2 - width / 2),
+      );
       tip.dataset.side = roomAbove ? 'above' : 'below';
       tip.style.transition = glide && !still ? '' : 'none';
       tip.style.setProperty('--x', `${Math.round(left)}px`);

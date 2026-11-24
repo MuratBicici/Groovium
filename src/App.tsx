@@ -546,6 +546,8 @@ export default function App() {
     // inside a scrolling list is what made it clip and misbehave.
     <div
       ref={shellRef}
+      // What the hover hints keep inside: the window can be wider than what is drawn.
+      data-app-shell
       // `ml-auto` when the drawer is on the left, which is what makes the shell
       // grow leftwards inside a window that is already wide enough. The window
       // moves at the same instant it is resized, so the far edge — the one the
