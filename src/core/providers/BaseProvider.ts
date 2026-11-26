@@ -27,7 +27,7 @@ export abstract class BaseProvider implements AudioProvider {
 
   abstract initialize(): Promise<boolean>;
   abstract authenticate(): Promise<AuthResult>;
-  abstract play(trackId: string): Promise<void>;
+  abstract play(trackId: string, fromMs?: number): Promise<void>;
   abstract pause(): Promise<void>;
   abstract resume(): Promise<void>;
   abstract seek(positionMs: number): Promise<void>;

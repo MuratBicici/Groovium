@@ -84,8 +84,14 @@ export interface AudioProvider {
   /** Run the provider's auth flow. Local playback needs none and returns success. */
   authenticate(): Promise<AuthResult>;
 
-  /** Load and start the given track. Resolves once playback has begun. */
-  play(trackId: string): Promise<void>;
+  /**
+   * Load and start the given track. Resolves once playback has begun.
+   *
+   * `fromMs` starts it that far in, as one request, rather than a start and a
+   * seek after it: a reload carrying on where it was. A seek sent while the
+   * start is still on its way races it.
+   */
+  play(trackId: string, fromMs?: number): Promise<void>;
 
   pause(): Promise<void>;
   resume(): Promise<void>;

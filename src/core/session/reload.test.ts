@@ -81,48 +81,47 @@ describe('carrying on after it', () => {
 
   const leave = (snapshot: ReloadSnapshot) => sessionStorage.setItem('groovium.reloadedWith', JSON.stringify(snapshot));
 
-  function resumer(playing: () => TrackMetadata | null) {
+  function resumer() {
     const calls: string[] = [];
     return {
       calls,
       queueLast: (t: TrackMetadata) => void calls.push(`queue ${t.id}`),
-      playList: async (id: string, tracks: TrackMetadata[], shuffle?: boolean, from?: number) =>
-        void calls.push(`play ${id} ${tracks.length} ${String(shuffle)} ${String(from)}`),
-      seek: async (ms: number) => void calls.push(`seek ${ms}`),
-      current: playing,
+      playList: async (id: string, tracks: TrackMetadata[], shuffle?: boolean, from?: number, fromMs?: number) =>
+        void calls.push(`play ${id} ${tracks.length} ${String(shuffle)} ${String(from)} ${String(fromMs)}`),
     };
   }
 
-  it('plays the list from the same song, queues what was queued and goes back to the same place', async () => {
+  it('starts the same song in the same list where it was, with what was queued', async () => {
     leave({ at: 5000, playback: { id: 'spotify:playlist:x', tracks: list, index: 1 }, positionMs: 61_400, shuffle: true, upNext: [track('q')] });
-    const r = resumer(() => list[1] as TrackMetadata);
+    const r = resumer();
     await resumeAfterReload(r, 6000);
-    expect(r.calls).toEqual(['queue q', 'play spotify:playlist:x 3 true 1', 'seek 61400']);
+    // One start at the place, never a start and a seek after it.
+    expect(r.calls).toEqual(['queue q', 'play spotify:playlist:x 3 true 1 61400']);
   });
 
   it('is used once', async () => {
     leave({ at: 5000, playback: { id: 'single', tracks: [list[0] as TrackMetadata], index: 0 }, positionMs: 0, shuffle: false, upNext: [] });
-    await resumeAfterReload(resumer(() => null), 6000);
+    await resumeAfterReload(resumer(), 6000);
     expect(takeSnapshot(6000)).toBeNull();
   });
 
   it('ignores one left by a reload long ago', async () => {
     leave({ at: 0, playback: { id: 'single', tracks: [list[0] as TrackMetadata], index: 0 }, positionMs: 0, shuffle: false, upNext: [] });
-    const r = resumer(() => null);
+    const r = resumer();
     await resumeAfterReload(r, 120_000);
     expect(r.calls).toEqual([]);
   });
 
-  it('does not seek when the song did not start', async () => {
-    leave({ at: 0, playback: { id: 'single', tracks: [list[0] as TrackMetadata], index: 0 }, positionMs: 50_000, shuffle: false, upNext: [] });
-    const r = resumer(() => null);
+  it('starts from the top a song that had barely begun', async () => {
+    leave({ at: 0, playback: { id: 'single', tracks: [list[0] as TrackMetadata], index: 0 }, positionMs: 800, shuffle: false, upNext: [] });
+    const r = resumer();
     await resumeAfterReload(r, 1);
-    expect(r.calls).toEqual(['play single 1 false 0']);
+    expect(r.calls).toEqual(['play single 1 false 0 undefined']);
   });
 
   it('survives what is not a snapshot', async () => {
     sessionStorage.setItem('groovium.reloadedWith', '{not json');
-    const r = resumer(() => null);
+    const r = resumer();
     await resumeAfterReload(r, 1);
     expect(r.calls).toEqual([]);
   });

@@ -513,12 +513,7 @@ export default function App() {
   useEffect(() => {
     if (!playerReady) return;
     const player = usePlayerStore.getState();
-    void resumeAfterReload({
-      queueLast: player.queueLast,
-      playList: player.playList,
-      seek: player.seek,
-      current: () => usePlayerStore.getState().currentTrack,
-    });
+    void resumeAfterReload({ queueLast: player.queueLast, playList: player.playList });
   }, [playerReady]);
 
   useEffect(() => {

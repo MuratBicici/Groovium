@@ -305,8 +305,10 @@ export interface PlayerActions {
    * With `from`, a song was picked out of the list rather than the list put on:
    * it starts there and plays on through the rest of the list. Either way, with
    * infinite play on, the station follows once the list has ended.
+   *
+   * `fromMs` starts that song that far in, for carrying on after a reload.
    */
-  playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean, from?: number) => Promise<void>;
+  playList: (id: ContextId, tracks: TrackMetadata[], shuffle?: boolean, from?: number, fromMs?: number) => Promise<void>;
 
   /** Put a song at the end of the queue. */
   queueLast: (track: TrackMetadata) => void;
@@ -1007,11 +1009,11 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * Turkish song ended. The station's own hand-off is the one case where the
    * queue outlives a track change, because there it is the same run.
    */
-  async function startTrack(index: number, continuingStation = false): Promise<void> {
+  async function startTrack(index: number, continuingStation = false, fromMs = 0): Promise<void> {
     const track = get().playback.tracks[index];
     if (!track) return;
     interjecting = false;
-    await begin(track, index, continuingStation);
+    await begin(track, index, continuingStation, fromMs);
   }
 
   /**
@@ -1031,6 +1033,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     track: TrackMetadata,
     index: number,
     continuingStation: boolean,
+    fromMs = 0,
   ): Promise<void> {
     if (!continuingStation) discardStationQueue();
     // From here to the end, however it ends: this track is on its way. The
@@ -1038,7 +1041,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     // timer it cannot know the right length of runs out.
     set({ starting: track });
     try {
-      await startingTrack(track, index);
+      await startingTrack(track, index, fromMs);
     } finally {
       // Only if it is still this one. A second choice while the first was
       // still opening owns the slot now, and clearing it here would tell the
@@ -1100,7 +1103,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
    * playing — the same sleeve sitting there through track after track, which is
    * how it was reported — and `starting` already says whose turn it is.
    */
-  async function startingTrack(track: TrackMetadata, index: number): Promise<void> {
+  async function startingTrack(track: TrackMetadata, index: number, fromMs = 0): Promise<void> {
     /** Whether this attempt is still the one that counts. */
     const mine = () => get().starting?.id === track.id;
 
@@ -1131,12 +1134,12 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
     set({
       playback: { ...get().playback, index },
       currentTrack: track,
-      positionMs: 0,
+      positionMs: fromMs,
       durationMs: track.duration,
       error: null,
     });
     rememberPlayed(track);
-    await withProvider((provider) => provider.play(track.id));
+    await withProvider((provider) => provider.play(track.id, fromMs || undefined));
     // And one last time, for the sound rather than the picture: two plays that
     // overlapped would leave the provider on the earlier of them.
     if (!mine()) return;
@@ -1287,7 +1290,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
       await startTrack(index);
     },
 
-    async playList(id, tracks, shuffle, from) {
+    async playList(id, tracks, shuffle, from, fromMs) {
       if (tracks.length === 0) return;
       const shuffling = shuffle ?? get().shuffle;
       const picked = from !== undefined && from >= 0 && from < tracks.length ? from : null;
@@ -1307,7 +1310,7 @@ export const usePlayerStore = create<PlayerStore>()((set, get) => {
         stationAdded: [],
         skipped: [],
       });
-      await startTrack(index);
+      await startTrack(index, false, fromMs);
     },
 
     async playSingle(track) {

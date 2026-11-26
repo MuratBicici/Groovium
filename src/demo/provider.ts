@@ -72,11 +72,11 @@ export class DemoProvider extends BaseProvider {
     return { success: true };
   }
 
-  async play(trackId: string): Promise<void> {
+  async play(trackId: string, fromMs = 0): Promise<void> {
     this.stopClock();
     if (this.starting) clearTimeout(this.starting);
     this.playing = trackId;
-    this.positionMs = 0;
+    this.positionMs = fromMs;
     this.durationMs = trackById(trackId)?.duration ?? 210_000;
     this.setState('LOADING');
     this.emitProgress();

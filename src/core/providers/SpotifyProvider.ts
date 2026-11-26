@@ -412,7 +412,7 @@ export class SpotifyProvider extends BaseProvider {
   }
 
   /** `trackId` is a Spotify track URI, as carried in `TrackMetadata.id`. */
-  async play(trackId: string): Promise<void> {
+  async play(trackId: string, fromMs = 0): Promise<void> {
     if (!this.player) throw new Error('Spotify player is not connected.');
 
     // Known not to play here: said at once, rather than asked and refused.
@@ -429,17 +429,18 @@ export class SpotifyProvider extends BaseProvider {
     this.playing = uri;
     // Before the command goes out, not after: Spotify can answer with a state
     // before the request that caused it has returned.
-    this.expectSound(0);
+    this.expectSound(fromMs);
+    this.positionMs = fromMs;
     try {
       // `connect()` resolving does not mean Spotify has registered the device;
       // that arrives later on the `ready` event. Picking a track inside that
       // window is entirely normal, so wait for it rather than failing.
       const deviceId = await this.waitForDevice();
       try {
-        await playOnDevice(deviceId, uri);
+        await playOnDevice(deviceId, uri, fromMs);
       } catch (err) {
         if (!restricted(err)) throw err;
-        await this.playAnotherRelease(deviceId, trackId, err);
+        await this.playAnotherRelease(deviceId, trackId, err, fromMs);
       }
       // Starting playback through the Web API can hand the device back its own
       // default volume, so the setting is applied again once playback is on.
@@ -469,7 +470,7 @@ export class SpotifyProvider extends BaseProvider {
    * it will, if there is one; otherwise fail with why, in words, rather than
    * with "Restriction violated".
    */
-  private async playAnotherRelease(deviceId: string, trackId: string, refusal: unknown): Promise<void> {
+  private async playAnotherRelease(deviceId: string, trackId: string, refusal: unknown, fromMs: number): Promise<void> {
     const other = await playableVersion(trackId).catch((err: unknown) => {
       log('warn', 'playback', 'could not ask Spotify which release of a refused track plays here', err);
       return null;
@@ -478,7 +479,7 @@ export class SpotifyProvider extends BaseProvider {
       log('info', 'playback', 'Spotify refused a track here; playing the release of it that plays here');
       noteRelinked(trackId, other.uri);
       this.playing = other.uri;
-      await playOnDevice(deviceId, other.uri);
+      await playOnDevice(deviceId, other.uri, fromMs);
       return;
     }
     if (other) {

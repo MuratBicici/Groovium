@@ -124,12 +124,22 @@ export function takeSnapshot(now: number): ReloadSnapshot | null {
 
 interface Resumer {
   queueLast: (track: TrackMetadata) => void;
-  playList: (id: PlaybackContext['id'], tracks: TrackMetadata[], shuffle?: boolean, from?: number) => Promise<void>;
-  seek: (positionMs: number) => Promise<void>;
-  current: () => TrackMetadata | null;
+  playList: (
+    id: PlaybackContext['id'],
+    tracks: TrackMetadata[],
+    shuffle?: boolean,
+    from?: number,
+    fromMs?: number,
+  ) => Promise<void>;
 }
 
-/** Carry on after a reload by hand, if one left something to carry on with. */
+/**
+ * Carry on after a reload by hand, if one left something to carry on with.
+ *
+ * The song is started where it was rather than started and then moved there:
+ * on Spotify a move sent while the start is still on its way raced it, and the
+ * window stayed saying it was loading over music that was playing.
+ */
 export async function resumeAfterReload(player: Resumer, now = Date.now()): Promise<void> {
   const snapshot = takeSnapshot(now);
   if (!snapshot) return;
@@ -138,8 +148,7 @@ export async function resumeAfterReload(player: Resumer, now = Date.now()): Prom
   if (!song) return;
   log('info', 'app', `carrying on after the reload, ${Math.round(snapshot.positionMs / 1000)} s into a ${song.source} song`);
   for (const track of snapshot.upNext) player.queueLast(track);
-  await player.playList(playback.id, playback.tracks, snapshot.shuffle, playback.index);
-  const playing = player.current();
   // A second in is nowhere worth going back to.
-  if (snapshot.positionMs > 1000 && playing && trackKey(playing) === trackKey(song)) await player.seek(snapshot.positionMs);
+  const fromMs = snapshot.positionMs > 1000 ? Math.round(snapshot.positionMs) : undefined;
+  await player.playList(playback.id, playback.tracks, snapshot.shuffle, playback.index, fromMs);
 }

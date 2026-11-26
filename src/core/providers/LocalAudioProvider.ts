@@ -66,7 +66,7 @@ export class LocalAudioProvider extends BaseProvider {
     return { success: true };
   }
 
-  async play(trackId: string): Promise<void> {
+  async play(trackId: string, fromMs = 0): Promise<void> {
     const audio = this.requireAudio();
     const entry = this.library.get(trackId);
     if (!entry) {
@@ -83,7 +83,8 @@ export class LocalAudioProvider extends BaseProvider {
       audio.src = entry.url;
       audio.load();
     }
-    audio.currentTime = 0;
+    // Before the file has loaded this is where it starts.
+    audio.currentTime = fromMs / 1000;
 
     try {
       await audio.play();
