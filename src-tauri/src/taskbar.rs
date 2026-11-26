@@ -17,7 +17,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 use crate::media::{self, MediaCommand};
@@ -76,28 +75,13 @@ pub struct PreviewSize {
     pub height: u32,
 }
 
-/// When Windows last asked for the preview, and at what size. A preview asked
-/// for within this long is taken to be on screen still, and is drawn again when
-/// something in it changes; one not asked for since is not drawn at all.
-const PREVIEW_SHOWN_FOR: Duration = Duration::from_secs(3);
-static LAST_ASK: Mutex<Option<(Instant, PreviewSize)>> = Mutex::new(None);
-
 /// Windows wants the preview at `size`: the frontend draws it.
 fn preview_asked(size: PreviewSize) {
-    *LAST_ASK.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), size));
     if let Some(app) = APP.get() {
         if let Err(e) = app.emit(PREVIEW_EVENT, size) {
             log::warn!("[taskbar] could not ask for the preview: {e}");
         }
     }
-}
-
-/// Whether the preview is likely on screen: asked for a moment ago.
-fn preview_shown(now: Instant) -> bool {
-    LAST_ASK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .is_some_and(|(at, _)| now.duration_since(at) < PREVIEW_SHOWN_FOR)
 }
 
 /// The preview, drawn: RGBA, `width` by `height`, in the request's body.
@@ -123,12 +107,15 @@ pub fn taskbar_thumbnail(request: tauri::ipc::Request<'_>) -> Result<(), String>
     Ok(())
 }
 
-/// Something in the preview changed: if it is on screen, have Windows ask again.
+/// Something in the preview changed: have Windows ask for it again.
+///
+/// Every time, on screen or not. Windows keeps the last preview it was given
+/// and shows it until told it is out of date, so a song started while the
+/// preview was away came up as "nothing playing" the next time it was pointed
+/// at. Being told costs nothing: Windows only marks it, and asks when it
+/// actually shows it.
 #[tauri::command]
 pub fn taskbar_preview_changed() {
-    if !preview_shown(Instant::now()) {
-        return;
-    }
     #[cfg(windows)]
     imp::invalidate_preview();
 }

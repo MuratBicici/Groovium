@@ -13,8 +13,9 @@ import { log } from '@/platform/log';
  * artist below. With nothing on, the same square, plain, with a note in it, so
  * the picture keeps its shape from one to the other.
  *
- * Nothing is drawn while the preview is not on screen: Windows only asks while
- * it is, and asks again when told something changed (`taskbar_preview_changed`).
+ * Windows keeps the last picture it was given and asks for a new one only when
+ * told the old one is out of date (`taskbar_preview_changed`), so it is told on
+ * every change, on screen or not; it only draws again when it shows it.
  */
 
 /** Must match `PREVIEW_EVENT` in `src-tauri/src/taskbar.rs`. */
@@ -279,8 +280,14 @@ export function startTaskbarPreview(): () => void {
   void import('@tauri-apps/api/event')
     .then(({ listen }) => listen<{ width: number; height: number }>(PREVIEW_EVENT, (e) => answer(e.payload.width, e.payload.height)))
     .then((stop) => {
-      if (stopped) stop();
-      else unlisten = stop;
+      if (stopped) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      // Windows may have asked before this was listening, and been left with
+      // nothing: asked again, now that the answer will be heard.
+      changed();
     })
     .catch((err: unknown) => log('warn', 'taskbar', 'could not listen for the preview', err));
 
@@ -288,7 +295,7 @@ export function startTaskbarPreview(): () => void {
   const unsubscribe = usePlayerStore.subscribe((s, prev) => {
     if (s.currentTrack !== prev.currentTrack || s.playbackState !== prev.playbackState) changed();
   });
-  // And the progress, while it moves. Rust ignores this unless the preview is showing.
+  // And the progress, while it moves.
   const ticking = setInterval(() => {
     if (usePlayerStore.getState().playbackState === 'PLAYING') changed();
   }, TICK_MS);
