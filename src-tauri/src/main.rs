@@ -154,6 +154,8 @@ fn main() {
             config::load_settings,
             tray::set_tray_labels,
             taskbar::taskbar_state,
+            taskbar::taskbar_thumbnail,
+            taskbar::taskbar_preview_changed,
             config::save_settings,
             session::load_session,
             session::save_session,

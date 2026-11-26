@@ -1,5 +1,13 @@
-//! The buttons under Groovium's preview on the taskbar: like, previous,
-//! play or pause, and next.
+//! Groovium on the taskbar: the preview drawn for it, and the buttons under
+//! that preview — like, previous, play or pause, and next.
+//!
+//! The preview is the song: its cover, its name and how far it has got, or a
+//! plain square with a note when nothing is on. Left to Windows it would be a
+//! picture of the window, which is mostly transparent, and on the left with the
+//! drawer shut is a page reaching past its own edge. Windows asks for it at the
+//! size it wants (`WM_DWMSENDICONICTHUMBNAIL`); this asks the frontend, which
+//! draws it with everything it already knows (`taskbarPreview.ts`) and hands it
+//! back (`taskbar_thumbnail`).
 //!
 //! Like the tray and the media keys (`media.rs`), they know nothing about
 //! playback: a press is a command for the frontend, which already knows what
@@ -7,9 +15,10 @@
 //! names in the app's language — is told to them by the frontend
 //! (`taskbar_state`), which is where all of that is known.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, OnceLock};
-use tauri::AppHandle;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter};
 
 use crate::media::{self, MediaCommand};
 
@@ -55,6 +64,74 @@ pub(crate) fn command_for(id: u32) -> Option<MediaCommand> {
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 static STATE: Mutex<Option<TaskbarState>> = Mutex::new(None);
+
+/// Event the frontend draws the preview on. Must match `PREVIEW_EVENT` in
+/// `src/platform/taskbarPreview.ts`.
+pub const PREVIEW_EVENT: &str = "taskbar:preview";
+
+/// The size Windows asked for the preview at, in physical pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct PreviewSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// When Windows last asked for the preview, and at what size. A preview asked
+/// for within this long is taken to be on screen still, and is drawn again when
+/// something in it changes; one not asked for since is not drawn at all.
+const PREVIEW_SHOWN_FOR: Duration = Duration::from_secs(3);
+static LAST_ASK: Mutex<Option<(Instant, PreviewSize)>> = Mutex::new(None);
+
+/// Windows wants the preview at `size`: the frontend draws it.
+fn preview_asked(size: PreviewSize) {
+    *LAST_ASK.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), size));
+    if let Some(app) = APP.get() {
+        if let Err(e) = app.emit(PREVIEW_EVENT, size) {
+            log::warn!("[taskbar] could not ask for the preview: {e}");
+        }
+    }
+}
+
+/// Whether the preview is likely on screen: asked for a moment ago.
+fn preview_shown(now: Instant) -> bool {
+    LAST_ASK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some_and(|(at, _)| now.duration_since(at) < PREVIEW_SHOWN_FOR)
+}
+
+/// The preview, drawn: RGBA, `width` by `height`, in the request's body.
+#[tauri::command]
+pub fn taskbar_thumbnail(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(rgba) = request.body() else {
+        return Err("the preview comes as raw bytes".into());
+    };
+    let number = |name: &str| -> Result<u32, String> {
+        request
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse().ok())
+            .ok_or_else(|| format!("no {name} for the preview"))
+    };
+    let (width, height) = (number("width")?, number("height")?);
+    if width == 0 || height == 0 || rgba.len() != (width * height * 4) as usize {
+        return Err("the preview is not the size it says".into());
+    }
+    #[cfg(windows)]
+    imp::show_preview(rgba, width, height);
+    Ok(())
+}
+
+/// Something in the preview changed: if it is on screen, have Windows ask again.
+#[tauri::command]
+pub fn taskbar_preview_changed() {
+    if !preview_shown(Instant::now()) {
+        return;
+    }
+    #[cfg(windows)]
+    imp::invalidate_preview();
+}
 
 fn current() -> TaskbarState {
     STATE
@@ -126,6 +203,25 @@ mod imp {
         CreateIconFromResourceEx, DestroyIcon, RegisterWindowMessageW, HICON, LR_DEFAULTCOLOR,
         WM_COMMAND, WM_DPICHANGED,
     };
+    use windows::core::BOOL;
+    use windows::Win32::Graphics::Dwm::{
+        DwmInvalidateIconicBitmaps, DwmSetIconicThumbnail, DwmSetWindowAttribute,
+        DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP,
+    };
+    use windows::Win32::Graphics::Gdi::{
+        CreateDIBSection, DeleteObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    };
+    use std::sync::atomic::{AtomicIsize, Ordering};
+
+    const WM_DWMSENDICONICTHUMBNAIL: u32 = 0x0323;
+
+    /// The main window, for the preview's calls, which come from a command.
+    static WINDOW: AtomicIsize = AtomicIsize::new(0);
+
+    fn window() -> Option<HWND> {
+        let raw = WINDOW.load(Ordering::SeqCst);
+        (raw != 0).then_some(HWND(raw as *mut _))
+    }
 
     const SUBCLASS_ID: usize = 0x6772_7476; // "grtv"
 
@@ -212,6 +308,17 @@ mod imp {
             })
         });
         let _ = button_created();
+        WINDOW.store(hwnd.0 as isize, Ordering::SeqCst);
+        // The preview is drawn here rather than taken from the window.
+        let on = BOOL::from(true);
+        for attribute in [DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP] {
+            let set = unsafe {
+                DwmSetWindowAttribute(hwnd, attribute, &on as *const BOOL as *const _, size_of::<BOOL>() as u32)
+            };
+            if let Err(e) = set {
+                log::warn!("[taskbar] the preview stays Windows' own: {e}");
+            }
+        }
         if !unsafe { SetWindowSubclass(hwnd, Some(listen), SUBCLASS_ID, 0) }.as_bool() {
             log::warn!("[taskbar] could not listen for presses on the preview's buttons");
             return;
@@ -313,6 +420,63 @@ mod imp {
         }
     }
 
+    /// Hand Windows the preview the frontend drew. It keeps a copy.
+    pub fn show_preview(rgba: &[u8], width: u32, height: u32) {
+        let Some(hwnd) = window() else { return };
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width as i32,
+                // Negative: top row first, as the canvas has it.
+                biHeight: -(height as i32),
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let bitmap = match unsafe { CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) } {
+            Ok(bitmap) if !bits.is_null() => bitmap,
+            Ok(bitmap) => {
+                let _ = unsafe { DeleteObject(bitmap.into()) };
+                return;
+            }
+            Err(e) => {
+                log::warn!("[taskbar] no bitmap for the preview: {e}");
+                return;
+            }
+        };
+        // RGBA to the premultiplied BGRA Windows reads.
+        let out = unsafe { std::slice::from_raw_parts_mut(bits as *mut u8, rgba.len()) };
+        for (to, from) in out.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
+            let a = u16::from(from[3]);
+            let pre = |c: u8| ((u16::from(c) * a + 127) / 255) as u8;
+            to[0] = pre(from[2]);
+            to[1] = pre(from[1]);
+            to[2] = pre(from[0]);
+            to[3] = from[3];
+        }
+        match unsafe { DwmSetIconicThumbnail(hwnd, bitmap, 0) } {
+            Ok(()) => {
+                static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if !SAID.swap(true, Ordering::SeqCst) {
+                    log::info!("[taskbar] the preview is drawn here, {width}x{height} the first time");
+                }
+            }
+            Err(e) => log::warn!("[taskbar] Windows did not take the preview: {e}"),
+        }
+        let _ = unsafe { DeleteObject(bitmap.into()) };
+    }
+
+    /// Have Windows ask for the preview again.
+    pub fn invalidate_preview() {
+        if let Some(hwnd) = window() {
+            let _ = unsafe { DwmInvalidateIconicBitmaps(hwnd) };
+        }
+    }
+
     unsafe extern "system" fn listen(
         hwnd: HWND,
         msg: u32,
@@ -330,6 +494,13 @@ mod imp {
             add();
         } else if msg == WM_COMMAND && ((wparam.0 >> 16) & 0xffff) as u32 == THBN_CLICKED {
             pressed((wparam.0 & 0xffff) as u32);
+            return LRESULT(0);
+        } else if msg == WM_DWMSENDICONICTHUMBNAIL {
+            let size = super::PreviewSize {
+                width: ((lparam.0 >> 16) & 0xffff) as u32,
+                height: (lparam.0 & 0xffff) as u32,
+            };
+            super::preview_asked(size);
             return LRESULT(0);
         } else if msg == WM_DPICHANGED {
             // Sharp at the new scale: drawn again at the size that matches it.

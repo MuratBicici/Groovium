@@ -77,6 +77,7 @@ import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
 import { startTaskbarSync } from '@/platform/taskbar';
+import { startTaskbarPreview } from '@/platform/taskbarPreview';
 import { PLAYER_WIDTH, setWindowZoom } from '@/platform/window';
 
 const PANEL_IDS = {
@@ -548,6 +549,8 @@ export default function App() {
 
   // And the buttons under the taskbar preview, which are told what to show.
   useEffect(() => startTaskbarSync(), []);
+  // And the picture over them, drawn when Windows asks for it.
+  useEffect(() => startTaskbarPreview(), []);
 
   useEffect(() => {
     // The tray is the one part of the interface Rust draws, so it has to be
