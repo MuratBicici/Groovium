@@ -78,6 +78,7 @@ import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
 import { startTaskbarSync } from '@/platform/taskbar';
 import { startTaskbarPreview } from '@/platform/taskbarPreview';
+import { startMediaControls } from '@/platform/mediaControls';
 import { PLAYER_WIDTH, setWindowZoom } from '@/platform/window';
 
 const PANEL_IDS = {
@@ -551,6 +552,8 @@ export default function App() {
   useEffect(() => startTaskbarSync(), []);
   // And the picture over them, drawn when Windows asks for it.
   useEffect(() => startTaskbarPreview(), []);
+  // And Windows' own media controls: the volume-key box and the lock screen.
+  useEffect(() => startMediaControls(), []);
 
   useEffect(() => {
     // The tray is the one part of the interface Rust draws, so it has to be

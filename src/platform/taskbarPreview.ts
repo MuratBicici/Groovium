@@ -3,6 +3,7 @@ import { usePlayerStore } from '@/core/store';
 import type { TrackMetadata } from '@/core/types';
 import { isTauri } from '@/core/utils/env';
 import { log } from '@/platform/log';
+import { coverOf, forgetCover } from '@/platform/coverImage';
 
 /**
  * The picture over Groovium on the taskbar.
@@ -47,26 +48,6 @@ function palette(): Palette {
     muted: read('--color-cream-400', '#a9977e'),
     hollow: read('--color-shell-700', '#2a1f18'),
   };
-}
-
-/** Covers that are loaded, by address; null for one that could not be drawn from. */
-const covers = new Map<string, HTMLImageElement | null>();
-
-/** The cover if it is ready to draw, starting it loading if it is not. */
-function coverOf(url: string | undefined, onReady: () => void): HTMLImageElement | null {
-  if (!url) return null;
-  if (covers.has(url)) return covers.get(url) ?? null;
-  covers.set(url, null);
-  const image = new Image();
-  // So the picture it is drawn into can still be read back and handed over.
-  image.crossOrigin = 'anonymous';
-  image.onload = () => {
-    covers.set(url, image);
-    onReady();
-  };
-  image.onerror = () => covers.set(url, null);
-  image.src = url;
-  return null;
 }
 
 /**
@@ -266,7 +247,7 @@ export function startTaskbarPreview(): () => void {
     } catch {
       // A cover from somewhere that would not let it be read back: drawn
       // without it from now on.
-      if (currentTrack?.coverArtUrl) covers.set(currentTrack.coverArtUrl, null);
+      forgetCover(currentTrack?.coverArtUrl);
       drawPreview(ctx, width, height, currentTrack, progress, null);
       pixels = ctx.getImageData(0, 0, width, height).data;
     }

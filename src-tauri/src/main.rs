@@ -20,6 +20,7 @@ mod report;
 mod session;
 mod shell;
 mod shortcuts;
+mod smtc;
 mod spotify;
 mod taskbar;
 mod tray;
@@ -85,6 +86,8 @@ fn main() {
                 shell::undress(&window.as_ref().window());
                 // Like, previous, play and next under its preview on the taskbar.
                 taskbar::attach(app.handle(), &window.as_ref().window());
+                // And Windows' own media controls: the volume-key box, the lock screen.
+                smtc::attach(app.handle(), &window.as_ref().window());
             }
             log::info!("Groovium {} started", app.package_info().version);
             shell::forget_old_place(app.handle());
@@ -156,6 +159,8 @@ fn main() {
             taskbar::taskbar_state,
             taskbar::taskbar_thumbnail,
             taskbar::taskbar_preview_changed,
+            smtc::smtc_state,
+            smtc::smtc_cover,
             config::save_settings,
             session::load_session,
             session::save_session,
