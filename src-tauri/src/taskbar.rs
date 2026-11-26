@@ -190,20 +190,11 @@ pub fn taskbar_state(state: TaskbarState) {
 mod imp {
     use super::{current, pressed, TaskbarState, LIKE, NEXT, PLAY_PAUSE, PREVIOUS};
     use std::cell::RefCell;
+    use std::sync::atomic::{AtomicIsize, Ordering};
     use std::sync::OnceLock;
     use windows::core::w;
-    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-    use windows::Win32::UI::HiDpi::GetDpiForWindow;
-    use windows::Win32::UI::Shell::{
-        DefSubclassProc, ITaskbarList3, SetWindowSubclass, TaskbarList, THBF_DISABLED,
-        THBF_ENABLED, THBF_HIDDEN, THBN_CLICKED, THB_FLAGS, THB_ICON, THB_TOOLTIP, THUMBBUTTON,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        CreateIconFromResourceEx, DestroyIcon, RegisterWindowMessageW, HICON, LR_DEFAULTCOLOR,
-        WM_COMMAND, WM_DPICHANGED,
-    };
     use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::Graphics::Dwm::{
         DwmInvalidateIconicBitmaps, DwmSetIconicThumbnail, DwmSetWindowAttribute,
         DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP,
@@ -211,7 +202,16 @@ mod imp {
     use windows::Win32::Graphics::Gdi::{
         CreateDIBSection, DeleteObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
     };
-    use std::sync::atomic::{AtomicIsize, Ordering};
+    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+    use windows::Win32::UI::HiDpi::GetDpiForWindow;
+    use windows::Win32::UI::Shell::{
+        DefSubclassProc, ITaskbarList3, SetWindowSubclass, TaskbarList, THBF_DISABLED,
+        THBF_ENABLED, THBF_HIDDEN, THBN_CLICKED, THB_FLAGS, THB_ICON, THB_TOOLTIP, THUMBBUTTON,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateIconFromResourceEx, DestroyIcon, IsWindowVisible, RegisterWindowMessageW, HICON,
+        LR_DEFAULTCOLOR, WM_COMMAND, WM_DPICHANGED,
+    };
 
     const WM_DWMSENDICONICTHUMBNAIL: u32 = 0x0323;
 
@@ -258,8 +258,17 @@ mod imp {
             let size = SIZES[at];
             let icon = |set: [&[u8]; 4]| -> Option<HICON> {
                 // A PNG is a valid icon image since Vista: no conversion needed.
-                unsafe { CreateIconFromResourceEx(set[at], true, 0x0003_0000, size, size, LR_DEFAULTCOLOR) }
-                    .ok()
+                unsafe {
+                    CreateIconFromResourceEx(
+                        set[at],
+                        true,
+                        0x0003_0000,
+                        size,
+                        size,
+                        LR_DEFAULTCOLOR,
+                    )
+                }
+                .ok()
             };
             Some(Icons {
                 heart: icon(glyphs!("heart"))?,
@@ -274,7 +283,14 @@ mod imp {
 
     impl Drop for Icons {
         fn drop(&mut self) {
-            for icon in [self.heart, self.heart_filled, self.previous, self.play, self.pause, self.next] {
+            for icon in [
+                self.heart,
+                self.heart_filled,
+                self.previous,
+                self.play,
+                self.pause,
+                self.next,
+            ] {
                 let _ = unsafe { DestroyIcon(icon) };
             }
         }
@@ -313,7 +329,12 @@ mod imp {
         let on = BOOL::from(true);
         for attribute in [DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP] {
             let set = unsafe {
-                DwmSetWindowAttribute(hwnd, attribute, &on as *const BOOL as *const _, size_of::<BOOL>() as u32)
+                DwmSetWindowAttribute(
+                    hwnd,
+                    attribute,
+                    &on as *const BOOL as *const _,
+                    size_of::<BOOL>() as u32,
+                )
             };
             if let Err(e) = set {
                 log::warn!("[taskbar] the preview stays Windows' own: {e}");
@@ -321,20 +342,33 @@ mod imp {
         }
         if !unsafe { SetWindowSubclass(hwnd, Some(listen), SUBCLASS_ID, 0) }.as_bool() {
             log::warn!("[taskbar] could not listen for presses on the preview's buttons");
-            return;
         }
-        // The taskbar button may already be there; if not, its arrival adds them.
-        add();
+        // The buttons themselves wait for the first word from the frontend.
+        // Windows wants them added once the window's taskbar button exists, and
+        // the announcement of that came before anything here was listening; by
+        // the time the page speaks, the window is up and has one.
     }
 
     /// The buttons on the taskbar, once per taskbar button: after Explorer
     /// restarts there is a new one, and they go on again.
     fn add() {
+        // Only onto a window that is showing: one that is not has no taskbar
+        // button for them to go on, and they would be taken and lost.
+        let showing = BAR.with(|bar| {
+            bar.borrow()
+                .as_ref()
+                .is_some_and(|bar| unsafe { IsWindowVisible(bar.hwnd) }.as_bool())
+        });
+        if !showing {
+            return;
+        }
         let Some((hwnd, list)) = BAR.with(|bar| {
             let mut held = bar.borrow_mut();
             let bar = held.as_mut()?;
             if bar.list.is_none() {
-                bar.list = match unsafe { CoCreateInstance::<_, ITaskbarList3>(&TaskbarList, None, CLSCTX_INPROC_SERVER) } {
+                bar.list = match unsafe {
+                    CoCreateInstance::<_, ITaskbarList3>(&TaskbarList, None, CLSCTX_INPROC_SERVER)
+                } {
                     Ok(list) => unsafe { list.HrInit() }.ok().map(|()| list),
                     Err(e) => {
                         log::warn!("[taskbar] no taskbar to talk to: {e}");
@@ -346,7 +380,9 @@ mod imp {
         }) else {
             return;
         };
-        let Some(buttons) = buttons(&current()) else { return };
+        let Some(buttons) = buttons(&current()) else {
+            return;
+        };
         // Outside the borrow: a call to Explorer can bring a message here first.
         match unsafe { list.ThumbBarAddButtons(hwnd, &buttons) } {
             Ok(()) => {
@@ -358,23 +394,29 @@ mod imp {
                 });
             }
             // Before the taskbar button exists; its arrival brings us back.
-            Err(e) => log::debug!("[taskbar] buttons not added yet: {e}"),
+            Err(e) => log::info!("[taskbar] buttons not added yet: {e}"),
         }
     }
 
     pub fn refresh() {
-        let Some((hwnd, list, added)) = BAR.with(|bar| {
+        match BAR.with(|bar| bar.borrow().as_ref().map(|bar| bar.added)) {
+            None => return,
+            Some(false) => {
+                add();
+                return;
+            }
+            Some(true) => {}
+        }
+        let Some((hwnd, list)) = BAR.with(|bar| {
             let held = bar.borrow();
             let bar = held.as_ref()?;
-            Some((bar.hwnd, bar.list.clone()?, bar.added))
+            Some((bar.hwnd, bar.list.clone()?))
         }) else {
             return;
         };
-        if !added {
-            add();
+        let Some(buttons) = buttons(&current()) else {
             return;
-        }
-        let Some(buttons) = buttons(&current()) else { return };
+        };
         if let Err(e) = unsafe { list.ThumbBarUpdateButtons(hwnd, &buttons) } {
             log::warn!("[taskbar] could not update the preview's buttons: {e}");
         }
@@ -385,7 +427,11 @@ mod imp {
             let held = bar.borrow();
             let icons = held.as_ref()?.icons.as_ref()?;
             let tips = &state.tips;
-            let on = if state.has_track { THBF_ENABLED } else { THBF_DISABLED };
+            let on = if state.has_track {
+                THBF_ENABLED
+            } else {
+                THBF_DISABLED
+            };
             let heart = match state.liked {
                 Some(true) => (icons.heart_filled, tips.unlike.as_str(), THBF_ENABLED),
                 Some(false) => (icons.heart, tips.like.as_str(), THBF_ENABLED),
@@ -405,7 +451,12 @@ mod imp {
         })
     }
 
-    fn button(id: u32, icon: HICON, tip: &str, flags: windows::Win32::UI::Shell::THUMBBUTTONFLAGS) -> THUMBBUTTON {
+    fn button(
+        id: u32,
+        icon: HICON,
+        tip: &str,
+        flags: windows::Win32::UI::Shell::THUMBBUTTONFLAGS,
+    ) -> THUMBBUTTON {
         let mut sz_tip = [0u16; 260];
         for (slot, unit) in sz_tip.iter_mut().take(259).zip(tip.encode_utf16()) {
             *slot = unit;
@@ -437,17 +488,18 @@ mod imp {
             ..Default::default()
         };
         let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let bitmap = match unsafe { CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) } {
-            Ok(bitmap) if !bits.is_null() => bitmap,
-            Ok(bitmap) => {
-                let _ = unsafe { DeleteObject(bitmap.into()) };
-                return;
-            }
-            Err(e) => {
-                log::warn!("[taskbar] no bitmap for the preview: {e}");
-                return;
-            }
-        };
+        let bitmap =
+            match unsafe { CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) } {
+                Ok(bitmap) if !bits.is_null() => bitmap,
+                Ok(bitmap) => {
+                    let _ = unsafe { DeleteObject(bitmap.into()) };
+                    return;
+                }
+                Err(e) => {
+                    log::warn!("[taskbar] no bitmap for the preview: {e}");
+                    return;
+                }
+            };
         // RGBA to the premultiplied BGRA Windows reads.
         let out = unsafe { std::slice::from_raw_parts_mut(bits as *mut u8, rgba.len()) };
         for (to, from) in out.chunks_exact_mut(4).zip(rgba.chunks_exact(4)) {
@@ -460,9 +512,12 @@ mod imp {
         }
         match unsafe { DwmSetIconicThumbnail(hwnd, bitmap, 0) } {
             Ok(()) => {
-                static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                static SAID: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
                 if !SAID.swap(true, Ordering::SeqCst) {
-                    log::info!("[taskbar] the preview is drawn here, {width}x{height} the first time");
+                    log::info!(
+                        "[taskbar] the preview is drawn here, {width}x{height} the first time"
+                    );
                 }
             }
             Err(e) => log::warn!("[taskbar] Windows did not take the preview: {e}"),
@@ -486,6 +541,7 @@ mod imp {
         _data: usize,
     ) -> LRESULT {
         if msg == button_created() {
+            log::info!("[taskbar] the taskbar button is there");
             BAR.with(|bar| {
                 if let Some(bar) = bar.borrow_mut().as_mut() {
                     bar.added = false;
