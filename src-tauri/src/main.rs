@@ -21,6 +21,7 @@ mod session;
 mod shell;
 mod shortcuts;
 mod spotify;
+mod taskbar;
 mod tray;
 mod visualizer;
 
@@ -82,6 +83,8 @@ fn main() {
             // this app draws over, and the corners are where that shows.
             if let Some(window) = app.get_webview_window("main") {
                 shell::undress(&window.as_ref().window());
+                // Like, previous, play and next under its preview on the taskbar.
+                taskbar::attach(app.handle(), &window.as_ref().window());
             }
             log::info!("Groovium {} started", app.package_info().version);
             shell::forget_old_place(app.handle());
@@ -150,6 +153,7 @@ fn main() {
             playlists::playlist_remove_item,
             config::load_settings,
             tray::set_tray_labels,
+            taskbar::taskbar_state,
             config::save_settings,
             session::load_session,
             session::save_session,

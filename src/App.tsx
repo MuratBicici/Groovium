@@ -76,6 +76,7 @@ import { useLanguage } from '@/core/settings/store';
 import { isTauri } from '@/core/utils/env';
 import { startCommandBridge } from '@/platform/commandBridge';
 import { syncTrayLabels } from '@/platform/tray';
+import { startTaskbarSync } from '@/platform/taskbar';
 import { PLAYER_WIDTH, setWindowZoom } from '@/platform/window';
 
 const PANEL_IDS = {
@@ -544,6 +545,9 @@ export default function App() {
     // Tray menu and global media keys arrive as events from Rust.
     return startCommandBridge();
   }, []);
+
+  // And the buttons under the taskbar preview, which are told what to show.
+  useEffect(() => startTaskbarSync(), []);
 
   useEffect(() => {
     // The tray is the one part of the interface Rust draws, so it has to be

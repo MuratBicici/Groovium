@@ -22,6 +22,8 @@ pub enum MediaCommand {
     PlayPause,
     Next,
     Previous,
+    /// Like the song, or take the like back: the heart under the taskbar preview.
+    Like,
 }
 
 impl MediaCommand {
@@ -32,6 +34,7 @@ impl MediaCommand {
             MediaCommand::PlayPause => "playpause",
             MediaCommand::Next => "next",
             MediaCommand::Previous => "previous",
+            MediaCommand::Like => "like",
         }
     }
 }
@@ -54,6 +57,7 @@ mod tests {
         assert_eq!(MediaCommand::PlayPause.as_str(), "playpause");
         assert_eq!(MediaCommand::Next.as_str(), "next");
         assert_eq!(MediaCommand::Previous.as_str(), "previous");
+        assert_eq!(MediaCommand::Like.as_str(), "like");
     }
 
     #[test]
@@ -64,6 +68,7 @@ mod tests {
             MediaCommand::PlayPause,
             MediaCommand::Next,
             MediaCommand::Previous,
+            MediaCommand::Like,
         ] {
             let json = serde_json::to_string(&command).expect("serializes");
             assert_eq!(json, format!("\"{}\"", command.as_str()));

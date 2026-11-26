@@ -1,5 +1,6 @@
 import { usePlayerStore } from '@/core/store';
 import { useFocusStore } from '@/core/focus/store';
+import { setLiked, useLikes } from '@/core/spotify/likes';
 import { isTauri } from '@/core/utils/env';
 import { log } from '@/platform/log';
 
@@ -19,7 +20,7 @@ import { log } from '@/platform/log';
 /** Must match `MEDIA_COMMAND_EVENT` in `src-tauri/src/media.rs`. */
 const MEDIA_COMMAND_EVENT = 'media:command';
 
-type MediaCommand = 'playpause' | 'next' | 'previous';
+type MediaCommand = 'playpause' | 'next' | 'previous' | 'like';
 
 /**
  * Begin listening. Returns a function that stops listening.
@@ -80,6 +81,13 @@ async function dispatch(command: MediaCommand): Promise<void> {
     case 'previous':
       await previous();
       break;
+    case 'like': {
+      // The heart under the taskbar preview: the song playing, liked or not.
+      const track = usePlayerStore.getState().currentTrack;
+      if (track?.source !== 'spotify') break;
+      await setLiked(track.id, useLikes.getState().saved[track.id] !== true, 'song');
+      break;
+    }
     default:
       log('warn', 'commandBridge', 'unknown media command', command);
   }
