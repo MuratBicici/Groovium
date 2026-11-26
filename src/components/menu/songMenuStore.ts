@@ -98,6 +98,19 @@ export interface MenuPlace {
  * To the right of the pointer and below it, unless that runs off the area, in
  * which case to the left or above; and never closer than a margin to the edge.
  */
+/**
+ * How a menu comes out of the pointer and goes again, shared by the song's menu
+ * and the app's: the card springs out, then its rows one after another.
+ */
+export const OPENS_MS = 240;
+export const SPRING = 'cubic-bezier(.3,1.35,.5,1)';
+export const EASE = 'cubic-bezier(.2,.9,.3,1)';
+export const ROWS_AFTER_MS = 70;
+export const ROW_STAGGER_MS = 22;
+export const ROW_MS = 200;
+/** Putting it away is quicker than bringing it out: it is on the way to something else. */
+export const CLOSES_MS = 110;
+
 export function placeMenu(
   at: { x: number; y: number },
   size: { width: number; height: number },

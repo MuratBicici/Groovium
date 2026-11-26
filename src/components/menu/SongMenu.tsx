@@ -11,7 +11,19 @@ import { formatDuration } from '@/core/utils/time';
 import { VinylDisc } from '@/components/player/VinylDisc';
 import { containsTrack, usePlaylistPicker } from '@/components/playlists/PlaylistPicker';
 import { copyLink, hasLink } from '@/components/queue/share';
-import { closeSongMenu, placeMenu, useSongMenu, type SongMenuRequest } from './songMenuStore';
+import {
+  CLOSES_MS,
+  EASE,
+  OPENS_MS,
+  ROW_MS,
+  ROW_STAGGER_MS,
+  ROWS_AFTER_MS,
+  SPRING,
+  closeSongMenu,
+  placeMenu,
+  useSongMenu,
+  type SongMenuRequest,
+} from './songMenuStore';
 
 /**
  * A song's right-click menu: the song at its head, and what can be done with it
@@ -23,18 +35,10 @@ import { closeSongMenu, placeMenu, useSongMenu, type SongMenuRequest } from './s
  */
 
 /** The opening: the card, then its head, then each row, and the record last. */
-const OPENS_MS = 240;
-const SPRING = 'cubic-bezier(.3,1.35,.5,1)';
-const EASE = 'cubic-bezier(.2,.9,.3,1)';
 const HEAD_AFTER_MS = 40;
 const HEAD_MS = 200;
-const ROWS_AFTER_MS = 70;
-const ROW_STAGGER_MS = 22;
-const ROW_MS = 200;
 const DISC_AFTER_MS = 90;
 const DISC_MS = 320;
-/** Putting it away is quicker than bringing it out: it is on the way to something else. */
-const CLOSES_MS = 110;
 /** How wide the playlists are beside it, and how long they wait for a pointer on its way to them. */
 const SUB_WIDTH = 200;
 const SUB_LINGERS_MS = 160;

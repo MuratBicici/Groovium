@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
+mod clipboard;
 mod config;
 mod equaliser;
 mod keyring;
@@ -187,6 +188,7 @@ fn main() {
             lyrics::chosen::lyrics_unchoose,
             audio::audio_backend_available,
             shell::place_window,
+            clipboard::clipboard_text,
             shell::set_click_area,
             report::logs_open_folder,
             report::report_problem,

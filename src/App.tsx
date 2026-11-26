@@ -7,6 +7,8 @@ import { LibraryDrawer } from '@/components/library/LibraryDrawer';
 import { ImportProgress } from '@/components/library/ImportProgress';
 import { PlaylistPickerProvider } from '@/components/playlists/PlaylistPicker';
 import { SongMenu } from '@/components/menu/SongMenu';
+import { AppMenu } from '@/components/menu/AppMenu';
+import { resumeAfterReload } from '@/core/session/reload';
 import { LyricsMatchProvider } from '@/components/lyrics/LyricsMatch';
 import { SheetHost } from '@/components/SheetHost';
 import { DiscFlightProvider } from '@/components/player/DiscFlight';
@@ -504,6 +506,21 @@ export default function App() {
     void initialize();
   }, [initialize]);
 
+  // Then the song a reload by hand was playing, if it left one. On the player
+  // being ready rather than after `initialize`, which a second caller (React's
+  // double effects in development) gets back before the first has finished.
+  const playerReady = usePlayerStore((s) => s.initialized);
+  useEffect(() => {
+    if (!playerReady) return;
+    const player = usePlayerStore.getState();
+    void resumeAfterReload({
+      queueLast: player.queueLast,
+      playList: player.playList,
+      seek: player.seek,
+      current: () => usePlayerStore.getState().currentTrack,
+    });
+  }, [playerReady]);
+
   useEffect(() => {
     // Separate from playback startup, and not awaited alongside it: a theme
     // should land as soon as it is read rather than behind provider setup, and
@@ -955,6 +972,7 @@ export default function App() {
       </LyricsMatchProvider>
       {/* Inside the picker, which its "New playlist…" opens, and over the shell. */}
       <SongMenu />
+      <AppMenu />
       </PlaylistPickerProvider>
       </SheetHost.Provider>
     </div>

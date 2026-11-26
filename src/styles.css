@@ -387,6 +387,12 @@ body {
   color: #f09a8a;
 }
 
+/* A row's shortcut, after its name. */
+.groove-menu-keys {
+  flex: none;
+  color: var(--color-cream-400);
+  font-size: 11px;
+}
 .groove-menu-sep {
   height: 1px;
   margin: 5px 8px;

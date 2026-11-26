@@ -112,6 +112,23 @@ export function log(level: LogLevel, scope: string, message: string, detail?: un
 }
 
 /**
+ * Write one line and wait for it to be written, for the moment before the page
+ * goes: a reload by hand. `log` hands the line over and returns, and a page
+ * reloaded straight after it can take the line with it.
+ */
+export async function logAndWait(level: LogLevel, scope: string, message: string, detail?: unknown): Promise<void> {
+  const text = line(scope, message, detail);
+  if (import.meta.env.DEV) console.info(text);
+  if (!('__TAURI_INTERNALS__' in globalThis)) return;
+  try {
+    const plugin = await import('@tauri-apps/plugin-log');
+    await plugin[level](text);
+  } catch {
+    /* nowhere else to say it */
+  }
+}
+
+/**
  * Catch what nothing else caught.
  *
  * An exception thrown from an event handler, or a promise rejected with no

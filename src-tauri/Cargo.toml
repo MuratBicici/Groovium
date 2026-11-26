@@ -82,7 +82,7 @@ strip = true
 [target."cfg(windows)".dependencies]
 # The patched copy in vendor/wry (see [patch.crates-io] below): `set_left_reach`.
 wry = "=0.55.1"
-windows = { version = "0.61", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Foundation", "Win32_System_Variant", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Networking_NetworkListManager"] }
+windows = { version = "0.61", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_Foundation", "Win32_System_Variant", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Dwm", "Win32_Networking_NetworkListManager", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole"] }
 windows-core = "0.61"
 
 [dev-dependencies]
