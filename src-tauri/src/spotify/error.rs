@@ -54,6 +54,7 @@ pub const ALL_CODES: &[&str] = &[
     "access_denied",
     "timeout",
     "token_exchange_failed",
+    "premium_required",
     "keyring_failed",
     "not_authenticated",
     "network",

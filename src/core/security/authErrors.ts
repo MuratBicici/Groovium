@@ -30,6 +30,8 @@ const MESSAGES: Record<string, string> = {
     'Port 14536 is in use, so the sign-in response cannot arrive. Close whatever is using it and try again.',
   timeout: 'Timed out waiting for Spotify. Try connecting again.',
   token_exchange_failed: 'Spotify returned something unexpected while signing in.',
+  premium_required:
+    'Spotify signed you in, then refused the app. Since February 2026 Spotify only lets an app like this work when the account that created it has Premium. If it does, check that the account you sign in with is on the app’s user list under User Management in the dashboard.',
   keyring_failed: 'Could not reach the system credential store to save your session.',
   not_authenticated: 'Not signed in to Spotify.',
   network: 'Could not reach Spotify. Check your internet connection.',
@@ -58,7 +60,8 @@ export function describeAuthError(error: unknown): string {
     return FALLBACK;
   }
 
-  // The detail is never shown, but it is what makes a bug report useful.
-  console.info(`[spotifyAuth] ${error.code}: ${error.detail}`);
+  // The detail is never shown, but it is what makes a bug report useful, and
+  // a bug report has the log, not the console: written there, as a warning.
+  log('warn', 'spotifyAuth', `${error.code}: ${error.detail}`);
   return message;
 }

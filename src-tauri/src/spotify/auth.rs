@@ -261,10 +261,21 @@ async fn fetch_profile(access_token: &str) -> Result<Account, AuthError> {
         .await
         .map_err(|e| AuthError::new("network", e.to_string()))?;
 
-    if !response.status().is_success() {
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        // Signed in, and then refused. Since February 2026 Spotify does that to
+        // every development-mode app whose owner has no Premium, and to an
+        // account missing from the app's user list; the first request to say
+        // so is this one. It used to come out as "something unexpected".
+        let code = if status == reqwest::StatusCode::FORBIDDEN {
+            "premium_required"
+        } else {
+            "token_exchange_failed"
+        };
         return Err(AuthError::new(
-            "token_exchange_failed",
-            format!("Profile request failed: {}", response.status()),
+            code,
+            format!("Profile request failed: {status}: {body}"),
         ));
     }
 
