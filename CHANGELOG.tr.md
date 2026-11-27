@@ -13,6 +13,24 @@ sıkıştırılmış yan cümlelerle yazılıyor; Türkçede aynı yapı, yükle
 sonunda bekleyen bir cümle demek. Kısa cümle kurun, yüklemi geciktirmeyin,
 "siz" diye hitap edin — arayüzün tamamı öyle yapıyor.
 
+## 1.5.3 — 2026-11-27
+
+Görev çubuğunda Groovium ve kendi sağ tık menüsü.
+
+Görev çubuğunda Groovium'un üstüne gelince artık şarkı görünüyor: kapağı,
+nereye geldiği, adı ve sanatçısı. Altında dört düğme var: beğenmek, geri
+gitmek, çalmak ya da duraklatmak ve ileri gitmek. Hiçbir şey çalmıyorsa sade
+bir kare bunu söyler.
+
+Windows, Groovium'un ne çaldığını biliyor. Ses tuşlarıyla açılan kutuda, kilit
+ekranında ve hızlı ayarlarda şarkı kapağıyla görünür. Oradaki düğmeler ve zaman
+çizgisi çalışır. Başka bir uygulama medya tuşlarını kapmış olsa bile tuşlar bu
+yoldan Groovium'a ulaşır.
+
+Sağ tık artık bir tarayıcının değil, Groovium'un kendi menüsü. İçinde Yenile
+var ve yenilemek her şeyi sıfırlamıyor: şarkı kaldığı yerden, çaldığı listeden
+devam eder. Bir yazı alanında menü keser, kopyalar ve yapıştırır.
+
 ## 1.5.2 — 2026-11-24
 
 Sevdiğiniz şarkılar için bir kalp.

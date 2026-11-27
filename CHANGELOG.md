@@ -4,6 +4,75 @@ Newest first. Each section is the text shown in the app when it offers that
 version, so it is written to be read there: plain prose, no markup, and the
 point of the release before the detail of it.
 
+## 1.5.3 — 2026-11-27
+
+Groovium on the taskbar, and a right click of its own.
+
+Pointing at Groovium on the taskbar now shows the song: its cover, how far it
+has got, and its name and artist, with four buttons under it to like it, go
+back, play or pause, and go on. With nothing playing, a plain square says so.
+
+Windows knows what Groovium is playing. The box that comes up with the volume
+keys, the lock screen and quick settings show the song with its cover, and
+their buttons and timeline work. The media keys reach Groovium this way even
+when another app has taken them.
+
+A right click is Groovium's own menu now, not a browser's. It has Reload, and
+reloading is a way out rather than a reset: the song carries on where it was,
+in the list it was playing from. In a text box the menu cuts, copies and
+pastes.
+
+HIGHLIGHTS
+· The song on the taskbar: its cover, progress, name and artist.
+· Like, previous, play and next under the taskbar preview.
+· Windows' media controls: the volume-key box, the lock screen, media keys.
+· A right-click menu of Groovium's own, with Reload, Cut, Copy and Paste.
+· Reload carries on with the song where it was.
+· A plain answer when Spotify needs Premium.
+
+ALL CHANGES
+
+Taskbar
+· The preview is drawn for the song: the cover in the middle, a line under
+  it for how far it has got, and its name and artist below. Names that are
+  too long get a little smaller, then end in an ellipsis; nothing goes over
+  the edge. With nothing playing, a plain square with a note.
+· Under it, a heart, previous, play or pause, and next. The heart is filled
+  when the song is liked and hidden for a local file. The buttons are named
+  in the app's language.
+· The preview keeps up: a song started while it was away shows the next
+  time you point at it, and the line moves while it plays.
+· Another taskbar that draws its own previews, such as YASB's, may show the
+  picture without the buttons. Windows' own taskbar shows both.
+
+Windows media controls
+· The song, its artist, album and cover, whether it plays, and a timeline
+  are shown wherever Windows shows the music playing.
+· Their play, pause, previous and next buttons work, and so does moving
+  along their timeline.
+· The media keys arrive this way when another app holds them, as the log
+  said at every start.
+· The webview no longer opens a second media session of its own, which
+  only said "Groovium" and took the volume-key box over while playing.
+
+Right-click menu
+· Right-clicking anywhere a song's own menu does not answer opens Groovium's
+  menu in place of the webview's (Back, Print, Save as and Inspect are gone).
+· Reload is in it, and on Ctrl+R and F5. The song that was playing starts
+  again where it was, in the same list, with what was queued after it.
+  A paused song is not brought back.
+· Each reload by hand is written to the log with what the player was doing,
+  without the song's name, so a report can say what had got stuck.
+· In a text box, Cut, Copy and Paste. Paste reads the clipboard without the
+  webview asking for permission each time.
+
+Spotify
+· When Spotify signs you in and then refuses the app, the message says why:
+  since February 2026 an app like Groovium only works when the account that
+  created it has Premium, or the account is missing from its user list. It
+  used to say "something unexpected".
+· What Spotify answered at a failed sign-in is now written to the log.
+
 ## 1.5.2 — 2026-11-24
 
 A heart for the songs you love.
